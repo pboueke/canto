@@ -12,6 +12,7 @@ target 'canto' do
     :hermes_enabled => false
   )
 
+
   target 'cantoTests' do
     inherit! :complete
     # Pods for testing
