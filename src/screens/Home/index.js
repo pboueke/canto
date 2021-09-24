@@ -5,29 +5,31 @@ import {Flex, Box} from 'native-grid-styled';
 import {ScrollView, StyleSheet} from 'react-native';
 import {JournalSelector, NewJournalSelector} from '../../components/Home';
 
-export default () => (
-  <Container>
-    <Logo />
-    <WelcomeText>
-      {' '}
-      Welcome to Canto, your Journaling app. Please select one of your journals
-      or create a new one:
-    </WelcomeText>
-    <Scroll>
-      <JournalTable>
-        <JournalSelector title="Diário" />
-        <JournalSelector title="Sonhos" />
-        <JournalSelector title="A" />
-        <JournalSelector title="B" />
-        <JournalSelector title="C" />
-        <JournalSelector title="D" />
-        <JournalSelector title="E" />
+export default ({navigation, route}) => {
+  const journals = route.params.journals.map(j => (
+    <JournalSelector title={j.title} />
+  ));
+  return (
+    <Container>
+      <Logo />
+      <WelcomeText>
+        {' '}
+        Welcome to Canto, your Journaling app. Please select one of your
+        journals or create a new one:
+      </WelcomeText>
+      <Scroll>
+        <JournalTable>
+          {journals}
 
-        <NewJournalSelector />
-      </JournalTable>
-    </Scroll>
-  </Container>
-);
+          <JournalSelector title="Diário" />
+          <JournalSelector title="Sonhos" />
+
+          <NewJournalSelector />
+        </JournalTable>
+      </Scroll>
+    </Container>
+  );
+};
 
 const Scroll = styled.ScrollView.attrs({
   contentContainerStyle: props => {
