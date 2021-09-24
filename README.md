@@ -1,6 +1,10 @@
-# canto
+![canto](./android/app/src/main/assets/images/logo_t_v1_256.png)
 
 Free and open source diary and journaling app
+
+---
+
+&nbsp;
 
 # Build
 
@@ -32,5 +36,5 @@ externalNativeBuild {
 
 6. In Android Studio, run **Build** -> **Refresh Linked C++ Projects**
 
-These steps may not all be required, but they also may not be enough.
+These steps may not all be required, but they also may not be enough. [Related discussion](https://github.com/ammarahm-ed/react-native-mmkv-storage/issues/67#issuecomment-801467636).
 
