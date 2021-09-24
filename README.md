@@ -12,8 +12,7 @@ Free and open source diary and journaling app
 
 ### mmkv-storage
 
-This project uses [react-native-mmkv-storage](https://github.com/ammarahm-ed/react-native-mmkv-storage). If the your project wont build after following the installation instrunctions, you may need to follow these steps:
-This project uses [react-native-mmkv-storage](https://github.com/ammarahm-ed/react-native-mmkv-storage). If the your project wont build after following the [installation instrunctions](), you may need to follow these steps:
+This project uses [react-native-mmkv-storage](https://github.com/ammarahm-ed/react-native-mmkv-storage). If the your project wont build after following the [installation instrunctions](https://rnmmkv.vercel.app/#/gettingstarted), you may need to follow these steps:
 
 1. In the Android Studio SDK Manager, install CMake 3.10 and make sure it is the only version available. 
 
