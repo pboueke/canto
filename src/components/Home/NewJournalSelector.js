@@ -68,6 +68,7 @@ export default props => {
                 </Flex>
               </Pressable>
 
+              <IconIndicatorText>(click to change icon)</IconIndicatorText>
               <Flex
                 css={{flexDirection: 'row', justifyContent: 'space-evenly'}}>
                 <Box width={1 / 3}>
@@ -89,6 +90,7 @@ export default props => {
             <IconListModal
               handleClose={changeIcon}
               show={iconsModalVisible}
+              unShow={() => setIconsModalVisiblel(false)}
               key={'icons-' + iconsModalVisible}
             />
           </NewJournalModal>
@@ -153,6 +155,13 @@ const TextField = styled.TextInput`
   border-radius: 5px;
   border-style: solid;
   padding-left: 20px;
+`;
+
+const IconIndicatorText = styled.Text`
+  font-weight: 300;
+  width: 100%;
+  text-align: center;
+  margin: -30px auto 30px auto;
 `;
 
 const CancelButton = styled.Pressable`

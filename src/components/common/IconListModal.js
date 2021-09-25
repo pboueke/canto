@@ -5,41 +5,58 @@ import {Flex, Box} from 'native-grid-styled';
 
 export default props => {
   const [modalVisible, setModalVisible] = useState(props.show);
-  const icons = iconNames.map(name => (
-    <IconDisplay key={name} width={1 / 6}>
+  const closeModal = () => {
+    setModalVisible(!modalVisible);
+    props.unShow();
+  };
+  return (
+    <IconModal
+      animationType="slide"
+      transparent={false}
+      visible={modalVisible}
+      onRequestClose={closeModal}>
+      <Scroll>
+        <IconModalInterior>
+          <IconModalTitle>Select an {'Icon'}</IconModalTitle>
+        </IconModalInterior>
+        <Flex
+          css={{
+            flexDirection: 'row',
+            justifyContent: 'space-evenly',
+            marginBottom: '30px;',
+            flexWrap: 'wrap',
+          }}>
+          <Icons doCLose={closeModal} handleClose={props.handleClose} />
+        </Flex>
+      </Scroll>
+    </IconModal>
+  );
+};
+
+const Icons = props =>
+  iconNames.map(name => (
+    <IconDisplay key={name} width={1 / 7}>
       <IconDisplayButton
         onPress={() => {
-          setModalVisible(false);
+          props.doCLose(false);
           props.handleClose(name);
         }}>
         <Icon name={name} size={20} />
       </IconDisplayButton>
     </IconDisplay>
   ));
-  return (
-    <IconModal
-      animationType="fade"
-      transparent={false}
-      visible={modalVisible}
-      onRequestClose={() => {
-        setModalVisible(!modalVisible);
-      }}>
-      <IconModalInterior>
-        <IconModalTitle>Select an {'Icon'}</IconModalTitle>
-      </IconModalInterior>
 
-      <Flex
-        css={{
-          flexDirection: 'row',
-          justifyContent: 'space-evenly',
-          marginBottom: '30px;',
-          flexWrap: 'wrap',
-        }}>
-        {icons}
-      </Flex>
-    </IconModal>
-  );
-};
+const Scroll = styled.ScrollView.attrs({
+  contentContainerStyle: props => {
+    return {
+      justifyContent: 'center',
+    };
+  },
+})`
+  width: 100%;
+  margin: 25px auto;
+  background-color: white;
+`;
 
 const IconDisplay = styled(Box)`
   border-width: 1px;
@@ -76,6 +93,27 @@ const IconModalInterior = styled.View`
 // List with all the available feather icons:
 // https://github.com/feathericons/feather/tree/master/icons
 const iconNames = [
+  'book-open',
+  'book',
+  'bookmark',
+  'box',
+  'briefcase',
+  'calendar',
+  'smile',
+  'speaker',
+  'square',
+  'star',
+  'stop-circle',
+  'sun',
+  'sunrise',
+  'sunset',
+  'tablet',
+  'tag',
+  'target',
+  'terminal',
+  'thermometer',
+  'thumbs-down',
+  'thumbs-up',
   'activity',
   'airplay',
   'alert-circle',
@@ -110,12 +148,6 @@ const iconNames = [
   'bell',
   'bluetooth',
   'bold',
-  'book-open',
-  'book',
-  'bookmark',
-  'box',
-  'briefcase',
-  'calendar',
   'camera-off',
   'camera',
   'cast',
@@ -302,21 +334,6 @@ const iconNames = [
   'slash',
   'sliders',
   'smartphone',
-  'smile',
-  'speaker',
-  'square',
-  'star',
-  'stop-circle',
-  'sun',
-  'sunrise',
-  'sunset',
-  'tablet',
-  'tag',
-  'target',
-  'terminal',
-  'thermometer',
-  'thumbs-down',
-  'thumbs-up',
   'toggle-left',
   'toggle-right',
   'tool',
