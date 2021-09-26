@@ -5,6 +5,7 @@ import {Flex, Box} from 'native-grid-styled';
 import {Pressable, TouchableNativeFeedback} from 'react-native';
 import {IconListModal} from '../common';
 import JournalSelector from './JournalSelector';
+import {Journal} from '../../models';
 
 export default props => {
   const [journalModalVisible, setJournalModalVisible] = useState(false);
@@ -16,9 +17,9 @@ export default props => {
   const changeIcon = iconName => setIcon(iconName);
   const confirmPassword = (top, bottom) => {
     if (top === '') {
-      return null;
+      return <Flex css={{height: '94px;'}} />;
     }
-    const color = top !== bottom ? 'red' : 'green';
+    const color = top === bottom ? 'green' : 'red';
     return (
       <Box>
         <TextFieldTitle color={color}>
@@ -27,6 +28,12 @@ export default props => {
         <TextField value={password2} onChangeText={setPassword2} />
       </Box>
     );
+  };
+  const saveAndClose = () => {
+    if (password1 === '' || password1 === password2) {
+      props.save(new Journal(title, icon, password1));
+      setJournalModalVisible(false);
+    }
   };
   return (
     <Selector width={3 / 4}>
@@ -76,12 +83,16 @@ export default props => {
                     onPress={() =>
                       setJournalModalVisible(!journalModalVisible)
                     }>
-                    <ButtonText>Cancel</ButtonText>
+                    <ButtonText enabled={true}>Cancel</ButtonText>
                   </CancelButton>
                 </Box>
                 <Box width={1 / 3}>
-                  <CreateButton onPress={() => {}}>
-                    <ButtonText>Create</ButtonText>
+                  <CreateButton
+                    enabled={password1 === password2}
+                    onPress={saveAndClose}>
+                    <ButtonText enabled={password1 === password2}>
+                      Create
+                    </ButtonText>
                   </CreateButton>
                 </Box>
               </Flex>
@@ -182,9 +193,13 @@ const CreateButton = styled.Pressable`
   margin: 10px 0 10px 0;
   align-items: center;
   background-color: white;
+  color: ${props => (props.enabled ? 'rgb(0, 0, 0)' : 'rgb(222, 222, 222)')};
+  border-color: ${props =>
+    props.enabled ? 'rgb(0, 0, 0)' : 'rgb(222, 222, 222)'};
 `;
 
 const ButtonText = styled.Text`
   padding: 10px;
   font-weight: bold;
+  color: : ${props => (props.enabled ? 'rgb(0, 0, 0)' : 'rgb(222, 222, 222)')};
 `;
