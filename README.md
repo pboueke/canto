@@ -1,11 +1,11 @@
-<p align="center"><img width="300" height="300" src="./android/app/src/main/assets/images/logo_t_v1_256.png"></p>
+<p align="center"><img width="200" height="200" src="./android/app/src/main/assets/images/logo_t_v1_256.png"></p>
 
 # About
 
 Canto is am entirely free, simple journaling app for Android. 
-It's built with `react-native` an may one day be ported to *ios*. 
+It's built with `react-native` and may one day be ported to *ios*. 
 It's meant to resolve frustrations with the current *journaling mobile app*
-ecosystem - pointless features, insane charges and 'DiaryAsAService'-BS.
+ecosystem - pointless features, insane charges and 'DiaryAsAService'-bs.
 
 Features:
 
@@ -14,9 +14,9 @@ Features:
 * Local encryption
 * Automated backups with Drive
 
----
-
 &nbsp;
+
+---
 
 # Development
 
@@ -26,19 +26,19 @@ Features:
 
 *Console #1*
 ```
-> react-native start 
+> yarn start 
 ```
 
 3. Compile and install Canto
 
-*Console #1*
+*Console #2*
 ```
 > yarn android
 ```
 
----
-
 &nbsp;
+
+---
 
 # Build
 
