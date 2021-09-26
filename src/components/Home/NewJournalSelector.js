@@ -2,7 +2,7 @@ import React, {useState} from 'react';
 import styled from 'styled-components/native';
 import Icon from 'react-native-vector-icons/Feather';
 import {Flex, Box} from 'native-grid-styled';
-import {Pressable, TouchableNativeFeedback} from 'react-native';
+import {TouchableNativeFeedback} from 'react-native';
 import {IconListModal} from '../common';
 import JournalSelector from './JournalSelector';
 import {Journal} from '../../models';
@@ -50,53 +50,51 @@ export default props => {
             onRequestClose={() => {
               setJournalModalVisible(!journalModalVisible);
             }}>
-            <NewJournalModalInterior>
-              <NewJournalModalTitle>Create a new Journal?</NewJournalModalTitle>
+            <Scroll>
+              <NewJournalModalInterior>
+                <NewJournalModalTitle>
+                  Create a new Journal?
+                </NewJournalModalTitle>
 
-              <TextFieldTitle>Title</TextFieldTitle>
-              <TextField value={title} onChangeText={setTitle} />
+                <TextFieldTitle>Title</TextFieldTitle>
+                <TextField value={title} onChangeText={setTitle} />
 
-              <TextFieldTitle>Password (leave empty for none)</TextFieldTitle>
-              <TextField value={password1} onChangeText={setPassword1} />
+                <TextFieldTitle>Password (leave empty for none)</TextFieldTitle>
+                <TextField value={password1} onChangeText={setPassword1} />
 
-              {confirmPassword(password1, password2)}
+                {confirmPassword(password1, password2)}
 
-              <Pressable
-                onPress={() => {
-                  setIconsModalVisiblel(!iconsModalVisible);
-                }}>
+                <Preview>
+                  <JournalSelector
+                    title={title}
+                    icon={icon}
+                    onPress={() => setIconsModalVisiblel(!iconsModalVisible)}
+                  />
+                </Preview>
+
+                <IconIndicatorText>(click to change icon)</IconIndicatorText>
                 <Flex
-                  css={{
-                    flexDirection: 'row',
-                    justifyContent: 'space-evenly',
-                    marginBottom: '30px;',
-                  }}>
-                  <JournalSelector title={title} icon={icon} />
+                  css={{flexDirection: 'row', justifyContent: 'space-evenly'}}>
+                  <Box width={1 / 3}>
+                    <CancelButton
+                      onPress={() =>
+                        setJournalModalVisible(!journalModalVisible)
+                      }>
+                      <ButtonText enabled={true}>Cancel</ButtonText>
+                    </CancelButton>
+                  </Box>
+                  <Box width={1 / 3}>
+                    <CreateButton
+                      enabled={password1 === password2}
+                      onPress={saveAndClose}>
+                      <ButtonText enabled={password1 === password2}>
+                        Create
+                      </ButtonText>
+                    </CreateButton>
+                  </Box>
                 </Flex>
-              </Pressable>
-
-              <IconIndicatorText>(click to change icon)</IconIndicatorText>
-              <Flex
-                css={{flexDirection: 'row', justifyContent: 'space-evenly'}}>
-                <Box width={1 / 3}>
-                  <CancelButton
-                    onPress={() =>
-                      setJournalModalVisible(!journalModalVisible)
-                    }>
-                    <ButtonText enabled={true}>Cancel</ButtonText>
-                  </CancelButton>
-                </Box>
-                <Box width={1 / 3}>
-                  <CreateButton
-                    enabled={password1 === password2}
-                    onPress={saveAndClose}>
-                    <ButtonText enabled={password1 === password2}>
-                      Create
-                    </ButtonText>
-                  </CreateButton>
-                </Box>
-              </Flex>
-            </NewJournalModalInterior>
+              </NewJournalModalInterior>
+            </Scroll>
 
             <IconListModal
               handleClose={changeIcon}
@@ -110,6 +108,18 @@ export default props => {
     </Selector>
   );
 };
+
+const Scroll = styled.ScrollView.attrs({
+  contentContainerStyle: props => {
+    return {
+      justifyContent: 'center',
+    };
+  },
+})`
+  width: 100%;
+  margin: 25px auto;
+  background-color: white;
+`;
 
 const Selector = styled(Box)`
   border-width: 2px;
@@ -172,7 +182,13 @@ const IconIndicatorText = styled.Text`
   font-weight: 300;
   width: 100%;
   text-align: center;
-  margin: -30px auto 30px auto;
+  margin: 0px auto 30px auto;
+`;
+
+const Preview = styled.View`
+  width: 100%;
+  flex-direction: row;
+  justify-content: space-evenly;
 `;
 
 const CancelButton = styled.Pressable`

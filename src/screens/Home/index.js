@@ -1,7 +1,7 @@
 import React from 'react';
 import styled from 'styled-components/native';
 import {Logo} from '../../components/common';
-import {Flex, Box} from 'native-grid-styled';
+import {Flex} from 'native-grid-styled';
 import {metadata} from '../..';
 import {JournalSelector, NewJournalSelector} from '../../components/Home';
 import MMKVStorage, {useMMKVStorage} from 'react-native-mmkv-storage';
@@ -14,8 +14,19 @@ export default ({navigation, route}) => {
     version: metadata.srcVersion,
     journals: [],
   });
-  const journals = appData.journals.map((j,i) => (
-    <JournalSelector key={i} icon={j.icon} title={j.title} />
+  const journals = appData.journals.map((j, i) => (
+    <JournalSelector
+      key={i}
+      onPress={() =>
+        navigation.navigate('Journal', {
+          journal: j,
+          title: j.title,
+          icon: j.icon,
+        })
+      }
+      icon={j.icon}
+      title={j.title}
+    />
   ));
   const saveJournal = journal => {
     let data = appData;
@@ -34,9 +45,6 @@ export default ({navigation, route}) => {
       <Scroll>
         <JournalTable>
           {journals}
-
-          <JournalSelector title="Diário" />
-          <JournalSelector title="Sonhos" />
 
           <NewJournalSelector save={saveJournal} />
         </JournalTable>

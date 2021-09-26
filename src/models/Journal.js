@@ -1,5 +1,6 @@
 import bcrypt from 'react-native-bcrypt';
 import isaac from 'isaac';
+
 export default class Journal {
   constructor(title, icon, key) {
     bcrypt.setRandomFallback(len => {

@@ -1,25 +1,21 @@
-import React from 'react';
-
+import React, {View} from 'react';
 import {NavigationContainer} from '@react-navigation/native';
 import {createNativeStackNavigator} from '@react-navigation/native-stack';
-//import MMKVStorage, {useMMKVStorage} from 'react-native-mmkv-storage';
 import HomeScreen from './src/screens/Home';
-
-const cantoVersion = '0.1';
+import JournalScreen from './src/screens/Journal';
 
 const Stack = createNativeStackNavigator();
-/*const MMKV = new MMKVStorage.Loader().withEncryption().initialize();
-  const [appData, setAppData] = useMMKVStorage('canto', MMKV, {
-    initialized: true,
-    version: cantoVersion,
-    journals: [],
-  });*/
 
 const App = () => {
   return (
     <NavigationContainer>
       <Stack.Navigator initialRouteName="Home">
-        <Stack.Screen name=" " component={HomeScreen} />
+        <Stack.Screen
+          name="Home"
+          component={HomeScreen}
+          options={{headerShown: false}}
+        />
+        <Stack.Screen name="Journal" component={JournalScreen} />
       </Stack.Navigator>
     </NavigationContainer>
   );
