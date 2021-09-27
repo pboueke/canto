@@ -1,5 +1,7 @@
 import bcrypt from 'react-native-bcrypt';
 import isaac from 'isaac';
+import {v5 as uuidv5} from 'uuid';
+import {metadata} from '..';
 
 bcrypt.setRandomFallback(len => {
   const buf = new Uint8Array(len);
@@ -11,7 +13,8 @@ export default class Journal {
   constructor(title, icon, key) {
     this.title = title ?? '';
     this.icon = !icon || icon === '' ? 'book' : icon;
-    this.id = 'journal_' + new Date().getMilliseconds();
+    this.date = new Date().getMilliseconds();
+    this.id = uuidv5(title, metadata.uuid);
     this.secure = key !== '';
     this.hash = bcrypt.hashSync(key, 10);
 

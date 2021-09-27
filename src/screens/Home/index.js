@@ -1,4 +1,4 @@
-import React from 'react';
+import React, {useState} from 'react';
 import styled from 'styled-components/native';
 import {Logo} from '../../components/common';
 import {Flex} from 'native-grid-styled';
@@ -9,6 +9,7 @@ import MMKVStorage, {useMMKVStorage} from 'react-native-mmkv-storage';
 const MMKV = new MMKVStorage.Loader().withEncryption().initialize();
 
 export default ({navigation, route}) => {
+  const [reRender, setReRender] = useState(0);
   const [appData, setAppData] = useMMKVStorage('canto', MMKV, {
     initialized: true,
     version: metadata.srcVersion,
@@ -32,6 +33,7 @@ export default ({navigation, route}) => {
     let data = appData;
     data.journals.push(journal);
     setAppData(data);
+    setReRender(reRender + 1);
   };
 
   return (

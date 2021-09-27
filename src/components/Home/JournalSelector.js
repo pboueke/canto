@@ -16,6 +16,7 @@ const Selector = styled(Box)`
 const InnerTouchable = styled.View`
   align-items: center;
   margin: 0;
+  width: 100%;
   padding: 15px 0 15px 0;
 `;
 
