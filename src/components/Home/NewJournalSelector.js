@@ -85,9 +85,10 @@ export default props => {
                   </Box>
                   <Box width={1 / 3}>
                     <CreateButton
-                      enabled={password1 === password2}
+                      enabled={password1 === password2 || password1 === ''}
                       onPress={saveAndClose}>
-                      <ButtonText enabled={password1 === password2}>
+                      <ButtonText
+                        enabled={password1 === password2 || password1 === ''}>
                         Create
                       </ButtonText>
                     </CreateButton>
