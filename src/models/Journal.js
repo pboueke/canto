@@ -10,7 +10,7 @@ bcrypt.setRandomFallback(len => {
 });
 
 export default class Journal {
-  constructor(title, icon, key) {
+  constructor(title, icon, key = '') {
     this.title = title ?? '';
     this.icon = !icon || icon === '' ? 'book' : icon;
     this.date = new Date().getMilliseconds();
@@ -22,7 +22,7 @@ export default class Journal {
       // in-memory store of private key as array
       var _secret = [...key];
       this.storeKey = k => {
-        _secret = [...key];
+        _secret = [...k];
       };
       this.getKey = () => _secret.join('');
     }
@@ -32,7 +32,10 @@ export default class Journal {
     if (!this.secure) {
       return true;
     }
-    this.storeKey(key);
-    return bcrypt.compareSync(key, this.hash);
+    if (bcrypt.compareSync(key, this.hash)) {
+      this.storeKey(key);
+      return true;
+    }
+    return false;
   }
 }
