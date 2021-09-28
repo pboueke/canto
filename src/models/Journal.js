@@ -5,37 +5,41 @@ import {metadata} from '..';
 
 bcrypt.setRandomFallback(len => {
   const buf = new Uint8Array(len);
-
   return buf.map(() => Math.floor(isaac.random() * 256));
 });
 
 export default class Journal {
-  constructor(title, icon, key = '') {
-    this.title = title ?? '';
-    this.icon = !icon || icon === '' ? 'book' : icon;
-    this.date = new Date().getMilliseconds();
-    this.id = uuidv5(title, metadata.uuid);
-    this.secure = key !== '';
-    this.hash = bcrypt.hashSync(key, 10);
+  constructor({
+    title = '',
+    icon = 'book',
+    date = new Date().toISOString(),
+    id = uuidv5(title, metadata.uuid),
+    secure = false,
+    hash = null,
+    key = '',
+  }) {
+    Object.assign(this, {title, icon, date, id, secure, hash});
+
+    if (!secure) {
+      this.secure = key !== '';
+    }
 
     if (this.secure) {
-      // in-memory store of private key as array
-      var _secret = [...key];
-      this.storeKey = k => {
-        _secret = [...k];
-      };
-      this.getKey = () => _secret.join('');
+      if (!this.hash) {
+        this.hash = bcrypt.hashSync(key, 10);
+      }
     }
   }
 
-  unlock(key) {
+  unlock(key, callback) {
     if (!this.secure) {
-      return true;
+      return callback(true);
     }
-    if (bcrypt.compareSync(key, this.hash)) {
-      this.storeKey(key);
-      return true;
-    }
-    return false;
+    bcrypt.compare(key, this.hash, (err, res) => {
+      if (err) {
+        console.log(err);
+      }
+      return callback(err, res);
+    });
   }
 }

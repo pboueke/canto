@@ -31,7 +31,7 @@ export default props => {
   };
   const saveAndClose = () => {
     if (password1 === '' || password1 === password2) {
-      props.save(new Journal(title, icon, password1));
+      props.save(new Journal({title: title, icon: icon, key: password1}));
       setJournalModalVisible(false);
     }
   };

@@ -1,12 +1,17 @@
-import React, {useState} from 'react';
+import React, {useState, useEffect} from 'react';
 import styled from 'styled-components/native';
 import Icon from 'react-native-vector-icons/Feather';
 import {Flex, Box} from 'native-grid-styled';
 import {JournalSelector} from '.';
+import {Journal} from '../../models';
+import {Loader} from '../common';
 
 export default props => {
   const [modalVisible, setModalVisible] = useState(props.show);
-  const [key, setKey] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [status, setStatus] = useState(true);
+  const [statusText, setStatusText] = useState('Password');
+  const [journalKey, setJournalKey] = useState('');
   return (
     <AccessModal
       animationType="fade"
@@ -23,8 +28,8 @@ export default props => {
             }}>
             <JournalDisplay journal={props.journal} />
 
-            <TextFieldTitle>Password</TextFieldTitle>
-            <TextField value={key} onChangeText={setKey} />
+            <TextFieldTitle status={status}>{statusText}</TextFieldTitle>
+            <TextField value={journalKey} onChangeText={setJournalKey} />
           </Flex>
 
           <Flex
@@ -44,11 +49,38 @@ export default props => {
               </CancelButton>
             </Box>
             <Box width={1 / 3}>
-              <SubmitButton enabled={true} onPress={() => null}>
+              <SubmitButton
+                enabled={true}
+                onPress={() => {
+                  setLoading(true);
+                  let temp = props.journal;
+                  temp.key = journalKey;
+                  const journal = new Journal({...temp});
+                  journal.unlock(journalKey, (err, res) => {
+                    if (err) {
+                      console.log(err);
+                    }
+                    if (res) {
+                      setModalVisible(false);
+                      props.unShow();
+                      setStatus(true);
+                      setStatusText('Password');
+                      setLoading(false);
+                      setModalVisible(false);
+                      props.navigate(journal, [...journalKey]);
+                    } else {
+                      setStatus(false);
+                      setLoading(false);
+                      setStatusText('Wrong Password');
+                      setJournalKey('');
+                    }
+                  });
+                }}>
                 <ButtonText enabled={true}>Open</ButtonText>
               </SubmitButton>
             </Box>
           </Flex>
+          <Loader loading={loading} top={37} />
         </AccessModalInterior>
       </AccessModalBackground>
     </AccessModal>
@@ -82,8 +114,8 @@ const JournalDisplay = props => {
     <DisplayWrapper>
       <JournalSelector
         onPress={() => null}
-        icon={props.icon}
-        title={props.title}
+        icon={props.journal.icon}
+        title={props.journal.title}
       />
       <LockWrapper>
         <Icon name="lock" size={24} />
@@ -124,8 +156,8 @@ const AccessModalInterior = styled.View`
 const TextFieldTitle = styled.Text`
   font-weight: 300;
   margin: 0 0 -5px 35px;
-  color: ${props => props.color ?? 'black'};
-`;
+  color: : ${props => (props.status ? 'rgb(0, 0, 0)' : 'rgb(255, 0, 0)')};
+  `;
 
 const TextField = styled.TextInput`
   height: 40px;

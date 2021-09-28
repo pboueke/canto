@@ -21,11 +21,10 @@ export default ({navigation, route}) => {
     version: metadata.srcVersion,
     journals: [],
   });
-  const goToJournal = j => {
+  const goToJournal = (j, k) => {
     navigation.navigate('Journal', {
       journal: j,
-      title: j.title,
-      icon: j.icon,
+      key: k,
     });
   };
   const journals = appData.journals.map((j, i) => (
@@ -34,9 +33,9 @@ export default ({navigation, route}) => {
       onPress={() => {
         setSelectedJournal(j);
         if (j.secure) {
-          setAccessModalVisible(true);
+          setAccessModalVisible(!accessModalVisible);
         } else {
-          goToJournal(j);
+          goToJournal(j, null);
         }
       }}
       icon={j.icon}
@@ -67,7 +66,7 @@ export default ({navigation, route}) => {
           <JournalAccessModal
             journal={selectedJournal}
             show={accessModalVisible}
-            unShow={() => setAccessModalVisible(false)}
+            unShow={() => setAccessModalVisible(!accessModalVisible)}
             navigate={goToJournal}
             key={'am' + accessModalVisible}
           />

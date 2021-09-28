@@ -1,4 +1,5 @@
 import React from 'react';
+import {Text} from 'react-native';
 import styled from 'styled-components/native';
 import Icon from 'react-native-vector-icons/Feather';
 import {Flex} from 'native-grid-styled';
@@ -22,7 +23,7 @@ export default ({navigation, route}) => {
     });
   }, [navigation, route]);
 
-  return <Icon name="book" />;
+  return <Text>{JSON.stringify(route.params.journal)}</Text>;
 };
 
 const HeaderTitle = styled.Text`
