@@ -33,7 +33,7 @@ export default class Journal {
 
   unlock(key, callback) {
     if (!this.secure) {
-      return callback(true);
+      return callback(null, true);
     }
     bcrypt.compare(key, this.hash, (err, res) => {
       if (err) {
