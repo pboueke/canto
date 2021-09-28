@@ -13,7 +13,7 @@ export default class Journal {
     title = '',
     icon = 'book',
     date = new Date().toISOString(),
-    id = uuidv5(title, metadata.uuid),
+    id = uuidv5(title + new Date().toISOString(), metadata.uuid),
     secure = false,
     hash = null,
     key = '',
