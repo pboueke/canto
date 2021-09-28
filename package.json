@@ -8,6 +8,7 @@
     "start": "react-native start",
     "test": "jest",
     "lint": "eslint .",
+    "clean": "cd android && ./gradlew clean && ./gradlew build" ,
     "fix-mmkv": "sed -i -e '/version \"3.10.2\"/d' node_modules/react-native-mmkv-storage/android/build.gradle && sed -i '70i version \"3.10.2\"' node_modules/react-native-mmkv-storage/android/build.gradle && sed -i '87i version \"3.10.2\"' node_modules/react-native-mmkv-storage/android/build.gradle"
   },
   "dependencies": {
@@ -21,6 +22,7 @@
     "react-native-mmkv-storage": "^0.6.4",
     "react-native-safe-area-context": "^3.3.2",
     "react-native-screens": "^3.7.2",
+    "react-native-svg": "^12.1.1",
     "react-native-vector-icons": "^8.1.0",
     "styled-components": "^5.3.1",
     "uuid": "^8.3.2"
@@ -34,6 +36,7 @@
     "jest": "^27.2.0",
     "metro-react-native-babel-preset": "^0.66.2",
     "react-native-codegen": "^0.0.7",
+    "react-native-svg-transformer": "^0.14.3",
     "react-test-renderer": "17.0.2"
   },
   "jest": {

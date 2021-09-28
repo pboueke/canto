@@ -13,6 +13,10 @@ target 'canto' do
   )
 
 
+
+
+  pod 'RNSVG', :path => '../node_modules/react-native-svg'
+
   target 'cantoTests' do
     inherit! :complete
     # Pods for testing

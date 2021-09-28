@@ -1,4 +1,4 @@
-<p align="center"><img width="200" height="200" src="./android/app/src/main/assets/images/logo_t_v1_256.png"></p>
+<p align="center"><img height="175" src="./src/assets/images/canto_bv1.png"></p>
 
 # About
 
