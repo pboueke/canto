@@ -77,3 +77,5 @@ The previous steps came from this [related discussion](https://github.com/ammara
 6. In Android Studio, run **Build** -> **Refresh Linked C++ Projects**
 
 The current build process is not deterministic. The previous steps work sometimes, fail others. I am still trying to figure it out. Currently, follow steps 1 to 3 and repeat 5 and 6 untill the project can be built (help needed).
+
+7. This specific order seems to work: `Build/Clean`, `Build/Refresh Linked C++ Projects`, `Build/Make Project`, `Build/Make Project` (yes, build twice). Then follow the *development steps* listed above.

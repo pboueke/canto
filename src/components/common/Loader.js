@@ -27,7 +27,7 @@ const ModalBackground = styled.View`
 
 const Wrapper = styled.View`
   background-color: rgb(255, 255, 255);
-  height: 85;
+  height: 85px;
   width: 85px;
   margin-top: ${props => props.top ?? 200}px;
   border-width: 2px;
