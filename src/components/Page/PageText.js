@@ -50,7 +50,8 @@ Canto uses Markdown to format your text, it's a very practical way to format tex
 # Use # at the start of the line to create a header.
 Add asteriscs for styling: **bold text**, *italic text*.
 Create lists by using lines started by * or numbers.
-Markdown also allows for tables, lines, quotes and more.
+Markdown also allows for tables, lines, quotes, and links:
+[markdown cheatsheet](https://github.com/adam-p/markdown-here/wiki/Markdown-Cheatsheet)
 
 Formatting will be applied once you save your changes. Also note: The first line of this page will be used for the Page preview. The text contained in it can also be used for search queries. 
 `;

@@ -12,7 +12,15 @@ export default class Page {
     attachments = [],
     comments = [],
   } = {}) {
-    Object.assign(this, {text, date, id, thumbnail, attachments, comments});
+    Object.assign(this, {
+      text,
+      date,
+      id,
+      thumbnail,
+      tags,
+      attachments,
+      comments,
+    });
 
     if (location) {
       this.location = location;

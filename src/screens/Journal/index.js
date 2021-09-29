@@ -1,7 +1,7 @@
 import React, {useState} from 'react';
 import styled from 'styled-components/native';
 import Icon from 'react-native-vector-icons/Feather';
-import {Keyboard} from 'react-native';
+import {Keyboard, Text} from 'react-native';
 import {Flex} from 'native-grid-styled';
 import MMKVStorage, {useMMKVStorage} from 'react-native-mmkv-storage';
 import {PopAction} from '../../components/common';
@@ -28,16 +28,16 @@ export default ({navigation, route}) => {
   const [journalData, setJournalData] = useMMKVStorage(
     props.journal.id,
     MMKV,
-    new JournalContent(props.journal),
+    new JournalContent({cover: props.journal}),
   );
 
   React.useLayoutEffect(() => {
     navigation.setOptions({
-      title: props.title,
+      title: journalData.title,
       headerTitle: () => (
         <Flex css={{flexDirection: 'row'}}>
-          <HeaderIcon name={props.journal.icon} />
-          <HeaderTitle>{props.journal.title}</HeaderTitle>
+          <HeaderIcon name={journalData.icon} />
+          <HeaderTitle>{journalData.title}</HeaderTitle>
         </Flex>
       ),
       headerRight: () => (
@@ -51,7 +51,11 @@ export default ({navigation, route}) => {
         </Flex>
       ),
     });
-  }, [navigation, props]);
+  }, [navigation, journalData]);
+
+  console.log('JOURNAL');
+  console.log(props.journal.id);
+  console.log(journalData);
 
   return (
     <Container onPress={() => Keyboard.dismiss()}>
@@ -59,10 +63,22 @@ export default ({navigation, route}) => {
         journal={props.journal}
         onChange={() => console.log('filter change!')}
       />
+
+      <Flex css={{marginTop: '100px'}}>
+        <Text>PAGES #: {JSON.stringify(journalData.pages.length)}</Text>
+        {journalData.pages.map(x => {
+          return <Text key={x.id}>{JSON.stringify(x)}</Text>;
+        })}
+      </Flex>
       <PopAction
-        onPress={() =>
-          navigation.push('Page', {page: new Page({}), newPage: true})
-        }
+        onPress={() => {
+          navigation.navigate('Page', {
+            page: new Page({}),
+            newPage: true,
+            key: props.key,
+            parent: props.journal.id,
+          });
+        }}
       />
     </Container>
   );
