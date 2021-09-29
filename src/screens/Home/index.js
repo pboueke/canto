@@ -10,7 +10,10 @@ import {
 } from '../../components/Home';
 import MMKVStorage, {useMMKVStorage} from 'react-native-mmkv-storage';
 
-const MMKV = new MMKVStorage.Loader().withEncryption().initialize();
+const MMKV = new MMKVStorage.Loader()
+  .withInstanceID(metadata.mmkvInstance)
+  .withEncryption()
+  .initialize();
 
 export default ({navigation, route}) => {
   const [reRender, setReRender] = useState(0);

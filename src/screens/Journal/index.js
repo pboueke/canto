@@ -8,36 +8,31 @@ import {PopAction} from '../../components/common';
 import {FilterBar} from '../../components/Journal';
 import {JournalContent} from '../../models';
 import {Page} from '../../models';
-
-var MMKV;
+import {metadata} from '../..';
 
 export default ({navigation, route}) => {
   const props = route.params;
 
-  if (!MMKV) {
-    if (props.key) {
-      MMKV = new MMKVStorage.Loader()
-        .withEncryption()
-        .encryptWithCustomKey(props.key.join())
-        .initialize();
-    } else {
-      MMKV = new MMKVStorage.Loader().withEncryption().initialize();
-    }
-  }
+  const MMKV = new MMKVStorage.Loader()
+    .withInstanceID(metadata.mmkvInstance)
+    .withEncryption()
+    .encryptWithCustomKey((props.key || [...metadata.defaultKey]).join(''))
+    .initialize();
 
-  const [journalData, setJournalData] = useMMKVStorage(
-    props.journal.id,
-    MMKV,
-    new JournalContent({cover: props.journal}),
-  );
+  const [journalData, setJournalData] = useMMKVStorage(props.journal.id, MMKV, {
+    content: new JournalContent({
+      cover: props.journal,
+      pages: [{t: (Math.random() + 1).toString(36).substring(7)}],
+    }),
+  });
 
   React.useLayoutEffect(() => {
     navigation.setOptions({
-      title: journalData.title,
+      title: journalData.content.title,
       headerTitle: () => (
         <Flex css={{flexDirection: 'row'}}>
-          <HeaderIcon name={journalData.icon} />
-          <HeaderTitle>{journalData.title}</HeaderTitle>
+          <HeaderIcon name={journalData.content.icon} />
+          <HeaderTitle>{journalData.content.title}</HeaderTitle>
         </Flex>
       ),
       headerRight: () => (
@@ -55,7 +50,7 @@ export default ({navigation, route}) => {
 
   console.log('JOURNAL');
   console.log(props.journal.id);
-  console.log(journalData);
+  console.log(journalData.content);
 
   return (
     <Container onPress={() => Keyboard.dismiss()}>
@@ -65,8 +60,8 @@ export default ({navigation, route}) => {
       />
 
       <Flex css={{marginTop: '100px'}}>
-        <Text>PAGES #: {JSON.stringify(journalData.pages.length)}</Text>
-        {journalData.pages.map(x => {
+        <Text>PAGES #: {JSON.stringify(journalData.content.pages.length)}</Text>
+        {journalData.content.pages.map(x => {
           return <Text key={x.id}>{JSON.stringify(x)}</Text>;
         })}
       </Flex>
