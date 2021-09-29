@@ -181,7 +181,7 @@ const HeaderIcon = styled(Icon)`
 
 const HeaderButton = styled.Pressable`
   background-color: white;
-  margin-left: 15;
+  margin-left: 15px;
 `;
 
 const Container = styled.View`
