@@ -7,54 +7,51 @@ import {PopAction} from '../../components/common';
 
 export default ({navigation, route}) => {
   const props = route.params;
+  const [dateTime, setDateTime] = useState(new Date(props.page.date));
+
+  console.log(props);
   React.useLayoutEffect(() => {
+    const getDate = () => dateTime.toDateString();
+    const getTime = () => dateTime.getHours() + ':' + dateTime.getMinutes();
     navigation.setOptions({
-      title: 'Page',
       headerTitle: () => (
         <Flex css={{flexDirection: 'row'}}>
-          <HeaderIcon name="book" />
-          <HeaderTitle>{'Page'}</HeaderTitle>
+          <HeaderIcon name="calendar" />
+          <HeaderTitle>{getDate()}</HeaderTitle>
         </Flex>
       ),
       headerRight: () => (
         <Flex css={{flexDirection: 'row'}}>
-          <HeaderButton onPress={() => console.log('backup')}>
-            <Icon name="hard-drive" size={22} />
-          </HeaderButton>
-          <HeaderButton onPress={() => console.log('settings')}>
-            <Icon name="settings" size={22} />
-          </HeaderButton>
+          <HeaderIcon name="clock" size={18} />
+          <HeaderTitle size={18}>{getTime()}</HeaderTitle>
         </Flex>
       ),
     });
-  }, [navigation, props]);
+  }, [navigation, props, dateTime]);
 
   return (
-    <Scroll>
-      <PopAction onPress={() => console.log('Action!')} />
-    </Scroll>
+    <Container>
+      <Scroll />
+      <PopAction icon="edit-2" onPress={() => console.log('Action!')} />
+    </Container>
   );
 };
 
 const HeaderTitle = styled.Text`
-  font-size: 24px;
+  font-size: ${props => props.size ?? 20}px;
   margin: 0 10px 0 10px;
 `;
 
 const HeaderIcon = styled(Icon)`
-  margin: 5px 0 0 0;
-  font-size: 25px;
-`;
-
-const HeaderButton = styled.Pressable`
-  background-color: white;
-  margin-left: 15px;
+  font-size: ${props => props.size ?? 20}px;
+  margin: 4px 0 0 0;
 `;
 
 const Container = styled.View`
-  flex: 1;
-  height: 100%;
+  flex: 1
+  flex-direction: column
   width: 100%;
+  height: 100%;
 `;
 
 const Scroll = styled.ScrollView.attrs({
@@ -65,6 +62,4 @@ const Scroll = styled.ScrollView.attrs({
   },
 })`
   width: 100%;
-  margin: 25px auto;
-  background-color: white;
 `;

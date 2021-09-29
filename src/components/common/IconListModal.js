@@ -54,7 +54,7 @@ const Scroll = styled.ScrollView.attrs({
   },
 })`
   width: 100%;
-  margin: 25px auto;
+  margin: auto;
   background-color: white;
 `;
 

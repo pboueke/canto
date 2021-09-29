@@ -17,7 +17,7 @@ export default props => {
       leftSide={left}
       borderMargin={margin}>
       <Text>
-        <Icon name={props.icon ?? 'plus'} size={size * 0.75} />
+        <Icon name={props.icon ?? 'plus'} size={size * 0.5} />
       </Text>
     </Container>
   );
