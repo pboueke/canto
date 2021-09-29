@@ -1,6 +1,7 @@
 import React, {useState} from 'react';
 import styled from 'styled-components/native';
 import Icon from 'react-native-vector-icons/Feather';
+import {Keyboard} from 'react-native';
 import {Flex} from 'native-grid-styled';
 import MMKVStorage, {useMMKVStorage} from 'react-native-mmkv-storage';
 import {PopAction} from '../../components/common';
@@ -53,13 +54,15 @@ export default ({navigation, route}) => {
   }, [navigation, props]);
 
   return (
-    <Container>
+    <Container onPress={() => Keyboard.dismiss()}>
       <FilterBar
         journal={props.journal}
         onChange={() => console.log('filter change!')}
       />
       <PopAction
-        onPress={() => navigation.push('Page', {page: new Page({})})}
+        onPress={() =>
+          navigation.push('Page', {page: new Page({}), newPage: true})
+        }
       />
     </Container>
   );
@@ -80,7 +83,7 @@ const HeaderButton = styled.Pressable`
   margin-left: 15px;
 `;
 
-const Container = styled.View`
+const Container = styled.Pressable`
   flex: 1;
   height: 100%;
   width: 100%;

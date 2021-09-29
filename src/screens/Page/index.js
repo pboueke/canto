@@ -2,12 +2,17 @@ import React, {useState} from 'react';
 import styled from 'styled-components/native';
 import Icon from 'react-native-vector-icons/Feather';
 import {Flex} from 'native-grid-styled';
-import MMKVStorage, {useMMKVStorage} from 'react-native-mmkv-storage';
+import {Keyboard} from 'react-native';
+
 import {PopAction} from '../../components/common';
+import {PageText} from '../../components/Page';
 
 export default ({navigation, route}) => {
   const props = route.params;
+
+  const [editMode, setEditMode] = useState(props.newPage);
   const [dateTime, setDateTime] = useState(new Date(props.page.date));
+  const [text, setText] = useState(props.page.text);
 
   console.log(props);
   React.useLayoutEffect(() => {
@@ -30,8 +35,10 @@ export default ({navigation, route}) => {
   }, [navigation, props, dateTime]);
 
   return (
-    <Container>
-      <Scroll />
+    <Container onPress={() => Keyboard.dismiss()}>
+      <Scroll>
+        <PageText value={text} onChange={setText} editMode={editMode} />
+      </Scroll>
       <PopAction icon="edit-2" onPress={() => console.log('Action!')} />
     </Container>
   );
@@ -47,7 +54,7 @@ const HeaderIcon = styled(Icon)`
   margin: 4px 0 0 0;
 `;
 
-const Container = styled.View`
+const Container = styled.Pressable`
   flex: 1
   flex-direction: column
   width: 100%;
