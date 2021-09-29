@@ -1,5 +1,4 @@
-import React from 'react';
-import {Text, View} from 'react-native';
+import React, {useState} from 'react';
 import styled from 'styled-components/native';
 import Icon from 'react-native-vector-icons/Feather';
 import {Flex} from 'native-grid-styled';
@@ -17,19 +16,46 @@ export default ({navigation, route}) => {
         </Flex>
       ),
       headerRight: () => (
-        <SettingsButton onPress={() => console.log('settings')}>
-          <Icon name="settings" size={20} />
-        </SettingsButton>
+        <Flex css={{flexDirection: 'row'}}>
+          <HeaderButton onPress={() => console.log('backup')}>
+            <Icon name="hard-drive" size={22} />
+          </HeaderButton>
+          <HeaderButton onPress={() => console.log('settings')}>
+            <Icon name="settings" size={22} />
+          </HeaderButton>
+        </Flex>
       ),
     });
   }, [navigation, route]);
 
+  const [query, setQuery] = useState('');
+
   return (
     <Container>
+      <Flex css={{flexDirection: 'row'}}>
+        <FilterIput
+          value={query}
+          onChange={event => {
+            const {eventCount, target, text} = event.nativeEvent;
+            setQuery(text);
+          }}
+        />
+      </Flex>
       <PopAction onPress={() => console.log('action!')} />
     </Container>
   );
 };
+
+const FilterIput = styled.TextInput`
+  height: 40px;
+  margin: 10px 10px 30px 10px;
+  border-width: 2px;
+  border-radius: 5px;
+  border-style: solid;
+  padding-left: 20px;
+  flex-grow: 1;
+  background-color: rgb(255, 255, 255);
+`;
 
 const HeaderTitle = styled.Text`
   font-size: 24px;
@@ -38,15 +64,28 @@ const HeaderTitle = styled.Text`
 
 const HeaderIcon = styled(Icon)`
   margin: 5px 0 0 0;
-  font-size: 24px;
+  font-size: 25px;
 `;
 
-const SettingsButton = styled.Pressable`
+const HeaderButton = styled.Pressable`
   background-color: white;
+  margin-left: 15;
 `;
 
 const Container = styled.View`
   flex: 1;
   height: 100%;
   width: 100%;
+`;
+
+const Scroll = styled.ScrollView.attrs({
+  contentContainerStyle: props => {
+    return {
+      justifyContent: 'center',
+    };
+  },
+})`
+  width: 100%;
+  margin: 25px auto;
+  background-color: white;
 `;

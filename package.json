@@ -8,7 +8,7 @@
     "start": "react-native start",
     "test": "jest",
     "lint": "eslint .",
-    "clean": "cd android && ./gradlew clean && ./gradlew build" ,
+    "fix-android": "cd android && ./gradlew clean && cd .. && yarn fix-mmkv && cd android && ./gradlew build && ./gradlew build" ,
     "fix-mmkv": "sed -i -e '/version \"3.10.2\"/d' node_modules/react-native-mmkv-storage/android/build.gradle && sed -i '70i version \"3.10.2\"' node_modules/react-native-mmkv-storage/android/build.gradle && sed -i '87i version \"3.10.2\"' node_modules/react-native-mmkv-storage/android/build.gradle"
   },
   "dependencies": {
