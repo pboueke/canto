@@ -8,7 +8,6 @@ import {Page} from '../../models';
 import {JournalContent} from '../../models';
 import {metadata} from '../..';
 
-
 export default ({navigation, route}) => {
   const props = route.params;
 
@@ -18,41 +17,48 @@ export default ({navigation, route}) => {
     .encryptWithCustomKey((props.key || [...metadata.defaultKey]).join(''))
     .initialize();
 
-  console.log('PAGE PARENT:');
-  console.log(props.parent);
-  const [journalData, setJournalData] = useMMKVStorage(props.parent, MMKV);
-  const [pageData, setPageData] = useMMKVStorage(props.page.id, MMKV, {
-    page: new Page(props.Page),
-  });
+  const journalData = MMKV.getMap(props.parent);
+  let pageData = MMKV.getMap(props.page.id);
+  if (!pageData) {
+    MMKV.setMap(props.page.id, {
+      content: new Page(props.Page),
+      rand: (Math.random() + 1).toString(36).substring(7),
+    });
+  }
+  pageData = MMKV.getMap(props.page.id);
 
-  console.log(journalData);
-
-  const [stored, setStored] = useState(props.newPage);
+  const [stored, setStored] = useState(!props.newPage);
   const [editMode, setEditMode] = useState(props.newPage);
   const [dateTime, setDateTime] = useState(new Date(props.page.date));
   const [text, setText] = useState(props.page.text);
 
   const saveJournalData = (page, update) => {
     let tmp = journalData;
+    console.log(tmp.content.pages);
     if (update) {
-      for (let i = 0; i < tmp.pages.length; i++) {
-        if (tmp.pages[i].id === page.id) {
-          tmp.pages[i] = page;
+      for (let i = 0; i < tmp.content.pages.length; i++) {
+        if (tmp.content.pages[i].id === page.id) {
+          tmp.content.pages[i] = page;
+          console.log('Updated');
+          console.log(tmp.content.pages);
           break;
         }
       }
     } else {
-      tmp.pages.push(page);
+      tmp.content.pages.push(page);
+      console.log('Pushed');
+      console.log(tmp.content.pages);
     }
-    setJournalData(tmp);
+    MMKV.setMap(props.parent, tmp);
   };
 
   const savePageData = () => {
     let tmp = pageData;
-    tmp.text = text;
-    tmp.date = new Date(dateTime).toISOString();
-    setPageData(tmp);
-    saveJournalData(tmp.getPreview(), stored);
+    tmp.content.text = text;
+    tmp.content.date = new Date(dateTime).toISOString();
+    tmp.content = new Page(tmp.content);
+    MMKV.setMap(pageData.content.id, tmp);
+    saveJournalData(tmp.content.getPreview(), stored);
     setStored(true);
   };
 

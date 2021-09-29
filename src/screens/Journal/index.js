@@ -19,20 +19,22 @@ export default ({navigation, route}) => {
     .encryptWithCustomKey((props.key || [...metadata.defaultKey]).join(''))
     .initialize();
 
-  const [journalData, setJournalData] = useMMKVStorage(props.journal.id, MMKV, {
-    content: new JournalContent({
-      cover: props.journal,
-      pages: [{t: (Math.random() + 1).toString(36).substring(7)}],
-    }),
-  });
+  let journalData = MMKV.getMap(props.journal.id);
+  if (!journalData) {
+    MMKV.setMap(props.journal.id, {
+      content: new JournalContent({cover: props.journal}),
+      rand: (Math.random() + 1).toString(36).substring(7),
+    });
+  }
+  journalData = MMKV.getMap(props.journal.id);
 
   React.useLayoutEffect(() => {
     navigation.setOptions({
-      title: journalData.content.title,
+      title: props.journal.title,
       headerTitle: () => (
         <Flex css={{flexDirection: 'row'}}>
-          <HeaderIcon name={journalData.content.icon} />
-          <HeaderTitle>{journalData.content.title}</HeaderTitle>
+          <HeaderIcon name={props.journal.icon} />
+          <HeaderTitle>{props.journal.title}</HeaderTitle>
         </Flex>
       ),
       headerRight: () => (
@@ -46,11 +48,7 @@ export default ({navigation, route}) => {
         </Flex>
       ),
     });
-  }, [navigation, journalData]);
-
-  console.log('JOURNAL');
-  console.log(props.journal.id);
-  console.log(journalData.content);
+  }, [navigation, props]);
 
   return (
     <Container onPress={() => Keyboard.dismiss()}>
