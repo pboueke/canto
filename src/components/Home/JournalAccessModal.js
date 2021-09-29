@@ -3,7 +3,7 @@ import styled from 'styled-components/native';
 import Icon from 'react-native-vector-icons/Feather';
 import {Flex, Box} from 'native-grid-styled';
 import {JournalSelector} from '.';
-import {Journal} from '../../models';
+import {JournalCover} from '../../models';
 import {Loader} from '../common';
 
 export default props => {
@@ -55,7 +55,7 @@ export default props => {
                   setLoading(true);
                   let temp = props.journal;
                   temp.key = journalKey;
-                  const journal = new Journal({...temp});
+                  const journal = new JournalCover({...temp});
                   journal.unlock(journalKey, (err, res) => {
                     if (err) {
                       console.log(err);

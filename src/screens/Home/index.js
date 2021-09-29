@@ -17,7 +17,6 @@ export default ({navigation, route}) => {
   const [selectedJournal, setSelectedJournal] = useState(null);
   const [accessModalVisible, setAccessModalVisible] = useState(false);
   const [appData, setAppData] = useMMKVStorage('canto', MMKV, {
-    initialized: true,
     version: metadata.srcVersion,
     journals: [],
   });

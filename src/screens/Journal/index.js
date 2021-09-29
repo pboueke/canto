@@ -5,9 +5,31 @@ import {Flex} from 'native-grid-styled';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import MMKVStorage, {useMMKVStorage} from 'react-native-mmkv-storage';
 import {PopAction} from '../../components/common';
+import {JournalContent} from '../../models';
+import {Page} from '../../models';
+
+var MMKV;
 
 export default ({navigation, route}) => {
   const props = route.params;
+
+  if (!MMKV) {
+    if (props.key) {
+      MMKV = new MMKVStorage.Loader()
+        .withEncryption()
+        .encryptWithCustomKey(props.key.join())
+        .initialize();
+    } else {
+      MMKV = new MMKVStorage.Loader().withEncryption().initialize();
+    }
+  }
+
+  const [journalData, setJournalData] = useMMKVStorage(
+    props.journal.id,
+    MMKV,
+    new JournalContent(props.journal),
+  );
+
   React.useLayoutEffect(() => {
     navigation.setOptions({
       title: props.title,
@@ -90,7 +112,9 @@ export default ({navigation, route}) => {
           />
         )}
       </FilterBar>
-      <PopAction onPress={() => console.log('action!')} />
+      <PopAction
+        onPress={() => navigation.push('Page', {page: new Page({})})}
+      />
     </Container>
   );
 };

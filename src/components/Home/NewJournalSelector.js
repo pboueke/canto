@@ -5,7 +5,7 @@ import {Flex, Box} from 'native-grid-styled';
 import {TouchableNativeFeedback} from 'react-native';
 import {IconListModal} from '../common';
 import JournalSelector from './JournalSelector';
-import {Journal} from '../../models';
+import {JournalCover} from '../../models';
 
 export default props => {
   const [journalModalVisible, setJournalModalVisible] = useState(false);
@@ -31,7 +31,7 @@ export default props => {
   };
   const saveAndClose = () => {
     if (password1 === '' || password1 === password2) {
-      props.save(new Journal({title: title, icon: icon, key: password1}));
+      props.save(new JournalCover({title: title, icon: icon, key: password1}));
       setJournalModalVisible(false);
     }
   };

@@ -8,7 +8,7 @@ bcrypt.setRandomFallback(len => {
   return buf.map(() => Math.floor(isaac.random() * 256));
 });
 
-export default class Journal {
+export default class JournalCover {
   constructor({
     title = '',
     icon = 'book',
