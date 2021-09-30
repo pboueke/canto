@@ -29,14 +29,7 @@ export default class Filter {
    * (Page previews defined at Models/Page/getPreview)
    */
   apply(pages) {
-    console.log(' \n\n\nENDERED FILTER:');
-    console.log(this);
-    console.log('\n\n');
-    console.log('PAGES:');
-    console.log(pages);
-
     const applyQuery = (query, items) => {
-      console.log();
       if (!items || items.length === 0) {
         return [];
       }
@@ -44,8 +37,6 @@ export default class Filter {
         return items;
       }
       let res = search(items, ['text'], query);
-      console.log('\n\nTEXT:');
-      console.log(res.length);
       return res;
     };
 
@@ -69,8 +60,6 @@ export default class Filter {
       if (properties.location) {
         res = res.filter(p => p.location);
       }
-      console.log('\n\nPROPERTIES:');
-      console.log(res.length);
       return res;
     };
 
@@ -89,9 +78,6 @@ export default class Filter {
         const d = getDateOnly(item.date);
         return d >= s && d <= e;
       });
-      console.log('\n\nDATE:');
-      console.log(res.length);
-      console.log('\n\n\n');
       return res;
     };
 

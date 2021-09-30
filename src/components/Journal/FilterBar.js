@@ -31,7 +31,6 @@ export default props => {
   };
 
   const changeCaller = () => {
-    console.log(props.data);
     const filter = new Filter(
       queryRef.current,
       Filter.getAvailableProperties(props.data),
@@ -39,7 +38,6 @@ export default props => {
       endDateRef.current,
     );
     const filtered = filter.apply(props.data);
-    console.log(filtered);
     props.onChange(filtered);
   };
 
@@ -49,14 +47,22 @@ export default props => {
         <FilterButtonIcon name="filter" size={25} />
         <FilterButtonSmallIcon name="plus" size={20} />
       </FilterButton>
-      <FilterInputIcon name="search" size={25} />
 
       <FilterIput
+        autoCorrect={false}
         placeholder="search filter"
         value={query}
         onChange={event => {
           const {eventCount, target, text} = event.nativeEvent;
           setQuery(text);
+          changeCaller();
+        }}
+      />
+
+      <FilterInputIcon
+        active={query !== ''}
+        onPress={() => {
+          setQuery('');
           changeCaller();
         }}
       />
@@ -182,11 +188,27 @@ const FilterButton = styled.Pressable`
     props.empty ? 'rgb(233, 255, 224)' : 'rgb(255, 234, 224)'};
 `;
 
-const FilterInputIcon = styled(Icon)`
-  position: absolute;
-  margin: 20px 0 0 75px;
-  elevation: 5;
-`;
+const FilterInputIcon = props => {
+  const IconWrapper = styled.Pressable`
+    elevation: 10;
+    height: 50px;
+    width: 40px;
+    position: absolute;
+    margin: 10px 0 0 70px;
+    align-items: center;
+    justify-content: center;
+  `;
+  return (
+    <IconWrapper
+      onPress={() => {
+        if (props.active) {
+          props.onPress();
+        }
+      }}>
+      <Icon name={props.active ? 'x' : 'search'} size={25} />
+    </IconWrapper>
+  );
+};
 
 const FilterButtonIcon = styled(Icon)`
   position: absolute;
