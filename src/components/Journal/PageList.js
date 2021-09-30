@@ -6,7 +6,13 @@ import Icon from 'react-native-vector-icons/Feather';
 import Markdown from 'react-native-markdown-display';
 
 export default props => {
-  const renderItem = i => <Item date={i.item.date} text={i.item.text} />;
+  const renderItem = i => (
+    <Item
+      onPress={() => props.onClick(i.item)}
+      date={i.item.date}
+      text={i.item.text}
+    />
+  );
   return (
     <Container>
       <FlatList
@@ -20,7 +26,7 @@ export default props => {
 
 const Container = styled(SafeAreaView)`
   flex: 1;
-  margin-top: 80px;
+  margin-top: 70px;
 `;
 
 const Item = props => {
@@ -30,7 +36,7 @@ const Item = props => {
     props.text.length > 200 ? props.text.substring(0, 200) + '...' : props.text;
   const time = dateTime.getHours() + ':' + dateTime.getMinutes();
   return (
-    <ItemBackground>
+    <ItemBackground onPress={props.onPress}>
       <Flex css={{flexDirection: 'row', flex: 1}}>
         <ItemThumbnail />
         <Flex css={{flexDirection: 'column'}}>
@@ -54,14 +60,14 @@ const Item = props => {
   );
 };
 
-const ItemBackground = styled.View`
+const ItemBackground = styled.Pressable`
   border-width: 2px;
   border-radius: 5px;
   border-style: solid;
   flex: 1;
   flex-direction: row;
   background-color: white;
-  margin: 0 5px 10px 5px;
+  margin: 5px;
 `;
 
 const ItemThumbnail = props => {

@@ -29,7 +29,7 @@ export default ({navigation, route}) => {
   const [stored, setStored] = useState(!props.newPage);
   const [editMode, setEditMode] = useState(props.newPage);
   const [dateTime, setDateTime] = useState(new Date(props.page.date));
-  const [text, setText] = useState(props.page.text);
+  const [text, setText] = useState(pageData.content.text);
 
   const saveJournalData = (page, update) => {
     let tmp = journalData;

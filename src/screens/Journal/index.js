@@ -3,7 +3,7 @@ import styled from 'styled-components/native';
 import Icon from 'react-native-vector-icons/Feather';
 import {Keyboard, Text} from 'react-native';
 import {Flex} from 'native-grid-styled';
-import MMKVStorage, {useMMKVStorage} from 'react-native-mmkv-storage';
+import MMKVStorage from 'react-native-mmkv-storage';
 import {PopAction} from '../../components/common';
 import {FilterBar, PageList} from '../../components/Journal';
 import {JournalContent} from '../../models';
@@ -57,7 +57,17 @@ export default ({navigation, route}) => {
         onChange={() => console.log('filter change!')}
       />
 
-      <PageList data={journalData.content.pages} />
+      <PageList
+        data={journalData.content.pages}
+        onClick={page => {
+          navigation.navigate('Page', {
+            page: page,
+            newPage: false,
+            key: props.key,
+            parent: props.journal.id,
+          });
+        }}
+      />
       <PopAction
         onPress={() => {
           navigation.navigate('Page', {

@@ -69,6 +69,10 @@ const FilterBar = styled.View`
   height: 70px;
   width: 100%
   position: absolute;
+  elevation: 15;
+  background-color: rgb(209, 209, 209);
+  border-bottom-width: 1px;
+  border-top-width: 1px;
 `;
 
 const Wrapper = styled.Pressable`
