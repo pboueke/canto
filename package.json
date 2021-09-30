@@ -27,6 +27,7 @@
     "react-native-svg": "^12.1.1",
     "react-native-vector-icons": "^8.1.0",
     "react-usestateref": "^1.0.5",
+    "ss-search": "^1.6.1",
     "styled-components": "^5.3.1",
     "uuid": "^8.3.2"
   },

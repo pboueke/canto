@@ -6812,6 +6812,11 @@ sprintf-js@~1.0.2:
   resolved "https://registry.npmjs.org/sprintf-js/-/sprintf-js-1.0.3.tgz"
   integrity sha1-BOaSb2YolTVPPdAVIDYzuFcpfiw=
 
+ss-search@^1.6.1:
+  version "1.6.1"
+  resolved "https://registry.yarnpkg.com/ss-search/-/ss-search-1.6.1.tgz#6c23a50dada324d0682c60096f2c17e1d5c213b3"
+  integrity sha512-zztU8mIu/+S/g88y2NYUWaaWdK7QLoQ8eNWpbzEkOT7irL4S0OozHkPUaydcpy1guOeMgDXEC163QqFUaGbLFQ==
+
 stable@^0.1.8:
   version "0.1.8"
   resolved "https://registry.yarnpkg.com/stable/-/stable-0.1.8.tgz#836eb3c8382fe2936feaf544631017ce7d47a3cf"
