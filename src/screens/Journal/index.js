@@ -1,7 +1,7 @@
 import React, {useState} from 'react';
 import styled from 'styled-components/native';
 import Icon from 'react-native-vector-icons/Feather';
-import {Keyboard, Text} from 'react-native';
+import {Keyboard} from 'react-native';
 import {Flex} from 'native-grid-styled';
 import MMKVStorage from 'react-native-mmkv-storage';
 import {PopAction} from '../../components/common';
@@ -19,14 +19,22 @@ export default ({navigation, route}) => {
     .encryptWithCustomKey((props.key || [...metadata.defaultKey]).join(''))
     .initialize();
 
-  let journalData = MMKV.getMap(props.journal.id);
-  if (!journalData) {
+  let journalDataStorage = MMKV.getMap(props.journal.id);
+  if (!journalDataStorage) {
     MMKV.setMap(props.journal.id, {
       content: new JournalContent({cover: props.journal}),
       rand: (Math.random() + 1).toString(36).substring(7),
     });
   }
-  journalData = MMKV.getMap(props.journal.id);
+  journalDataStorage = MMKV.getMap(props.journal.id);
+  const [journalDataState, setJournalDataState] = useState(journalDataStorage);
+
+  React.useEffect(() => {
+    const unsubscribe = navigation.addListener('focus', () => {
+      setJournalDataState(MMKV.getMap(props.journal.id));
+    });
+    return unsubscribe;
+  }, [navigation, props, MMKV]);
 
   React.useLayoutEffect(() => {
     navigation.setOptions({
@@ -58,7 +66,7 @@ export default ({navigation, route}) => {
       />
 
       <PageList
-        data={journalData.content.pages}
+        data={journalDataState.content.pages}
         onClick={page => {
           navigation.navigate('Page', {
             page: page,

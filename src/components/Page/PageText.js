@@ -41,8 +41,9 @@ const TextPreview = styled.View`
   border-radius: 5px;
   border-style: solid;
   margin: 5px;
-  padding: 5px;
+  padding: 3px 12px 6px 13px;
   background-color: white;
+  min-height: 340px;
 `;
 
 const TextEditor = styled.TextInput`
@@ -53,6 +54,7 @@ const TextEditor = styled.TextInput`
   padding: 15px;
   background-color: white;
   text-align-vertical: top;
+  min-height: 340px;
 `;
 
 const placeholder = `Write your journal entry here...
