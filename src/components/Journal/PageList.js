@@ -4,6 +4,7 @@ import {SafeAreaView, FlatList} from 'react-native';
 import {Flex} from 'native-grid-styled';
 import Icon from 'react-native-vector-icons/Feather';
 import Markdown from 'react-native-markdown-display';
+import {getTime, getDate} from '../../lib';
 
 export default props => {
   const renderItem = i => (
@@ -30,11 +31,10 @@ const Container = styled(SafeAreaView)`
 `;
 
 const Item = props => {
-  const dateTime = new Date(props.date);
-  const date = dateTime.toDateString();
+  const date = getDate(props.date);
   const text =
     props.text.length > 200 ? props.text.substring(0, 200) + '...' : props.text;
-  const time = dateTime.getHours() + ':' + dateTime.getMinutes();
+  const time = getTime(props.date);
   return (
     <ItemBackground onPress={props.onPress}>
       <Flex css={{flexDirection: 'row', flex: 1}}>

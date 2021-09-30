@@ -19,3 +19,9 @@ export const useStateWithCallback = initialState => {
 
   return [state, handleSetState];
 };
+
+export const getDate = date => new Date(date).toDateString();
+export const getTime = date =>
+  new Date(date).getHours() +
+  ':' +
+  ('0' + new Date(date).getMinutes()).slice(-2);

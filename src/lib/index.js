@@ -1,1 +1,1 @@
-export {useStateWithCallback} from './Utils';
+export {useStateWithCallback, getDate, getTime} from './Utils';

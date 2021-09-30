@@ -2,10 +2,7 @@ import React, {useState} from 'react';
 import styled from 'styled-components/native';
 import Icon from 'react-native-vector-icons/Feather';
 import DateTimePicker from '@react-native-community/datetimepicker';
-
-const getDate = date => new Date(date).toDateString();
-const getTime = date =>
-  new Date(date).getHours() + ':' + new Date(date).getMinutes();
+import {getTime, getDate} from '../../lib';
 
 const PageDate = props => {
   const [date, setDate] = useState(new Date(props.date));
