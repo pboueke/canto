@@ -5,7 +5,7 @@ import {Keyboard, Text} from 'react-native';
 import {Flex} from 'native-grid-styled';
 import MMKVStorage, {useMMKVStorage} from 'react-native-mmkv-storage';
 import {PopAction} from '../../components/common';
-import {FilterBar} from '../../components/Journal';
+import {FilterBar, PageList} from '../../components/Journal';
 import {JournalContent} from '../../models';
 import {Page} from '../../models';
 import {metadata} from '../..';
@@ -57,12 +57,7 @@ export default ({navigation, route}) => {
         onChange={() => console.log('filter change!')}
       />
 
-      <Flex css={{marginTop: '100px'}}>
-        <Text>PAGES #: {JSON.stringify(journalData.content.pages.length)}</Text>
-        {journalData.content.pages.map(x => {
-          return <Text key={x.id}>{JSON.stringify(x)}</Text>;
-        })}
-      </Flex>
+      <PageList data={journalData.content.pages} />
       <PopAction
         onPress={() => {
           navigation.navigate('Page', {

@@ -1,11 +1,10 @@
 import React, {useState} from 'react';
 import styled from 'styled-components/native';
 import {Keyboard} from 'react-native';
-import MMKVStorage, {useMMKVStorage} from 'react-native-mmkv-storage';
+import MMKVStorage from 'react-native-mmkv-storage';
 import {PopAction} from '../../components/common';
 import {PageText, PageDate, PageTime} from '../../components/Page';
 import {Page} from '../../models';
-import {JournalContent} from '../../models';
 import {metadata} from '../..';
 
 export default ({navigation, route}) => {
@@ -34,20 +33,15 @@ export default ({navigation, route}) => {
 
   const saveJournalData = (page, update) => {
     let tmp = journalData;
-    console.log(tmp.content.pages);
     if (update) {
       for (let i = 0; i < tmp.content.pages.length; i++) {
         if (tmp.content.pages[i].id === page.id) {
           tmp.content.pages[i] = page;
-          console.log('Updated');
-          console.log(tmp.content.pages);
           break;
         }
       }
     } else {
       tmp.content.pages.push(page);
-      console.log('Pushed');
-      console.log(tmp.content.pages);
     }
     MMKV.setMap(props.parent, tmp);
   };

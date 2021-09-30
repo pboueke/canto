@@ -33,6 +33,7 @@ export default class Page {
 
   getPreview() {
     return {
+      id: this.id,
       text: this.text.split('\n')[0],
       date: this.date,
       thumbnail: this.thumbnail,
