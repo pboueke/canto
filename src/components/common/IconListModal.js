@@ -1,20 +1,31 @@
-import React, {useState} from 'react';
+import React, {useState, useMemo} from 'react';
 import styled from 'styled-components/native';
 import Icon from 'react-native-vector-icons/Feather';
 import {Flex, Box} from 'native-grid-styled';
 
 export default props => {
   const [modalVisible, setModalVisible] = useState(props.show);
-  const closeModal = () => {
-    setModalVisible(!modalVisible);
-    props.unShow();
-  };
+  const icons = useMemo(
+    () => (
+      <Icons
+        doCLose={() => {
+          setModalVisible(false);
+          props.unShow();
+        }}
+        handleClose={props.handleClose}
+      />
+    ),
+    [props],
+  );
   return (
     <IconModal
       animationType="slide"
       transparent={false}
       visible={modalVisible}
-      onRequestClose={closeModal}>
+      onRequestClose={() => {
+        setModalVisible(!modalVisible);
+        props.unShow();
+      }}>
       <Scroll>
         <IconModalInterior>
           <IconModalTitle>Select an {'Icon'}</IconModalTitle>
@@ -26,15 +37,15 @@ export default props => {
             marginBottom: '30px;',
             flexWrap: 'wrap',
           }}>
-          <Icons doCLose={closeModal} handleClose={props.handleClose} />
+          {icons}
         </Flex>
       </Scroll>
     </IconModal>
   );
 };
 
-const Icons = props =>
-  iconNames.map(name => (
+const Icons = props => {
+  return iconNames.map(name => (
     <IconDisplay key={name} width={1 / 7}>
       <IconDisplayButton
         onPress={() => {
@@ -45,6 +56,7 @@ const Icons = props =>
       </IconDisplayButton>
     </IconDisplay>
   ));
+};
 
 const Scroll = styled.ScrollView.attrs({
   contentContainerStyle: props => {

@@ -3,13 +3,18 @@ import styled from 'styled-components/native';
 import Icon from 'react-native-vector-icons/Feather';
 import {Flex, Box} from 'native-grid-styled';
 import {TouchableNativeFeedback} from 'react-native';
+import {useStateWithCallback} from '../../lib';
+import useStateRef from 'react-usestateref';
 import {IconListModal} from '../common';
 import JournalSelector from './JournalSelector';
 import {JournalCover} from '../../models';
+import {Loader} from '../common';
 
 export default props => {
   const [journalModalVisible, setJournalModalVisible] = useState(false);
-  const [iconsModalVisible, setIconsModalVisiblel] = useState(false);
+  const [iconsModalVisible, setIconsModalVisible] = useState(false);
+  const [isSaving, setIsSaving] = useStateWithCallback(false);
+  const [loading, setLoading] = useStateRef(false);
   const [title, setTitle] = useState('My Journal');
   const [password1, setPassword1] = useState('');
   const [password2, setPassword2] = useState('');
@@ -29,12 +34,7 @@ export default props => {
       </Box>
     );
   };
-  const saveAndClose = () => {
-    if (password1 === '' || password1 === password2) {
-      props.save(new JournalCover({title: title, icon: icon, key: password1}));
-      setJournalModalVisible(false);
-    }
-  };
+
   return (
     <Selector width={3 / 4}>
       <TouchableNativeFeedback onPress={() => setJournalModalVisible(true)}>
@@ -50,6 +50,7 @@ export default props => {
             onRequestClose={() => {
               setJournalModalVisible(!journalModalVisible);
             }}>
+            <Loader loading={isSaving || loading} />
             <Scroll>
               <NewJournalModalInterior>
                 <NewJournalModalTitle>
@@ -68,7 +69,7 @@ export default props => {
                   <JournalSelector
                     title={title}
                     icon={icon}
-                    onPress={() => setIconsModalVisiblel(!iconsModalVisible)}
+                    onPress={() => setIconsModalVisible(!iconsModalVisible)}
                   />
                 </Preview>
 
@@ -86,7 +87,27 @@ export default props => {
                   <Box width={1 / 3}>
                     <CreateButton
                       enabled={password1 === password2 || password1 === ''}
-                      onPress={saveAndClose}>
+                      onPressOut={() => {
+                        /* TODO: clean up the loader state management.
+                                 Only setting 'loading' inside 'setIsSaving'
+                                 seems to work. Maybe put it inside a new useEffect.
+                        */
+                        setLoading(true);
+                        setIsSaving(true, () => {
+                          if (password1 === '' || password1 === password2) {
+                            props.save(
+                              new JournalCover({
+                                title: title,
+                                icon: icon,
+                                key: password1,
+                              }),
+                            );
+                            setJournalModalVisible(false);
+                            setIsSaving(false);
+                            setLoading(false);
+                          }
+                        });
+                      }}>
                       <ButtonText
                         enabled={password1 === password2 || password1 === ''}>
                         Create
@@ -100,7 +121,7 @@ export default props => {
             <IconListModal
               handleClose={changeIcon}
               show={iconsModalVisible}
-              unShow={() => setIconsModalVisiblel(false)}
+              unShow={() => setIconsModalVisible(false)}
               key={'icons-' + iconsModalVisible}
             />
           </NewJournalModal>
