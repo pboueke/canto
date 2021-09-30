@@ -1,6 +1,7 @@
 import React, {useState} from 'react';
 import styled from 'styled-components/native';
 import {Flex} from 'native-grid-styled';
+import Icon from 'react-native-vector-icons/Feather';
 import DateTimePicker from '@react-native-community/datetimepicker';
 
 export default props => {
@@ -23,8 +24,14 @@ export default props => {
   };
   return (
     <FilterBar>
+      <FilterButton>
+        <FilterButtonIcon name="filter" size={25} />
+        <FilterButtonSmallIcon name="plus" size={20} />
+      </FilterButton>
+      <FilterInputIcon name="search" size={25} />
+
       <FilterIput
-        placeholder="search"
+        placeholder="search filter"
         value={query}
         onChange={event => {
           const {eventCount, target, text} = event.nativeEvent;
@@ -135,10 +142,41 @@ const FilterIput = styled.TextInput`
   border-width: 2px;
   border-radius: 5px;
   border-style: solid;
-  padding-left: 20px;
+  padding-left: 40px;
   flex-grow: 1;
   background-color: rgb(255, 255, 255);
   font-size: 16px;
+`;
+
+const FilterButton = styled.Pressable`
+  width: 50px;
+  height: 50px;
+  align-items: center;
+  margin: 10px 0 10px 10px;
+  border-width: 2px;
+  border-radius: 5px;
+  border-style: solid;
+  background-color: ${props =>
+    props.empty ? 'rgb(233, 255, 224)' : 'rgb(255, 234, 224)'};
+`;
+
+const FilterInputIcon = styled(Icon)`
+  position: absolute;
+  margin: 20px 0 0 75px;
+  elevation: 5;
+`;
+
+const FilterButtonIcon = styled(Icon)`
+  position: absolute;
+  margin: 10px 0 0 15px;
+  elevation: 5;
+`;
+
+const FilterButtonSmallIcon = styled(Icon)`
+  position: absolute;
+  top: 25px;
+  right: 0px;
+  elevation: 6;
 `;
 
 const monthNames = [
