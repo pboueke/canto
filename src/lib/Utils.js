@@ -11,7 +11,6 @@ export const useStateWithCallback = initialState => {
 
   useEffect(() => {
     if (callbackRef.current) {
-      console.log(state);
       callbackRef.current(state);
       callbackRef.current = undefined;
     }

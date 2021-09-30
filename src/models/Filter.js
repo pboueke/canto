@@ -5,7 +5,22 @@ export default class Filter {
     this.query = query; //page.text
     this.properties = properties;
     this.dateStart = dateStart;
-    this.dateEnd;
+    this.dateEnd = dateEnd;
+  }
+
+  /**
+   * Receives a list of page previews
+   * Returns a properties object to be used for filtering
+   * (Page previews defined at Models/Page/getPreview)
+   */
+  static getAvailableProperties(pages) {
+    let tags = new Set();
+    for (let i = 0; i < pages.length; i++) {
+      if (pages[i].tags && pages[i].tags.length > 0) {
+        pages[i].tags.forEach(t => tags.add(t));
+      }
+    }
+    return {tags: Array.from(tags)};
   }
 
   /**
@@ -14,14 +29,27 @@ export default class Filter {
    * (Page previews defined at Models/Page/getPreview)
    */
   apply(pages) {
-    const applyQuery = (items, query) => {
+    console.log(' \n\n\nENDERED FILTER:');
+    console.log(this);
+    console.log('\n\n');
+    console.log('PAGES:');
+    console.log(pages);
+
+    const applyQuery = (query, items) => {
+      console.log();
       if (!items || items.length === 0) {
         return [];
       }
-      return search(items, ['text'], query);
+      if (!query || query === '') {
+        return items;
+      }
+      let res = search(items, ['text'], query);
+      console.log('\n\nTEXT:');
+      console.log(res.length);
+      return res;
     };
 
-    const applyFilters = (items, properties) => {
+    const applyFilters = (properties, items) => {
       if (!items || items.length === 0) {
         return [];
       }
@@ -41,28 +69,38 @@ export default class Filter {
       if (properties.location) {
         res = res.filter(p => p.location);
       }
+      console.log('\n\nPROPERTIES:');
+      console.log(res.length);
       return res;
     };
 
     const getDateOnly = date => {
       const d = new Date(date);
-      return new Date(
-        d.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()),
-      );
+      return new Date((d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
     };
 
-    const applyDate = (items, start, end) => {
+    const applyDate = (start, end, items) => {
       if (!items || items.length === 0) {
         return [];
       }
       let s = getDateOnly(start);
       let e = getDateOnly(end);
-      return items.filter(item => {
+      let res = items.filter(item => {
         const d = getDateOnly(item.date);
         return d >= s && d <= e;
       });
+      console.log('\n\nDATE:');
+      console.log(res.length);
+      console.log('\n\n\n');
+      return res;
     };
 
-    return applyQuery(applyFilters(applyDate(pages)));
+    return applyQuery(
+      this.query,
+      applyFilters(
+        this.properties,
+        applyDate(this.dateStart, this.dateEnd, pages),
+      ),
+    );
   }
 }

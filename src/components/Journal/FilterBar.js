@@ -1,27 +1,48 @@
-import React, {useState} from 'react';
+import React, {useState, useEffect} from 'react';
+import useStateRef from 'react-usestateref';
 import styled from 'styled-components/native';
 import {Flex} from 'native-grid-styled';
 import Icon from 'react-native-vector-icons/Feather';
 import DateTimePicker from '@react-native-community/datetimepicker';
+import {Filter} from '../../models';
 
 export default props => {
-  const [query, setQuery] = useState('');
+  const [query, setQuery, queryRef] = useStateRef('');
   const [startDatePickerVisibility, setStartDatePickerVisibility] =
     useState(false);
   const [endDatePickerVisibility, setEndDatePickerVisibility] = useState(false);
-  const [startDate, setStartDate] = useState(new Date(props.journal.date));
-  const [endDate, setEndDate] = useState(new Date());
+  const [startDate, setStartDate, startDateRef] = useStateRef(
+    new Date(props.journal.date),
+  );
+  const [endDate, setEndDate, endDateRef] = useStateRef(new Date());
+  const [properties, setProperties] = useState({});
 
   const onStartDateChange = (event, selectedDate) => {
     const currentDate = selectedDate || startDate;
     setStartDate(currentDate);
     setStartDatePickerVisibility(false);
+    changeCaller();
   };
   const onEndDateChange = (event, selectedDate) => {
     const currentDate = selectedDate || endDate;
     setEndDate(currentDate);
     setEndDatePickerVisibility(false);
+    changeCaller();
   };
+
+  const changeCaller = () => {
+    console.log(props.data);
+    const filter = new Filter(
+      queryRef.current,
+      Filter.getAvailableProperties(props.data),
+      startDateRef.current,
+      endDateRef.current,
+    );
+    const filtered = filter.apply(props.data);
+    console.log(filtered);
+    props.onChange(filtered);
+  };
+
   return (
     <FilterBar>
       <FilterButton>
@@ -36,6 +57,7 @@ export default props => {
         onChange={event => {
           const {eventCount, target, text} = event.nativeEvent;
           setQuery(text);
+          changeCaller();
         }}
       />
       <DatePickerButton

@@ -28,13 +28,16 @@ export default ({navigation, route}) => {
   }
   journalDataStorage = MMKV.getMap(props.journal.id);
   const [journalDataState, setJournalDataState] = useState(journalDataStorage);
+  const [pageList, setPageList] = useState(journalDataState.content.pages);
 
   React.useEffect(() => {
     const unsubscribe = navigation.addListener('focus', () => {
-      setJournalDataState(MMKV.getMap(props.journal.id));
+      const data = MMKV.getMap(props.journal.id);
+      setJournalDataState(data);
+      setPageList(data.content.pages);
     });
     return unsubscribe;
-  }, [navigation, props, MMKV]);
+  }, [navigation, props, MMKV, journalDataState, setJournalDataState]);
 
   React.useLayoutEffect(() => {
     navigation.setOptions({
@@ -61,12 +64,13 @@ export default ({navigation, route}) => {
   return (
     <Container onPress={() => Keyboard.dismiss()}>
       <FilterBar
+        data={journalDataState.content.pages}
         journal={props.journal}
-        onChange={() => console.log('filter change!')}
+        onChange={setPageList}
       />
 
       <PageList
-        data={journalDataState.content.pages}
+        data={pageList}
         onClick={page => {
           navigation.navigate('Page', {
             page: page,
