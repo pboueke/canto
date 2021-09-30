@@ -32,8 +32,9 @@ const Container = styled(SafeAreaView)`
 
 const Item = props => {
   const date = getDate(props.date);
+  let tmpText = props.text.split('\n')[0];
   const text =
-    props.text.length > 200 ? props.text.substring(0, 200) + '...' : props.text;
+    tmpText.length > 200 ? tmpText.substring(0, 200) + '...' : tmpText;
   const time = getTime(props.date);
   return (
     <ItemBackground onPress={props.onPress}>

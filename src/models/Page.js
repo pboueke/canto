@@ -34,7 +34,7 @@ export default class Page {
   getPreview() {
     return {
       id: this.id,
-      text: this.text.split('\n')[0],
+      text: this.text,
       date: this.date,
       thumbnail: this.thumbnail,
       location: this.location,
