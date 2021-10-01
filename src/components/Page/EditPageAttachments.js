@@ -3,7 +3,7 @@ import styled from 'styled-components/native';
 import Icon from 'react-native-vector-icons/Feather';
 import {AddAttachmentModal} from '.';
 
-export default props => {
+export default ({page}) => {
   const [attachmentModalVisible, setAttachmentModalVisible] = useState(false);
   return (
     <AttachmentBar>
@@ -24,6 +24,7 @@ export default props => {
         <AddButtonIcon name="paperclip" size={14} />
       </AddButton>
       <AddAttachmentModal
+        page={page}
         show={attachmentModalVisible}
         unShow={() => setAttachmentModalVisible(!attachmentModalVisible)}
       />

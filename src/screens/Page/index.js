@@ -87,7 +87,7 @@ export default ({navigation, route}) => {
       <Scroll>
         <PageText value={text} onChange={setText} editMode={editMode} />
       </Scroll>
-      {editMode && <EditPageAttachments />}
+      {editMode && <EditPageAttachments page={pageData.content} />}
       <PopAction
         icon={editMode ? 'save' : 'edit-2'}
         onPress={() => {
