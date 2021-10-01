@@ -4,13 +4,13 @@ import styled from 'styled-components/native';
 import Markdown from 'react-native-markdown-display';
 
 export default props => (
-  <View>
+  <TextWrapper>
     {props.editMode ? (
       <PageTextEditor value={props.value} onChange={props.onChange} />
     ) : (
       <PageTextPreview value={props.value} />
     )}
-  </View>
+  </TextWrapper>
 );
 
 const PageTextEditor = props => {
@@ -35,6 +35,11 @@ const PageTextPreview = props => (
     <Markdown>{props.value}</Markdown>
   </TextPreview>
 );
+
+const TextWrapper = styled.View`
+  elevation: 5;
+  margin-top: ${props => props.marginTop ?? 50}px;
+`;
 
 const TextPreview = styled.View`
   border-width: 2px;

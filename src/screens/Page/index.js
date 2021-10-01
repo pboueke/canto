@@ -4,6 +4,7 @@ import {Keyboard} from 'react-native';
 import MMKVStorage from 'react-native-mmkv-storage';
 import {PopAction} from '../../components/common';
 import {PageText, PageDate, PageTime} from '../../components/Page';
+import {AttachmentBar} from '../../components/Page';
 import {Page} from '../../models';
 import {metadata} from '../..';
 
@@ -69,6 +70,7 @@ export default ({navigation, route}) => {
 
   return (
     <Container onPress={() => Keyboard.dismiss()}>
+      <AttachmentBar />
       <Scroll>
         <PageText value={text} onChange={setText} editMode={editMode} />
       </Scroll>
