@@ -3,6 +3,28 @@ import styled from 'styled-components/native';
 import Icon from 'react-native-vector-icons/Feather';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import {getTime, getDate} from '../../lib';
+import {BackButton} from '../common';
+
+/*  Note: for unknown reasons, disabling the default back navigation
+ *  using react-native-navigation did not work. Tried using the headerLeft
+ *  property, tried assingning an event listener, and more. Creating a
+ *  custom header has proven to be the easier work-around.
+ */
+export default props => (
+  <HeaderContainer>
+    <BackButton onPress={props.goBack} />
+    <PageDate
+      editMode={props.editMode}
+      date={props.date}
+      onChange={props.setDateTime}
+    />
+    <PageTime
+      editMode={props.editMode}
+      date={props.date}
+      onChange={props.setDateTime}
+    />
+  </HeaderContainer>
+);
 
 const PageDate = props => {
   const [date, setDate] = useState(new Date(props.date));
@@ -14,7 +36,7 @@ const PageDate = props => {
     setShow(false);
   };
   return (
-    <Container
+    <DateTimeContainer
       editable={props.editMode}
       onPress={() => {
         if (props.editMode) {
@@ -33,7 +55,7 @@ const PageDate = props => {
           onChange={onChange}
         />
       )}
-    </Container>
+    </DateTimeContainer>
   );
 };
 
@@ -47,7 +69,7 @@ const PageTime = props => {
     setShow(false);
   };
   return (
-    <Container
+    <DateTimeContainer
       editable={props.editMode}
       onPress={() => {
         if (props.editMode) {
@@ -55,8 +77,8 @@ const PageTime = props => {
           props.onChange();
         }
       }}>
-      <HeaderIcon name="clock" size={18} />
-      <HeaderTitle size={18}>{getTime(time)}</HeaderTitle>
+      <HeaderIcon name="clock" size={20} />
+      <HeaderTitle size={20}>{getTime(time)}</HeaderTitle>
       {show && (
         <DateTimePicker
           testID="dateTimePicker"
@@ -67,12 +89,23 @@ const PageTime = props => {
           onChange={onChange}
         />
       )}
-    </Container>
+    </DateTimeContainer>
   );
 };
 
-const Container = styled.Pressable`
+const HeaderContainer = styled.View`
+  height: 55px;
   flex-direction: row;
+  justify-content: space-between;
+  background-color: white;
+  align-items: center;
+  elevation: 10;
+  border-bottom-width: 1px;
+`;
+
+const DateTimeContainer = styled.Pressable`
+  flex-direction: row;
+  margin-right: 10px;
   ${props =>
     props.editable
       ? `border-bottom-width: 1px;
@@ -82,13 +115,11 @@ const Container = styled.Pressable`
 `;
 
 const HeaderTitle = styled.Text`
-  font-size: ${props => props.size ?? 20}px;
+  font-size: ${props => props.size ?? 22}px;
   margin: 0 5px 0 10px;
 `;
 
 const HeaderIcon = styled(Icon)`
-  font-size: ${props => props.size ?? 20}px;
+  font-size: ${props => props.size ?? 22}px;
   margin: 4px 0 0 0;
 `;
-
-export {PageDate, PageTime};

@@ -20,7 +20,11 @@ const App = () => {
           options={{headerShown: false}}
         />
         <Stack.Screen name="Journal" component={JournalScreen} />
-        <Stack.Screen name="Page" component={PageScreen} />
+        <Stack.Screen
+          name="Page"
+          component={PageScreen}
+          options={{headerShown: false}}
+        />
       </Stack.Navigator>
     </NavigationContainer>
   );

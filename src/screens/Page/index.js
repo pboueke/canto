@@ -1,9 +1,9 @@
-import React, {useState} from 'react';
+import React, {useState, useEffect} from 'react';
 import styled from 'styled-components/native';
-import {Keyboard} from 'react-native';
+import {Keyboard, Alert, BackHandler} from 'react-native';
 import MMKVStorage from 'react-native-mmkv-storage';
 import {PopAction} from '../../components/common';
-import {PageText, PageDate, PageTime} from '../../components/Page';
+import {PageText, PageHeader} from '../../components/Page';
 import {EditPageAttachments} from '../../components/Page';
 import {Page} from '../../models';
 import {metadata} from '../..';
@@ -57,19 +57,33 @@ export default ({navigation, route}) => {
     setStored(true);
   };
 
-  React.useLayoutEffect(() => {
-    navigation.setOptions({
-      headerTitle: () => (
-        <PageDate editMode={editMode} date={dateTime} onChange={setDateTime} />
-      ),
-      headerRight: () => (
-        <PageTime editMode={editMode} date={dateTime} onChange={setDateTime} />
-      ),
-    });
-  }, [navigation, editMode, dateTime]);
+  const cautiousGoBack = () => {
+    if (!editMode) {
+      navigation.goBack();
+      return;
+    }
+    Alert.alert(
+      'Discard changes?',
+      'You have unsaved changes. Are you sure to discard them and leave the screen?',
+      [
+        {text: "Don't leave", style: 'cancel', onPress: () => {}},
+        {
+          text: 'Discard',
+          style: 'destructive',
+          onPress: () => navigation.goBack(),
+        },
+      ],
+    );
+  };
 
   return (
     <Container onPress={() => Keyboard.dismiss()}>
+      <PageHeader
+        goBack={cautiousGoBack}
+        date={dateTime}
+        setDateTime={setDateTime}
+        editMode={editMode}
+      />
       <Scroll>
         <PageText value={text} onChange={setText} editMode={editMode} />
       </Scroll>

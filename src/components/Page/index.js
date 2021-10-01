@@ -1,4 +1,4 @@
 export {default as PageText} from './PageText';
 export {default as EditPageAttachments} from './EditPageAttachments';
 export {default as AddAttachmentModal} from './AddAttachmentModal';
-export {PageDate, PageTime} from './PageHeader';
+export {default as PageHeader} from './PageHeader';
