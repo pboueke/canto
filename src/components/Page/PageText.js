@@ -48,7 +48,7 @@ const TextPreview = styled.View`
   margin: 5px;
   padding: 3px 12px 6px 13px;
   background-color: white;
-  min-height: 340px;
+  min-height: 400px;
 `;
 
 const TextEditor = styled.TextInput`
@@ -59,7 +59,7 @@ const TextEditor = styled.TextInput`
   padding: 15px;
   background-color: white;
   text-align-vertical: top;
-  min-height: 340px;
+  min-height: 400px;
 `;
 
 const placeholder = `Write your journal entry here...
@@ -67,12 +67,13 @@ const placeholder = `Write your journal entry here...
 Canto uses Markdown to format your text, it's a very practical way to format text. Here are some tips:
 
 # Use hashtag at the start of the line to create a header.
-Add asteriscs for styling: **bold text**, *italic text*.
-Create lists by using lines started by * or numbers.
-Markdown also allows for tables, lines, quotes, and links:
-[markdown cheatsheet](https://github.com/adam-p/markdown-here/wiki/Markdown-Cheatsheet)
+
+Create lists by using lines started by * or numbers:
+
+1. Add asteriscs for styling: **bold text**, *italic text*.
+2. Use > for quotes
+3. --- for linebreaks
+4. And links: [markdown cheatsheet linlk](https://github.com/adam-p/markdown-here/wiki/Markdown-Cheatsheet)
 
 Formatting will be applied once you save your changes. 
-
-Also note: The first line of this page will be used for the Page preview. The text contained in it can also be used for search queries. 
 `;

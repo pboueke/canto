@@ -7,18 +7,20 @@ import Markdown from 'react-native-markdown-display';
 import {getTime, getDate} from '../../lib';
 
 export default props => {
-  const renderItem = i => (
+  const renderItem = (i, last) => (
     <Item
       onPress={() => props.onClick(i.item)}
       date={i.item.date}
       text={i.item.text}
+      isLast={i.index === last}
     />
   );
   return (
     <Container>
       <FlatList
+        ontentContainerStyle={{paddingBottom: '100px'}}
         data={props.data}
-        renderItem={renderItem}
+        renderItem={item => renderItem(item, props.data.length - 1)}
         keyExtractor={item => item.id}
       />
     </Container>
@@ -27,7 +29,7 @@ export default props => {
 
 const Container = styled(SafeAreaView)`
   flex: 1;
-  margin-top: 70px;
+  margin-top: 75px;
 `;
 
 const Item = props => {
@@ -37,7 +39,7 @@ const Item = props => {
     tmpText.length > 200 ? tmpText.substring(0, 200) + '...' : tmpText;
   const time = getTime(props.date);
   return (
-    <ItemBackground onPress={props.onPress}>
+    <ItemBackground isLast={props.isLast} onPress={props.onPress}>
       <Flex css={{flexDirection: 'row', flex: 1}}>
         <ItemThumbnail />
         <Flex css={{flexDirection: 'column'}}>
@@ -68,7 +70,7 @@ const ItemBackground = styled.Pressable`
   flex: 1;
   flex-direction: row;
   background-color: white;
-  margin: 5px;
+  margin: ${props => (props.isLast ? '5px 5px 100px 5px' : '5px')};
 `;
 
 const ItemThumbnail = props => {
