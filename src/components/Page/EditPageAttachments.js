@@ -1,11 +1,14 @@
 import React, {useState} from 'react';
 import styled from 'styled-components/native';
 import Icon from 'react-native-vector-icons/Feather';
+import {AddAttachmentModal} from '.';
 
 export default props => {
+  const [attachmentModalVisible, setAttachmentModalVisible] = useState(false);
   return (
     <AttachmentBar>
-      <AddButton>
+      <AddButton
+        onPress={() => setAttachmentModalVisible(!attachmentModalVisible)}>
         <AddButtonText>Add a</AddButtonText>
         <Bold>Tag </Bold>
         <AddButtonIcon name="tag" size={14} />
@@ -20,6 +23,10 @@ export default props => {
         <Bold>File</Bold>
         <AddButtonIcon name="paperclip" size={14} />
       </AddButton>
+      <AddAttachmentModal
+        show={attachmentModalVisible}
+        unShow={() => setAttachmentModalVisible(!attachmentModalVisible)}
+      />
     </AttachmentBar>
   );
 };
@@ -50,7 +57,7 @@ const AddButtonText = styled.Text`
 
 const Bold = styled(AddButtonText)`
   font-weight: 700;
-  margin: 0 3px 0 3px;
+  margin: 0 3px 0 5px;
 `;
 
 const AttachmentBar = styled.View`

@@ -18,7 +18,6 @@ export default props => {
   return (
     <Container>
       <FlatList
-        ontentContainerStyle={{paddingBottom: '100px'}}
         data={props.data}
         renderItem={item => renderItem(item, props.data.length - 1)}
         keyExtractor={item => item.id}
