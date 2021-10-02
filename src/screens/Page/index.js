@@ -2,7 +2,7 @@ import React, {useState, useMemo} from 'react';
 import styled from 'styled-components/native';
 import {Keyboard, Alert} from 'react-native';
 import MMKVStorage from 'react-native-mmkv-storage';
-import {PopAction} from '../../components/common';
+import {PopAction, TagsRow} from '../../components/common';
 import {PageText, PageHeader} from '../../components/Page';
 import {EditPageAttachments} from '../../components/Page';
 import {Page} from '../../models';
@@ -107,6 +107,13 @@ export default ({navigation, route}) => {
       />
       <Scroll>
         <PageText value={text} onChange={setText} editMode={editMode} />
+        <TagsRow
+          tags={attachments.tags}
+          scale={1}
+          justify="center"
+          width="100%"
+          color="rgb(200, 200, 200)"
+        />
       </Scroll>
       {editMode && (
         <EditPageAttachments

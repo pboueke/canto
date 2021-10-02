@@ -1,5 +1,4 @@
 import React, {useState} from 'react';
-import {View} from 'react-native';
 import styled from 'styled-components/native';
 import Markdown from 'react-native-markdown-display';
 
@@ -39,6 +38,7 @@ const PageTextPreview = props => (
 const TextWrapper = styled.View`
   elevation: 5;
   margin-top: ${props => props.marginTop ?? 50}px;
+  margin-bottom: 5px;
 `;
 
 const TextPreview = styled.View`

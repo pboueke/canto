@@ -5,7 +5,7 @@ import {Flex} from 'native-grid-styled';
 import Icon from 'react-native-vector-icons/Feather';
 import Markdown from 'react-native-markdown-display';
 import {getTime, getDate} from '../../lib';
-import {Tag} from '../common';
+import {TagsRow} from '../common';
 
 export default props => {
   const renderItem = (i, last) => (
@@ -49,22 +49,7 @@ const Item = props => {
             <ItemTime>{time}</ItemTime>
           </Flex>
           {props.tags && props.tags.length && (
-            <Flex
-              css={{
-                justifyContent: 'flex-start',
-                flexFlow: 'row wrap',
-                width: '300px',
-              }}>
-              {props.tags.map(t => (
-                <Tag
-                  text={t}
-                  key={t}
-                  scale={0.75}
-                  pd="0px 4px 1px 4px"
-                  color="rgb(222, 222, 222)"
-                />
-              ))}
-            </Flex>
+            <TagsRow tags={props.tags} scale={0.75} />
           )}
           <ItemText>
             <Markdown

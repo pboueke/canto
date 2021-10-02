@@ -54,6 +54,25 @@ const TagsTable = ({tags, allTags, onChange, mode = 'in-use'}) => {
   );
 };
 
+const TagsRow = ({
+  tags,
+  scale = 1,
+  width = '300px',
+  justify = 'flex-start',
+  color = 'rgb(222, 222, 222)',
+}) => (
+  <Flex
+    css={{
+      justifyContent: justify,
+      flexFlow: 'row wrap',
+      width: width,
+    }}>
+    {tags.map(t => (
+      <Tag text={t} key={t} scale={scale} pd="0px 4px 1px 4px" color={color} />
+    ))}
+  </Flex>
+);
+
 const Tag = ({
   text,
   onPress,
@@ -105,4 +124,4 @@ const TagWrapper = styled.View`
   padding: ${p => p.pd};
 `;
 
-export {Tag, TagsTable};
+export {Tag, TagsTable, TagsRow};
