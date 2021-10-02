@@ -24,16 +24,14 @@ export default class Filter {
   }
 
   static sort(pages) {
-    return pages.sort(
-      (p1, p2) => Filter.getDateOnly(p1.date) < Filter.getDateOnly(p2.date),
-    );
+    return pages.sort((p1, p2) => p1.date < p2.date);
   }
 
   static getOldestDate(pages, journalCreation) {
-    let first = Filter.getDateOnly(journalCreation);
+    let first = journalCreation;
     for (let i = 0; i < pages.length; i++) {
-      if (Filter.getDateOnly(pages[i].date) < first) {
-        first = Filter.getDateOnly(pages[i].date);
+      if (pages[i].date < first) {
+        first = pages[i].date;
       }
     }
     return first;

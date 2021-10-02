@@ -111,8 +111,9 @@ export default ({navigation, route}) => {
           tags={attachments.tags}
           scale={1}
           justify="center"
-          width="100%"
+          width="90%"
           color="rgb(200, 200, 200)"
+          align="center"
         />
       </Scroll>
       {editMode && (
