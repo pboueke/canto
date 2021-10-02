@@ -1,4 +1,4 @@
-import React, {useState} from 'react';
+import React, {useState, useMemo} from 'react';
 import styled from 'styled-components/native';
 import {Keyboard, Alert} from 'react-native';
 import MMKVStorage from 'react-native-mmkv-storage';
@@ -26,6 +26,10 @@ export default ({navigation, route}) => {
     });
   }
   pageData = MMKV.getMap(props.page.id);
+  const orgValueString = useMemo(
+    () => JSON.stringify(pageData.content),
+    [pageData],
+  );
 
   const [stored, setStored] = useState(!props.newPage);
   const [editMode, setEditMode] = useState(props.newPage);
@@ -54,22 +58,31 @@ export default ({navigation, route}) => {
     MMKV.setMap(props.parent, tmp);
   };
 
-  const savePageData = () => {
+  const createUpdatedPage = () => {
     let tmp = pageData;
     Object.assign(tmp.content, attachments);
     tmp.content.text = text;
     tmp.content.date = new Date(dateTime).toISOString();
     tmp.content = new Page(tmp.content);
+    return tmp;
+  };
+
+  const savePageData = () => {
+    let tmp = createUpdatedPage();
     MMKV.setMap(pageData.content.id, tmp);
     saveJournalData(tmp.content.getPreview(), stored);
     setStored(true);
   };
 
   const cautiousGoBack = () => {
-    if (!editMode) {
+    if (
+      !editMode ||
+      JSON.stringify(createUpdatedPage().content) === orgValueString
+    ) {
       navigation.goBack();
       return;
     }
+
     Alert.alert(
       'Discard changes?',
       'You have unsaved changes. Are you sure to discard them and leave the screen?',
