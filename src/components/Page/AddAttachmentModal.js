@@ -171,12 +171,13 @@ const AttachmentRowTitle = ({name, icon}) => (
 );
 
 const AttachmentBarTitle = styled.Text`
-  font-size: 30px;
+  font-size: 24px;
+  margin-top: 10px;
 `;
 
 const AttachmentBarIcon = styled(Icon)`
-  font-size: 30px;
-  margin: 5px 20px 0 0;
+  font-size: 24px;
+  margin: 15px 20px 0 0;
 `;
 
 const Scroll = styled.ScrollView.attrs({
@@ -186,13 +187,16 @@ const Scroll = styled.ScrollView.attrs({
     };
   },
 })`
-  width: 360px;
+  width: 400px;
   margin: auto;
   margin-top: 100px;
   background-color: white;
   border-width: 2px;
   border-radius: 5px;
   border-style: solid;
+  border-bottom-width: 0px
+  border-bottom-left-radius: 0px;
+  border-bottom-right-radius: 0px;
 `;
 
 const AttachmentModal = styled.Modal`
