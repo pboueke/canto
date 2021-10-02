@@ -118,6 +118,7 @@ export default ({navigation, route}) => {
       </Scroll>
       {editMode && (
         <EditPageAttachments
+          availableTags={props.tags}
           page={pageData.content}
           onChange={({tags, images, files, thumbnail, location}) => {
             setAttachments({

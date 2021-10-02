@@ -49,6 +49,7 @@ export default props => {
           </Box>
         </Flex>
       </TextInputModalInterior>
+      {props.children}
     </TextInputModal>
   );
 };

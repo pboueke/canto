@@ -77,6 +77,8 @@ export default ({navigation, route}) => {
             newPage: false,
             key: props.key,
             parent: props.journal.id,
+            tags: Filter.getAvailableProperties(journalDataState.content.pages)
+              .tags,
           });
         }}
       />
@@ -87,6 +89,8 @@ export default ({navigation, route}) => {
             newPage: true,
             key: props.key,
             parent: props.journal.id,
+            tags: Filter.getAvailableProperties(journalDataState.content.pages)
+              .tags,
           });
         }}
       />

@@ -6,7 +6,7 @@ import {Flex} from 'native-grid-styled';
 import {TextInputModal} from '../../components/common';
 import {TagsTable} from '../common';
 
-export default ({show, unShow, page, onChange}) => {
+export default ({show, unShow, page, onChange, availableTags}) => {
   const [addTagModalVisibility, setAddTagModalVisibility] = useState(false);
   const [tags, setTags, tagsRef] = useStateRef(page.tags);
   const [images, setImages, ImagesRef] = useStateRef(page.images);
@@ -43,15 +43,32 @@ export default ({show, unShow, page, onChange}) => {
           />
           <TextInputModal
             submit="Add"
-            placeholder="new tag"
+            placeholder="add a new tag"
             shadow={true}
             onSubmit={tag => {
               setTags(Array.from(new Set(tags).add(tag)));
               onChange(createDataObject());
             }}
             show={addTagModalVisibility}
-            unShow={() => setAddTagModalVisibility(!addTagModalVisibility)}
-          />
+            unShow={() => setAddTagModalVisibility(!addTagModalVisibility)}>
+            <AddTagScroll>
+              <AttachmentRow
+                name="Or pick one of your tags:"
+                icon="tag"
+                mt="10px"
+              />
+              <TagsTable
+                mode="add"
+                tags={tags}
+                allTags={availableTags}
+                onChange={t => {
+                  setTags(t);
+                  onChange(createDataObject());
+                  setAddTagModalVisibility(!addTagModalVisibility);
+                }}
+              />
+            </AddTagScroll>
+          </TextInputModal>
           <TagsTable
             tags={tags}
             mode="in-use"
@@ -69,12 +86,13 @@ export default ({show, unShow, page, onChange}) => {
   );
 };
 
-const AttachmentRow = ({name, icon, addAction}) => {
+const AttachmentRow = ({name, icon, addAction, mt = '20px'}) => {
   return (
     <Flex
       css={{
         flexDirection: 'column',
         margin: '20px 20px 20px 20px',
+        marginTop: mt,
         width: '90%',
         borderBottomWidth: '2px',
       }}>
@@ -85,7 +103,7 @@ const AttachmentRow = ({name, icon, addAction}) => {
           justifyContent: 'space-between',
         }}>
         <AttachmentRowTitle name={name} icon={icon} />
-        <AddAttachmentButton action={addAction} />
+        {addAction && <AddAttachmentButton action={addAction} />}
       </Flex>
     </Flex>
   );
@@ -150,6 +168,25 @@ const Scroll = styled.ScrollView.attrs({
   width: 401px;
   margin: auto;
   margin-top: 100px;
+  background-color: white;
+  border-width: 2px;
+  border-radius: 5px;
+  border-style: solid;
+  border-bottom-width: 0px
+  border-bottom-left-radius: 0px;
+  border-bottom-right-radius: 0px;
+`;
+
+const AddTagScroll = styled.ScrollView.attrs({
+  contentContainerStyle: props => {
+    return {
+      justifyContent: 'center',
+    };
+  },
+})`
+  flex-grow: 1;
+  margin-top: 20px;
+  padding-top: -10px;
   background-color: white;
   border-width: 2px;
   border-radius: 5px;
