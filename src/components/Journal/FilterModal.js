@@ -5,50 +5,35 @@ import Icon from 'react-native-vector-icons/Feather';
 import {Flex} from 'native-grid-styled';
 import {TagsTable} from '../common';
 
-export default ({show, unShow, availableTags, onChange}) => {
-  const [tags, setTags, tagsRef] = useStateRef([]);
-  const createNewResult = () => ({
-    file: false,
-    image: false,
-    location: false,
-    tags: tagsRef.current,
-  });
-  return (
-    <FilterModal
-      animationType="slide"
-      transparent={true}
-      visible={show}
-      onRequestClose={unShow}>
-      <Scroll>
-        <CloseButton onPress={unShow}>
-          <ModalTitle>Change filters</ModalTitle>
-          <Icon name="x" size={30} />
-        </CloseButton>
-        <FilterModalInterior>
-          <Row name="Selected Tags" icon="tag" action="remove" />
-          <TagsTable
-            mode="remove"
-            tags={tags}
-            onChange={newTags => {
-              setTags(newTags);
-              onChange(createNewResult());
-            }}
-          />
-          <Row name="Available Tags" icon="tag" action="add" />
-          <TagsTable
-            mode="add"
-            tags={tags}
-            allTags={availableTags}
-            onChange={newTags => {
-              setTags(newTags);
-              onChange(createNewResult());
-            }}
-          />
-        </FilterModalInterior>
-      </Scroll>
-    </FilterModal>
-  );
-};
+export default ({show, unShow, data, availableTags, onChange}) => (
+  <FilterModal
+    animationType="slide"
+    transparent={true}
+    visible={show}
+    onRequestClose={unShow}>
+    <Scroll>
+      <CloseButton onPress={unShow}>
+        <ModalTitle>Change filters</ModalTitle>
+        <Icon name="x" size={30} />
+      </CloseButton>
+      <FilterModalInterior>
+        <Row name="Selected Tags" icon="tag" action="remove" />
+        <TagsTable
+          mode="remove"
+          tags={data.tags}
+          onChange={newTags => onChange({...data, tags: newTags})}
+        />
+        <Row name="Available Tags" icon="tag" action="add" />
+        <TagsTable
+          mode="add"
+          tags={data.tags}
+          allTags={availableTags}
+          onChange={newTags => onChange({...data, tags: newTags})}
+        />
+      </FilterModalInterior>
+    </Scroll>
+  </FilterModal>
+);
 
 const Row = ({name, icon, action}) => {
   return (

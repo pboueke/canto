@@ -53,18 +53,21 @@ export default props => {
         show={filterModalVisibility}
         unShow={() => setFilterModalVisibility(!filterModalVisibility)}
         availableTags={availableTags.tags}
+        data={mustHaves}
         onChange={value => {
           setMustHaves(value);
           changeCaller();
         }}
       />
 
-      <FilterButton
+      <FilterButtonWithClear
         empty={emptyMustHavesInit === JSON.stringify(mustHaves)}
-        onPress={() => setFilterModalVisibility(!filterModalVisibility)}>
-        <FilterButtonIcon name="filter" size={25} />
-        <FilterButtonSmallIcon name="plus" size={20} />
-      </FilterButton>
+        onPress={() => setFilterModalVisibility(!filterModalVisibility)}
+        clear={() => {
+          setMustHaves(emptyMustHaves);
+          changeCaller();
+        }}
+      />
 
       <FilterIput
         autoCorrect={false}
@@ -194,16 +197,56 @@ const FilterIput = styled.TextInput`
   font-size: 16px;
 `;
 
-const FilterButton = styled.Pressable`
+//  margin: 10px 0 10px 10px;
+
+const FilterButtonWithClear = ({empty, onPress, clear}) => (
+  <Flex
+    css={{
+      flexDirection: 'column',
+      height: '50px',
+      width: '50px',
+      marginTop: '10px',
+      marginBottom: '10px',
+      marginLeft: '10px;',
+    }}>
+    {!empty && (
+      <FilterButtonClear onPress={clear}>
+        <FilterButtonClearText>CLEAR</FilterButtonClearText>
+      </FilterButtonClear>
+    )}
+    <FilterButton empty={empty} onPress={onPress}>
+      <FilterButtonIcon name="filter" empty={empty} />
+      <FilterButtonSmallIcon name="plus" empty={empty} />
+    </FilterButton>
+  </Flex>
+);
+
+const FilterButtonClearText = styled.Text`
+  font-size: 12px;
+  letter-spacing: 1px;
+  font-weight: 900;
+`;
+
+const FilterButtonClear = styled.Pressable`
   width: 50px;
-  height: 50px;
+  height: 20px;
   align-items: center;
-  margin: 10px 0 10px 10px;
   border-width: 2px;
   border-radius: 5px;
   border-style: solid;
-  background-color: ${props =>
-    props.empty ? 'rgb(233, 255, 224)' : 'rgb(255, 234, 224)'};
+  background-color: white;
+`;
+
+const FilterButton = styled.Pressable`
+  width: 50px;
+  height: ${props => (props.empty ? 50 : 29)}px;
+  flex-grow: 1;
+  margin: 1px 0 10px 0;
+  align-items: center;
+  border-width: 2px;
+  border-radius: 5px;
+  border-style: solid;
+  background-color: ${props => (props.empty ? 'white' : 'rgb(235, 187, 129)')};
 `;
 
 const FilterInputIcon = props => {
@@ -230,15 +273,18 @@ const FilterInputIcon = props => {
 
 const FilterButtonIcon = styled(Icon)`
   position: absolute;
-  margin: 10px 0 0 15px;
+  margin-left: 15px;
+  margin-top: ${props => (props.empty ? 10 : 3)}px;
   elevation: 5;
+  font-size: ${props => (props.empty ? 25 : 20)}px;
 `;
 
 const FilterButtonSmallIcon = styled(Icon)`
   position: absolute;
-  top: 25px;
+  top: ${props => (props.empty ? 25 : 10)}px;
   right: 0px;
   elevation: 6;
+  font-size: ${props => (props.empty ? 20 : 15)}px;
 `;
 
 const monthNames = [
