@@ -11,6 +11,8 @@ export default ({show, unShow, data, availableTags, onChange}) => (
     transparent={true}
     visible={show}
     onRequestClose={unShow}>
+    <EmptyBlock />
+    <EmptyBlock right={0} width={100} />
     <Scroll>
       <CloseButton onPress={unShow}>
         <ModalTitle>Change filters</ModalTitle>
@@ -117,4 +119,13 @@ const CloseButton = styled.Pressable`
   margin: 10px;
   flex-direction: row;
   justify-content: space-between;
+`;
+
+const EmptyBlock = styled.View`
+  background-color: white;
+  width: ${p => p.width ?? 50}px;
+  height: 50px;
+  position: absolute;
+  ${p => (p.mg ? 'margin: ' + p.mg + ';' : '')}
+  ${p => (p.right ? 'left: ' + p.right + ';' : '')}
 `;

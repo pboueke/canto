@@ -29,6 +29,7 @@ export default ({show, unShow, page, onChange}) => {
       transparent={true}
       visible={show}
       onRequestClose={unShow}>
+      <EmptyBlock />
       <Scroll>
         <CloseButton onPress={unShow}>
           <ModalTitle>Edit page attachments</ModalTitle>
@@ -182,4 +183,11 @@ const CloseButton = styled.Pressable`
   margin: 10px;
   flex-direction: row;
   justify-content: space-between;
+`;
+
+const EmptyBlock = styled.View`
+  background-color: white;
+  width: ${p => p.width ?? 50}px;
+  height: 50px;
+  position: absolute;
 `;

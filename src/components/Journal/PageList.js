@@ -5,6 +5,7 @@ import {Flex} from 'native-grid-styled';
 import Icon from 'react-native-vector-icons/Feather';
 import Markdown from 'react-native-markdown-display';
 import {getTime, getDate} from '../../lib';
+import {Tag} from '../common';
 
 export default props => {
   const renderItem = (i, last) => (
@@ -12,6 +13,7 @@ export default props => {
       onPress={() => props.onClick(i.item)}
       date={i.item.date}
       text={i.item.text}
+      tags={i.item.tags}
       isLast={i.index === last}
     />
   );
@@ -46,6 +48,24 @@ const Item = props => {
             <ItemDate>{date}</ItemDate>
             <ItemTime>{time}</ItemTime>
           </Flex>
+          {props.tags && props.tags.length && (
+            <Flex
+              css={{
+                justifyContent: 'flex-start',
+                flexFlow: 'row wrap',
+                width: '300px',
+              }}>
+              {props.tags.map(t => (
+                <Tag
+                  text={t}
+                  key={t}
+                  scale={0.75}
+                  pd="0px 4px 1px 4px"
+                  color="rgb(222, 222, 222)"
+                />
+              ))}
+            </Flex>
+          )}
           <ItemText>
             <Markdown
               style={{
