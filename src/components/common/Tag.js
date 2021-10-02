@@ -1,0 +1,100 @@
+import React from 'react';
+import styled from 'styled-components/native';
+import Icon from 'react-native-vector-icons/Feather';
+import {Flex} from 'native-grid-styled';
+
+const TagsTable = ({tags, allTags, onChange, mode = 'in-use'}) => {
+  let tagsToDisplay = allTags ?? tags;
+  let action, color, icon, emptyMessage;
+  switch (mode) {
+    case 'remove':
+      action = tag => onChange(tags.filter(t => t !== tag));
+      color = 'rgb(87, 196, 173)';
+      icon = 'x';
+      emptyMessage = 'no tags selected';
+      break;
+    case 'add':
+      action = tag => onChange(Array.from(new Set(tags).add(tag)));
+      color = 'rgb(237, 162, 71)';
+      icon = 'plus';
+      emptyMessage = 'no tags in use in this journal';
+      break;
+    case 'in-use':
+      action = tag => onChange(tags.filter(t => t !== tag));
+      color = 'rgb(200, 200, 200)';
+      icon = 'x';
+      emptyMessage = 'no tags in use in this page';
+      break;
+  }
+
+  return (
+    <Flex
+      css={{
+        flexFlow: 'row wrap',
+        flexGrow: 1,
+        justifyContent: 'flex-start',
+        alignItems: 'flex-start',
+        marginRight: '10px',
+        marginLeft: '10px',
+      }}>
+      {!tagsToDisplay || tagsToDisplay.length === 0 ? (
+        <EmptyTableWarning>{emptyMessage}</EmptyTableWarning>
+      ) : (
+        tagsToDisplay.map(t => (
+          <Tag
+            key={t + '-tag'}
+            text={t}
+            onPress={() => action(t)}
+            color={color}
+            icon={icon}
+          />
+        ))
+      )}
+    </Flex>
+  );
+};
+
+const Tag = ({text, onPress, color = 'rgb(200, 200, 200)', icon = 'x'}) => {
+  const TagRemove = () => (
+    <DelButton onPress={onPress}>
+      <DelIcon name={icon} size={20} />
+    </DelButton>
+  );
+  return (
+    <TagWrapper color={color}>
+      <TagText>{text}</TagText>
+      {onPress && <TagRemove tag={text} />}
+    </TagWrapper>
+  );
+};
+
+const EmptyTableWarning = styled.Text`
+  font-weight: 300;
+  margin-top: -10px;
+  width: 100%;
+  text-align: center;
+`;
+
+const TagText = styled.Text`
+  margin: 5px;
+  font-weight: 500;
+  max-width: 90%;
+`;
+
+const DelButton = styled.Pressable``;
+
+const DelIcon = styled(Icon)``;
+
+const TagWrapper = styled.View`
+  background-color: ${props => props.color};
+  margin: 5px;
+  flex-grow: 1;
+  flex-shrink: 1;
+  flex-direction: row;
+  justify-content: space-between;
+  align-items: center;
+  border-radius: 20px;
+  padding: 2px 5px 2px 5px;
+`;
+
+export {Tag, TagsTable};

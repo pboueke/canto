@@ -1,13 +1,19 @@
-import React, {useState, useEffect} from 'react';
+import React, {useState, useMemo} from 'react';
 import useStateRef from 'react-usestateref';
 import styled from 'styled-components/native';
 import {Flex} from 'native-grid-styled';
 import Icon from 'react-native-vector-icons/Feather';
 import DateTimePicker from '@react-native-community/datetimepicker';
+import {FilterModal} from '.';
 import {Filter} from '../../models';
 
 export default props => {
+  const availableTags = useMemo(
+    () => Filter.getAvailableProperties(props.data),
+    [props.data],
+  );
   const [query, setQuery, queryRef] = useStateRef('');
+  const [filterModalVisibility, setFilterModalVisibility] = useState(false);
   const [startDatePickerVisibility, setStartDatePickerVisibility] =
     useState(false);
   const [endDatePickerVisibility, setEndDatePickerVisibility] = useState(false);
@@ -15,7 +21,7 @@ export default props => {
     new Date(props.journal.date),
   );
   const [endDate, setEndDate, endDateRef] = useStateRef(new Date());
-  const [properties, setProperties] = useState({});
+  const [mustHaves, setMustHaves, mustHavesRef] = useStateRef(emptyMustHaves);
 
   const onStartDateChange = (event, selectedDate) => {
     const currentDate = selectedDate || startDate;
@@ -33,7 +39,7 @@ export default props => {
   const changeCaller = () => {
     const filter = new Filter(
       queryRef.current,
-      Filter.getAvailableProperties(props.data),
+      mustHavesRef.current,
       startDateRef.current,
       endDateRef.current,
     );
@@ -43,7 +49,19 @@ export default props => {
 
   return (
     <FilterBar>
-      <FilterButton>
+      <FilterModal
+        show={filterModalVisibility}
+        unShow={() => setFilterModalVisibility(!filterModalVisibility)}
+        availableTags={availableTags.tags}
+        onChange={value => {
+          setMustHaves(value);
+          changeCaller();
+        }}
+      />
+
+      <FilterButton
+        empty={emptyMustHavesInit === JSON.stringify(mustHaves)}
+        onPress={() => setFilterModalVisibility(!filterModalVisibility)}>
         <FilterButtonIcon name="filter" size={25} />
         <FilterButtonSmallIcon name="plus" size={20} />
       </FilterButton>
@@ -53,7 +71,7 @@ export default props => {
         placeholder="search filter"
         value={query}
         onChange={event => {
-          const {eventCount, target, text} = event.nativeEvent;
+          const {_eventCount, _target, text} = event.nativeEvent;
           setQuery(text);
           changeCaller();
         }}
@@ -237,3 +255,11 @@ const monthNames = [
   'Nov',
   'Dec',
 ];
+
+const emptyMustHaves = {
+  file: false,
+  image: false,
+  location: false,
+  tags: [],
+};
+const emptyMustHavesInit = JSON.stringify(emptyMustHaves);

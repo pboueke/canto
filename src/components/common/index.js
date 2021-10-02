@@ -4,3 +4,4 @@ export {default as IconListModal} from './IconListModal';
 export {default as PopAction} from './PopAction';
 export {default as TextInputModal} from './TextInputModal';
 export {BackButton} from './CustomNavigation';
+export {Tag, TagsTable} from './Tag';

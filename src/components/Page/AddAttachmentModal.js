@@ -4,6 +4,7 @@ import styled from 'styled-components/native';
 import Icon from 'react-native-vector-icons/Feather';
 import {Flex} from 'native-grid-styled';
 import {TextInputModal} from '../../components/common';
+import {TagsTable} from '../common';
 
 export default ({show, unShow, page, onChange}) => {
   const [addTagModalVisibility, setAddTagModalVisibility] = useState(false);
@@ -50,8 +51,9 @@ export default ({show, unShow, page, onChange}) => {
             show={addTagModalVisibility}
             unShow={() => setAddTagModalVisibility(!addTagModalVisibility)}
           />
-          <TagTable
+          <TagsTable
             tags={tags}
+            mode="in-use"
             onChange={t => {
               setTags(t);
               onChange(createDataObject());
@@ -63,49 +65,6 @@ export default ({show, unShow, page, onChange}) => {
         </AttachmentModalInterior>
       </Scroll>
     </AttachmentModal>
-  );
-};
-
-const TagTable = ({tags, onChange}) => {
-  const DelButton = styled.Pressable``;
-  const DelIcon = styled(Icon)``;
-  const Tag = styled.View`
-    background-color: rgb(200, 200, 200);
-    margin: 5px;
-    flex-grow: 1;
-    flex-shrink: 1;
-    flex-direction: row;
-    justify-content: space-between;
-    align-items: center;
-    border-radius: 20px;
-    padding: 2px 5px 2px 5px;
-  `;
-  const TagRemove = ({onPress}) => (
-    <DelButton onPress={onPress}>
-      <DelIcon name="x" size={20} />
-    </DelButton>
-  );
-  const TagText = styled.Text`
-    margin: 5px;
-    font-weight: 500;
-    max-width: 90%;
-  `;
-  const removeTag = tag => onChange(tags.filter(t => t !== tag));
-  return (
-    <Flex
-      css={{
-        flexFlow: 'row wrap',
-        flexGrow: 1,
-        justifyContent: 'flex-start',
-        alignItems: 'flex-start',
-      }}>
-      {tags.map(t => (
-        <Tag key={t}>
-          <TagText>{t}</TagText>
-          <TagRemove tag={t} onPress={() => removeTag(t)} />
-        </Tag>
-      ))}
-    </Flex>
   );
 };
 
