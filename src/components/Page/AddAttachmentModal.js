@@ -88,6 +88,7 @@ const TagTable = ({tags, onChange}) => {
   const TagText = styled.Text`
     margin: 5px;
     font-weight: 500;
+    max-width: 90%;
   `;
   const removeTag = tag => onChange(tags.filter(t => t !== tag));
   return (

@@ -30,7 +30,11 @@ export default props => {
         <TextFieldTitle color={color}>
           Confirm password (you can´t change it later)
         </TextFieldTitle>
-        <TextField value={password2} onChangeText={setPassword2} />
+        <TextField
+          secureTextEntry={true}
+          value={password2}
+          onChangeText={setPassword2}
+        />
       </Box>
     );
   };
@@ -61,7 +65,11 @@ export default props => {
                 <TextField value={title} onChangeText={setTitle} />
 
                 <TextFieldTitle>Password (leave empty for none)</TextFieldTitle>
-                <TextField value={password1} onChangeText={setPassword1} />
+                <TextField
+                  secureTextEntry={true}
+                  value={password1}
+                  onChangeText={setPassword1}
+                />
 
                 {confirmPassword(password1, password2)}
 

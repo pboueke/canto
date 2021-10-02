@@ -29,7 +29,11 @@ export default props => {
             <JournalDisplay journal={props.journal} />
 
             <TextFieldTitle status={status}>{statusText}</TextFieldTitle>
-            <TextField value={journalKey} onChangeText={setJournalKey} />
+            <TextField
+              secureTextEntry={true}
+              value={journalKey}
+              onChangeText={setJournalKey}
+            />
           </Flex>
 
           <Flex
