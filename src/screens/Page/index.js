@@ -85,7 +85,7 @@ export default ({navigation, route}) => {
 
     Alert.alert(
       'Discard changes?',
-      'You have unsaved changes. Are you sure to discard them and leave the screen?',
+      'You have unsaved changes. Are you sure to discard them and leave?',
       [
         {text: "Don't leave", style: 'cancel', onPress: () => {}},
         {

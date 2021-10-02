@@ -17,7 +17,7 @@ const TagsTable = ({tags, allTags, onChange, mode = 'in-use'}) => {
       action = tag => onChange(Array.from(new Set(tags).add(tag)));
       color = 'rgb(237, 162, 71)';
       icon = 'plus';
-      emptyMessage = 'no tags in use in this journal';
+      emptyMessage = 'no more tags in use in this journal';
       break;
     case 'in-use':
       action = tag => onChange(tags.filter(t => t !== tag));

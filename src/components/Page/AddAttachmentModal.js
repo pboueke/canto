@@ -60,7 +60,7 @@ export default ({show, unShow, page, onChange, availableTags}) => {
               <TagsTable
                 mode="add"
                 tags={tags}
-                allTags={availableTags}
+                allTags={availableTags.filter(t => !tags.includes(t))}
                 onChange={t => {
                   setTags(t);
                   onChange(createDataObject());
