@@ -7,7 +7,7 @@ import MMKVStorage from 'react-native-mmkv-storage';
 import {PopAction} from '../../components/common';
 import {FilterBar, PageList} from '../../components/Journal';
 import {JournalContent} from '../../models';
-import {Page} from '../../models';
+import {Page, Filter} from '../../models';
 import {metadata} from '../..';
 
 export default ({navigation, route}) => {
@@ -34,7 +34,7 @@ export default ({navigation, route}) => {
     const unsubscribe = navigation.addListener('focus', () => {
       const data = MMKV.getMap(props.journal.id);
       setJournalDataState(data);
-      setPageList(data.content.pages);
+      setPageList(Filter.sort(data.content.pages));
     });
     return unsubscribe;
   }, [navigation, props, MMKV, journalDataState, setJournalDataState]);

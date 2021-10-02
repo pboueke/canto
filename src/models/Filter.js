@@ -23,6 +23,27 @@ export default class Filter {
     return {tags: Array.from(tags)};
   }
 
+  static sort(pages) {
+    return pages.sort(
+      (p1, p2) => Filter.getDateOnly(p1.date) < Filter.getDateOnly(p2.date),
+    );
+  }
+
+  static getOldestDate(pages, journalCreation) {
+    let first = Filter.getDateOnly(journalCreation);
+    for (let i = 0; i < pages.length; i++) {
+      if (Filter.getDateOnly(pages[i].date) < first) {
+        first = Filter.getDateOnly(pages[i].date);
+      }
+    }
+    return first;
+  }
+
+  static getDateOnly = date => {
+    const d = new Date(date);
+    return new Date(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate());
+  };
+
   /**
    * Receives a list of page previews
    * Returns a filtered list of page previews
@@ -63,29 +84,26 @@ export default class Filter {
       return res;
     };
 
-    const getDateOnly = date => {
-      const d = new Date(date);
-      return new Date(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate());
-    };
-
     const applyDate = (start, end, items) => {
       if (!items || items.length === 0) {
         return [];
       }
-      let s = getDateOnly(start);
-      let e = getDateOnly(end);
+      let s = Filter.getDateOnly(start);
+      let e = Filter.getDateOnly(end);
       let res = items.filter(item => {
-        const d = getDateOnly(item.date);
+        const d = Filter.getDateOnly(item.date);
         return d >= s && d <= e;
       });
       return res;
     };
 
-    return applyQuery(
-      this.query,
-      applyFilters(
-        this.properties,
-        applyDate(this.dateStart, this.dateEnd, pages),
+    return Filter.sort(
+      applyQuery(
+        this.query,
+        applyFilters(
+          this.properties,
+          applyDate(this.dateStart, this.dateEnd, pages),
+        ),
       ),
     );
   }

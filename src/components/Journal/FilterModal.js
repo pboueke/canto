@@ -190,7 +190,7 @@ const CloseButton = styled.Pressable`
 `;
 
 const Bold = styled.Text`
-  font-size: 14;
+  font-size: 14px;
   font-weight: 600;
   margin: 0 0 0 10px;
 `;
