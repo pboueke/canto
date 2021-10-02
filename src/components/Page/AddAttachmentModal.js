@@ -1,13 +1,27 @@
 import React, {useState} from 'react';
+import useStateRef from 'react-usestateref';
 import styled from 'styled-components/native';
 import Icon from 'react-native-vector-icons/Feather';
 import {Flex} from 'native-grid-styled';
-import {taggedTemplateExpression} from '@babel/types';
 import {TextInputModal} from '../../components/common';
 
 export default ({show, unShow, page, onChange}) => {
   const [addTagModalVisibility, setAddTagModalVisibility] = useState(false);
-  const [tags, setTags] = useState(page.tags);
+  const [tags, setTags, tagsRef] = useStateRef(page.tags);
+  const [images, setImages, ImagesRef] = useStateRef(page.images);
+  const [files, setFiles, filesRef] = useStateRef(page.files);
+  const [location, setLocation, locationRef] = useStateRef(page.location);
+  const [thumbnail, setThumbnail, thumbnailRef] = useStateRef(page.thumbnail);
+  const createDataObject = () => {
+    return {
+      tags: tagsRef.current,
+      images: ImagesRef.current,
+      files: filesRef.current,
+      location: locationRef.current,
+      thumbnail: thumbnailRef.current,
+    };
+  };
+
   return (
     <AttachmentModal
       animationType="slide"
@@ -26,13 +40,23 @@ export default ({show, unShow, page, onChange}) => {
             addAction={() => setAddTagModalVisibility(!addTagModalVisibility)}
           />
           <TextInputModal
+            submit="Add"
             placeholder="new tag"
             shadow={true}
-            onSubmit={tag => setTags(Array.from(new Set(tags).add(tag)))}
+            onSubmit={tag => {
+              setTags(Array.from(new Set(tags).add(tag)));
+              onChange(createDataObject());
+            }}
             show={addTagModalVisibility}
             unShow={() => setAddTagModalVisibility(!addTagModalVisibility)}
           />
-          <TagTable tags={tags} onChange={setTags} />
+          <TagTable
+            tags={tags}
+            onChange={t => {
+              setTags(t);
+              onChange(createDataObject());
+            }}
+          />
           <AttachmentRow name="Images" icon="image" />
           <AttachmentRow name="Files" icon="paperclip" />
           <AttachmentRow name="Location" icon="map-pin" />
@@ -43,12 +67,37 @@ export default ({show, unShow, page, onChange}) => {
 };
 
 const TagTable = ({tags, onChange}) => {
-  const removeTag = tag => {
-    tags.filter(t => t !== tag);
-    onChange(taggedTemplateExpression);
-  };
+  const DelButton = styled.Pressable``;
+  const DelIcon = styled(Icon)``;
+  const Tag = styled.View`
+    background-color: rgb(200, 200, 200);
+    margin: 5px;
+    flex-grow: 1;
+    flex-shrink: 1;
+    flex-direction: row;
+    justify-content: space-between;
+    align-items: center;
+    border-radius: 20px;
+    padding: 2px 5px 2px 5px;
+  `;
+  const TagRemove = ({onPress}) => (
+    <DelButton onPress={onPress}>
+      <DelIcon name="x" size={20} />
+    </DelButton>
+  );
+  const TagText = styled.Text`
+    margin: 5px;
+    font-weight: 500;
+  `;
+  const removeTag = tag => onChange(tags.filter(t => t !== tag));
   return (
-    <Flex css={{flexFlow: 'row wrap'}}>
+    <Flex
+      css={{
+        flexFlow: 'row wrap',
+        flexGrow: 1,
+        justifyContent: 'flex-start',
+        alignItems: 'flex-start',
+      }}>
       {tags.map(t => (
         <Tag key={t}>
           <TagText>{t}</TagText>
@@ -58,22 +107,6 @@ const TagTable = ({tags, onChange}) => {
     </Flex>
   );
 };
-
-const Tag = styled.View`
-  background-color: pink;
-  margin: 5px;
-  flex: 1;
-  flex-direction: row;
-  justify-content: center;
-  align-items: center;
-`;
-
-const TagRemove = styled.Pressable``;
-
-const TagText = styled.Text`
-  background-color: pink;
-  margin: 5px;
-`;
 
 const AttachmentRow = ({name, icon, addAction}) => {
   return (

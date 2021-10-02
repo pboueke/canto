@@ -1,6 +1,6 @@
-import React, {useState, useEffect} from 'react';
+import React, {useState} from 'react';
 import styled from 'styled-components/native';
-import {Keyboard, Alert, BackHandler} from 'react-native';
+import {Keyboard, Alert} from 'react-native';
 import MMKVStorage from 'react-native-mmkv-storage';
 import {PopAction} from '../../components/common';
 import {PageText, PageHeader} from '../../components/Page';
@@ -31,6 +31,13 @@ export default ({navigation, route}) => {
   const [editMode, setEditMode] = useState(props.newPage);
   const [dateTime, setDateTime] = useState(new Date(props.page.date));
   const [text, setText] = useState(pageData.content.text);
+  const [attachments, setAttachments] = useState({
+    tags: pageData.content.tags,
+    images: pageData.content.images,
+    files: pageData.content.files,
+    location: pageData.content.location,
+    thumbnail: pageData.content.thumbnail,
+  });
 
   const saveJournalData = (page, update) => {
     let tmp = journalData;
@@ -49,6 +56,7 @@ export default ({navigation, route}) => {
 
   const savePageData = () => {
     let tmp = pageData;
+    Object.assign(tmp.content, attachments);
     tmp.content.text = text;
     tmp.content.date = new Date(dateTime).toISOString();
     tmp.content = new Page(tmp.content);
@@ -87,7 +95,20 @@ export default ({navigation, route}) => {
       <Scroll>
         <PageText value={text} onChange={setText} editMode={editMode} />
       </Scroll>
-      {editMode && <EditPageAttachments page={pageData.content} />}
+      {editMode && (
+        <EditPageAttachments
+          page={pageData.content}
+          onChange={({tags, images, files, thumbnail, location}) => {
+            setAttachments({
+              tags: tags ?? pageData.content.tags,
+              images: images ?? pageData.content.images,
+              files: files ?? pageData.content.files,
+              location: location ?? pageData.content.location,
+              thumbnail: thumbnail ?? pageData.content.thumbnail,
+            });
+          }}
+        />
+      )}
       <PopAction
         icon={editMode ? 'save' : 'edit-2'}
         onPress={() => {

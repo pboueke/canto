@@ -42,7 +42,9 @@ export default props => {
                   setValue('');
                 }
               }}>
-              <ButtonText enabled={value !== ''}>Open</ButtonText>
+              <ButtonText enabled={value !== ''}>
+                {props.submit ?? 'submit'}
+              </ButtonText>
             </SubmitButton>
           </Box>
         </Flex>

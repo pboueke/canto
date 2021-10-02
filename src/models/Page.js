@@ -9,7 +9,8 @@ export default class Page {
     thumbnail = null,
     location = null,
     tags = [],
-    attachments = [],
+    files = [],
+    images = [],
     comments = [],
   } = {}) {
     Object.assign(this, {
@@ -18,7 +19,8 @@ export default class Page {
       id,
       thumbnail,
       tags,
-      attachments,
+      files,
+      images,
       comments,
     });
 
@@ -39,7 +41,7 @@ export default class Page {
       thumbnail: this.thumbnail,
       location: this.location,
       tags: this.tags,
-      numberOfAttachments: this.attachments.length,
+      numberOfAttachments: this.files.length + this.images.length,
       numberOfComments: this.comments.length,
     };
   }
