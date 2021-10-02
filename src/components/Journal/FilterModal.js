@@ -1,8 +1,7 @@
 import React from 'react';
-import useStateRef from 'react-usestateref';
 import styled from 'styled-components/native';
 import Icon from 'react-native-vector-icons/Feather';
-import {Flex} from 'native-grid-styled';
+import {Flex, Box} from 'native-grid-styled';
 import {TagsTable} from '../common';
 
 export default ({show, unShow, data, availableTags, onChange}) => (
@@ -19,6 +18,41 @@ export default ({show, unShow, data, availableTags, onChange}) => (
         <Icon name="x" size={30} />
       </CloseButton>
       <FilterModalInterior>
+        <Flex css={binaryWrapperStyle.flex}>
+          <Box width={1 / 3} css={binaryWrapperStyle.box}>
+            <BinaryText size={10}>(must have)</BinaryText>
+            <Flex css={binaryWrapperStyle.innerFlex}>
+              <Bold>Image</Bold>
+              <BinaryIcon name="image" />
+            </Flex>
+            <BinarySwitch
+              value={data.image}
+              onValueChange={val => onChange({...data, image: val})}
+            />
+          </Box>
+          <Box width={1 / 3} css={binaryWrapperStyle.box}>
+            <BinaryText size={10}>(must have)</BinaryText>
+            <Flex css={binaryWrapperStyle.innerFlex}>
+              <Bold>File</Bold>
+              <BinaryIcon name="paperclip" />
+            </Flex>
+            <BinarySwitch
+              value={data.file}
+              onValueChange={val => onChange({...data, file: val})}
+            />
+          </Box>
+          <Box width={1 / 3} css={binaryWrapperStyle.box}>
+            <BinaryText size={10}>(must have)</BinaryText>
+            <Flex css={binaryWrapperStyle.innerFlex}>
+              <Bold>Location</Bold>
+              <BinaryIcon name="map-pin" />
+            </Flex>
+            <BinarySwitch
+              value={data.location}
+              onValueChange={val => onChange({...data, location: val})}
+            />
+          </Box>
+        </Flex>
         <Row name="Selected Tags" icon="tag" action="remove" />
         <TagsTable
           mode="remove"
@@ -36,6 +70,40 @@ export default ({show, unShow, data, availableTags, onChange}) => (
     </Scroll>
   </FilterModal>
 );
+
+const BinaryText = styled.Text`
+  font-size: ${p => p.size ?? 14}px;
+  color: ${p => p.color ?? 'rgb(111, 111, 111)'};
+  font-weight: 400;
+`;
+const BinaryIcon = styled(Icon)`
+  font-size: 16px;
+  margin: 2px 0 0 5px;
+`;
+const BinarySwitch = styled.Switch``;
+const binaryWrapperStyle = {
+  box: {
+    flexDirection: 'column',
+    justifyContent: 'space-evenly',
+    alignItems: 'center',
+    height: '100px',
+    marginLeft: '10px',
+    marginRight: '10px',
+    flexShrink: 1,
+    borderWidth: '2px',
+    borderRadius: '5px',
+    borderStyle: 'solid',
+  },
+  flex: {
+    flexDirection: 'row',
+    paddingLeft: '20px',
+    paddingRight: '20px',
+    marginTop: '20px',
+  },
+  innerFlex: {
+    flexDirection: 'row',
+  },
+};
 
 const Row = ({name, icon, action}) => {
   return (
@@ -119,6 +187,12 @@ const CloseButton = styled.Pressable`
   margin: 10px;
   flex-direction: row;
   justify-content: space-between;
+`;
+
+const Bold = styled.Text`
+  font-size: 14;
+  font-weight: 600;
+  margin: 0 0 0 10px;
 `;
 
 const EmptyBlock = styled.View`

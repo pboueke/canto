@@ -45,14 +45,14 @@ export default class Filter {
         return [];
       }
       let res = items;
-      if (properties.location) {
-        res = res.filter(p => p.location === properties.location);
-      }
       if (properties.tags && properties.tags.length > 0) {
         res = res.filter(p => properties.tags.every(t => p.tags.includes(t)));
       }
-      if (properties.attachments) {
-        res = res.filter(p => p.numberOfAttachments > 0);
+      if (properties.file) {
+        res = res.filter(p => p.numberOfFiles > 0);
+      }
+      if (properties.image) {
+        res = res.filter(p => p.numberOfImages > 0);
       }
       if (properties.comments) {
         res = res.filter(p => p.numberOfComments > 0);

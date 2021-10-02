@@ -147,7 +147,7 @@ const Scroll = styled.ScrollView.attrs({
     };
   },
 })`
-  width: 400px;
+  width: 401px;
   margin: auto;
   margin-top: 100px;
   background-color: white;

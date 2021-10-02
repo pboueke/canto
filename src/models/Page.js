@@ -41,7 +41,8 @@ export default class Page {
       thumbnail: this.thumbnail,
       location: this.location,
       tags: this.tags,
-      numberOfAttachments: this.files.length + this.images.length,
+      numberOfFiles: this.files.length,
+      numberOfImages: this.images.length,
       numberOfComments: this.comments.length,
     };
   }
