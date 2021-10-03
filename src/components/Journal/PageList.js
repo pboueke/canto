@@ -48,7 +48,7 @@ const Item = props => {
             <ItemDate>{date}</ItemDate>
             <ItemTime>{time}</ItemTime>
           </Flex>
-          {props.tags && props.tags.length && (
+          {props.tags && props.tags.length > 0 && (
             <TagsRow tags={props.tags} scale={0.75} />
           )}
           <ItemText>
