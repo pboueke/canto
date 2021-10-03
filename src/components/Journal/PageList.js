@@ -14,6 +14,9 @@ export default props => {
       date={i.item.date}
       text={i.item.text}
       tags={i.item.tags}
+      loc={i.item.location}
+      img={i.item.image}
+      file={i.item.image}
       isLast={i.index === last}
     />
   );
@@ -44,10 +47,15 @@ const Item = props => {
       <Flex css={{flexDirection: 'row', flex: 1}}>
         <ItemThumbnail />
         <Flex css={{flexDirection: 'column'}}>
-          <Flex css={{flexDirection: 'row'}}>
+          <ItemTitle>
             <ItemDate>{date}</ItemDate>
+            {props.file && props.file.length > 0 && (
+              <ItemFile name="paperclip" />
+            )}
+            {props.img && props.img.length > 0 && <ItemImage name="image" />}
+            {props.loc && <ItemLocation name="map-pin" />}
             <ItemTime>{time}</ItemTime>
-          </Flex>
+          </ItemTitle>
           {props.tags && props.tags.length > 0 && (
             <TagsRow tags={props.tags} scale={0.75} />
           )}
@@ -92,6 +100,14 @@ const ItemThumbnail = props => {
   );
 };
 
+const ItemTitle = styled.View`
+  flex: 1;
+  flex-direction: row;
+  margin-bottom: 10px;
+  border-bottom-width: 1px;
+  border-color: rgb(200, 200, 200);
+`;
+
 const ItemDate = styled.Text`
   font-size: 18px;
   font-weight: 700;
@@ -102,6 +118,26 @@ const ItemDate = styled.Text`
 const ItemTime = styled.Text`
   font-size: 16px;
   margin: 6px 0 0 100px;
+  position: absolute;
+  right: 5px;
+`;
+
+const ItemTitleIcon = styled(Icon)`
+  font-size: 14px;
+  position: absolute;
+  top: 8px;
+`;
+
+const ItemLocation = styled(ItemTitleIcon)`
+  right: 115px;
+`;
+
+const ItemImage = styled(ItemTitleIcon)`
+  right: 90px;
+`;
+
+const ItemFile = styled(ItemTitleIcon)`
+  right: 65px;
 `;
 
 const ItemText = styled.View`

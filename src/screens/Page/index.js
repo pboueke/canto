@@ -5,7 +5,7 @@ import MMKVStorage from 'react-native-mmkv-storage';
 import {PopAction, TagsRow, LocationTag} from '../../components/common';
 import {PageText, PageHeader, EditPageAttachments} from '../../components/Page';
 import {Page} from '../../models';
-import {openLocationExternally} from '../../lib';
+import {openLocationExternally, getDate} from '../../lib';
 import {metadata} from '../..';
 
 export default ({navigation, route}) => {
@@ -110,7 +110,9 @@ export default ({navigation, route}) => {
         <LocationTag
           loc={attachments.location}
           removable={false}
-          action={() => openLocationExternally(attachments.location)}
+          action={() =>
+            openLocationExternally(attachments.location, getDate(dateTime))
+          }
         />
         <TagsRow
           tags={attachments.tags}
