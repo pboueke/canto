@@ -1,10 +1,12 @@
 import React, {useState} from 'react';
+import {PermissionsAndroid, Alert} from 'react-native';
 import useStateRef from 'react-usestateref';
 import styled from 'styled-components/native';
 import Icon from 'react-native-vector-icons/Feather';
 import {Flex} from 'native-grid-styled';
 import {TextInputModal} from '../../components/common';
-import {TagsTable} from '../common';
+import {TagsTable, LocationTag} from '../common';
+import {Page} from '../../models';
 
 export default ({show, unShow, page, onChange, availableTags}) => {
   const [addTagModalVisibility, setAddTagModalVisibility] = useState(false);
@@ -79,14 +81,63 @@ export default ({show, unShow, page, onChange, availableTags}) => {
           />
           <AttachmentRow name="Images" icon="image" />
           <AttachmentRow name="Files" icon="paperclip" />
-          <AttachmentRow name="Location" icon="map-pin" />
+          <AttachmentRow
+            name="Location"
+            icon="map-pin"
+            actionEnabled={!location}
+            addAction={async () => {
+              const granted = await PermissionsAndroid.request(
+                PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
+                {
+                  title: 'Canto Location Permission',
+                  message:
+                    'Canto needs access to your location services ' +
+                    'to add location data to your journal page.',
+                  buttonNeutral: 'Ask Me Later',
+                  buttonNegative: 'Cancel',
+                  buttonPositive: 'OK',
+                },
+              );
+              if (granted === PermissionsAndroid.RESULTS.GRANTED) {
+                Page.setLocation(loc => {
+                  setLocation(loc);
+                  onChange(createDataObject());
+                });
+              } else {
+                Alert.alert(
+                  'Permission Denied',
+                  'Couldn´t get location permission.',
+                  [
+                    {
+                      text: 'Close',
+                      style: 'cancel',
+                    },
+                  ],
+                );
+              }
+            }}
+          />
+          <LocationTag
+            loc={location}
+            removable={true}
+            action={() => {
+              setLocation(null);
+              onChange(createDataObject());
+            }}
+          />
         </AttachmentModalInterior>
       </Scroll>
     </AttachmentModal>
   );
 };
 
-const AttachmentRow = ({name, icon, addAction, mt = '20px'}) => {
+const AttachmentRow = ({
+  name,
+  icon,
+  addAction,
+  actionEnabled = true,
+  mt = '20px',
+}) => {
   return (
     <Flex
       css={{
@@ -103,7 +154,9 @@ const AttachmentRow = ({name, icon, addAction, mt = '20px'}) => {
           justifyContent: 'space-between',
         }}>
         <AttachmentRowTitle name={name} icon={icon} />
-        {addAction && <AddAttachmentButton action={addAction} />}
+        {actionEnabled && addAction && (
+          <AddAttachmentButton action={addAction} />
+        )}
       </Flex>
     </Flex>
   );

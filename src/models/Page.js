@@ -1,3 +1,4 @@
+import Geolocation from 'react-native-geolocation-service';
 import {v5 as uuidv5} from 'uuid';
 import {metadata} from '..';
 
@@ -29,8 +30,16 @@ export default class Page {
     }
   }
 
-  setLocation() {
-    /* use: react-native-geolocation-service */
+  static setLocation(setter) {
+    Geolocation.getCurrentPosition(
+      position => {
+        setter(position);
+      },
+      error => {
+        console.log(error.code, error.message);
+      },
+      {enableHighAccuracy: true, timeout: 15000, maximumAge: 10000},
+    );
   }
 
   getPreview() {

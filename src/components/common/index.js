@@ -5,3 +5,4 @@ export {default as PopAction} from './PopAction';
 export {default as TextInputModal} from './TextInputModal';
 export {BackButton} from './CustomNavigation';
 export {Tag, TagsTable, TagsRow} from './Tag';
+export {LocationTag} from './Location';

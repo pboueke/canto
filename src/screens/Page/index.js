@@ -2,10 +2,10 @@ import React, {useState, useMemo} from 'react';
 import styled from 'styled-components/native';
 import {Keyboard, Alert} from 'react-native';
 import MMKVStorage from 'react-native-mmkv-storage';
-import {PopAction, TagsRow} from '../../components/common';
-import {PageText, PageHeader} from '../../components/Page';
-import {EditPageAttachments} from '../../components/Page';
+import {PopAction, TagsRow, LocationTag} from '../../components/common';
+import {PageText, PageHeader, EditPageAttachments} from '../../components/Page';
 import {Page} from '../../models';
+import {openLocationExternally} from '../../lib';
 import {metadata} from '../..';
 
 export default ({navigation, route}) => {
@@ -107,6 +107,11 @@ export default ({navigation, route}) => {
       />
       <Scroll>
         <PageText value={text} onChange={setText} editMode={editMode} />
+        <LocationTag
+          loc={attachments.location}
+          removable={false}
+          action={() => openLocationExternally(attachments.location)}
+        />
         <TagsRow
           tags={attachments.tags}
           scale={1}
@@ -120,15 +125,7 @@ export default ({navigation, route}) => {
         <EditPageAttachments
           availableTags={props.tags}
           page={pageData.content}
-          onChange={({tags, images, files, thumbnail, location}) => {
-            setAttachments({
-              tags: tags ?? pageData.content.tags,
-              images: images ?? pageData.content.images,
-              files: files ?? pageData.content.files,
-              location: location ?? pageData.content.location,
-              thumbnail: thumbnail ?? pageData.content.thumbnail,
-            });
-          }}
+          onChange={val => setAttachments(val)}
         />
       )}
       <PopAction
