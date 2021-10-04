@@ -8,6 +8,7 @@ import {getTime, getDate} from '../../lib';
 import {TagsRow} from '../common';
 
 export default props => {
+  console.log(props.data[1]);
   const renderItem = (i, last) => (
     <Item
       onPress={() => props.onClick(i.item)}
@@ -15,8 +16,9 @@ export default props => {
       text={i.item.text}
       tags={i.item.tags}
       loc={i.item.location}
-      img={i.item.image}
-      file={i.item.image}
+      img={i.item.numberOfImages > 0}
+      file={i.item.numberOfFiles > 0}
+      cmt={i.item.numberOfComment > 0}
       isLast={i.index === last}
     />
   );
@@ -49,10 +51,8 @@ const Item = props => {
         <Flex css={{flexDirection: 'column'}}>
           <ItemTitle>
             <ItemDate>{date}</ItemDate>
-            {props.file && props.file.length > 0 && (
-              <ItemFile name="paperclip" />
-            )}
-            {props.img && props.img.length > 0 && <ItemImage name="image" />}
+            {props.file && <ItemFile name="paperclip" />}
+            {props.img && <ItemImage name="image" />}
             {props.loc && <ItemLocation name="map-pin" />}
             <ItemTime>{time}</ItemTime>
           </ItemTitle>

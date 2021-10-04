@@ -18,7 +18,11 @@ export const useStateWithCallback = initialState => {
 
   return [state, handleSetState];
 };
-
+export const hashCode = s =>
+  s.split('').reduce((a, b) => {
+    a = (a << 5) - a + b.charCodeAt(0);
+    return a & a;
+  }, 0);
 export const getDate = date => new Date(date).toDateString();
 export const getTime = date =>
   new Date(date).getHours() +

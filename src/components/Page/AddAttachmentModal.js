@@ -1,24 +1,26 @@
 import React, {useState} from 'react';
-import {PermissionsAndroid, Alert} from 'react-native';
+import {PermissionsAndroid, Alert, Image} from 'react-native';
 import useStateRef from 'react-usestateref';
 import styled from 'styled-components/native';
 import Icon from 'react-native-vector-icons/Feather';
 import {Flex} from 'native-grid-styled';
-import {TextInputModal} from '../../components/common';
-import {TagsTable, LocationTag} from '../common';
+import {TagsTable, LocationTag, TextInputModal, ImageRow} from '../common';
+import {hashCode} from '../../lib/Utils';
+import {launchCamera, launchImageLibrary} from 'react-native-image-picker';
+import RNFS from 'react-native-fs';
 import {Page} from '../../models';
 
 export default ({show, unShow, page, onChange, availableTags}) => {
   const [addTagModalVisibility, setAddTagModalVisibility] = useState(false);
   const [tags, setTags, tagsRef] = useStateRef(page.tags);
-  const [images, setImages, ImagesRef] = useStateRef(page.images);
+  const [images, setImages, imagesRef] = useStateRef(page.images);
   const [files, setFiles, filesRef] = useStateRef(page.files);
   const [location, setLocation, locationRef] = useStateRef(page.location);
   const [thumbnail, setThumbnail, thumbnailRef] = useStateRef(page.thumbnail);
   const createDataObject = () => {
     return {
       tags: tagsRef.current,
-      images: ImagesRef.current,
+      images: imagesRef.current,
       files: filesRef.current,
       location: locationRef.current,
       thumbnail: thumbnailRef.current,
@@ -79,7 +81,71 @@ export default ({show, unShow, page, onChange, availableTags}) => {
               onChange(createDataObject());
             }}
           />
-          <AttachmentRow name="Images" icon="image" />
+          <AttachmentRow
+            name="Images"
+            icon="image"
+            addAction={async () => {
+              const granted = await PermissionsAndroid.request(
+                PermissionsAndroid.PERMISSIONS.WRITE_EXTERNAL_STORAGE,
+                {
+                  title: 'Canto Write to Storage Permission',
+                  message:
+                    'Canto needs access to save your files to your phone storage.',
+                  buttonNeutral: 'Ask Me Later',
+                  buttonNegative: 'Cancel',
+                  buttonPositive: 'OK',
+                },
+              );
+              if (granted === PermissionsAndroid.RESULTS.GRANTED) {
+                launchImageLibrary(
+                  {mediaType: 'image', includeBase64: false, selectionLimit: 0},
+                  res => {
+                    if (res.errorCode) {
+                      console.log(
+                        `ERROR: ${res.errorCode} \n ${res.errorMessage}}`,
+                      );
+                    } else if (!res.didCancel) {
+                      res.assets.forEach(f => {
+                        const ext = f.fileName.split('.').pop();
+                        const dest =
+                          'file://' +
+                          RNFS.DocumentDirectoryPath +
+                          `/img-${page.id}-${hashCode(f.fileName)}.${ext}`;
+                        RNFS.copyFile(f.uri, dest).then(() => {
+                          setImages(imagesRef.current.concat(dest));
+                          onChange(createDataObject());
+                        });
+                      });
+                    }
+                  },
+                );
+              } else {
+                Alert.alert(
+                  'Permission Denied',
+                  'Couldn´t get location permission.',
+                  [
+                    {
+                      text: 'Close',
+                      style: 'cancel',
+                    },
+                  ],
+                );
+              }
+            }}
+          />
+          <ImageRow
+            images={images}
+            action={i => {
+              setImages(imagesRef.current.filter(img => img !== i));
+              RNFS.unlink(i.substr(6))
+                .then(() => {
+                  onChange(createDataObject());
+                })
+                .catch(err => {
+                  console.log(err.message);
+                });
+            }}
+          />
           <AttachmentRow name="Files" icon="paperclip" />
           <AttachmentRow
             name="Location"
