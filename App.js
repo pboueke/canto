@@ -5,6 +5,7 @@ import HomeScreen from './src/screens/Home';
 import JournalScreen from './src/screens/Journal';
 import PageScreen from './src/screens/Page';
 import Toast from 'react-native-toast-message';
+import {toastConfig} from './src/components/common';
 
 const Stack = createNativeStackNavigator();
 
@@ -27,7 +28,7 @@ const App = () => {
           options={{headerShown: false}}
         />
       </Stack.Navigator>
-      <Toast ref={ref => Toast.setRef(ref)} />
+      <Toast config={toastConfig} ref={ref => Toast.setRef(ref)} />
     </NavigationContainer>
   );
 };

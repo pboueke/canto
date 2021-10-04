@@ -3,6 +3,7 @@ import styled from 'styled-components/native';
 import Icon from 'react-native-vector-icons/Feather';
 import Clipboard from '@react-native-clipboard/clipboard';
 import Toast from 'react-native-toast-message';
+import {toastConfig} from './CustomToast';
 
 const LocationTag = ({loc, removable, action}) => {
   // note: toast inside modals function weirdly.
@@ -20,13 +21,13 @@ const LocationTag = ({loc, removable, action}) => {
         Clipboard.setString(`${loc.coords.latitude},${loc.coords.longitude}`);
         setToastVisibility(true);
         modalToastRef.current.show({
-          type: 'info',
+          type: 'simpleInfo',
           position: 'bottom',
           text1: 'copied lat,lng',
           text2: `${loc.coords.latitude},${loc.coords.longitude}`,
-          visibilityTime: 500,
+          visibilityTime: 1000,
           autoHide: true,
-          bottomOffset: 40,
+          bottomOffset: 0,
           onShow: () => {},
           onHide: () => setToastVisibility(false),
           onPress: () => {},
@@ -37,7 +38,7 @@ const LocationTag = ({loc, removable, action}) => {
         {`${loc.coords.latitude} , ${loc.coords.longitude}`}
       </LocationText>
       <Icon name={icon} size={20} />
-      {toastVisibility && <Toast ref={modalToastRef} />}
+      {toastVisibility && <Toast config={toastConfig} ref={modalToastRef} />}
     </Wrapper>
   );
 };
