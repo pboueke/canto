@@ -18,8 +18,7 @@ export default props => {
     useState(false);
   const [endDatePickerVisibility, setEndDatePickerVisibility] = useState(false);
   const [startDate, setStartDate, startDateRef] = useStateRef(
-    Filter.getOldestDate(props.data, props.journal.date),
-    [props],
+    new Date(Filter.getOldestDate(props.data, props.journal.date)),
   );
   const [endDate, setEndDate, endDateRef] = useStateRef(new Date());
   const [mustHaves, setMustHaves, mustHavesRef] = useStateRef(emptyMustHaves);

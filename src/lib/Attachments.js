@@ -23,12 +23,16 @@ const addLocation = async (setLocation, callback) => {
       callback();
     });
   } else {
-    Alert.alert('Permission Denied', 'Couldn´t get location permission.', [
-      {
-        text: 'Close',
-        style: 'cancel',
-      },
-    ]);
+    Alert.alert(
+      'Permission Denied',
+      'Couldn´t get permission to use location services.',
+      [
+        {
+          text: 'Close',
+          style: 'cancel',
+        },
+      ],
+    );
   }
 };
 
@@ -71,12 +75,16 @@ const addFile = async (
       },
     );
   } else {
-    Alert.alert('Permission Denied', 'Couldn´t get file storage permission.', [
-      {
-        text: 'Close',
-        style: 'cancel',
-      },
-    ]);
+    Alert.alert(
+      'Permission Denied',
+      "Couldn´t get permission to use the device's file storage.",
+      [
+        {
+          text: 'Close',
+          style: 'cancel',
+        },
+      ],
+    );
   }
 };
 
