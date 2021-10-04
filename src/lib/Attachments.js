@@ -79,14 +79,17 @@ const addFile = async (pageId, callback, mode = 0) => {
 };
 
 const removeFile = async (filePath, callback) => {
-  console.log(filePath);
   RNFS.unlink(filePath.substr(6))
     .then(() => {
-      callback();
+      if (callback) {
+        callback();
+      }
     })
     .catch(err => {
       console.log(err.message);
-      callback();
+      if (callback) {
+        callback();
+      }
     });
 };
 

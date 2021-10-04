@@ -7,6 +7,7 @@ import {PageText, PageHeader, EditPageAttachments} from '../../components/Page';
 import {Page} from '../../models';
 import {openLocationExternally, getDate} from '../../lib';
 import {metadata} from '../..';
+import {removeFile} from '../../lib';
 
 export default ({navigation, route}) => {
   const props = route.params;
@@ -67,10 +68,22 @@ export default ({navigation, route}) => {
     return tmp;
   };
 
+  const deletePendingFiles = async discarding => {
+    let curr = createUpdatedPage().content;
+    let newer = discarding ? JSON.parse(orgValueString) : curr;
+    let older = discarding ? curr : JSON.parse(orgValueString);
+    let toDelete = newer.files.filter(f => !older.files.includes(f));
+    toDelete = toDelete.concat(
+      newer.images.filter(i => !older.files.includes(i)),
+    );
+    toDelete.forEach(file => removeFile(file));
+  };
+
   const savePageData = () => {
-    let tmp = createUpdatedPage();
-    MMKV.setMap(pageData.content.id, tmp);
-    saveJournalData(tmp.content.getPreview(), stored);
+    let curr = createUpdatedPage();
+    deletePendingFiles(false);
+    MMKV.setMap(pageData.content.id, curr);
+    saveJournalData(curr.content.getPreview(), stored);
     setStored(true);
   };
 
@@ -79,6 +92,7 @@ export default ({navigation, route}) => {
       !editMode ||
       JSON.stringify(createUpdatedPage().content) === orgValueString
     ) {
+      deletePendingFiles(true);
       navigation.goBack();
       return;
     }

@@ -18,7 +18,7 @@ export default ({show, unShow, page, onChange, availableTags}) => {
   const [tags, setTags, tagsRef] = useStateRef(page.tags);
   const [images, setImages, imagesRef] = useStateRef(page.images);
   const [files, setFiles, filesRef] = useStateRef(page.files);
-  const [filePath, setFilePath, FilePathRef] = useStateRef('');
+  const [filePath, setFilePath, filePathRef] = useStateRef('');
   const [location, setLocation, locationRef] = useStateRef(page.location);
   const [thumbnail, setThumbnail, thumbnailRef] = useStateRef(page.thumbnail);
   const createDataObject = () => {
@@ -97,12 +97,10 @@ export default ({show, unShow, page, onChange, availableTags}) => {
           />
           <ImageRow
             images={images}
-            action={i =>
-              removeFile(i, () => {
-                setImages(imagesRef.current.filter(img => i !== img));
-                onChange(createDataObject());
-              })
-            }
+            action={i => {
+              setImages(imagesRef.current.filter(img => i !== img));
+              onChange(createDataObject());
+            }}
           />
           <AttachmentRow
             name="Files"
@@ -120,12 +118,10 @@ export default ({show, unShow, page, onChange, availableTags}) => {
           />
           <FileRow
             files={files}
-            action={f =>
-              removeFile(f.path, () => {
-                setFiles(filesRef.current.filter(file => file.path !== f.path));
-                onChange(createDataObject());
-              })
-            }
+            action={f => {
+              setFiles(filesRef.current.filter(file => file.path !== f.path));
+              onChange(createDataObject());
+            }}
           />
           <TextInputModal
             submit="Save"
@@ -134,7 +130,7 @@ export default ({show, unShow, page, onChange, availableTags}) => {
             onSubmit={filename => {
               setFiles(
                 filesRef.current.concat({
-                  path: FilePathRef.current,
+                  path: filePathRef.current,
                   name: filename,
                 }),
               );
@@ -142,7 +138,7 @@ export default ({show, unShow, page, onChange, availableTags}) => {
               setFilePath('');
             }}
             onCancel={() =>
-              removeFile(FilePathRef.current, filesRef, setFiles, () =>
+              removeFile(filePathRef.current, () =>
                 onChange(createDataObject()),
               )
             }
