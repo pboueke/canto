@@ -46,36 +46,4 @@ Features:
 
 ### Issues derived from `mmkv-storage` 
 
-This project uses [react-native-mmkv-storage](https://github.com/ammarahm-ed/react-native-mmkv-storage). If the  project wont build after following the [installation instrunctions](https://rnmmkv.vercel.app/#/gettingstarted), you may need to follow these steps:
-
-1. In the Android Studio SDK Manager, install CMake 3.10 and make sure it is the only version available. 
-
-2. In the Android Studio Manager, install NDK 21.4.7075529 and make sure it is the only version available. 
-
-
-3. Specify CMake version at MMKV's `build.gradle` file.
-
-* Automated option: run the `fix-mmkv` script: `yarn fix-mmkv` (also included in the `yarn android` script)
-
-* Manual option: enter `node_modules/react-native-mmkv-storage/android/build.gradle` and make sure that the CMake version above is specified at `externalNativeBuild`. Like so:
-
-```
-externalNativeBuild {
-    cmake {
-        path "./src/main/rnmkv/CMakeLists.txt"
-        version "3.10.2"
-    }
-}
-```
-
-The previous steps came from this [related discussion](https://github.com/ammarahm-ed/react-native-mmkv-storage/issues/67#issuecomment-801467636). If they didn´t work, try the following:
-
-4. Delete and reinstall node_modules, apply step **3**
-
-5. Clean your project with `./gradlew clean` or Android Studio
-
-6. In Android Studio, run **Build** -> **Refresh Linked C++ Projects**
-
-The current build process is not deterministic. The previous steps work sometimes, fail others. I am still trying to figure it out. Currently, follow steps 1 to 3 and repeat 5 and 6 untill the project can be built (help needed).
-
-7. This specific order seems to work: `Build/Clean`, `Build/Refresh Linked C++ Projects`, `Build/Make Project`, `Build/Make Project` (yes, build twice). Be sure that metro is not running while you do it. Then follow the *development steps* listed above.
+This project uses [react-native-mmkv-storage](https://github.com/ammarahm-ed/react-native-mmkv-storage). If the  project wont build after following the [installation instrunctions](https://rnmmkv.vercel.app/#/gettingstarted), check the [related issue](https://github.com/pboueke/canto/issues/1).
