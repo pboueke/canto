@@ -3,14 +3,22 @@ import useStateRef from 'react-usestateref';
 import styled from 'styled-components/native';
 import Icon from 'react-native-vector-icons/Feather';
 import {Flex} from 'native-grid-styled';
-import {TagsTable, LocationTag, TextInputModal, ImageRow} from '../common';
 import {removeFile, addFile, addLocation} from '../../lib';
+import {
+  TagsTable,
+  LocationTag,
+  TextInputModal,
+  ImageRow,
+  FileRow,
+} from '../common';
 
 export default ({show, unShow, page, onChange, availableTags}) => {
   const [addTagModalVisibility, setAddTagModalVisibility] = useState(false);
+  const [fileModalVisibility, setFileModalVisibility] = useState(false);
   const [tags, setTags, tagsRef] = useStateRef(page.tags);
   const [images, setImages, imagesRef] = useStateRef(page.images);
   const [files, setFiles, filesRef] = useStateRef(page.files);
+  const [filePath, setFilePath, FilePathRef] = useStateRef('');
   const [location, setLocation, locationRef] = useStateRef(page.location);
   const [thumbnail, setThumbnail, thumbnailRef] = useStateRef(page.thumbnail);
   const createDataObject = () => {
@@ -81,20 +89,66 @@ export default ({show, unShow, page, onChange, availableTags}) => {
             name="Images"
             icon="image"
             addAction={() =>
-              addFile(page.id, setImages, imagesRef, () =>
-                onChange(createDataObject()),
-              )
+              addFile(page.id, val => {
+                setImages(imagesRef.current.concat(val));
+                onChange(createDataObject());
+              })
             }
           />
           <ImageRow
             images={images}
             action={i =>
-              removeFile(i, imagesRef, setImages, () =>
-                onChange(createDataObject()),
+              removeFile(i, () => {
+                setImages(imagesRef.current.filter(img => i !== img));
+                onChange(createDataObject());
+              })
+            }
+          />
+          <AttachmentRow
+            name="Files"
+            icon="paperclip"
+            addAction={() =>
+              addFile(
+                page.id,
+                val => {
+                  setFilePath(val);
+                  setFileModalVisibility(!fileModalVisibility);
+                },
+                3,
               )
             }
           />
-          <AttachmentRow name="Files" icon="paperclip" />
+          <FileRow
+            files={files}
+            action={f =>
+              removeFile(f.path, () => {
+                setFiles(filesRef.current.filter(file => file.path !== f.path));
+                onChange(createDataObject());
+              })
+            }
+          />
+          <TextInputModal
+            submit="Save"
+            placeholder="title of your file"
+            shadow={true}
+            onSubmit={filename => {
+              setFiles(
+                filesRef.current.concat({
+                  path: FilePathRef.current,
+                  name: filename,
+                }),
+              );
+              onChange(createDataObject());
+              setFilePath('');
+            }}
+            onCancel={() =>
+              removeFile(FilePathRef.current, filesRef, setFiles, () =>
+                onChange(createDataObject()),
+              )
+            }
+            show={fileModalVisibility}
+            unShow={() => setFileModalVisibility(!fileModalVisibility)}
+          />
           <AttachmentRow
             name="Location"
             icon="map-pin"

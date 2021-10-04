@@ -18,19 +18,19 @@ const Row = styled.View`
   flex-flow: row wrap;
   width: 100%;
   background-color: rgb(200, 200, 200);
+  justify-content: center;
 `;
 
 const ImageItem = styled.Pressable`
-  flex: 1;
   align-items: center;
-  height: 100px;
-  width: 100px;
+  height: 99px;
+  width: 99px;
 `;
 
 const Background = styled.ImageBackground`
   flex: 1;
-  width: 100px;
-  height: 100px;
+  height: 99px;
+  width: 99px;
   align-items: flex-end;
   background-color: rgba(255, 255, 255, 0.1);
 `;

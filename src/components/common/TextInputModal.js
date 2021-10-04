@@ -27,6 +27,9 @@ export default props => {
           <Box width={1 / 3}>
             <CancelButton
               onPress={() => {
+                if (props.onCancel) {
+                  props.onCancel();
+                }
                 props.unShow();
               }}>
               <ButtonText enabled={true}>Cancel</ButtonText>

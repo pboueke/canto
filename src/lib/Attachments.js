@@ -36,13 +36,7 @@ const addLocation = async (setLocation, callback) => {
   }
 };
 
-const addFile = async (
-  pageId,
-  fileSetter,
-  fileRef,
-  callback,
-  fileType = 'image',
-) => {
+const addFile = async (pageId, callback, mode = 0) => {
   const granted = await PermissionsAndroid.request(
     PermissionsAndroid.PERMISSIONS.WRITE_EXTERNAL_STORAGE,
     {
@@ -54,26 +48,22 @@ const addFile = async (
     },
   );
   if (granted === PermissionsAndroid.RESULTS.GRANTED) {
-    launchImageLibrary(
-      {mediaType: fileType, includeBase64: false, selectionLimit: 0},
-      res => {
-        if (res.errorCode) {
-          console.log(`ERROR: ${res.errorCode} \n ${res.errorMessage}}`);
-        } else if (!res.didCancel) {
-          res.assets.forEach(f => {
-            const ext = f.fileName.split('.').pop();
-            const dest =
-              'file://' +
-              RNFS.DocumentDirectoryPath +
-              `/img-${pageId}-${hashCode(f.fileName)}.${ext}`;
-            RNFS.copyFile(f.uri, dest).then(() => {
-              fileSetter(fileRef.current.concat(dest));
-              callback();
-            });
+    launchImageLibrary(RNFSConfig(mode), res => {
+      if (res.errorCode) {
+        console.log(`ERROR: ${res.errorCode} \n ${res.errorMessage}}`);
+      } else if (!res.didCancel) {
+        res.assets.forEach(f => {
+          const ext = f.fileName.split('.').pop();
+          const dest =
+            'file://' +
+            RNFS.DocumentDirectoryPath +
+            `/img-${pageId}-${hashCode(f.fileName)}.${ext}`;
+          RNFS.copyFile(f.uri, dest).then(() => {
+            callback(dest);
           });
-        }
-      },
-    );
+        });
+      }
+    });
   } else {
     Alert.alert(
       'Permission Denied',
@@ -88,15 +78,47 @@ const addFile = async (
   }
 };
 
-const removeFile = async (imagePath, imagesRef, setImages, callback) => {
-  setImages(imagesRef.current.filter(img => img !== imagePath));
-  RNFS.unlink(imagePath.substr(6))
+const removeFile = async (filePath, callback) => {
+  console.log(filePath);
+  RNFS.unlink(filePath.substr(6))
     .then(() => {
       callback();
     })
     .catch(err => {
       console.log(err.message);
+      callback();
     });
+};
+
+/* RNFS does not like dynamic configs for some reason
+ */
+const RNFSConfig = mode => {
+  switch (mode) {
+    case 0:
+      return {
+        mediaType: 'image',
+        includeBase64: false,
+        selectionLimit: 0,
+      };
+    case 1:
+      return {
+        mediaType: 'image',
+        includeBase64: false,
+        selectionLimit: 1,
+      };
+    case 2:
+      return {
+        mediaType: 'mixed',
+        includeBase64: false,
+        selectionLimit: 0,
+      };
+    case 4:
+      return {
+        mediaType: 'mixed',
+        includeBase64: false,
+        selectionLimit: 1,
+      };
+  }
 };
 
 export {removeFile, addFile, addLocation};
