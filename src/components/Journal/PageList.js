@@ -8,7 +8,6 @@ import {getTime, getDate} from '../../lib';
 import {TagsRow} from '../common';
 
 export default props => {
-  console.log(props.data[1]);
   const renderItem = (i, last) => (
     <Item
       onPress={() => props.onClick(i.item)}

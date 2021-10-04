@@ -1,14 +1,10 @@
 import React, {useState} from 'react';
-import {PermissionsAndroid, Alert, Image} from 'react-native';
 import useStateRef from 'react-usestateref';
 import styled from 'styled-components/native';
 import Icon from 'react-native-vector-icons/Feather';
 import {Flex} from 'native-grid-styled';
 import {TagsTable, LocationTag, TextInputModal, ImageRow} from '../common';
-import {hashCode} from '../../lib/Utils';
-import {launchCamera, launchImageLibrary} from 'react-native-image-picker';
-import RNFS from 'react-native-fs';
-import {Page} from '../../models';
+import {removeFile, addFile, addLocation} from '../../lib';
 
 export default ({show, unShow, page, onChange, availableTags}) => {
   const [addTagModalVisibility, setAddTagModalVisibility] = useState(false);
@@ -84,104 +80,28 @@ export default ({show, unShow, page, onChange, availableTags}) => {
           <AttachmentRow
             name="Images"
             icon="image"
-            addAction={async () => {
-              const granted = await PermissionsAndroid.request(
-                PermissionsAndroid.PERMISSIONS.WRITE_EXTERNAL_STORAGE,
-                {
-                  title: 'Canto Write to Storage Permission',
-                  message:
-                    'Canto needs access to save your files to your phone storage.',
-                  buttonNeutral: 'Ask Me Later',
-                  buttonNegative: 'Cancel',
-                  buttonPositive: 'OK',
-                },
-              );
-              if (granted === PermissionsAndroid.RESULTS.GRANTED) {
-                launchImageLibrary(
-                  {mediaType: 'image', includeBase64: false, selectionLimit: 0},
-                  res => {
-                    if (res.errorCode) {
-                      console.log(
-                        `ERROR: ${res.errorCode} \n ${res.errorMessage}}`,
-                      );
-                    } else if (!res.didCancel) {
-                      res.assets.forEach(f => {
-                        const ext = f.fileName.split('.').pop();
-                        const dest =
-                          'file://' +
-                          RNFS.DocumentDirectoryPath +
-                          `/img-${page.id}-${hashCode(f.fileName)}.${ext}`;
-                        RNFS.copyFile(f.uri, dest).then(() => {
-                          setImages(imagesRef.current.concat(dest));
-                          onChange(createDataObject());
-                        });
-                      });
-                    }
-                  },
-                );
-              } else {
-                Alert.alert(
-                  'Permission Denied',
-                  'Couldn´t get location permission.',
-                  [
-                    {
-                      text: 'Close',
-                      style: 'cancel',
-                    },
-                  ],
-                );
-              }
-            }}
+            addAction={() =>
+              addFile(page.id, setImages, imagesRef, () =>
+                onChange(createDataObject()),
+              )
+            }
           />
           <ImageRow
             images={images}
-            action={i => {
-              setImages(imagesRef.current.filter(img => img !== i));
-              RNFS.unlink(i.substr(6))
-                .then(() => {
-                  onChange(createDataObject());
-                })
-                .catch(err => {
-                  console.log(err.message);
-                });
-            }}
+            action={i =>
+              removeFile(i, imagesRef, setImages, () =>
+                onChange(createDataObject()),
+              )
+            }
           />
           <AttachmentRow name="Files" icon="paperclip" />
           <AttachmentRow
             name="Location"
             icon="map-pin"
             actionEnabled={!location}
-            addAction={async () => {
-              const granted = await PermissionsAndroid.request(
-                PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
-                {
-                  title: 'Canto Location Permission',
-                  message:
-                    'Canto needs access to your location services ' +
-                    'to add location data to your journal page.',
-                  buttonNeutral: 'Ask Me Later',
-                  buttonNegative: 'Cancel',
-                  buttonPositive: 'OK',
-                },
-              );
-              if (granted === PermissionsAndroid.RESULTS.GRANTED) {
-                Page.setLocation(loc => {
-                  setLocation(loc);
-                  onChange(createDataObject());
-                });
-              } else {
-                Alert.alert(
-                  'Permission Denied',
-                  'Couldn´t get location permission.',
-                  [
-                    {
-                      text: 'Close',
-                      style: 'cancel',
-                    },
-                  ],
-                );
-              }
-            }}
+            addAction={() =>
+              addLocation(setLocation, () => onChange(createDataObject()))
+            }
           />
           <LocationTag
             loc={location}
