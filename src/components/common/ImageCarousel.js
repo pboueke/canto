@@ -1,21 +1,35 @@
 import React from 'react';
+import {Image, Dimensions} from 'react-native';
 import styled from 'styled-components/native';
 import {SliderBox} from 'react-native-image-slider-box';
 
-export default ({images, imageHeight = 400, topDistance}) => {
+export default ({images}) => {
   return (
-    <Container topDistance={topDistance}>
+    <Container>
       <SliderBox
         images={images}
-        sliderBoxHeight={imageHeight}
+        sliderBoxHeight={Dimensions.get('window').width}
         circleLoop={true}
+        ImageComponent={ImageComponent}
+        dotColor="rgba(255, 255, 255, 0.9)"
+        inactiveDotColor="rgba(255, 255, 255, 0.6)"
       />
     </Container>
   );
 };
 
+const ImageComponent = props => (
+  <ImgContainer>
+    <Image {...props} resizeMode="contain" />
+  </ImgContainer>
+);
+
+const ImgContainer = styled.View`
+  width: 100%;
+`;
+
 const Container = styled.View`
   width: 100%;
-  top: ${props => props.topDistance ?? 55}px;
-  position: absolute;
+  background-color: rgb(200, 200, 200);
+  border-bottom-width: 2px;
 `;

@@ -70,6 +70,7 @@ const AttachmentBar = styled.View`
   width: 100%
   position: absolute;
   margin-top: 55px;
+  elevation: 10;
 `;
 
 const addColor = 'rgb(120, 120, 120)';
