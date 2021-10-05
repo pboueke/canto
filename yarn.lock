@@ -6085,6 +6085,13 @@ react-native-codegen@^0.0.7:
     jscodeshift "^0.11.0"
     nullthrows "^1.1.1"
 
+react-native-document-picker@^6.1.1:
+  version "6.1.1"
+  resolved "https://registry.yarnpkg.com/react-native-document-picker/-/react-native-document-picker-6.1.1.tgz#5ae72d489ea6d04f8325802570b1e24fc2c30a66"
+  integrity sha512-WcmPR/z+8dlPRqMCd+LwFXv9S/Q1gihf2lj/X2BVRxqQzQ+UEGo9mXjxcYB7mWKDkAqYS1MjdBcbfDycmTSs/A==
+  dependencies:
+    invariant "^2.2.4"
+
 react-native-fit-image@^1.5.5:
   version "1.5.5"
   resolved "https://registry.yarnpkg.com/react-native-fit-image/-/react-native-fit-image-1.5.5.tgz#c660d1ad74b9dcaa1cba27a0d9c23837e000226c"

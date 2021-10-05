@@ -1,5 +1,6 @@
 import {PermissionsAndroid, Alert} from 'react-native';
 import {launchImageLibrary} from 'react-native-image-picker';
+import DocumentPicker from 'react-native-document-picker';
 import {hashCode} from '.';
 import RNFS from 'react-native-fs';
 import {Page} from '../models';
@@ -36,7 +37,32 @@ const addLocation = async (setLocation, callback) => {
   }
 };
 
-const addFile = async (pageId, callback, mode = 0) => {
+const addFile = async (pageId, callback) => {
+  try {
+    const res = await DocumentPicker.pick({
+      type: [DocumentPicker.types.allFiles],
+    });
+    res.forEach(r => {
+      const ext = r.name.split('.').pop();
+      const dest =
+        'file://' +
+        RNFS.DocumentDirectoryPath +
+        `/img-${pageId}-${hashCode(r.name)}.${ext}`;
+      RNFS.copyFile(r.uri, dest).then(() => {
+        callback(dest, r.name);
+      });
+    });
+  } catch (err) {
+    if (DocumentPicker.isCancel(err)) {
+      // User cancelled the picker, exit any dialogs or menus and move on
+    } else {
+      console.log(err);
+      throw err;
+    }
+  }
+};
+
+const addImage = async (pageId, callback, mode = 0) => {
   const granted = await PermissionsAndroid.request(
     PermissionsAndroid.PERMISSIONS.WRITE_EXTERNAL_STORAGE,
     {
@@ -124,4 +150,4 @@ const RNFSConfig = mode => {
   }
 };
 
-export {removeFile, addFile, addLocation};
+export {removeFile, addImage, addFile, addLocation};

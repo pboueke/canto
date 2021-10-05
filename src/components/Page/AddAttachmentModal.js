@@ -3,7 +3,7 @@ import useStateRef from 'react-usestateref';
 import styled from 'styled-components/native';
 import Icon from 'react-native-vector-icons/Feather';
 import {Flex} from 'native-grid-styled';
-import {removeFile, addFile, addLocation} from '../../lib';
+import {addImage, addFile, addLocation} from '../../lib';
 import {
   TagsTable,
   LocationTag,
@@ -89,7 +89,7 @@ export default ({show, unShow, page, onChange, availableTags}) => {
             name="Images"
             icon="image"
             addAction={() =>
-              addFile(page.id, val => {
+              addImage(page.id, val => {
                 setImages(imagesRef.current.concat(val));
                 onChange(createDataObject());
               })
@@ -108,9 +108,14 @@ export default ({show, unShow, page, onChange, availableTags}) => {
             addAction={() =>
               addFile(
                 page.id,
-                val => {
-                  setFilePath(val);
-                  setFileModalVisibility(!fileModalVisibility);
+                (uri, name) => {
+                  setFiles(
+                    filesRef.current.concat({
+                      path: uri,
+                      name: name,
+                    }),
+                  );
+                  onChange(createDataObject());
                 },
                 3,
               )
@@ -122,28 +127,6 @@ export default ({show, unShow, page, onChange, availableTags}) => {
               setFiles(filesRef.current.filter(file => file.path !== f.path));
               onChange(createDataObject());
             }}
-          />
-          <TextInputModal
-            submit="Save"
-            placeholder="title of your file"
-            shadow={true}
-            onSubmit={filename => {
-              setFiles(
-                filesRef.current.concat({
-                  path: filePathRef.current,
-                  name: filename,
-                }),
-              );
-              onChange(createDataObject());
-              setFilePath('');
-            }}
-            onCancel={() =>
-              removeFile(filePathRef.current, () =>
-                onChange(createDataObject()),
-              )
-            }
-            show={fileModalVisibility}
-            unShow={() => setFileModalVisibility(!fileModalVisibility)}
           />
           <AttachmentRow
             name="Location"

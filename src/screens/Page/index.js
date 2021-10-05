@@ -72,11 +72,11 @@ export default ({navigation, route}) => {
     let curr = createUpdatedPage().content;
     let good = discarding ? JSON.parse(orgValueString).content : curr;
     let bad = discarding ? curr : JSON.parse(orgValueString).content;
-    let toDelete = bad.files.filter(f => !good.files.includes(f));
-    toDelete = toDelete.concat(
-      bad.images.filter(i => !good.images.includes(i)),
-    );
-    toDelete.forEach(file => removeFile(file));
+    let goodFiles = good.files.map(f => f.path);
+    let filesToDelete = bad.files.filter(f => !goodFiles.includes(f.path));
+    let imagesToDelete = bad.images.filter(i => !good.images.includes(i));
+    filesToDelete.forEach(file => removeFile(file.path));
+    imagesToDelete.forEach(file => removeFile(file));
   };
 
   const savePageData = () => {
