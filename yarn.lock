@@ -6125,13 +6125,6 @@ react-native-image-picker@^4.1.1:
   resolved "https://registry.yarnpkg.com/react-native-image-picker/-/react-native-image-picker-4.1.1.tgz#f5b20c77b060e4a8cad4e76ae042e1e45b4743da"
   integrity sha512-O78kljfaLQkFNzba4yWueqXlAWzDNzYUavqSQloJAf+ISGsOk95WO/a4Tp27E6hck8vPtx7u0GBrvEULyh1XAw==
 
-react-native-image-slider-box@^1.1.8:
-  version "1.1.8"
-  resolved "https://registry.yarnpkg.com/react-native-image-slider-box/-/react-native-image-slider-box-1.1.8.tgz#7796745419f0786970db328a903db53f989b5efe"
-  integrity sha512-LqyNhAHaUFxC+z6SQGMIwgyor/6ZT47nnUQoYZLscU5i1KbsxuMhc+u2UCpd5qfJENEZFB9EVOaRC+aa+p8Zwg==
-  dependencies:
-    react-native-snap-carousel latest
-
 react-native-markdown-display@^7.0.0-alpha.2:
   version "7.0.0-alpha.2"
   resolved "https://registry.yarnpkg.com/react-native-markdown-display/-/react-native-markdown-display-7.0.0-alpha.2.tgz#a48a70d3cb5c510a52ecf7f1509a4a3d14d728aa"
@@ -6159,7 +6152,7 @@ react-native-screens@^3.7.2:
   dependencies:
     warn-once "^0.1.0"
 
-react-native-snap-carousel@latest:
+react-native-snap-carousel@^3.9.1:
   version "3.9.1"
   resolved "https://registry.yarnpkg.com/react-native-snap-carousel/-/react-native-snap-carousel-3.9.1.tgz#6fd9bd8839546c2c6043a41d2035afbc6fe0443e"
   integrity sha512-xWEGusacIgK1YaDXLi7Gao2+ISLoGPVEBR8fcMf4tOOJQufutlNwkoLu0l6B8Qgsrre0nTxoVZikRgGRDWlLaQ==

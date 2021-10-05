@@ -132,7 +132,13 @@ export default ({navigation, route}) => {
         editMode={editMode}
       />
       <Scroll>
-        {hasImage && <Flex css={{marginTop: imageHeight}} />}
+        {hasImage && (
+          <ImageCarousel
+            images={attachments.images}
+            imageHeight={imageHeight}
+            topDistance={headerHeight}
+          />
+        )}
         <PageText value={text} onChange={setText} editMode={editMode} />
         <LocationTag
           loc={attachments.location}
@@ -150,13 +156,6 @@ export default ({navigation, route}) => {
           align="center"
         />
       </Scroll>
-      {hasImage && (
-        <ImageCarousel
-          images={attachments.images}
-          imageHeight={imageHeight}
-          topDistance={headerHeight}
-        />
-      )}
       {editMode && (
         <EditPageAttachments
           availableTags={props.tags}
