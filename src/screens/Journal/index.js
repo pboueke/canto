@@ -6,8 +6,7 @@ import {Flex} from 'native-grid-styled';
 import MMKVStorage from 'react-native-mmkv-storage';
 import {PopAction} from '../../components/common';
 import {FilterBar, PageList} from '../../components/Journal';
-import {JournalContent} from '../../models';
-import {Page, Filter} from '../../models';
+import {Page, Filter, JournalContent} from '../../models';
 import {metadata} from '../..';
 
 export default ({navigation, route}) => {
@@ -37,7 +36,7 @@ export default ({navigation, route}) => {
       setPageList(Filter.sort(data.content.pages));
     });
     return unsubscribe;
-  }, [navigation, props, MMKV, journalDataState, setJournalDataState]);
+  }, [navigation, props, MMKV, setJournalDataState]);
 
   React.useLayoutEffect(() => {
     navigation.setOptions({

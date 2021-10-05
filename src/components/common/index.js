@@ -5,6 +5,7 @@ export {default as PopAction} from './PopAction';
 export {default as TextInputModal} from './TextInputModal';
 export {default as ImageRow} from './ImageRow';
 export {default as FileRow} from './FileRow';
+export {default as ImageCarousel} from './ImageCarousel';
 export {BackButton} from './CustomNavigation';
 export {Tag, TagsTable, TagsRow} from './Tag';
 export {LocationTag} from './Location';

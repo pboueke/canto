@@ -2,13 +2,19 @@ import React, {useState} from 'react';
 import styled from 'styled-components/native';
 import {Keyboard, Alert} from 'react-native';
 import MMKVStorage from 'react-native-mmkv-storage';
-import {PopAction, TagsRow, LocationTag} from '../../components/common';
+import {
+  PopAction,
+  TagsRow,
+  LocationTag,
+  ImageCarousel,
+} from '../../components/common';
 import {PageText, PageHeader, EditPageAttachments} from '../../components/Page';
 import {Page} from '../../models';
 import {openLocationExternally, getDate} from '../../lib';
 import {metadata} from '../..';
 import {removeFile} from '../../lib';
 import reactUsestateref from 'react-usestateref';
+import {Flex} from 'native-grid-styled';
 
 export default ({navigation, route}) => {
   const props = route.params;
@@ -111,15 +117,22 @@ export default ({navigation, route}) => {
     );
   };
 
+  const headerHeight = 55;
+  const imageHeight = 400;
+  const hasImage =
+    attachments && attachments.images && attachments.images.length > 0;
+
   return (
     <Container onPress={() => Keyboard.dismiss()}>
       <PageHeader
+        headerHeight={headerHeight}
         goBack={cautiousGoBack}
         date={dateTime}
         setDateTime={setDateTime}
         editMode={editMode}
       />
       <Scroll>
+        {hasImage && <Flex css={{marginTop: imageHeight}} />}
         <PageText value={text} onChange={setText} editMode={editMode} />
         <LocationTag
           loc={attachments.location}
@@ -137,6 +150,13 @@ export default ({navigation, route}) => {
           align="center"
         />
       </Scroll>
+      {hasImage && (
+        <ImageCarousel
+          images={attachments.images}
+          imageHeight={imageHeight}
+          topDistance={headerHeight}
+        />
+      )}
       {editMode && (
         <EditPageAttachments
           availableTags={props.tags}
@@ -173,5 +193,6 @@ const Scroll = styled.ScrollView.attrs({
     };
   },
 })`
+  elevation: 10;
   width: 100%;
 `;

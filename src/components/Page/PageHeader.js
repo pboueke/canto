@@ -11,7 +11,7 @@ import {BackButton} from '../common';
  *  custom header has proven to be the easier work-around.
  */
 export default props => (
-  <HeaderContainer>
+  <HeaderContainer headerHeight={props.headerHeight}>
     <BackButton onPress={props.goBack} />
     <PageDate
       editMode={props.editMode}
@@ -94,7 +94,7 @@ const PageTime = props => {
 };
 
 const HeaderContainer = styled.View`
-  height: 55px;
+  height: ${props => props.headerHeight ?? 55}px;
   flex-direction: row;
   justify-content: space-between;
   background-color: white;
