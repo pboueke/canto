@@ -4,6 +4,9 @@ import styled from 'styled-components/native';
 import {SliderBox} from 'react-native-image-slider-box';
 
 export default ({images}) => {
+  if (!images || images.length < 1) {
+    return <Empty />;
+  }
   return (
     <Container>
       <SliderBox
@@ -32,4 +35,8 @@ const Container = styled.View`
   width: 100%;
   background-color: rgb(200, 200, 200);
   border-bottom-width: 2px;
+`;
+
+const Empty = styled.View`
+  height: 40px;
 `;

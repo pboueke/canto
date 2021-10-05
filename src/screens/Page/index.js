@@ -117,35 +117,16 @@ export default ({navigation, route}) => {
     );
   };
 
-  const headerHeight = 55;
-  const imageHeight = 400;
-  const hasImage =
-    attachments && attachments.images && attachments.images.length > 0;
-
   return (
     <Container onPress={() => Keyboard.dismiss()}>
       <PageHeader
-        headerHeight={headerHeight}
         goBack={cautiousGoBack}
         date={dateTime}
         setDateTime={setDateTime}
         editMode={editMode}
       />
       <Scroll>
-        {hasImage && (
-          <ImageCarousel
-            images={attachments.images}
-            imageHeight={imageHeight}
-          />
-        )}
-        <PageText value={text} onChange={setText} editMode={editMode} />
-        <LocationTag
-          loc={attachments.location}
-          removable={false}
-          action={() =>
-            openLocationExternally(attachments.location, getDate(dateTime))
-          }
-        />
+        <ImageCarousel images={attachments.images} />
         <TagsRow
           tags={attachments.tags}
           scale={1}
@@ -153,6 +134,14 @@ export default ({navigation, route}) => {
           width="90%"
           color="rgb(200, 200, 200)"
           align="center"
+        />
+        <PageText value={text} onChange={setText} editMode={editMode} />
+        <LocationTag
+          loc={attachments.location}
+          removable={false}
+          action={() =>
+            openLocationExternally(attachments.location, getDate(dateTime))
+          }
         />
       </Scroll>
       {editMode && (

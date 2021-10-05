@@ -68,6 +68,7 @@ const TagsRow = ({
       flexFlow: 'row wrap',
       width: width,
       alignSelf: align,
+      margin: 5,
     }}>
     {tags.map(t => (
       <Tag text={t} key={t} scale={scale} pd="0px 4px 1px 4px" color={color} />
@@ -91,6 +92,9 @@ const Tag = ({
   return (
     <TagWrapper color={color} pd={pd}>
       <TagText full={onPress} size={14 * scale} mg={pd}>
+        <Hashtag size={14 * scale} mg={pd}>
+          #
+        </Hashtag>
         {text}
       </TagText>
       {onPress && <TagRemove tag={text} />}
@@ -110,6 +114,12 @@ const TagText = styled.Text`
   margin: ${p => p.mg ?? '5px'};
   font-weight: 500;
   max-width: ${p => (p.full ? 90 : 100)}%;
+`;
+
+const Hashtag = styled(TagText)`
+  font-weight: 300;
+  margin-right: 1px;
+  letter-spacing: 1px;
 `;
 
 const DelButton = styled.Pressable``;

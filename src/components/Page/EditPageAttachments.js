@@ -9,7 +9,7 @@ export default ({availableTags, page, onChange}) => {
     <AttachmentBar>
       <AddButton
         onPress={() => setAttachmentModalVisible(!attachmentModalVisible)}>
-        <AddButtonText>Add a</AddButtonText>
+        <AddButtonText>Edit/add a</AddButtonText>
         <Bold>Tag </Bold>
         <AddButtonIcon name="tag" size={14} />
         <AddButtonText>,</AddButtonText>
@@ -18,8 +18,7 @@ export default ({availableTags, page, onChange}) => {
         <AddButtonText>,</AddButtonText>
         <Bold>Image </Bold>
         <AddButtonIcon name="image" size={14} />
-        <AddButtonText>, </AddButtonText>
-        <AddButtonText>or any</AddButtonText>
+        <AddButtonText> or</AddButtonText>
         <Bold>File</Bold>
         <AddButtonIcon name="paperclip" size={14} />
       </AddButton>

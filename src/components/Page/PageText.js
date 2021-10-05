@@ -37,7 +37,6 @@ const PageTextPreview = props => (
 
 const TextWrapper = styled.View`
   elevation: 5;
-  margin-top: ${props => props.marginTop ?? 50}px;
   margin-bottom: 5px;
 `;
 
