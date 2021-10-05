@@ -1,4 +1,4 @@
-import React, {useState, useMemo} from 'react';
+import React, {useState} from 'react';
 import styled from 'styled-components/native';
 import {Keyboard, Alert} from 'react-native';
 import MMKVStorage from 'react-native-mmkv-storage';
@@ -8,6 +8,7 @@ import {Page} from '../../models';
 import {openLocationExternally, getDate} from '../../lib';
 import {metadata} from '../..';
 import {removeFile} from '../../lib';
+import reactUsestateref from 'react-usestateref';
 
 export default ({navigation, route}) => {
   const props = route.params;
@@ -27,9 +28,8 @@ export default ({navigation, route}) => {
     });
   }
   pageData = MMKV.getMap(props.page.id);
-  const orgValueString = useMemo(
-    () => JSON.stringify(pageData.content),
-    [pageData],
+  const [orgValueString, setOrgValueString] = reactUsestateref(
+    JSON.stringify(pageData),
   );
 
   const [stored, setStored] = useState(!props.newPage);
@@ -70,11 +70,11 @@ export default ({navigation, route}) => {
 
   const deletePendingFiles = async discarding => {
     let curr = createUpdatedPage().content;
-    let newer = discarding ? JSON.parse(orgValueString) : curr;
-    let older = discarding ? curr : JSON.parse(orgValueString);
-    let toDelete = newer.files.filter(f => !older.files.includes(f));
+    let good = discarding ? JSON.parse(orgValueString).content : curr;
+    let bad = discarding ? curr : JSON.parse(orgValueString).content;
+    let toDelete = bad.files.filter(f => !good.files.includes(f));
     toDelete = toDelete.concat(
-      newer.images.filter(i => !older.files.includes(i)),
+      bad.images.filter(i => !good.images.includes(i)),
     );
     toDelete.forEach(file => removeFile(file));
   };
@@ -83,16 +83,13 @@ export default ({navigation, route}) => {
     let curr = createUpdatedPage();
     deletePendingFiles(false);
     MMKV.setMap(pageData.content.id, curr);
+    setOrgValueString(JSON.stringify(curr));
     saveJournalData(curr.content.getPreview(), stored);
     setStored(true);
   };
 
   const cautiousGoBack = () => {
-    if (
-      !editMode ||
-      JSON.stringify(createUpdatedPage().content) === orgValueString
-    ) {
-      deletePendingFiles(true);
+    if (!editMode || JSON.stringify(createUpdatedPage()) === orgValueString) {
       navigation.goBack();
       return;
     }
@@ -105,7 +102,10 @@ export default ({navigation, route}) => {
         {
           text: 'Discard',
           style: 'destructive',
-          onPress: () => navigation.goBack(),
+          onPress: () => {
+            deletePendingFiles(true);
+            navigation.goBack();
+          },
         },
       ],
     );
