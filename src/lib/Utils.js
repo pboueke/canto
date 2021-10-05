@@ -23,7 +23,11 @@ export const hashCode = s =>
     a = (a << 5) - a + b.charCodeAt(0);
     return a & a;
   }, 0);
+
+export const randomString = () => (Math.random() + 1).toString(36).substring(7);
+
 export const getDate = date => new Date(date).toDateString();
+
 export const getTime = date =>
   new Date(date).getHours() +
   ':' +

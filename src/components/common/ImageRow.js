@@ -1,11 +1,12 @@
 import React from 'react';
 import styled from 'styled-components';
 import Icon from 'react-native-vector-icons/Feather';
+import {randomString} from '../../lib';
 
 export default ({images, action, icon = 'x'}) => (
   <Row>
     {images.map(i => (
-      <ImageItem onPress={() => action(i)} key={i}>
+      <ImageItem onPress={() => action(i)} key={i + randomString()}>
         <Background source={{uri: i}}>
           <ActionIcon name={icon} />
         </Background>

@@ -7,6 +7,7 @@ import {
   TagsRow,
   LocationTag,
   ImageCarousel,
+  FileRow,
 } from '../../components/common';
 import {PageText, PageHeader, EditPageAttachments} from '../../components/Page';
 import {Page} from '../../models';
@@ -14,7 +15,6 @@ import {openLocationExternally, getDate} from '../../lib';
 import {metadata} from '../..';
 import {removeFile} from '../../lib';
 import reactUsestateref from 'react-usestateref';
-import {Flex} from 'native-grid-styled';
 
 export default ({navigation, route}) => {
   const props = route.params;
@@ -143,6 +143,7 @@ export default ({navigation, route}) => {
             openLocationExternally(attachments.location, getDate(dateTime))
           }
         />
+        <FileRow files={attachments.files} icon="save" padding={10} />
       </Scroll>
       {editMode && (
         <EditPageAttachments
