@@ -38,27 +38,50 @@ const addLocation = async (setLocation, callback) => {
 };
 
 const addFile = async (pageId, callback) => {
-  try {
-    const res = await DocumentPicker.pick({
-      type: [DocumentPicker.types.allFiles],
-    });
-    res.forEach(r => {
-      const ext = r.name.split('.').pop();
-      const dest =
-        'file://' +
-        RNFS.DocumentDirectoryPath +
-        `/img-${pageId}-${hashCode(r.name)}.${ext}`;
-      RNFS.copyFile(r.uri, dest).then(() => {
-        callback(dest, r.name);
+  const granted = await PermissionsAndroid.request(
+    PermissionsAndroid.PERMISSIONS.WRITE_EXTERNAL_STORAGE,
+    {
+      title: "Canto's Write to Storage Permission",
+      message: 'Canto needs access to save your files to your phone storage.',
+      buttonNeutral: 'Ask Me Later',
+      buttonNegative: 'Cancel',
+      buttonPositive: 'OK',
+    },
+  );
+  if (granted === PermissionsAndroid.RESULTS.GRANTED) {
+    try {
+      const res = await DocumentPicker.pick({
+        type: [DocumentPicker.types.allFiles],
       });
-    });
-  } catch (err) {
-    if (DocumentPicker.isCancel(err)) {
-      // User cancelled the picker, exit any dialogs or menus and move on
-    } else {
-      console.log(err);
-      throw err;
+      res.forEach(r => {
+        const ext = r.name.split('.').pop();
+        const dest =
+          'file://' +
+          RNFS.DocumentDirectoryPath +
+          `/img-${pageId}-${hashCode(r.name)}.${ext}`;
+        RNFS.copyFile(r.uri, dest).then(() => {
+          callback(dest, r.name);
+        });
+      });
+    } catch (err) {
+      if (DocumentPicker.isCancel(err)) {
+        // User cancelled the picker, exit any dialogs or menus and move on
+      } else {
+        console.log(err);
+        throw err;
+      }
     }
+  } else {
+    Alert.alert(
+      'Permission Denied',
+      "Couldn´t get permission to use the device's file storage.",
+      [
+        {
+          text: 'Close',
+          style: 'cancel',
+        },
+      ],
+    );
   }
 };
 
