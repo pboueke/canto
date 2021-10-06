@@ -1,8 +1,6 @@
 import React, {useState} from 'react';
 import styled from 'styled-components/native';
-import Icon from 'react-native-vector-icons/Feather';
 import {Keyboard} from 'react-native';
-import {Flex} from 'native-grid-styled';
 import MMKVStorage from 'react-native-mmkv-storage';
 import {PopAction} from '../../components/common';
 import {

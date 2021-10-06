@@ -60,7 +60,7 @@ const Item = props => {
             scale={0.75}
             maxWidth={props.thumb ? 295 : '100%'}
           />
-          <ItemText>
+          <ItemText maxWidth={props.thumb ? 295 : '100%'}>
             <ThemedMarkdown>{text}</ThemedMarkdown>
           </ItemText>
         </Flex>
@@ -147,6 +147,7 @@ const ItemImage = styled(ItemTitleIcon)``;
 const ItemFile = styled(ItemTitleIcon)``;
 
 const ItemText = styled.View`
+  max-width: ${p => p.maxWidth};
   flex-grow: 1;
   margin: 0 0 0 10px;
   color: ${p => p.theme.textColor};

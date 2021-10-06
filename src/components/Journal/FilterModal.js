@@ -1,5 +1,7 @@
 import React from 'react';
+import {Switch} from 'react-native';
 import styled from 'styled-components/native';
+import {withTheme} from 'styled-components';
 import Icon from 'react-native-vector-icons/Feather';
 import {Flex, Box} from 'native-grid-styled';
 import {TagsTable} from '../common';
@@ -15,11 +17,11 @@ export default ({show, unShow, data, availableTags, onChange}) => (
     <Scroll>
       <CloseButton onPress={unShow}>
         <ModalTitle>Change filters</ModalTitle>
-        <Icon name="x" size={30} />
+        <CloseIcon name="x" size={30} />
       </CloseButton>
       <FilterModalInterior>
         <Flex css={binaryWrapperStyle.flex}>
-          <Box width={1 / 3} css={binaryWrapperStyle.box}>
+          <BinaryBox width={1 / 3}>
             <BinaryText size={10}>(must have)</BinaryText>
             <Flex css={binaryWrapperStyle.innerFlex}>
               <Bold>Image</Bold>
@@ -29,8 +31,8 @@ export default ({show, unShow, data, availableTags, onChange}) => (
               value={data.image}
               onValueChange={val => onChange({...data, image: val})}
             />
-          </Box>
-          <Box width={1 / 3} css={binaryWrapperStyle.box}>
+          </BinaryBox>
+          <BinaryBox width={1 / 3}>
             <BinaryText size={10}>(must have)</BinaryText>
             <Flex css={binaryWrapperStyle.innerFlex}>
               <Bold>File</Bold>
@@ -40,8 +42,8 @@ export default ({show, unShow, data, availableTags, onChange}) => (
               value={data.file}
               onValueChange={val => onChange({...data, file: val})}
             />
-          </Box>
-          <Box width={1 / 3} css={binaryWrapperStyle.box}>
+          </BinaryBox>
+          <BinaryBox width={1 / 3}>
             <BinaryText size={10}>(must have)</BinaryText>
             <Flex css={binaryWrapperStyle.innerFlex}>
               <Bold>Location</Bold>
@@ -51,7 +53,7 @@ export default ({show, unShow, data, availableTags, onChange}) => (
               value={data.location}
               onValueChange={val => onChange({...data, location: val})}
             />
-          </Box>
+          </BinaryBox>
         </Flex>
         <Row name="Selected Tags" icon="tag" action="remove" />
         <TagsTable
@@ -76,24 +78,43 @@ const BinaryText = styled.Text`
   color: ${p => p.color ?? 'rgb(111, 111, 111)'};
   font-weight: 400;
 `;
+
 const BinaryIcon = styled(Icon)`
   font-size: 16px;
   margin: 2px 0 0 5px;
+  color: ${p => p.theme.textColor};
 `;
-const BinarySwitch = styled.Switch``;
+
+const BinarySwitch = withTheme(({value, onValueChange, theme}) => (
+  <Switch
+    value={value}
+    onValueChange={val => onValueChange(val)}
+    thumbColor={theme.switch.thumbColor}
+    trackColor={{
+      true: theme.switch.trackColorOn,
+      false: theme.switch.trackColorOff,
+    }}
+    style={{
+      transform: [{scaleX: 1.2}, {scaleY: 1.2}],
+    }}
+  />
+));
+
+const BinaryBox = styled(Box)`
+  flex-direction: column;
+  justify-content: space-evenly;
+  align-items: center;
+  height: 100px;
+  margin-left: 10px;
+  margin-right: 10px;
+  flex-shrink: 1;
+  border-width: 2px;
+  border-radius: 5px;
+  border-style: solid;
+  border-color: ${p => p.theme.textColor};
+`;
+
 const binaryWrapperStyle = {
-  box: {
-    flexDirection: 'column',
-    justifyContent: 'space-evenly',
-    alignItems: 'center',
-    height: '100px',
-    marginLeft: '10px',
-    marginRight: '10px',
-    flexShrink: 1,
-    borderWidth: '2px',
-    borderRadius: '5px',
-    borderStyle: 'solid',
-  },
   flex: {
     flexDirection: 'row',
     paddingLeft: '20px',
@@ -105,7 +126,7 @@ const binaryWrapperStyle = {
   },
 };
 
-const Row = ({name, icon, action}) => {
+const Row = withTheme(({name, icon, action, theme}) => {
   return (
     <Flex
       css={{
@@ -113,6 +134,7 @@ const Row = ({name, icon, action}) => {
         margin: '20px 20px 20px 20px',
         width: '90%',
         borderBottomWidth: '2px',
+        borderColor: theme.borderColor,
       }}>
       <Flex
         css={{
@@ -126,22 +148,25 @@ const Row = ({name, icon, action}) => {
       </Flex>
     </Flex>
   );
-};
+});
 
 const RowTitle = styled.Text`
   font-size: 24px;
   margin-top: 10px;
+  color: ${p => p.theme.textColor};
 `;
 
 const RowAction = styled.Text`
   font-size: 16px;
   font-weight: 300;
   margin: 15px 0 0 15px;
+  color: ${p => p.theme.textColor};
 `;
 
 const RowIcon = styled(Icon)`
   font-size: 24px;
   margin: 15px 20px 0 0;
+  color: ${p => p.theme.textColor};
 `;
 
 const Scroll = styled.ScrollView.attrs({
@@ -154,10 +179,11 @@ const Scroll = styled.ScrollView.attrs({
   width: 401px;
   margin: auto;
   margin-top: 60px;
-  background-color: white;
+  background-color: ${p => p.theme.foreground};
   border-width: 2px;
   border-radius: 5px;
   border-style: solid;
+  border-color: ${p => p.theme.borderColor};
   border-bottom-width: 0px
   border-bottom-left-radius: 0px;
   border-bottom-right-radius: 0px;
@@ -181,6 +207,11 @@ const FilterModalInterior = styled.View`
 const ModalTitle = styled.Text`
   font-size: 20px;
   margin: 2px 0 0 5px;
+  color: ${p => p.theme.textColor};
+`;
+
+const CloseIcon = styled(Icon)`
+  color: ${p => p.theme.textColor};
 `;
 
 const CloseButton = styled.Pressable`
@@ -193,10 +224,11 @@ const Bold = styled.Text`
   font-size: 14px;
   font-weight: 600;
   margin: 0 0 0 10px;
+  color: ${p => p.theme.textColor};
 `;
 
 const EmptyBlock = styled.View`
-  background-color: white;
+  background-color: ${p => p.theme.headerBg};
   width: ${p => p.width ?? 50}px;
   height: 50px;
   position: absolute;

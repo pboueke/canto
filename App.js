@@ -30,7 +30,7 @@ const App = () => {
             component={JournalScreen}
             options={{
               headerStyle: {
-                backgroundColor: theme.foreground,
+                backgroundColor: theme.headerBg,
                 color: theme.textColor,
               },
               headerTintColor: theme.textColor,
