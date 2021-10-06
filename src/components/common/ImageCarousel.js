@@ -3,7 +3,7 @@ import {Image, Dimensions} from 'react-native';
 import styled from 'styled-components/native';
 import {SliderBox} from 'react-native-image-slider-box';
 
-export default ({images}) => {
+export default ({images, action}) => {
   if (!images || images.length < 1) {
     return <Empty />;
   }
@@ -16,6 +16,7 @@ export default ({images}) => {
         ImageComponent={ImageComponent}
         dotColor="rgba(255, 255, 255, 0.9)"
         inactiveDotColor="rgba(255, 255, 255, 0.6)"
+        onCurrentImagePressed={index => action(index)}
       />
     </Container>
   );

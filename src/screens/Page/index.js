@@ -126,7 +126,13 @@ export default ({navigation, route}) => {
         editMode={editMode}
       />
       <Scroll>
-        <ImageCarousel images={attachments.images} />
+        <ImageCarousel
+          images={attachments.images}
+          action={index =>
+            !editMode &&
+            shareFile(attachments.images[index], `Image #${index}`, dateTime)
+          }
+        />
         <TagsRow
           tags={attachments.tags}
           scale={1}
