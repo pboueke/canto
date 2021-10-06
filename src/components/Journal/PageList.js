@@ -15,6 +15,7 @@ export default props => {
       text={i.item.text}
       tags={i.item.tags}
       loc={i.item.location}
+      thumb={i.item.thumbnail}
       img={i.item.numberOfImages > 0}
       file={i.item.numberOfFiles > 0}
       cmt={i.item.numberOfComment > 0}
@@ -46,7 +47,7 @@ const Item = props => {
   return (
     <ItemBackground isLast={props.isLast} onPress={props.onPress}>
       <Flex css={{flexDirection: 'row', flex: 1}}>
-        <ItemThumbnail />
+        <ItemThumbnail image={props.thumb} />
         <Flex css={{flexDirection: 'column'}}>
           <ItemTitle>
             <ItemDate>{date}</ItemDate>
@@ -84,14 +85,25 @@ const ItemBackground = styled.Pressable`
   margin: ${props => (props.isLast ? '5px 5px 100px 5px' : '5px')};
 `;
 
+const Thumb = styled.View`
+  height: 100%;
+  width: 100px;
+  align-items: center;
+  justify-content: center;
+`;
+
+const ThumbnailImage = styled.Image`
+  width: 80px;
+  height: 80px;
+  border-radius: 20px;
+  margin: 10px 2px 10px 2px;
+`;
+
 const ItemThumbnail = props => {
-  const Nail = () => <Icon name="edit-3" size={40} />;
-  const Thumb = styled.View`
-    height: 100%;
-    width: 80px;
-    align-items: center;
-    justify-content: center;
-  `;
+  const Nail = props.image
+    ? () => <ThumbnailImage source={{uri: props.image}} />
+    : () => <Icon name="edit-3" size={40} />;
+
   return (
     <Thumb>
       <Nail />
@@ -102,7 +114,7 @@ const ItemThumbnail = props => {
 const ItemTitle = styled.View`
   flex: 1;
   flex-direction: row;
-  margin-bottom: 10px;
+  height: 33px;
   border-bottom-width: 1px;
   border-color: rgb(200, 200, 200);
 `;
@@ -118,7 +130,8 @@ const ItemTime = styled.Text`
   font-size: 16px;
   margin: 6px 0 0 100px;
   position: absolute;
-  right: 5px;
+  right: 18px;
+  top: 0px;
 `;
 
 const ItemTitleIcon = styled(Icon)`
@@ -128,15 +141,15 @@ const ItemTitleIcon = styled(Icon)`
 `;
 
 const ItemLocation = styled(ItemTitleIcon)`
-  right: 115px;
+  right: 120px;
 `;
 
 const ItemImage = styled(ItemTitleIcon)`
-  right: 90px;
+  right: 95px;
 `;
 
 const ItemFile = styled(ItemTitleIcon)`
-  right: 65px;
+  right: 70px;
 `;
 
 const ItemText = styled.View`

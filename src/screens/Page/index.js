@@ -85,8 +85,20 @@ export default ({navigation, route}) => {
     imagesToDelete.forEach(file => removeFile(file));
   };
 
+  const updateThumbnail = (id = 0) => {
+    let newAttachments = attachments;
+    if (attachments.images && attachments.images.length > 0) {
+      newAttachments.thumbnail = attachments.images[id];
+    } else {
+      newAttachments.thumbnail = null;
+    }
+    setAttachments(newAttachments);
+    return newAttachments.thumbnail;
+  };
+
   const savePageData = () => {
     let curr = createUpdatedPage();
+    curr.thumbnail = updateThumbnail();
     deletePendingFiles(false);
     MMKV.setMap(pageData.content.id, curr);
     setOrgValueString(JSON.stringify(curr));
