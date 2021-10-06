@@ -1,9 +1,11 @@
 import {PermissionsAndroid, Alert} from 'react-native';
 import {launchImageLibrary} from 'react-native-image-picker';
 import DocumentPicker from 'react-native-document-picker';
+import Share from 'react-native-share';
 import {hashCode} from '.';
 import RNFS from 'react-native-fs';
 import {Page} from '../models';
+import {getDate} from '../lib';
 
 const addLocation = async (setLocation, callback) => {
   const granted = await PermissionsAndroid.request(
@@ -173,4 +175,19 @@ const RNFSConfig = mode => {
   }
 };
 
-export {removeFile, addImage, addFile, addLocation};
+const shareFile = async (path, name, date) => {
+  Share.open({
+    message: getDate(date),
+    title: name,
+    url: path,
+    failOnCancel: false,
+  })
+    .then(res => {
+      //console.log(res);
+    })
+    .catch(err => {
+      console.log(err);
+    });
+};
+
+export {removeFile, addImage, addFile, addLocation, shareFile};

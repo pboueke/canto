@@ -13,7 +13,7 @@ import {PageText, PageHeader, EditPageAttachments} from '../../components/Page';
 import {Page} from '../../models';
 import {openLocationExternally, getDate} from '../../lib';
 import {metadata} from '../..';
-import {removeFile} from '../../lib';
+import {removeFile, shareFile} from '../../lib';
 import reactUsestateref from 'react-usestateref';
 
 export default ({navigation, route}) => {
@@ -143,7 +143,12 @@ export default ({navigation, route}) => {
             openLocationExternally(attachments.location, getDate(dateTime))
           }
         />
-        <FileRow files={attachments.files} icon="save" padding={10} />
+        <FileRow
+          files={attachments.files}
+          icon="share"
+          padding={10}
+          action={f => shareFile(f.path, f.name, dateTime)}
+        />
       </Scroll>
       {editMode && (
         <EditPageAttachments

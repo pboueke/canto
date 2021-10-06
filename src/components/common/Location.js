@@ -55,7 +55,7 @@ const Wrapper = styled.Pressable`
   align-self: center;
   padding: 10px;
   border-radius: 20px;
-  margin: 10px 0 10px 0;
+  margin: 10px 0 20px 0;
 `;
 
 export {LocationTag};
