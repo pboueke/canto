@@ -8,6 +8,8 @@ const Selector = styled(Box)`
   border-width: 2px;
   border-radius: 5px;
   border-style: solid;
+  border-color: ${p => p.theme.borderColor};
+  background-color: ${p => p.theme.foreground};
   margin: 10px;
   align-items: center;
   align-self: center;
@@ -24,6 +26,11 @@ const Title = styled.Text`
   font-size: 20px;
   text-align: center;
   margin: auto auto 10px auto;
+  color: ${p => p.theme.textColor};
+`;
+
+const JournalIcon = styled(Icon)`
+  color: ${p => p.theme.textColor};
 `;
 
 export default props => (
@@ -31,7 +38,7 @@ export default props => (
     <TouchableNativeFeedback onPress={props.onPress}>
       <InnerTouchable>
         <Title>{props.title ?? 'Journal!'}</Title>
-        <Icon name={props.icon ?? 'book'} size={40} />
+        <JournalIcon name={props.icon ?? 'book'} size={40} />
       </InnerTouchable>
     </TouchableNativeFeedback>
   </Selector>

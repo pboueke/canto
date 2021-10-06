@@ -36,6 +36,7 @@ export default props => {
             justifyContent: 'space-evenly',
             marginBottom: '30px;',
             flexWrap: 'wrap',
+            backgroundColor: 'rgba(0,0,0,0)',
           }}>
           {icons}
         </Flex>
@@ -52,11 +53,15 @@ const Icons = props => {
           props.doCLose(false);
           props.handleClose(name);
         }}>
-        <Icon name={name} size={20} />
+        <IconElement name={name} size={20} />
       </IconDisplayButton>
     </IconDisplay>
   ));
 };
+
+const IconElement = styled(Icon)`
+  color: ${p => p.theme.textColor};
+`;
 
 const Scroll = styled.ScrollView.attrs({
   contentContainerStyle: props => {
@@ -67,7 +72,7 @@ const Scroll = styled.ScrollView.attrs({
 })`
   width: 100%;
   margin: auto;
-  background-color: white;
+  background-color: ${p => p.theme.foreground};
 `;
 
 const IconDisplay = styled(Box)`
@@ -76,12 +81,14 @@ const IconDisplay = styled(Box)`
   border-style: solid;
   text-align: center;
   margin: 10px;
+  border-color: ${p => p.theme.borderColor};
 `;
 
 const IconDisplayButton = styled.Pressable`
   margin: 10px 0 10px 0;
   align-items: center;
   background-color: white;
+  background-color: ${p => p.theme.foreground};
 `;
 
 const IconModalTitle = styled.Text`
@@ -89,6 +96,7 @@ const IconModalTitle = styled.Text`
   text-align: center;
   width: 100%;
   margin: 50px 0 50px 0;
+  color: ${p => p.theme.textColor};
 `;
 
 const IconModal = styled.Modal`
@@ -100,6 +108,7 @@ const IconModal = styled.Modal`
 const IconModalInterior = styled.View`
   flex: 1;
   flex-direction: column;
+  background-color: ${p => p.theme.foreground};
 `;
 
 // List with all the available feather icons:

@@ -87,12 +87,13 @@ const Scroll = styled.ScrollView.attrs({
 })`
   width: 100%;
   margin: 25px auto;
-  background-color: white;
+  background-color: ${p => p.theme.background};
 `;
 
 const Container = styled.View`
   align-items: center;
   justify-content: center;
+  background-color: ${p => p.theme.foreground};
 `;
 
 const WelcomeText = styled.Text`
@@ -100,6 +101,7 @@ const WelcomeText = styled.Text`
   text-align: center;
   font-size: 16px;
   padding: 0 50px 0 50px;
+  color: ${p => p.theme.textColor};
 `;
 
 const JournalTable = styled(Flex)`

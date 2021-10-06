@@ -108,10 +108,14 @@ const JournalDisplay = props => {
     text-align: center;
     justify-content: space-around;
     align-items: center;
-    background-color: white;
+    background-color: ${p => p.theme.foreground};
+    border-color: ${p => p.theme.borderColor};
     height: 40px;
     width: 40px;
     margin: -80px 0 0 100px;
+  `;
+  const Lock = styled(Icon)`
+    color: ${p => p.theme.textColor};
   `;
 
   return (
@@ -122,7 +126,7 @@ const JournalDisplay = props => {
         title={props.journal.title}
       />
       <LockWrapper>
-        <Icon name="lock" size={24} />
+        <Lock name="lock" size={24} />
       </LockWrapper>
     </DisplayWrapper>
   );
@@ -155,12 +159,14 @@ const AccessModalInterior = styled.View`
   flex-direction: column;
   height: 400px;
   width: 80%;
+  border-color: ${p => p.theme.borderColor};
+  background-color: ${p => p.theme.foreground};
 `;
 
 const TextFieldTitle = styled.Text`
   font-weight: 300;
   margin: 0 0 -5px 35px;
-  color: : ${props => (props.status ? 'rgb(0, 0, 0)' : 'rgb(255, 0, 0)')};
+  color: : ${p => (p.status ? p.theme.textColor : p.theme.failTextColor)};
   `;
 
 const TextField = styled.TextInput`
@@ -169,7 +175,10 @@ const TextField = styled.TextInput`
   border-width: 2px;
   border-radius: 5px;
   border-style: solid;
+  border-color: ${p => p.theme.borderColor};
   padding-left: 20px;
+  background-color: ${p => p.theme.textInputBg};
+  color: ${p => p.theme.textColor};
 `;
 
 const CancelButton = styled.Pressable`
@@ -179,7 +188,9 @@ const CancelButton = styled.Pressable`
   text-align: center;
   margin: 10px 0 10px 0;
   align-items: center;
-  background-color: rgb(252, 212, 210);
+  background-color: ${p => p.theme.cancelBtnBg};
+  color: ${p => p.theme.textColor};
+  border-color: ${p => p.theme.borderColor};
 `;
 
 const SubmitButton = styled.Pressable`
@@ -189,14 +200,15 @@ const SubmitButton = styled.Pressable`
   text-align: center;
   margin: 10px 0 10px 0;
   align-items: center;
-  background-color: white;
-  color: ${props => (props.enabled ? 'rgb(0, 0, 0)' : 'rgb(222, 222, 222)')};
-  border-color: ${props =>
-    props.enabled ? 'rgb(0, 0, 0)' : 'rgb(222, 222, 222)'};
+  background-color: ${p =>
+    p.enabled ? p.theme.submitBtnBg : p.theme.disabledSubmitBtnBg};
+  color: ${p => (p.enabled ? p.theme.submitBtn : p.theme.disabledSubmitBtn)};
+  border-color: ${p =>
+    p.enabled ? p.theme.submitBtn : p.theme.disabledSubmitBtn};
 `;
 
 const ButtonText = styled.Text`
   padding: 10px;
   font-weight: bold;
-  color: : ${props => (props.enabled ? 'rgb(0, 0, 0)' : 'rgb(222, 222, 222)')};
+  color: : ${p => p.theme.submitBtn};
 `;

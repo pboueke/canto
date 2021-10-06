@@ -6,6 +6,8 @@ import JournalScreen from './src/screens/Journal';
 import PageScreen from './src/screens/Page';
 import Toast from 'react-native-toast-message';
 import {toastConfig} from './src/components/common';
+import {ThemeProvider} from 'styled-components/native';
+import {CantoThemes} from './src';
 
 const Stack = createNativeStackNavigator();
 
@@ -13,23 +15,26 @@ const App = () => {
   console.log(
     '\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\nCANTO DEBUG\n-------------------------------\n\n\n\n',
   );
+  const theme = CantoThemes.dark;
   return (
-    <NavigationContainer>
-      <Stack.Navigator initialRouteName="Home">
-        <Stack.Screen
-          name="Home"
-          component={HomeScreen}
-          options={{headerShown: false}}
-        />
-        <Stack.Screen name="Journal" component={JournalScreen} />
-        <Stack.Screen
-          name="Page"
-          component={PageScreen}
-          options={{headerShown: false}}
-        />
-      </Stack.Navigator>
-      <Toast config={toastConfig} ref={ref => Toast.setRef(ref)} />
-    </NavigationContainer>
+    <ThemeProvider theme={theme}>
+      <NavigationContainer>
+        <Stack.Navigator initialRouteName="Home">
+          <Stack.Screen
+            name="Home"
+            component={HomeScreen}
+            options={{headerShown: false}}
+          />
+          <Stack.Screen name="Journal" component={JournalScreen} />
+          <Stack.Screen
+            name="Page"
+            component={PageScreen}
+            options={{headerShown: false}}
+          />
+        </Stack.Navigator>
+        <Toast config={toastConfig} ref={ref => Toast.setRef(ref)} />
+      </NavigationContainer>
+    </ThemeProvider>
   );
 };
 

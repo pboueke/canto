@@ -24,10 +24,9 @@ export default props => {
     if (top === '') {
       return <Flex css={{height: '94px;'}} />;
     }
-    const color = top === bottom ? 'green' : 'red';
     return (
       <Box>
-        <TextFieldTitle color={color}>
+        <TextFieldTitle ok={top === bottom} validate={true}>
           Confirm password (you can´t change it later)
         </TextFieldTitle>
         <TextField
@@ -100,9 +99,9 @@ export default props => {
                                  Only setting 'loading' inside 'setIsSaving'
                                  seems to work. Maybe put it inside a new useEffect.
                         */
-                        setLoading(true);
-                        setIsSaving(true, () => {
-                          if (password1 === '' || password1 === password2) {
+                        if (password1 === '' || password1 === password2) {
+                          setLoading(true);
+                          setIsSaving(true, () => {
                             props.save(
                               new JournalCover({
                                 title: title,
@@ -113,8 +112,8 @@ export default props => {
                             setJournalModalVisible(false);
                             setIsSaving(false);
                             setLoading(false);
-                          }
-                        });
+                          });
+                        }
                       }}>
                       <ButtonText
                         enabled={password1 === password2 || password1 === ''}>
@@ -147,8 +146,7 @@ const Scroll = styled.ScrollView.attrs({
   },
 })`
   width: 100%;
-  margin: 25px auto;
-  background-color: white;
+  background-color: ${p => p.theme.foreground};
 `;
 
 const Selector = styled(Box)`
@@ -158,6 +156,8 @@ const Selector = styled(Box)`
   text-align: center;
   margin: 10px 0 10px 0;
   align-items: center;
+  border-color: ${p => p.theme.borderColor};
+  background-color: ${p => p.theme.foreground};
 `;
 
 const SelectorSkeleton = styled.View`
@@ -173,17 +173,20 @@ const Invite = styled.Text`
   font-size: 20px;
   text-align: center;
   margin: auto auto 10px auto;
+  color: ${p => p.theme.textColor};
 `;
 
 const NewJournalModal = styled.Modal`
   text-align: center;
   margin: 10px 0 10px 0;
   align-items: center;
+  background-color: ${p => p.theme.foreground};
 `;
 
 const NewJournalModalInterior = styled.View`
   flex: 1;
   flex-direction: column;
+  background-color: ${p => p.theme.foreground};
 `;
 
 const NewJournalModalTitle = styled.Text`
@@ -191,21 +194,30 @@ const NewJournalModalTitle = styled.Text`
   text-align: center;
   width: 100%;
   margin: 50px 0 50px 0;
+  color: ${p => p.theme.textColor};
 `;
 
 const TextFieldTitle = styled.Text`
   font-weight: 300;
   margin: 0 0 -5px 35px;
-  color: ${props => props.color ?? 'black'};
+  color: ${p => {
+    if (p.validate) {
+      return p.ok ? p.theme.successTextColor : p.theme.failTextColor;
+    } else {
+      return p.theme.textColor;
+    }
+  }};
 `;
-
 const TextField = styled.TextInput`
   height: 40px;
   margin: 10px 30px 30px 30px;
   border-width: 2px;
   border-radius: 5px;
   border-style: solid;
+  border-color: ${p => p.theme.borderColor};
   padding-left: 20px;
+  background-color: ${p => p.theme.textInputBg};
+  color: ${p => p.theme.textColor};
 `;
 
 const IconIndicatorText = styled.Text`
@@ -213,6 +225,7 @@ const IconIndicatorText = styled.Text`
   width: 100%;
   text-align: center;
   margin: 0px auto 30px auto;
+  color: ${p => p.theme.textColor};
 `;
 
 const Preview = styled.View`
@@ -228,7 +241,9 @@ const CancelButton = styled.Pressable`
   text-align: center;
   margin: 10px 0 10px 0;
   align-items: center;
-  background-color: rgb(252, 212, 210);
+  background-color: ${p => p.theme.cancelBtnBg};
+  color: ${p => p.theme.textColor};
+  border-color: ${p => p.theme.borderColor};
 `;
 
 const CreateButton = styled.Pressable`
@@ -238,14 +253,15 @@ const CreateButton = styled.Pressable`
   text-align: center;
   margin: 10px 0 10px 0;
   align-items: center;
-  background-color: white;
-  color: ${props => (props.enabled ? 'rgb(0, 0, 0)' : 'rgb(222, 222, 222)')};
-  border-color: ${props =>
-    props.enabled ? 'rgb(0, 0, 0)' : 'rgb(222, 222, 222)'};
+  background-color: ${p =>
+    p.enabled ? p.theme.submitBtnBg : p.theme.disabledSubmitBtnBg};
+  color: ${p => (p.enabled ? p.theme.submitBtn : p.theme.disabledSubmitBtn)};
+  border-color: ${p =>
+    p.enabled ? p.theme.submitBtn : p.theme.disabledSubmitBtn};
 `;
 
 const ButtonText = styled.Text`
   padding: 10px;
   font-weight: bold;
-  color: : ${props => (props.enabled ? 'rgb(0, 0, 0)' : 'rgb(222, 222, 222)')};
+  color: : ${p => (p.enabled ? p.theme.submitBtn : p.theme.disabledSubmitBtn)};;
 `;
