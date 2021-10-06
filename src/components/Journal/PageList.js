@@ -3,9 +3,8 @@ import styled from 'styled-components/native';
 import {SafeAreaView, FlatList} from 'react-native';
 import {Flex} from 'native-grid-styled';
 import Icon from 'react-native-vector-icons/Feather';
-import Markdown from 'react-native-markdown-display';
 import {getTime, getDate} from '../../lib';
-import {TagsRow} from '../common';
+import {TagsRow, ThemedMarkdown} from '../common';
 
 export default props => {
   const renderItem = (i, last) => (
@@ -36,6 +35,7 @@ export default props => {
 const Container = styled(SafeAreaView)`
   flex: 1;
   margin-top: 75px;
+  background-color: ${p => p.theme.background};
 `;
 
 const Item = props => {
@@ -61,14 +61,7 @@ const Item = props => {
             maxWidth={props.thumb ? 295 : '100%'}
           />
           <ItemText>
-            <Markdown
-              style={{
-                body: {fontSize: 12},
-                heading1: {color: 'purple'},
-                code_block: {color: 'black', fontSize: 14},
-              }}>
-              {text}
-            </Markdown>
+            <ThemedMarkdown>{text}</ThemedMarkdown>
           </ItemText>
         </Flex>
         <ItemThumbnail image={props.thumb} />
@@ -81,10 +74,12 @@ const ItemBackground = styled.Pressable`
   border-width: 2px;
   border-radius: 5px;
   border-style: solid;
+  border-color: ${p => p.theme.borderColor};
   flex: 1;
   flex-direction: row;
   background-color: white;
   margin: ${props => (props.isLast ? '5px 5px 100px 5px' : '5px')};
+  background-color: ${p => p.theme.foreground};
 `;
 
 const Thumb = styled.View`
@@ -126,6 +121,7 @@ const ItemDate = styled.Text`
   font-weight: 700;
   letter-spacing: 2px;
   margin: 5px 0 0 10px;
+  color: ${p => p.theme.textColor};
 `;
 
 const ItemTime = styled.Text`
@@ -134,12 +130,14 @@ const ItemTime = styled.Text`
   position: absolute;
   right: 10px;
   bottom: 6px;
+  color: ${p => p.theme.textColor};
 `;
 
 const ItemTitleIcon = styled(Icon)`
   font-size: 12px;
   top: 10px;
   margin-left: 10px;
+  color: ${p => p.theme.textColor};
 `;
 
 const ItemLocation = styled(ItemTitleIcon)``;
@@ -151,4 +149,5 @@ const ItemFile = styled(ItemTitleIcon)``;
 const ItemText = styled.View`
   flex-grow: 1;
   margin: 0 0 0 10px;
+  color: ${p => p.theme.textColor};
 `;

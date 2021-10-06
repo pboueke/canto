@@ -1,6 +1,7 @@
 import React, {useState, useMemo} from 'react';
 import useStateRef from 'react-usestateref';
 import styled from 'styled-components/native';
+import {withTheme} from 'styled-components';
 import {Flex} from 'native-grid-styled';
 import Icon from 'react-native-vector-icons/Feather';
 import DateTimePicker from '@react-native-community/datetimepicker';
@@ -69,12 +70,12 @@ export default props => {
         }}
       />
 
-      <FilterIput
+      <FilterInput
         autoCorrect={false}
         placeholder="search filter"
         value={query}
         onChange={event => {
-          const {_eventCount, _target, text} = event.nativeEvent;
+          const {text} = event.nativeEvent;
           setQuery(text);
           changeCaller();
         }}
@@ -126,24 +127,26 @@ const FilterBar = styled.View`
   width: 100%
   position: absolute;
   elevation: 15;
-  background-color: rgb(209, 209, 209);
+  background-color: ${p => p.theme.filterRow};
   border-bottom-width: 1px;
   border-top-width: 1px;
 `;
 
-const Wrapper = styled.Pressable`
+const CalendarWrapper = styled.Pressable`
   border-width: 2px;
   border-radius: 5px;
   border-style: solid;
-  background-color: rgb(255, 255, 255);
+  border-color: ${p => p.theme.calendar.border};
+  background-color: ${p => p.theme.calendar.bg};
   width: 60px;
   height: 50px;
   align-items: center;
   margin: 10px 10px 0 0;
 `;
-const Title = styled.Text`
-  color: rgb(255, 255, 255);
-  background-color: rgb(0, 0, 0);
+const CalenarTitle = styled.Text`
+  color: ${p => p.theme.calendar.title};
+  background-color: ${p => p.theme.calendar.border};
+  border-color: ${p => p.theme.calendar.border};
   border-top-left-radius: 5px;
   border-top-right-radius: 5px;
   letter-spacing: 8px;
@@ -154,18 +157,18 @@ const Title = styled.Text`
 `;
 
 const DayPreview = styled.Text`
-  color: rgb(105, 105, 105);
+  color: ${p => p.theme.calendar.day};
   font-weight: 900;
   font-size: 18px;
   margin-right: 2px;
 `;
 const MonthPreview = styled.Text`
-  color: rgb(0, 0, 0);
+  color: ${p => p.theme.calendar.month};
   font-weight: 300;
   font-size: 18px;
 `;
 const YearPreview = styled.Text`
-  color: rgb(105, 105, 105);
+  color: ${p => p.theme.calendar.year};
   letter-spacing: 6px;
   font-size: 10px;
   margin-top: -2px;
@@ -174,18 +177,19 @@ const YearPreview = styled.Text`
 const DatePickerButton = props => {
   const date = new Date(props.date);
   return (
-    <Wrapper onPress={props.onPress}>
-      <Title>{props.title}</Title>
+    <CalendarWrapper onPress={props.onPress}>
+      <CalenarTitle>{props.title}</CalenarTitle>
       <Flex css={{flexDirection: 'row', marginTop: '-2px'}}>
         <DayPreview>{date.getDate()}</DayPreview>
         <MonthPreview>{monthNames[date.getMonth()]}</MonthPreview>
       </Flex>
       <YearPreview>{date.getFullYear()}</YearPreview>
-    </Wrapper>
+    </CalendarWrapper>
   );
 };
 
-const FilterIput = styled.TextInput`
+const FilterInput = withTheme(props => {
+  const UnthemedFilterIput = styled.TextInput`
   height: 50px;
   margin: 10px 10px 0 10px;
   border-width: 2px;
@@ -193,11 +197,17 @@ const FilterIput = styled.TextInput`
   border-style: solid;
   padding-left: 40px;
   flex-grow: 1;
-  background-color: rgb(255, 255, 255);
+  background-color: ${p => p.theme.foreground}
+  color: ${p => p.theme.textColor}
   font-size: 16px;
 `;
-
-//  margin: 10px 0 10px 10px;
+  return (
+    <UnthemedFilterIput
+      {...props}
+      placeholderTextColor={props.theme.textColor}
+    />
+  );
+});
 
 const FilterButtonWithClear = ({empty, onPress, clear}) => (
   <Flex
@@ -205,7 +215,7 @@ const FilterButtonWithClear = ({empty, onPress, clear}) => (
       flexDirection: 'column',
       height: '50px',
       width: '50px',
-      marginTop: '10px',
+      marginTop: '9px',
       marginBottom: '10px',
       marginLeft: '10px;',
     }}>
@@ -234,7 +244,7 @@ const FilterButtonClear = styled.Pressable`
   border-width: 2px;
   border-radius: 5px;
   border-style: solid;
-  background-color: white;
+  background-color: rgb(222, 222, 222);
 `;
 
 const FilterButton = styled.Pressable`
@@ -246,7 +256,8 @@ const FilterButton = styled.Pressable`
   border-width: 2px;
   border-radius: 5px;
   border-style: solid;
-  background-color: ${props => (props.empty ? 'white' : 'rgb(235, 187, 129)')};
+  background-color: ${props =>
+    props.empty ? props.theme.foreground : 'rgb(235, 187, 129)'};
 `;
 
 const FilterInputIcon = props => {
@@ -259,6 +270,9 @@ const FilterInputIcon = props => {
     align-items: center;
     justify-content: center;
   `;
+  const FilterBtn = styled(Icon)`
+    color: ${p => p.theme.textColor};
+  `;
   return (
     <IconWrapper
       onPress={() => {
@@ -266,7 +280,7 @@ const FilterInputIcon = props => {
           props.onPress();
         }
       }}>
-      <Icon name={props.active ? 'x' : 'search'} size={25} />
+      <FilterBtn name={props.active ? 'x' : 'search'} size={25} />
     </IconWrapper>
   );
 };
@@ -274,9 +288,10 @@ const FilterInputIcon = props => {
 const FilterButtonIcon = styled(Icon)`
   position: absolute;
   margin-left: 15px;
-  margin-top: ${props => (props.empty ? 10 : 3)}px;
+  margin-top: ${p => (p.empty ? 10 : 3)}px;
   elevation: 5;
-  font-size: ${props => (props.empty ? 25 : 20)}px;
+  font-size: ${p => (p.empty ? 25 : 20)}px;
+  color: ${p => (p.empty ? p.theme.textColor : 'rgb(0,0,0)')};
 `;
 
 const FilterButtonSmallIcon = styled(Icon)`

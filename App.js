@@ -25,7 +25,17 @@ const App = () => {
             component={HomeScreen}
             options={{headerShown: false}}
           />
-          <Stack.Screen name="Journal" component={JournalScreen} />
+          <Stack.Screen
+            name="Journal"
+            component={JournalScreen}
+            options={{
+              headerStyle: {
+                backgroundColor: theme.foreground,
+                color: theme.textColor,
+              },
+              headerTintColor: theme.textColor,
+            }}
+          />
           <Stack.Screen
             name="Page"
             component={PageScreen}

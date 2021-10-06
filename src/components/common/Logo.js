@@ -17,7 +17,6 @@ const Logo = props => {
       break;
     case 'white':
       Img = () => <WhiteLogo width={size} height={size} />;
-      break;
   }
   return (
     <Container>

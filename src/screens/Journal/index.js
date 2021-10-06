@@ -5,7 +5,12 @@ import {Keyboard} from 'react-native';
 import {Flex} from 'native-grid-styled';
 import MMKVStorage from 'react-native-mmkv-storage';
 import {PopAction} from '../../components/common';
-import {FilterBar, PageList} from '../../components/Journal';
+import {
+  FilterBar,
+  PageList,
+  JournalHeaderTitle,
+  JournalHeaderRight,
+} from '../../components/Journal';
 import {Page, Filter, JournalContent} from '../../models';
 import {metadata} from '../..';
 
@@ -42,21 +47,12 @@ export default ({navigation, route}) => {
     navigation.setOptions({
       title: props.journal.title,
       headerTitle: () => (
-        <Flex css={{flexDirection: 'row'}}>
-          <HeaderIcon name={props.journal.icon} />
-          <HeaderTitle>{props.journal.title}</HeaderTitle>
-        </Flex>
+        <JournalHeaderTitle
+          title={props.journal.title}
+          icon={props.journal.icon}
+        />
       ),
-      headerRight: () => (
-        <Flex css={{flexDirection: 'row'}}>
-          <HeaderButton onPress={() => console.log('backup')}>
-            <Icon name="hard-drive" size={22} />
-          </HeaderButton>
-          <HeaderButton onPress={() => console.log('settings')}>
-            <Icon name="settings" size={22} />
-          </HeaderButton>
-        </Flex>
-      ),
+      headerRight: () => <JournalHeaderRight />,
     });
   }, [navigation, props]);
 
@@ -97,23 +93,9 @@ export default ({navigation, route}) => {
   );
 };
 
-const HeaderTitle = styled.Text`
-  font-size: 24px;
-  margin: 0 10px 0 10px;
-`;
-
-const HeaderIcon = styled(Icon)`
-  margin: 5px 0 0 0;
-  font-size: 25px;
-`;
-
-const HeaderButton = styled.Pressable`
-  background-color: white;
-  margin-left: 15px;
-`;
-
 const Container = styled.Pressable`
   flex: 1;
   height: 100%;
   width: 100%;
+  background-color: ${p => p.theme.background};
 `;
