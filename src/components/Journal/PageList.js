@@ -47,8 +47,7 @@ const Item = props => {
   return (
     <ItemBackground isLast={props.isLast} onPress={props.onPress}>
       <Flex css={{flexDirection: 'row', flex: 1}}>
-        <ItemThumbnail image={props.thumb} />
-        <Flex css={{flexDirection: 'column'}}>
+        <Flex css={{flexDirection: 'column', flexGrow: 1}}>
           <ItemTitle>
             <ItemDate>{date}</ItemDate>
             {props.file && <ItemFile name="paperclip" />}
@@ -56,9 +55,11 @@ const Item = props => {
             {props.loc && <ItemLocation name="map-pin" />}
             <ItemTime>{time}</ItemTime>
           </ItemTitle>
-          {props.tags && props.tags.length > 0 && (
-            <TagsRow tags={props.tags} scale={0.75} />
-          )}
+          <TagsRow
+            tags={props.tags}
+            scale={0.75}
+            maxWidth={props.thumb ? 295 : '100%'}
+          />
           <ItemText>
             <Markdown
               style={{
@@ -70,6 +71,7 @@ const Item = props => {
             </Markdown>
           </ItemText>
         </Flex>
+        <ItemThumbnail image={props.thumb} />
       </Flex>
     </ItemBackground>
   );
@@ -100,19 +102,19 @@ const ThumbnailImage = styled.Image`
 `;
 
 const ItemThumbnail = props => {
-  const Nail = props.image
-    ? () => <ThumbnailImage source={{uri: props.image}} />
-    : () => <Icon name="edit-3" size={40} />;
-
+  if (!props.image) {
+    return null;
+  }
   return (
     <Thumb>
-      <Nail />
+      <ThumbnailImage source={{uri: props.image}} />
     </Thumb>
   );
 };
 
 const ItemTitle = styled.View`
   flex: 1;
+  width: 100%;
   flex-direction: row;
   height: 33px;
   border-bottom-width: 1px;
@@ -123,36 +125,30 @@ const ItemDate = styled.Text`
   font-size: 18px;
   font-weight: 700;
   letter-spacing: 2px;
-  margin: 5px 0 0 0;
+  margin: 5px 0 0 10px;
 `;
 
 const ItemTime = styled.Text`
   font-size: 16px;
   margin: 6px 0 0 100px;
   position: absolute;
-  right: 18px;
-  top: 0px;
+  right: 10px;
+  bottom: 6px;
 `;
 
 const ItemTitleIcon = styled(Icon)`
-  font-size: 14px;
-  position: absolute;
-  top: 8px;
+  font-size: 12px;
+  top: 10px;
+  margin-left: 10px;
 `;
 
-const ItemLocation = styled(ItemTitleIcon)`
-  right: 120px;
-`;
+const ItemLocation = styled(ItemTitleIcon)``;
 
-const ItemImage = styled(ItemTitleIcon)`
-  right: 95px;
-`;
+const ItemImage = styled(ItemTitleIcon)``;
 
-const ItemFile = styled(ItemTitleIcon)`
-  right: 70px;
-`;
+const ItemFile = styled(ItemTitleIcon)``;
 
 const ItemText = styled.View`
   flex-grow: 1;
-  width: 310px;
+  margin: 0 0 0 10px;
 `;

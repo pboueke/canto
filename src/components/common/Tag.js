@@ -57,18 +57,20 @@ const TagsTable = ({tags, allTags, onChange, mode = 'in-use'}) => {
 const TagsRow = ({
   tags,
   scale = 1,
-  width = '300px',
   justify = 'flex-start',
   color = 'rgb(222, 222, 222)',
   align = 'flex-start',
+  maxWidth = '100%',
 }) => (
   <Flex
     css={{
       justifyContent: justify,
       flexFlow: 'row wrap',
-      width: width,
+      flexGrow: 1,
       alignSelf: align,
-      margin: 5,
+      marginTop: 5,
+      marginLeft: 5,
+      maxWidth: maxWidth,
     }}>
     {tags.map(t => (
       <Tag text={t} key={t} scale={scale} pd="0px 4px 1px 4px" color={color} />
