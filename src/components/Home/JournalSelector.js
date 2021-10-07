@@ -9,7 +9,7 @@ const Selector = styled(Box)`
   border-radius: 5px;
   border-style: solid;
   border-color: ${p => p.theme.borderColor};
-  background-color: ${p => p.theme.foreground};
+  background-color: ${p => p.theme.journalPreviewBg};
   margin: 10px;
   align-items: center;
   align-self: center;

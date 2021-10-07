@@ -244,6 +244,7 @@ const Scroll = styled.ScrollView.attrs({
   border-bottom-left-radius: 0px;
   border-bottom-right-radius: 0px;
   border-color: ${p => p.theme.borderColor};
+  background-color: ${p => p.theme.modalBg};
 `;
 
 const AddTagScroll = styled.ScrollView.attrs({
@@ -256,7 +257,7 @@ const AddTagScroll = styled.ScrollView.attrs({
   flex-grow: 1;
   margin-top: 20px;
   padding-top: -10px;
-  background-color: ${p => p.theme.foreground};
+  background-color: ${p => p.theme.modalBg};
   border-width: 2px;
   border-radius: 5px;
   border-style: solid;

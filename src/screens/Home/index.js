@@ -1,4 +1,5 @@
 import React, {useState} from 'react';
+import {Linking} from 'react-native';
 import styled from 'styled-components/native';
 import {Logo} from '../../components/common';
 import {Flex, Box} from 'native-grid-styled';
@@ -67,11 +68,16 @@ export default ({navigation, route}) => {
           <Logo />
         </Box>
         <InfoBox width={2 / 5}>
+          <InfoBoxText>Switch theme:</InfoBoxText>
           {Object.keys(CantoThemes)
             .filter(t => t !== theme.name)
             .map(t => (
               <ThemeSelector key={t} themeName={t} onPress={setTheme} />
             ))}
+          <InfoBoxText>About Canto:</InfoBoxText>
+          <InfoBoxLink text="visit our project page" url={metadata.url} />
+          <InfoBoxText>Version:</InfoBoxText>
+          <Version>{metadata.srcVersion}</Version>
         </InfoBox>
       </Flex>
       <WelcomeText>
@@ -104,7 +110,42 @@ const InfoBox = styled(Box)`
   border-width: 2px;
   border-radius: 5px;
   border-style: solid;
+  background-color: ${p => p.theme.highlightBg};
+  height: 180px;
+  justify-content: space-evenly;
 `;
+
+const InfoBoxText = styled.Text`
+  margin: 2px 0 0 0;
+  color: ${p => p.theme.textColor};
+  font-weight: 700;
+`;
+
+const Version = styled.Text`
+  color: ${p => p.theme.textColor};
+  font-weight: 300;
+  margin: 0 0 4px 0;
+`;
+
+const InfoBoxLink = ({text, url}) => {
+  const Link = styled.Pressable`
+    border-color: ${p => p.theme.linkColor};
+    border-bottom-width: 1px;
+  `;
+  const Label = styled.Text`
+    color: ${p => p.theme.linkColor};
+  `;
+  return (
+    <Link
+      onPress={() =>
+        Linking.openURL(url).catch(err =>
+          console.error('An error occurred', err),
+        )
+      }>
+      <Label>{text}</Label>
+    </Link>
+  );
+};
 
 const ThemeSelector = ({themeName, onPress}) => {
   const ThemePressable = styled.Pressable`
@@ -114,6 +155,7 @@ const ThemeSelector = ({themeName, onPress}) => {
     border-radius: 5px;
     border-style: solid;
     padding: 5px;
+    margin: 2px;
   `;
   const ThemeText = styled.Text`
     color: ${p => p.theme.textColor};

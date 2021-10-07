@@ -112,6 +112,7 @@ const BinaryBox = styled(Box)`
   border-radius: 5px;
   border-style: solid;
   border-color: ${p => p.theme.textColor};
+  background-color: ${p => p.theme.journalPreviewBg};
 `;
 
 const binaryWrapperStyle = {
@@ -179,7 +180,7 @@ const Scroll = styled.ScrollView.attrs({
   width: 401px;
   margin: auto;
   margin-top: 60px;
-  background-color: ${p => p.theme.foreground};
+  background-color: ${p => p.theme.modalBg};
   border-width: 2px;
   border-radius: 5px;
   border-style: solid;

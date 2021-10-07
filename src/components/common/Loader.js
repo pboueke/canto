@@ -35,6 +35,7 @@ const Wrapper = styled.View`
   border-style: solid;
   display: flex;
   justify-content: space-around;
+  background-color: ${p => p.theme.modalBg};
 `;
 
 const Indicator = styled.ActivityIndicator``;

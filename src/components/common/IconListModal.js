@@ -72,7 +72,7 @@ const Scroll = styled.ScrollView.attrs({
 })`
   width: 100%;
   margin: auto;
-  background-color: ${p => p.theme.foreground};
+  background-color: ${p => p.theme.modalBg};
 `;
 
 const IconDisplay = styled(Box)`
@@ -82,13 +82,12 @@ const IconDisplay = styled(Box)`
   text-align: center;
   margin: 10px;
   border-color: ${p => p.theme.borderColor};
+  background-color: ${p => p.theme.journalPreviewBg};
 `;
 
 const IconDisplayButton = styled.Pressable`
   margin: 10px 0 10px 0;
   align-items: center;
-  background-color: white;
-  background-color: ${p => p.theme.foreground};
 `;
 
 const IconModalTitle = styled.Text`
@@ -108,7 +107,7 @@ const IconModal = styled.Modal`
 const IconModalInterior = styled.View`
   flex: 1;
   flex-direction: column;
-  background-color: ${p => p.theme.foreground};
+  background-color: ${p => p.theme.modalBg};
 `;
 
 // List with all the available feather icons:

@@ -146,7 +146,7 @@ const Scroll = styled.ScrollView.attrs({
   },
 })`
   width: 100%;
-  background-color: ${p => p.theme.foreground};
+  background-color: ${p => p.theme.modalBg};
 `;
 
 const Selector = styled(Box)`
@@ -157,7 +157,7 @@ const Selector = styled(Box)`
   margin: 10px 0 10px 0;
   align-items: center;
   border-color: ${p => p.theme.borderColor};
-  background-color: ${p => p.theme.foreground};
+  background-color: ${p => p.theme.journalPreviewBg};
   elevation: 10;
 `;
 
@@ -181,13 +181,13 @@ const NewJournalModal = styled.Modal`
   text-align: center;
   margin: 10px 0 10px 0;
   align-items: center;
-  background-color: ${p => p.theme.foreground};
+  background-color: ${p => p.theme.modalBg};
 `;
 
 const NewJournalModalInterior = styled.View`
   flex: 1;
   flex-direction: column;
-  background-color: ${p => p.theme.foreground};
+  background-color: ${p => p.theme.modalBg};
 `;
 
 const NewJournalModalTitle = styled.Text`

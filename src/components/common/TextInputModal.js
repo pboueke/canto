@@ -77,7 +77,7 @@ const TextInputModalInterior = styled.View`
   flex-direction: column;
   width: 300px;
   height: 150px;
-  background-color: ${p => p.theme.foreground};
+  background-color: ${p => p.theme.modalBg};
   border-width: 2px;
   border-radius: 5px;
   border-style: solid;
