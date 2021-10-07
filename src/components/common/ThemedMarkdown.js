@@ -10,6 +10,7 @@ export default withTheme(props => {
       {...props}
       style={{
         body: {
+          fontFamily: p.font.text.reg,
           fontSize: t.fontSize,
           backgroundColor: t.background,
         },
