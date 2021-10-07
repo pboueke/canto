@@ -78,7 +78,7 @@ const ItemBackground = styled.Pressable`
   flex: 1;
   flex-direction: row;
   background-color: white;
-  margin: ${props => (props.isLast ? '5px 5px 100px 5px' : '5px')};
+  margin: ${props => (props.isLast ? '5px 5px 100px 5px' : '5px 5px 10px 5px')};
   background-color: ${p => p.theme.foreground};
 `;
 
