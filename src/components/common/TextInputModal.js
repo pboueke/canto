@@ -78,7 +78,7 @@ const TextInputModalInterior = styled.View`
   width: 300px;
   height: 150px;
   background-color: ${p => p.theme.modalBg};
-  border-width: 2px;
+  border-width: ${p => p.theme.borderWidth};
   border-radius: 5px;
   border-style: solid;
   border-color: ${p => p.theme.borderColor};
@@ -87,11 +87,11 @@ const TextInputModalInterior = styled.View`
 `;
 
 const TextField = styled.TextInput.attrs(p => ({
-  placeholderTextColor: p.theme.textColor,
+  placeholderTextColor: p.theme.placeholderColor,
 }))`
   height: 40px;
   margin: 20px 30px 20px 30px;
-  border-width: 2px;
+  border-width: ${p => p.theme.borderWidth};
   border-radius: 5px;
   border-style: solid;
   border-color: ${p => p.theme.borderColor};
@@ -101,7 +101,7 @@ const TextField = styled.TextInput.attrs(p => ({
 `;
 
 const CancelButton = styled.Pressable`
-  border-width: 2px;
+  border-width: ${p => p.theme.borderWidth};
   border-radius: 5px;
   border-style: solid;
   text-align: center;
@@ -113,7 +113,7 @@ const CancelButton = styled.Pressable`
 `;
 
 const SubmitButton = styled.Pressable`
-  border-width: 2px;
+  border-width: ${p => p.theme.borderWidth};
   border-radius: 5px;
   border-style: solid;
   text-align: center;

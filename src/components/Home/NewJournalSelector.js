@@ -150,7 +150,7 @@ const Scroll = styled.ScrollView.attrs({
 `;
 
 const Selector = styled(Box)`
-  border-width: 2px;
+  border-width: ${p => p.theme.borderWidth};
   border-radius: 5px;
   border-style: solid;
   text-align: center;
@@ -172,6 +172,7 @@ const SelectorSkeleton = styled.View`
 
 const Invite = styled.Text`
   font-size: 20px;
+  height: 30px;
   text-align: center;
   margin: auto auto 10px auto;
   color: ${p => p.theme.textColor};
@@ -212,7 +213,7 @@ const TextFieldTitle = styled.Text`
 const TextField = styled.TextInput`
   height: 40px;
   margin: 10px 30px 30px 30px;
-  border-width: 2px;
+  border-width: ${p => p.theme.borderWidth};
   border-radius: 5px;
   border-style: solid;
   border-color: ${p => p.theme.borderColor};
@@ -236,7 +237,7 @@ const Preview = styled.View`
 `;
 
 const CancelButton = styled.Pressable`
-  border-width: 2px;
+  border-width: ${p => p.theme.borderWidth};
   border-radius: 5px;
   border-style: solid;
   text-align: center;
@@ -248,7 +249,7 @@ const CancelButton = styled.Pressable`
 `;
 
 const CreateButton = styled.Pressable`
-  border-width: 2px;
+  border-width: ${p => p.theme.borderWidth};
   border-radius: 5px;
   border-style: solid;
   text-align: center;

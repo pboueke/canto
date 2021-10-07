@@ -71,7 +71,7 @@ const Item = props => {
 };
 
 const ItemBackground = styled.Pressable`
-  border-width: 2px;
+  border-width: ${p => p.theme.borderWidth};
   border-radius: 5px;
   border-style: solid;
   border-color: ${p => p.theme.borderColor};

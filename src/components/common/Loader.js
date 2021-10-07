@@ -30,7 +30,7 @@ const Wrapper = styled.View`
   height: 85px;
   width: 85px;
   margin-top: ${props => props.top ?? 200}px;
-  border-width: 2px;
+  border-width: ${p => p.theme.borderWidth};
   border-radius: 42px;
   border-style: solid;
   display: flex;

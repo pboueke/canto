@@ -5,7 +5,7 @@ import {Box} from 'native-grid-styled';
 import {TouchableNativeFeedback} from 'react-native';
 
 const Selector = styled(Box)`
-  border-width: 2px;
+  border-width: ${p => p.theme.borderWidth};
   border-radius: 5px;
   border-style: solid;
   border-color: ${p => p.theme.borderColor};

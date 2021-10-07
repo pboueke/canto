@@ -182,6 +182,7 @@ const AddAttachmentButton = ({action}) => {
     margin: 10px 0 5px 0;
     padding: 1px 0 2px 7px;
     border-width: 1px;
+    border-color: ${p => p.theme.borderColor};
     border-radius: 10px;
     border-style: solid;
     justify-content: center
@@ -237,7 +238,7 @@ const Scroll = styled.ScrollView.attrs({
   margin: auto;
   margin-top: 100px;
   background-color: ${p => p.theme.foreground};
-  border-width: 2px;
+  border-width: ${p => p.theme.borderWidth};
   border-radius: 5px;
   border-style: solid;
   border-bottom-width: 0px
@@ -258,7 +259,7 @@ const AddTagScroll = styled.ScrollView.attrs({
   margin-top: 20px;
   padding-top: -10px;
   background-color: ${p => p.theme.modalBg};
-  border-width: 2px;
+  border-width: ${p => p.theme.borderWidth};
   border-radius: 5px;
   border-style: solid;
   border-bottom-width: 0px

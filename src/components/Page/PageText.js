@@ -41,7 +41,7 @@ const TextWrapper = styled.View`
 `;
 
 const TextPreview = styled.View`
-  border-width: 2px;
+  border-width: ${p => p.theme.borderWidth};
   border-radius: 5px;
   border-style: solid;
   border-color: ${p => p.theme.borderColor};
@@ -51,8 +51,10 @@ const TextPreview = styled.View`
   min-height: 400px;
 `;
 
-const TextEditor = styled.TextInput`
-  border-width: 2px;
+const TextEditor = styled.TextInput.attrs(p => ({
+  placeholderTextColor: p.theme.placeholderColor,
+}))`
+  border-width: ${p => p.theme.borderWidth};
   border-radius: 5px;
   border-style: solid;
   border-color: ${p => p.theme.borderColor};

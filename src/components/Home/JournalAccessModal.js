@@ -102,7 +102,7 @@ const JournalDisplay = props => {
     align-items: center;
   `;
   const LockWrapper = styled.View`
-    border-width: 2px;
+    border-width: ${p => p.theme.borderWidth};
     border-radius: 25px;
     border-style: solid;
     text-align: center;
@@ -113,6 +113,7 @@ const JournalDisplay = props => {
     height: 40px;
     width: 40px;
     margin: -80px 0 0 100px;
+    elevation: 10;
   `;
   const Lock = styled(Icon)`
     color: ${p => p.theme.textColor};
@@ -149,7 +150,7 @@ const AccessModal = styled.Modal`
 
 const AccessModalInterior = styled.View`
   margin: 10px 0 0 0;
-  border-width: 2px;
+  border-width: ${p => p.theme.borderWidth};
   border-radius: 5px;
   border-style: solid;
   align-self: center;
@@ -172,7 +173,7 @@ const TextFieldTitle = styled.Text`
 const TextField = styled.TextInput`
   height: 40px;
   margin: 10px 30px 30px 30px;
-  border-width: 2px;
+  border-width: ${p => p.theme.borderWidth};
   border-radius: 5px;
   border-style: solid;
   border-color: ${p => p.theme.borderColor};
@@ -182,7 +183,7 @@ const TextField = styled.TextInput`
 `;
 
 const CancelButton = styled.Pressable`
-  border-width: 2px;
+  border-width: ${p => p.theme.borderWidth};
   border-radius: 5px;
   border-style: solid;
   text-align: center;
@@ -194,7 +195,7 @@ const CancelButton = styled.Pressable`
 `;
 
 const SubmitButton = styled.Pressable`
-  border-width: 2px;
+  border-width: ${p => p.theme.borderWidth};
   border-radius: 5px;
   border-style: solid;
   text-align: center;

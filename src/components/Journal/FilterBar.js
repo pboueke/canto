@@ -137,7 +137,7 @@ const CalendarWrapper = styled.Pressable`
   border-radius: 5px;
   border-style: solid;
   border-color: ${p => p.theme.calendar.border};
-  background-color: ${p => p.theme.calendar.bg};
+  background-color: ${p => p.theme.filterItemBg};
   width: 60px;
   height: 50px;
   align-items: center;
@@ -192,19 +192,20 @@ const FilterInput = withTheme(props => {
   const UnthemedFilterIput = styled.TextInput`
   height: 50px;
   margin: 10px 10px 0 10px;
-  border-width: 2px;
+  border-width: ${p => p.theme.borderWidth};
   border-radius: 5px;
   border-style: solid;
+  border-color: ${p => p.theme.borderColor};
   padding-left: 40px;
   flex-grow: 1;
-  background-color: ${p => p.theme.foreground}
+  background-color: ${p => p.theme.filterItemBg}
   color: ${p => p.theme.textColor}
   font-size: 16px;
 `;
   return (
     <UnthemedFilterIput
       {...props}
-      placeholderTextColor={props.theme.textColor}
+      placeholderTextColor={props.theme.placeholderColor}
     />
   );
 });
@@ -241,7 +242,8 @@ const FilterButtonClear = styled.Pressable`
   width: 50px;
   height: 20px;
   align-items: center;
-  border-width: 2px;
+  border-width: ${p => p.theme.borderWidth};
+  border-color: ${p => p.theme.borderColor};
   border-radius: 5px;
   border-style: solid;
   background-color: rgb(222, 222, 222);
@@ -255,9 +257,11 @@ const FilterButton = styled.Pressable`
   align-items: center;
   border-width: 2px;
   border-radius: 5px;
+  border-width: ${p => p.theme.borderWidth};
+  border-color: ${p => p.theme.borderColor};
   border-style: solid;
   background-color: ${props =>
-    props.empty ? props.theme.foreground : 'rgb(235, 187, 129)'};
+    props.empty ? props.theme.filterItemBg : 'rgb(235, 187, 129)'};
 `;
 
 const FilterInputIcon = props => {
@@ -299,6 +303,7 @@ const FilterButtonSmallIcon = styled(Icon)`
   top: ${props => (props.empty ? 25 : 10)}px;
   right: 0px;
   elevation: 6;
+  color: ${p => (p.empty ? p.theme.textColor : 'rgb(0,0,0)')};
   font-size: ${props => (props.empty ? 20 : 15)}px;
 `;
 

@@ -107,7 +107,7 @@ const InfoBox = styled(Box)`
   align-items: center;
   align-self: center;
   border-color: ${p => p.theme.borderColor};
-  border-width: 2px;
+  border-width: ${p => p.theme.borderWidth};
   border-radius: 5px;
   border-style: solid;
   background-color: ${p => p.theme.highlightBg};
@@ -151,7 +151,7 @@ const ThemeSelector = ({themeName, onPress}) => {
   const ThemePressable = styled.Pressable`
     background-color: ${p => p.theme.foreground};
     border-color: ${p => p.theme.borderColor};
-    border-width: 2px;
+    border-width: ${p => p.theme.borderWidth};
     border-radius: 5px;
     border-style: solid;
     padding: 5px;

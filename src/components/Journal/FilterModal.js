@@ -108,7 +108,7 @@ const BinaryBox = styled(Box)`
   margin-left: 10px;
   margin-right: 10px;
   flex-shrink: 1;
-  border-width: 2px;
+  border-width: ${p => p.theme.borderWidth};
   border-radius: 5px;
   border-style: solid;
   border-color: ${p => p.theme.textColor};
@@ -181,7 +181,7 @@ const Scroll = styled.ScrollView.attrs({
   margin: auto;
   margin-top: 60px;
   background-color: ${p => p.theme.modalBg};
-  border-width: 2px;
+  border-width: ${p => p.theme.borderWidth};
   border-radius: 5px;
   border-style: solid;
   border-color: ${p => p.theme.borderColor};
