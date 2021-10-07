@@ -1,8 +1,10 @@
-import React from 'react';
+import React, {useContext} from 'react';
 import styled from 'styled-components/native';
+import {ThemeContext} from 'styled-components';
 import {Modal} from 'react-native';
 
 export default props => {
+  const theme = useContext(ThemeContext);
   return (
     <Modal transparent={true} animationType={'fade'} visible={props.loading}>
       <ModalBackground>
@@ -10,7 +12,7 @@ export default props => {
           <Indicator
             animating={props.loading}
             size="large"
-            color="rgb(0,0,0)"
+            color={theme.textColor}
           />
         </Wrapper>
       </ModalBackground>
@@ -26,11 +28,11 @@ const ModalBackground = styled.View`
 `;
 
 const Wrapper = styled.View`
-  background-color: rgb(255, 255, 255);
   height: 85px;
   width: 85px;
   margin-top: ${props => props.top ?? 200}px;
-  border-width: ${p => p.theme.borderWidth};
+  border-width: 2px;
+  border-color: ${p => p.theme.borderColor};
   border-radius: 42px;
   border-style: solid;
   display: flex;

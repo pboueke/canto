@@ -161,7 +161,7 @@ const AccessModalInterior = styled.View`
   height: 400px;
   width: 80%;
   border-color: ${p => p.theme.borderColor};
-  background-color: ${p => p.theme.foreground};
+  background-color: ${p => p.theme.modalBg};
 `;
 
 const TextFieldTitle = styled.Text`

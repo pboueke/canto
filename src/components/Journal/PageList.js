@@ -113,7 +113,7 @@ const ItemTitle = styled.View`
   flex-direction: row;
   height: 33px;
   border-bottom-width: 1px;
-  border-color: rgb(200, 200, 200);
+  border-color: ${p => p.theme.borderColor};
 `;
 
 const ItemDate = styled.Text`

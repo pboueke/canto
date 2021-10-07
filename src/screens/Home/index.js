@@ -60,6 +60,7 @@ export default ({navigation, route}) => {
     <Container>
       <Flex
         css={{
+          marginBottom: 40,
           flexDirection: 'row',
           justifyContent: 'space-evenly',
           width: '100%',
@@ -80,15 +81,10 @@ export default ({navigation, route}) => {
           <Version>{metadata.srcVersion}</Version>
         </InfoBox>
       </Flex>
-      <WelcomeText>
-        Welcome to Canto, your Journaling app. Please select one of your
-        journals or create a new one:
-      </WelcomeText>
+      <NewJournalSelector save={saveJournal} />
       <Scroll>
         <JournalTable>
           {journals}
-
-          <NewJournalSelector save={saveJournal} />
 
           <JournalAccessModal
             journal={selectedJournal}
@@ -182,22 +178,16 @@ const Scroll = styled.ScrollView.attrs({
   },
 })`
   width: 100%;
-  margin: 25px auto;
+  margin: 25px 0 0 0;
   background-color: ${p => p.theme.tableBg};
 `;
 
 const Container = styled.View`
   align-items: center;
   justify-content: center;
+  margin-bottom: 0;
   background-color: ${p => p.theme.foreground};
-`;
-
-const WelcomeText = styled.Text`
-  font-weight: bold;
-  text-align: center;
-  font-size: 16px;
-  padding: 0 0px 0 0px;
-  color: ${p => p.theme.textColor};
+  height: 100%;
 `;
 
 const JournalTable = styled(Flex)`

@@ -120,6 +120,7 @@ const EmptyTableWarning = styled.Text`
   margin-top: -10px;
   width: 100%;
   text-align: center;
+  color: ${p => p.theme.textColor};
 `;
 
 const TagText = styled.Text`

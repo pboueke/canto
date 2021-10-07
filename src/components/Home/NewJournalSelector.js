@@ -39,13 +39,18 @@ export default props => {
   };
 
   return (
-    <Selector width={3 / 4}>
+    <Selector width={1}>
       <TouchableNativeFeedback onPress={() => setJournalModalVisible(true)}>
         <SelectorSkeleton>
-          <Invite>
-            Add new Journal <Icon name="file-plus" size={25} />
-          </Invite>
-
+          <Flex
+            css={{
+              flexDirection: 'row',
+              justifyContent: 'space-evenly',
+              width: '100%',
+            }}>
+            <Invite>Select a Journal or create a new one</Invite>
+            <InviteIcon name="file-plus" />
+          </Flex>
           <NewJournalModal
             animationType="fade"
             transparent={false}
@@ -151,14 +156,18 @@ const Scroll = styled.ScrollView.attrs({
 
 const Selector = styled(Box)`
   border-width: ${p => p.theme.borderWidth};
-  border-radius: 5px;
   border-style: solid;
+  border-right-width: 0;
+  border-left-width: 0;
   text-align: center;
-  margin: 10px 0 10px 0;
   align-items: center;
-  border-color: ${p => p.theme.borderColor};
-  background-color: ${p => p.theme.journalPreviewBg};
+  justify-content: center;
+  bottom: 0;
+  height: 40px;
+  border-color: ${p => p.theme.newJournalInvite.border};
+  background-color: ${p => p.theme.newJournalInvite.bg};
   elevation: 10;
+  margin-bottom: -25px;
 `;
 
 const SelectorSkeleton = styled.View`
@@ -167,15 +176,22 @@ const SelectorSkeleton = styled.View`
   height: 100%;
   flex: 1;
   flex-grow: 1;
+  justify-content: center;
   padding: 15px 0 15px 0;
 `;
 
 const Invite = styled.Text`
-  font-size: 20px;
+  font-size: 18px;
   height: 30px;
   text-align: center;
-  margin: auto auto 10px auto;
-  color: ${p => p.theme.textColor};
+  color: ${p => p.theme.newJournalInvite.text};
+  margin: 3px 0 0 0;
+`;
+
+const InviteIcon = styled(Icon)`
+  font-size: 24px;
+  margin: 2px 0 0 0;
+  color: ${p => p.theme.newJournalInvite.icon};
 `;
 
 const NewJournalModal = styled.Modal`
