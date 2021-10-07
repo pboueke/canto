@@ -60,7 +60,8 @@ export default ({navigation, route}) => {
     <Container>
       <Flex
         css={{
-          marginBottom: 40,
+          marginBottom: 15,
+          marginTop: 10,
           flexDirection: 'row',
           justifyContent: 'space-evenly',
           width: '100%',
@@ -112,14 +113,14 @@ const InfoBox = styled(Box)`
 `;
 
 const InfoBoxText = styled.Text`
+  font-family: ${p => p.theme.font.menu.bold};
   margin: 2px 0 0 0;
   color: ${p => p.theme.textColor};
-  font-weight: 700;
 `;
 
 const Version = styled.Text`
+  font-family: ${p => p.theme.font.menu.reg};
   color: ${p => p.theme.textColor};
-  font-weight: 300;
   margin: 0 0 4px 0;
 `;
 
@@ -129,6 +130,7 @@ const InfoBoxLink = ({text, url}) => {
     border-bottom-width: 1px;
   `;
   const Label = styled.Text`
+    font-family: ${p => p.theme.font.menu.reg};
     color: ${p => p.theme.linkColor};
   `;
   return (
@@ -154,6 +156,7 @@ const ThemeSelector = ({themeName, onPress}) => {
     margin: 2px;
   `;
   const ThemeText = styled.Text`
+    font-family: ${p => p.theme.font.menu.reg};
     color: ${p => p.theme.textColor};
   `;
   return (

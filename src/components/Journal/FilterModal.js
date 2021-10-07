@@ -74,9 +74,9 @@ export default ({show, unShow, data, availableTags, onChange}) => (
 );
 
 const BinaryText = styled.Text`
+  font-family: ${p => p.theme.font.menu.reg};
   font-size: ${p => p.size ?? 14}px;
   color: ${p => p.color ?? 'rgb(111, 111, 111)'};
-  font-weight: 400;
 `;
 
 const BinaryIcon = styled(Icon)`
@@ -152,14 +152,15 @@ const Row = withTheme(({name, icon, action, theme}) => {
 });
 
 const RowTitle = styled.Text`
+  font-family: ${p => p.theme.font.menu.reg};
   font-size: 24px;
   margin-top: 10px;
   color: ${p => p.theme.textColor};
 `;
 
 const RowAction = styled.Text`
+  font-family: ${p => p.theme.font.menu.reg};
   font-size: 16px;
-  font-weight: 300;
   margin: 15px 0 0 15px;
   color: ${p => p.theme.textColor};
 `;
@@ -206,6 +207,7 @@ const FilterModalInterior = styled.View`
 `;
 
 const ModalTitle = styled.Text`
+  font-family: ${p => p.theme.font.menu.reg};
   font-size: 20px;
   margin: 2px 0 0 5px;
   color: ${p => p.theme.textColor};
@@ -222,8 +224,8 @@ const CloseButton = styled.Pressable`
 `;
 
 const Bold = styled.Text`
+  font-family: ${p => p.theme.font.menu.bold};
   font-size: 14px;
-  font-weight: 600;
   margin: 0 0 0 10px;
   color: ${p => p.theme.textColor};
 `;

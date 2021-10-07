@@ -82,6 +82,7 @@ export default withTheme(props => {
           backgroundColor: t.box,
           marginBottom: 5,
           marginTop: 5,
+          fontFamily: 'monospace',
         },
         fence: {color: t.textColor, backgroundColor: t.box, margin: 5},
         table: {
@@ -106,6 +107,7 @@ export default withTheme(props => {
         inline: {color: t.textColor, marginBottom: 5, marginTop: 5},
         span: {color: t.textColor},
         code_block: {
+          fontFamily: 'monospace',
           color: t.textColor,
           backgroundColor: t.box,
           fontSize: 14,

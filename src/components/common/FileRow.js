@@ -31,18 +31,19 @@ const Row = styled.View`
 `;
 
 const FileName = styled.Text`
+  font-family: ${p => p.theme.font.menu.reg};
   text-align: center;
   font-size: 12px;
 `;
 
 const FileExt = styled.Text`
+  font-family: ${p => p.theme.font.menu.bold};
   position: absolute;
   bottom: 3px;
   right: 3px;
   background-color: rgba(0, 0, 0, 0.1);
   border-radius: 10px;
-  font-weight: 700;
-  font-size: 10px;
+  font-size: 12px;
   padding: 4px;
 `;
 

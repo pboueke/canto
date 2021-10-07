@@ -48,7 +48,7 @@ export default props => {
               justifyContent: 'space-evenly',
               width: '100%',
             }}>
-            <Invite>Select a Journal or create a new one</Invite>
+            <Invite>Select a Journal or create a new one:</Invite>
             <InviteIcon name="file-plus" />
           </Flex>
           <NewJournalModal
@@ -181,16 +181,17 @@ const SelectorSkeleton = styled.View`
 `;
 
 const Invite = styled.Text`
+  font-family: ${p => p.theme.font.menu.reg};
   font-size: 18px;
   height: 30px;
   text-align: center;
   color: ${p => p.theme.newJournalInvite.text};
-  margin: 3px 0 0 0;
+  margin: 6px 0 0 0;
 `;
 
 const InviteIcon = styled(Icon)`
   font-size: 24px;
-  margin: 2px 0 0 0;
+  margin: 4px 0 0 0;
   color: ${p => p.theme.newJournalInvite.icon};
 `;
 
@@ -208,6 +209,7 @@ const NewJournalModalInterior = styled.View`
 `;
 
 const NewJournalModalTitle = styled.Text`
+  font-family: ${p => p.theme.font.menu.reg};
   font-size: 30px;
   text-align: center;
   width: 100%;
@@ -216,6 +218,7 @@ const NewJournalModalTitle = styled.Text`
 `;
 
 const TextFieldTitle = styled.Text`
+  font-family: ${p => p.theme.font.menu.reg};
   font-weight: 300;
   margin: 0 0 -5px 35px;
   color: ${p => {
@@ -227,6 +230,7 @@ const TextFieldTitle = styled.Text`
   }};
 `;
 const TextField = styled.TextInput`
+  font-family: ${p => p.theme.font.text.reg};
   height: 40px;
   margin: 10px 30px 30px 30px;
   border-width: ${p => p.theme.borderWidth};
@@ -239,6 +243,7 @@ const TextField = styled.TextInput`
 `;
 
 const IconIndicatorText = styled.Text`
+  font-family: ${p => p.theme.font.menu.lght};
   font-weight: 300;
   width: 100%;
   text-align: center;
@@ -279,7 +284,8 @@ const CreateButton = styled.Pressable`
 `;
 
 const ButtonText = styled.Text`
+  font-family: ${p => p.theme.font.menu.reg};
   padding: 10px;
-  font-weight: bold;
+  font-weight: 700;
   color: : ${p => (p.enabled ? p.theme.submitBtn : p.theme.disabledSubmitBtn)};;
 `;

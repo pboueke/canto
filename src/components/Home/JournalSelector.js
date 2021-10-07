@@ -24,6 +24,7 @@ const InnerTouchable = styled.View`
 `;
 
 const Title = styled.Text`
+  font-family: ${p => p.theme.font.menu.reg};
   font-size: 20px;
   text-align: center;
   margin: auto auto 10px auto;

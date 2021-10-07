@@ -191,8 +191,8 @@ const AddAttachmentButton = ({action}) => {
     background-color: rgb(48, 48, 48);
   `;
   const Label = styled.Text`
+    font-family: ${p => p.theme.font.menu.reg};
     font-size: 16px;
-    font-weight: 600;
     color: white;
   `;
   const AddIcon = styled(Icon)`
@@ -216,6 +216,7 @@ const AttachmentRowTitle = ({name, icon}) => (
 );
 
 const AttachmentBarTitle = styled.Text`
+  font-family: ${p => p.theme.font.menu.reg};
   font-size: 24px;
   margin-top: 10px;
   color: ${p => p.theme.textColor};
@@ -284,6 +285,7 @@ const AttachmentModalInterior = styled.View`
 `;
 
 const ModalTitle = styled.Text`
+  font-family: ${p => p.theme.font.menu.reg};
   font-size: 20px;
   margin: 2px 0 0 5px;
   color: ${p => p.theme.textColor};

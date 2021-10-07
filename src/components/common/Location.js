@@ -44,6 +44,7 @@ const LocationTag = ({loc, removable, action}) => {
 };
 
 const LocationText = styled.Text`
+  font-family: ${p => p.theme.font.menu.reg};
   margin: 0 20px 0 20px;
   color: ${p => p.theme.location.color};
 `;

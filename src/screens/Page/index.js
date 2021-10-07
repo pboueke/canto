@@ -1,6 +1,6 @@
 import React, {useState} from 'react';
 import styled from 'styled-components/native';
-import {Keyboard, Alert} from 'react-native';
+import {Alert} from 'react-native';
 import MMKVStorage from 'react-native-mmkv-storage';
 import {
   PopAction,

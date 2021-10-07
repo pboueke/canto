@@ -117,14 +117,15 @@ const ItemTitle = styled.View`
 `;
 
 const ItemDate = styled.Text`
+  font-family: ${p => p.theme.font.menu.bold};
   font-size: 18px;
-  font-weight: 700;
   letter-spacing: 2px;
   margin: 5px 0 0 10px;
   color: ${p => p.theme.textColor};
 `;
 
 const ItemTime = styled.Text`
+  font-family: ${p => p.theme.font.menu.reg};
   font-size: 16px;
   margin: 6px 0 0 100px;
   position: absolute;
@@ -134,17 +135,23 @@ const ItemTime = styled.Text`
 `;
 
 const ItemTitleIcon = styled(Icon)`
+  position: absolute
   font-size: 12px;
   top: 10px;
-  margin-left: 10px;
   color: ${p => p.theme.textColor};
 `;
 
-const ItemLocation = styled(ItemTitleIcon)``;
+const ItemLocation = styled(ItemTitleIcon)`
+  left: 195px;
+`;
 
-const ItemImage = styled(ItemTitleIcon)``;
+const ItemImage = styled(ItemTitleIcon)`
+  left: 212px;
+`;
 
-const ItemFile = styled(ItemTitleIcon)``;
+const ItemFile = styled(ItemTitleIcon)`
+  left: 229px;
+`;
 
 const ItemText = styled.View`
   max-width: ${p => p.maxWidth};

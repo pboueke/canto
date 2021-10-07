@@ -116,8 +116,9 @@ const DateTimeContainer = styled.Pressable`
 `;
 
 const HeaderTitle = styled.Text`
+  font-family: ${p => p.theme.font.menu.reg};
   font-size: ${props => props.size ?? 22}px;
-  margin: 0 5px 0 10px;
+  margin: 4px 5px 0 10px;
   color: ${p => p.theme.textColor};
 `;
 

@@ -11,8 +11,9 @@ export default ({title, icon}) => (
 );
 
 const HeaderTitle = styled.Text`
+  font-family: ${p => p.theme.font.menu.reg};
   font-size: 24px;
-  margin: 0 10px 0 10px;
+  margin: 3px 10px 0 10px;
   color: ${p => p.theme.textColor};
 `;
 

@@ -89,6 +89,7 @@ const TextInputModalInterior = styled.View`
 const TextField = styled.TextInput.attrs(p => ({
   placeholderTextColor: p.theme.placeholderColor,
 }))`
+  font-family: ${p => p.theme.font.menu.reg};
   height: 40px;
   margin: 20px 30px 20px 30px;
   border-width: ${p => p.theme.borderWidth};
@@ -129,6 +130,7 @@ const SubmitButton = styled.Pressable`
 `;
 
 const ButtonText = styled.Text`
+  font-family: ${p => p.theme.font.menu.reg};
   padding: 10px;
   font-weight: bold;
   color: : ${p => (p.enabled ? p.theme.submitBtn : p.theme.disabledSubmitBtn)};

@@ -165,12 +165,13 @@ const AccessModalInterior = styled.View`
 `;
 
 const TextFieldTitle = styled.Text`
-  font-weight: 300;
+  font-family: ${p => p.theme.font.menu.reg};
   margin: 0 0 -5px 35px;
   color: : ${p => (p.status ? p.theme.textColor : p.theme.failTextColor)};
   `;
 
 const TextField = styled.TextInput`
+  font-family: ${p => p.theme.font.text.reg};
   height: 40px;
   margin: 10px 30px 30px 30px;
   border-width: ${p => p.theme.borderWidth};
@@ -209,6 +210,7 @@ const SubmitButton = styled.Pressable`
 `;
 
 const ButtonText = styled.Text`
+  font-family: ${p => p.theme.font.menu.reg};
   padding: 10px;
   font-weight: bold;
   color: : ${p => p.theme.submitBtn};

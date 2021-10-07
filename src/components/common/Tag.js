@@ -116,7 +116,7 @@ const Tag = ({
 };
 
 const EmptyTableWarning = styled.Text`
-  font-weight: 300;
+  font-family: ${p => p.theme.font.menu.lght};
   margin-top: -10px;
   width: 100%;
   text-align: center;
@@ -124,6 +124,7 @@ const EmptyTableWarning = styled.Text`
 `;
 
 const TagText = styled.Text`
+  font-family: ${p => p.theme.font.menu.bold};
   font-size: ${p => p.size ?? 14}px;
   margin: ${p => p.mg ?? '5px'};
   font-weight: 500;

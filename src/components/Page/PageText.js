@@ -54,6 +54,7 @@ const TextPreview = styled.View`
 const TextEditor = styled.TextInput.attrs(p => ({
   placeholderTextColor: p.theme.placeholderColor,
 }))`
+  font-family: ${p => p.theme.font.text.reg};
   border-width: ${p => p.theme.borderWidth};
   border-radius: 5px;
   border-style: solid;

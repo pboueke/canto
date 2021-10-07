@@ -14,11 +14,13 @@ const ToastBody = styled.View`
 `;
 
 const ToastText1 = styled.Text`
+  font-family: ${p => p.theme.font.menu.reg};
   color: white;
   font-size: 14px;
 `;
 
 const ToastText2 = styled.Text`
+  font-family: ${p => p.theme.font.menu.reg};
   color: white;
   margin-top: 5px;
   font-size: 10px;

@@ -52,13 +52,13 @@ const AddButtonIcon = styled(Icon)`
 `;
 
 const AddButtonText = styled.Text`
-  font-weight: 400;
+  font-family: ${p => p.theme.font.menu.bold};
   text-align: center;
   color: ${p => p.theme.editBar.borderColor};
 `;
 
 const Bold = styled(AddButtonText)`
-  font-weight: 700;
+  font-family: ${p => p.theme.font.menu.blk};
   margin: 0 3px 0 5px;
 `;
 

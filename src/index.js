@@ -87,6 +87,24 @@ const CantoThemes = {
       bg: 'rgb(255, 237, 145)',
       border: 'rgb(0, 0, 0)',
     },
+    font: {
+      menu: {
+        reg: 'Lato-Regular',
+        it: 'Lato-Italic',
+        bold: 'Lato-Bold',
+        lght: 'Lato-Light',
+        blk: 'Lato-Black',
+      },
+      text: {
+        blk: 'Merriweather-Black',
+        blkIt: 'Merriweather-BlackItalic',
+        bold: 'Merriweather-Bold',
+        it: 'Merriweather-Italic',
+        lght: 'Merriweather-Light',
+        lghtIt: 'Merriweather-LightItalic',
+        reg: 'Merriweather-Regular',
+      },
+    },
   },
   dark: {
     displayName: 'Dark Theme',
@@ -159,6 +177,24 @@ const CantoThemes = {
       icon: 'rgb(222, 222, 222)',
       bg: 'rgb(82, 69, 6)',
       border: 'rgb(255, 217, 23)',
+    },
+    font: {
+      menu: {
+        reg: 'Lato-Regular',
+        it: 'Lato-Italic',
+        bold: 'Lato-Bold',
+        lght: 'Lato-Light',
+        blk: 'Lato-Black',
+      },
+      text: {
+        blk: 'Merriweather-Black',
+        blkIt: 'Merriweather-BlackItalic',
+        bold: 'Merriweather-Bold',
+        it: 'Merriweather-Italic',
+        lght: 'Merriweather-Light',
+        lghtIt: 'Merriweather-LightItalic',
+        reg: 'Merriweather-Regular',
+      },
     },
   },
 };

@@ -91,6 +91,7 @@ const IconDisplayButton = styled.Pressable`
 `;
 
 const IconModalTitle = styled.Text`
+  font-family: ${p => p.theme.font.menu.reg};
   font-size: 30px;
   text-align: center;
   width: 100%;

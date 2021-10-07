@@ -144,6 +144,7 @@ const CalendarWrapper = styled.Pressable`
   margin: 10px 10px 0 0;
 `;
 const CalenarTitle = styled.Text`
+  font-family: ${p => p.theme.font.menu.bold};
   color: ${p => p.theme.calendar.title};
   background-color: ${p => p.theme.calendar.border};
   border-color: ${p => p.theme.calendar.border};
@@ -157,21 +158,24 @@ const CalenarTitle = styled.Text`
 `;
 
 const DayPreview = styled.Text`
+  font-family: ${p => p.theme.font.menu.bold};
   color: ${p => p.theme.calendar.day};
-  font-weight: 900;
-  font-size: 18px;
-  margin-right: 2px;
+  font-size: 20px;
+  margin-right: 1px;
+  margin-top: 2px;
 `;
 const MonthPreview = styled.Text`
+  font-family: ${p => p.theme.font.menu.reg};
   color: ${p => p.theme.calendar.month};
-  font-weight: 300;
   font-size: 18px;
+  margin-top: 4px;
 `;
 const YearPreview = styled.Text`
+  font-family: ${p => p.theme.font.menu.reg};
   color: ${p => p.theme.calendar.year};
   letter-spacing: 6px;
   font-size: 10px;
-  margin-top: -2px;
+  margin-top: 0px;
 `;
 
 const DatePickerButton = props => {
@@ -190,6 +194,7 @@ const DatePickerButton = props => {
 
 const FilterInput = withTheme(props => {
   const UnthemedFilterIput = styled.TextInput`
+  font-family: ${p => p.theme.font.text.reg};
   height: 50px;
   margin: 10px 10px 0 10px;
   border-width: ${p => p.theme.borderWidth};
@@ -233,6 +238,7 @@ const FilterButtonWithClear = ({empty, onPress, clear}) => (
 );
 
 const FilterButtonClearText = styled.Text`
+  font-family: monospace;
   font-size: 12px;
   letter-spacing: 1px;
   font-weight: 900;
