@@ -1,7 +1,7 @@
 import React from 'react';
 import {NavigationContainer} from '@react-navigation/native';
 import {createNativeStackNavigator} from '@react-navigation/native-stack';
-import MMKVStorage, {useMMKVStorage} from 'react-native-mmkv-storage';
+import MMKVStorage from 'react-native-mmkv-storage';
 import HomeScreen from './src/screens/Home';
 import JournalScreen from './src/screens/Journal';
 import PageScreen from './src/screens/Page';
@@ -17,8 +17,7 @@ const App = () => {
   const MMKV = new MMKVStorage.Loader()
     .withInstanceID(metadata.mmkvInstance)
     .initialize();
-  const themeObj = MMKV.getMap('theme');
-  const theme = themeObj ?? {name: 'main'};
+  const theme = MMKV.getMap('theme') ?? {name: 'main'};
   console.log(
     `\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n
     CANTO DEBUG\n-----------------------------------

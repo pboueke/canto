@@ -158,6 +158,7 @@ const Selector = styled(Box)`
   align-items: center;
   border-color: ${p => p.theme.borderColor};
   background-color: ${p => p.theme.foreground};
+  elevation: 10;
 `;
 
 const SelectorSkeleton = styled.View`

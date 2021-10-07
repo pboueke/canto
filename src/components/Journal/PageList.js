@@ -35,7 +35,7 @@ export default props => {
 const Container = styled(SafeAreaView)`
   flex: 1;
   margin-top: 75px;
-  background-color: ${p => p.theme.background};
+  background-color: ${p => p.theme.tableBg};
 `;
 
 const Item = props => {

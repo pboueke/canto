@@ -13,6 +13,7 @@ const Selector = styled(Box)`
   margin: 10px;
   align-items: center;
   align-self: center;
+  elevation: 10;
 `;
 
 const InnerTouchable = styled.View`

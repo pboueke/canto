@@ -208,5 +208,5 @@ const Scroll = styled.ScrollView.attrs({
 })`
   elevation: 10;
   width: 100%;
-  background-color: ${p => p.theme.background};
+  background-color: ${p => p.theme.tableBg};
 `;

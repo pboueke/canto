@@ -1,5 +1,6 @@
-import React, {useState} from 'react';
+import React, {useState, useContext} from 'react';
 import styled from 'styled-components/native';
+import {ThemeContext} from 'styled-components';
 import {Keyboard} from 'react-native';
 import MMKVStorage from 'react-native-mmkv-storage';
 import {PopAction} from '../../components/common';
@@ -14,7 +15,7 @@ import {metadata} from '../..';
 
 export default ({navigation, route}) => {
   const props = route.params;
-
+  const theme = useContext(ThemeContext);
   const MMKV = new MMKVStorage.Loader()
     .withInstanceID(metadata.mmkvInstance)
     .withEncryption()
@@ -44,6 +45,11 @@ export default ({navigation, route}) => {
   React.useLayoutEffect(() => {
     navigation.setOptions({
       title: props.journal.title,
+      headerStyle: {
+        backgroundColor: theme.headerBg,
+        color: theme.textColor,
+      },
+      headerTintColor: theme.textColor,
       headerTitle: () => (
         <JournalHeaderTitle
           title={props.journal.title}
@@ -52,7 +58,7 @@ export default ({navigation, route}) => {
       ),
       headerRight: () => <JournalHeaderRight />,
     });
-  }, [navigation, props]);
+  }, [navigation, props, theme]);
 
   return (
     <Container onPress={() => Keyboard.dismiss()}>
@@ -96,5 +102,5 @@ const Container = styled.Pressable`
   flex: 1;
   height: 100%;
   width: 100%;
-  background-color: ${p => p.theme.background};
+  background-color: ${p => p.theme.tableBg};
 `;

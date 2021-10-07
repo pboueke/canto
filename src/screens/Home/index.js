@@ -57,11 +57,16 @@ export default ({navigation, route}) => {
 
   return (
     <Container>
-      <Flex css={{flexDirection: 'row'}}>
-        <Box width={1 / 2} css={{alignItems: 'center'}}>
+      <Flex
+        css={{
+          flexDirection: 'row',
+          justifyContent: 'space-evenly',
+          width: '100%',
+        }}>
+        <Box width={2 / 5} css={{alignItems: 'center'}}>
           <Logo />
         </Box>
-        <InfoBox width={1 / 2}>
+        <InfoBox width={2 / 5}>
           {Object.keys(CantoThemes)
             .filter(t => t !== theme.name)
             .map(t => (
@@ -95,6 +100,10 @@ export default ({navigation, route}) => {
 const InfoBox = styled(Box)`
   align-items: center;
   align-self: center;
+  border-color: ${p => p.theme.borderColor};
+  border-width: 2px;
+  border-radius: 5px;
+  border-style: solid;
 `;
 
 const ThemeSelector = ({themeName, onPress}) => {
@@ -132,7 +141,7 @@ const Scroll = styled.ScrollView.attrs({
 })`
   width: 100%;
   margin: 25px auto;
-  background-color: ${p => p.theme.background};
+  background-color: ${p => p.theme.tableBg};
 `;
 
 const Container = styled.View`
