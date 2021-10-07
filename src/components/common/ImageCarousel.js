@@ -35,7 +35,8 @@ const ImgContainer = styled.View`
 const Container = styled.View`
   width: 100%;
   background-color: ${p => p.theme.imgViewerBg};
-  border-bottom-width: 2px;
+  border-bottom-width: ${p => p.theme.borderWidth};
+  border-top-width: ${p => p.theme.borderWidth};
   border-color: ${p => p.theme.borderColor};
 `;
 

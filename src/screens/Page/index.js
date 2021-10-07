@@ -130,14 +130,14 @@ export default ({navigation, route}) => {
   };
 
   return (
-    <Container onPress={() => Keyboard.dismiss()}>
+    <Container>
       <PageHeader
         goBack={cautiousGoBack}
         date={dateTime}
         setDateTime={setDateTime}
         editMode={editMode}
       />
-      <Scroll>
+      <Scroll contentInsetAdjustmentBehavior="automatic">
         <ImageCarousel
           images={attachments.images}
           action={index =>
@@ -153,7 +153,9 @@ export default ({navigation, route}) => {
           color="rgb(200, 200, 200)"
           align="center"
         />
+
         <PageText value={text} onChange={setText} editMode={editMode} />
+
         <LocationTag
           loc={attachments.location}
           removable={false}
@@ -191,22 +193,17 @@ export default ({navigation, route}) => {
   );
 };
 
-const Container = styled.Pressable`
+const Container = styled.View`
   flex: 1
   flex-direction: column
-  width: 100%;
-  height: 100%;
   background-color: ${p => p.theme.background};
 `;
 
 const Scroll = styled.ScrollView.attrs({
   contentContainerStyle: props => {
     return {
-      justifyContent: 'center',
+      backgroundColor: props.theme.tableBg,
+      flexGrow: 1,
     };
   },
-})`
-  elevation: 10;
-  width: 100%;
-  background-color: ${p => p.theme.tableBg};
-`;
+})``;
