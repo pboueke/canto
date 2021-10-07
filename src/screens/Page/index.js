@@ -177,6 +177,7 @@ export default ({navigation, route}) => {
       )}
       <PopAction
         icon={editMode ? 'save' : 'edit-2'}
+        action={editMode ? 'save' : 'edit'}
         onPress={() => {
           if (editMode) {
             savePageData();
@@ -195,6 +196,7 @@ const Container = styled.Pressable`
   flex-direction: column
   width: 100%;
   height: 100%;
+  background-color: ${p => p.theme.background};
 `;
 
 const Scroll = styled.ScrollView.attrs({
@@ -206,4 +208,5 @@ const Scroll = styled.ScrollView.attrs({
 })`
   elevation: 10;
   width: 100%;
+  background-color: ${p => p.theme.background};
 `;

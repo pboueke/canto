@@ -1,6 +1,6 @@
 import React, {useState} from 'react';
 import styled from 'styled-components/native';
-import Markdown from 'react-native-markdown-display';
+import {ThemedMarkdown} from '../common';
 
 export default props => (
   <TextWrapper>
@@ -31,7 +31,7 @@ const PageTextEditor = props => {
 
 const PageTextPreview = props => (
   <TextPreview>
-    <Markdown>{props.value}</Markdown>
+    <ThemedMarkdown>{props.value}</ThemedMarkdown>
   </TextPreview>
 );
 
@@ -44,9 +44,10 @@ const TextPreview = styled.View`
   border-width: 2px;
   border-radius: 5px;
   border-style: solid;
+  border-color: ${p => p.theme.borderColor};
   margin: 5px;
   padding: 3px 12px 6px 13px;
-  background-color: white;
+  background-color: ${p => p.theme.foreground};
   min-height: 400px;
 `;
 
@@ -54,9 +55,11 @@ const TextEditor = styled.TextInput`
   border-width: 2px;
   border-radius: 5px;
   border-style: solid;
+  border-color: ${p => p.theme.borderColor};
   margin: 5px;
   padding: 15px;
-  background-color: white;
+  background-color: ${p => p.theme.foreground};
+  color: ${p => p.theme.textColor};
   text-align-vertical: top;
   min-height: 400px;
 `;

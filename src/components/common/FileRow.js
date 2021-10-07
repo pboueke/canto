@@ -24,7 +24,7 @@ export default ({files, action, icon = 'x', padding}) => {
 const Row = styled.View`
   flex-flow: row wrap;
   width: 100%;
-  background-color: rgb(200, 200, 200);
+  background-color: ${p => p.theme.fileRowBg};
   justify-content: space-evenly;
   ${p => (p.padding ? 'padding-top: ' + p.padding + 'px;' : '')}
   ${p => (p.padding ? 'padding-bottom: ' + (p.padding + 60) + 'px;' : '60px')}

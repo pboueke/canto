@@ -11,17 +11,26 @@ export default props => {
   const margin = props.margin ?? 20;
   return (
     <Container
+      action={props.action}
       onPress={props.onPress}
       size={size}
       onTop={top}
       leftSide={left}
       borderMargin={margin}>
       <Text>
-        <Icon name={props.icon ?? 'plus'} size={size * 0.5} />
+        <ActionIcon
+          action={props.action}
+          name={props.icon ?? 'plus'}
+          size={size * 0.5}
+        />
       </Text>
     </Container>
   );
 };
+
+const ActionIcon = styled(Icon)`
+  color: ${p => p.theme.popAction[p.action].color};
+`;
 
 const Container = styled.Pressable`
   width: ${props => props.size}px;
@@ -29,7 +38,8 @@ const Container = styled.Pressable`
   border-radius: ${props => props.size / 2}px;
   border-width: 2px;
   border-style: solid;
-  background-color: white;
+  border-color: ${p => p.theme.borderColor};
+  background-color: ${p => p.theme.popAction[p.action].bg};
   align-items: center;
   justify-content: center;
   position: absolute;

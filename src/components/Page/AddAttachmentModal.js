@@ -1,6 +1,7 @@
 import React, {useState} from 'react';
 import useStateRef from 'react-usestateref';
 import styled from 'styled-components/native';
+import {withTheme} from 'styled-components';
 import Icon from 'react-native-vector-icons/Feather';
 import {Flex} from 'native-grid-styled';
 import {addImage, addFile, addLocation} from '../../lib';
@@ -14,20 +15,16 @@ import {
 
 export default ({show, unShow, page, onChange, availableTags}) => {
   const [addTagModalVisibility, setAddTagModalVisibility] = useState(false);
-  const [fileModalVisibility, setFileModalVisibility] = useState(false);
   const [tags, setTags, tagsRef] = useStateRef(page.tags);
   const [images, setImages, imagesRef] = useStateRef(page.images);
   const [files, setFiles, filesRef] = useStateRef(page.files);
-  const [filePath, setFilePath, filePathRef] = useStateRef('');
   const [location, setLocation, locationRef] = useStateRef(page.location);
-  const [thumbnail, setThumbnail, thumbnailRef] = useStateRef(page.thumbnail);
   const createDataObject = () => {
     return {
       tags: tagsRef.current,
       images: imagesRef.current,
       files: filesRef.current,
       location: locationRef.current,
-      thumbnail: thumbnailRef.current,
     };
   };
 
@@ -41,7 +38,7 @@ export default ({show, unShow, page, onChange, availableTags}) => {
       <Scroll>
         <CloseButton onPress={unShow}>
           <ModalTitle>Edit page attachments</ModalTitle>
-          <Icon name="x" size={30} />
+          <CloseIcon name="x" size={30} />
         </CloseButton>
         <AttachmentModalInterior>
           <AttachmentRow
@@ -150,36 +147,33 @@ export default ({show, unShow, page, onChange, availableTags}) => {
   );
 };
 
-const AttachmentRow = ({
-  name,
-  icon,
-  addAction,
-  actionEnabled = true,
-  mt = '20px',
-}) => {
-  return (
-    <Flex
-      css={{
-        flexDirection: 'column',
-        margin: '20px 20px 20px 20px',
-        marginTop: mt,
-        width: '90%',
-        borderBottomWidth: '2px',
-      }}>
+const AttachmentRow = withTheme(
+  ({name, icon, addAction, actionEnabled = true, mt = '20px', theme}) => {
+    return (
       <Flex
         css={{
-          flexDirection: 'row',
-          width: '100%',
-          justifyContent: 'space-between',
+          flexDirection: 'column',
+          margin: '20px 20px 20px 20px',
+          marginTop: mt,
+          width: '90%',
+          borderBottomWidth: '2px',
+          borderColor: theme.borderColor,
         }}>
-        <AttachmentRowTitle name={name} icon={icon} />
-        {actionEnabled && addAction && (
-          <AddAttachmentButton action={addAction} />
-        )}
+        <Flex
+          css={{
+            flexDirection: 'row',
+            width: '100%',
+            justifyContent: 'space-between',
+          }}>
+          <AttachmentRowTitle name={name} icon={icon} />
+          {actionEnabled && addAction && (
+            <AddAttachmentButton action={addAction} />
+          )}
+        </Flex>
       </Flex>
-    </Flex>
-  );
-};
+    );
+  },
+);
 
 const AddAttachmentButton = ({action}) => {
   const Wrapper = styled.Pressable`
@@ -223,11 +217,13 @@ const AttachmentRowTitle = ({name, icon}) => (
 const AttachmentBarTitle = styled.Text`
   font-size: 24px;
   margin-top: 10px;
+  color: ${p => p.theme.textColor};
 `;
 
 const AttachmentBarIcon = styled(Icon)`
   font-size: 24px;
   margin: 15px 20px 0 0;
+  color: ${p => p.theme.textColor};
 `;
 
 const Scroll = styled.ScrollView.attrs({
@@ -240,13 +236,14 @@ const Scroll = styled.ScrollView.attrs({
   width: 401px;
   margin: auto;
   margin-top: 100px;
-  background-color: white;
+  background-color: ${p => p.theme.background};
   border-width: 2px;
   border-radius: 5px;
   border-style: solid;
   border-bottom-width: 0px
   border-bottom-left-radius: 0px;
   border-bottom-right-radius: 0px;
+  border-color: ${p => p.theme.borderColor};
 `;
 
 const AddTagScroll = styled.ScrollView.attrs({
@@ -259,13 +256,14 @@ const AddTagScroll = styled.ScrollView.attrs({
   flex-grow: 1;
   margin-top: 20px;
   padding-top: -10px;
-  background-color: white;
+  background-color: ${p => p.theme.background};
   border-width: 2px;
   border-radius: 5px;
   border-style: solid;
   border-bottom-width: 0px
   border-bottom-left-radius: 0px;
   border-bottom-right-radius: 0px;
+  border-color: ${p => p.theme.borderColor};
 `;
 
 const AttachmentModal = styled.Modal`
@@ -286,6 +284,11 @@ const AttachmentModalInterior = styled.View`
 const ModalTitle = styled.Text`
   font-size: 20px;
   margin: 2px 0 0 5px;
+  color: ${p => p.theme.textColor};
+`;
+
+const CloseIcon = styled(Icon)`
+  color: ${p => p.theme.textColor};
 `;
 
 const CloseButton = styled.Pressable`
@@ -295,7 +298,7 @@ const CloseButton = styled.Pressable`
 `;
 
 const EmptyBlock = styled.View`
-  background-color: white;
+  background-color: ${p => p.theme.headerBg}
   width: ${p => p.width ?? 50}px;
   height: 50px;
   position: absolute;

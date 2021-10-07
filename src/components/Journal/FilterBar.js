@@ -127,7 +127,7 @@ const FilterBar = styled.View`
   width: 100%
   position: absolute;
   elevation: 15;
-  background-color: ${p => p.theme.filterRow};
+  background-color: ${p => p.theme.filterRowBg};
   border-bottom-width: 1px;
   border-top-width: 1px;
 `;

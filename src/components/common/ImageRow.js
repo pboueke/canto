@@ -18,7 +18,7 @@ export default ({images, action, icon = 'x'}) => (
 const Row = styled.View`
   flex-flow: row wrap;
   width: 100%;
-  background-color: rgb(200, 200, 200);
+  background-color: ${p => p.theme.fileRowBg};
   justify-content: center;
 `;
 

@@ -76,6 +76,7 @@ export default ({navigation, route}) => {
         }}
       />
       <PopAction
+        action="new"
         onPress={() => {
           navigation.navigate('Page', {
             page: new Page({}),

@@ -97,7 +97,7 @@ const HeaderContainer = styled.View`
   height: ${props => props.headerHeight ?? 55}px;
   flex-direction: row;
   justify-content: space-between;
-  background-color: white;
+  background-color: ${p => p.theme.headerBg};
   align-items: center;
   elevation: 10;
   border-bottom-width: 1px;
@@ -106,6 +106,7 @@ const HeaderContainer = styled.View`
 const DateTimeContainer = styled.Pressable`
   flex-direction: row;
   margin-right: 10px;
+  border-color: ${p => p.theme.textColor};
   ${props =>
     props.editable
       ? `border-bottom-width: 1px;
@@ -117,9 +118,11 @@ const DateTimeContainer = styled.Pressable`
 const HeaderTitle = styled.Text`
   font-size: ${props => props.size ?? 22}px;
   margin: 0 5px 0 10px;
+  color: ${p => p.theme.textColor};
 `;
 
 const HeaderIcon = styled(Icon)`
   font-size: ${props => props.size ?? 22}px;
   margin: 4px 0 0 0;
+  color: ${p => p.theme.textColor};
 `;

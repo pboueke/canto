@@ -16,6 +16,8 @@ const BackButton = ({onPress}) => {
   );
 };
 
-const NavButton = styled(Icon)``;
+const NavButton = styled(Icon)`
+  color: ${p => p.theme.textColor};
+`;
 
 export {BackButton};

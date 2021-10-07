@@ -15,7 +15,9 @@ const CantoThemes = {
     foreground: 'rgb(255, 255, 255)',
     headerBg: 'rgb(255, 255, 255)',
     background: 'rgb(200, 200, 200)',
-    filterRow: 'rgb(209, 209, 209)',
+    filterRowBg: 'rgb(209, 209, 209)',
+    imgViewerBg: 'rgb(209, 209, 209)',
+    fileRowBg: 'rgb(209, 209, 209)',
     borderColor: 'rgb(0, 0, 0)',
     submitBtn: 'rgb(0, 0, 0)',
     disabledSubmitBtn: 'rgb(222, 222, 222)',
@@ -36,15 +38,28 @@ const CantoThemes = {
     },
     tag: {
       color: 'rgb(0, 0, 0)',
-      bg: 'rgb(222, 222, 222)',
+      defaultBg: 'rgb(222, 222, 222)',
       inUseBg: 'rgb(200, 200, 200)',
       addBg: 'rgb(237, 162, 71)',
       removeBg: 'rgb(87, 196, 173)',
+    },
+    location: {
+      color: 'rgb(0, 0, 0)',
+      bg: 'rgb(222, 222, 222)',
     },
     switch: {
       thumbColor: 'rgb(200, 200, 200)',
       trackColorOn: 'red',
       trackColorOff: 'green',
+    },
+    editBar: {
+      bg: 'white',
+      borderColor: 'rgb(120, 120, 120)',
+    },
+    popAction: {
+      save: {bg: 'white', color: 'rgb(0, 0, 0)'},
+      edit: {bg: 'white', color: 'rgb(0, 0, 0)'},
+      new: {bg: 'white', color: 'rgb(0, 0, 0)'},
     },
   },
   dark: {
@@ -56,7 +71,9 @@ const CantoThemes = {
     foreground: 'rgb(25, 25, 25)',
     headerBg: 'rgb(25, 25, 25)',
     background: 'rgb(0, 0, 0)',
-    filterRow: 'rgb(54, 54, 54)',
+    filterRowBg: 'rgb(54, 54, 54)',
+    imgViewerBg: 'rgb(54, 54, 54)',
+    fileRowBg: 'rgb(54, 54, 54)',
     borderColor: 'rgb(255, 255, 255)',
     submitBtn: 'rgb(255, 255, 255)',
     disabledSubmitBtn: 'rgb(50, 50, 50)',
@@ -84,10 +101,23 @@ const CantoThemes = {
       addBg: 'rgb(133, 86, 29)',
       removeBg: 'rgb(57, 128, 113)',
     },
+    location: {
+      color: 'rgb(222, 222, 222)',
+      bg: 'rgb(66, 66, 66)',
+    },
     switch: {
       thumbColor: 'rgb(255, 255, 255)',
       trackColorOn: 'red',
       trackColorOff: 'green',
+    },
+    editBar: {
+      bg: 'rgb(232, 202, 51)',
+      borderColor: 'rgb(0, 0, 0)',
+    },
+    popAction: {
+      save: {bg: 'rgb(232, 202, 51)', color: 'rgb(0, 0, 0)'},
+      edit: {bg: 'rgb(50, 50, 50)', color: 'white'},
+      new: {bg: 'rgb(50, 50, 50)', color: 'white'},
     },
   },
 };

@@ -77,21 +77,27 @@ const TextInputModalInterior = styled.View`
   flex-direction: column;
   width: 300px;
   height: 150px;
-  background-color: white;
+  background-color: ${p => p.theme.foreground};
   border-width: 2px;
   border-radius: 5px;
   border-style: solid;
+  border-color: ${p => p.theme.borderColor};
   align-self: center;
   margin-top: ${props => props.marginTop ?? 220}px;
 `;
 
-const TextField = styled.TextInput`
+const TextField = styled.TextInput.attrs(p => ({
+  placeholderTextColor: p.theme.textColor,
+}))`
   height: 40px;
   margin: 20px 30px 20px 30px;
   border-width: 2px;
   border-radius: 5px;
   border-style: solid;
+  border-color: ${p => p.theme.borderColor};
   padding-left: 20px;
+  background-color: ${p => p.theme.textInputBg};
+  color: ${p => p.theme.textColor};
 `;
 
 const CancelButton = styled.Pressable`
@@ -101,7 +107,9 @@ const CancelButton = styled.Pressable`
   text-align: center;
   margin: 0px 0 20px 0;
   align-items: center;
-  background-color: rgb(252, 212, 210);
+  background-color: ${p => p.theme.cancelBtnBg};
+  color: ${p => p.theme.textColor};
+  border-color: ${p => p.theme.borderColor};
 `;
 
 const SubmitButton = styled.Pressable`
@@ -113,13 +121,15 @@ const SubmitButton = styled.Pressable`
   align-items: center;
   background-color: white;
   color: rgb(0, 0, 0);
-  color: ${props => (props.enabled ? 'rgb(0, 0, 0)' : 'rgb(222, 222, 222)')};
-  border-color: ${props =>
-    props.enabled ? 'rgb(0, 0, 0)' : 'rgb(222, 222, 222)'};
+  background-color: ${p =>
+    p.enabled ? p.theme.submitBtnBg : p.theme.disabledSubmitBtnBg};
+  color: ${p => (p.enabled ? p.theme.submitBtn : p.theme.disabledSubmitBtn)};
+  border-color: ${p =>
+    p.enabled ? p.theme.submitBtn : p.theme.disabledSubmitBtn};
 `;
 
 const ButtonText = styled.Text`
   padding: 10px;
   font-weight: bold;
-  color: : ${props => (props.enabled ? 'rgb(0, 0, 0)' : 'rgb(222, 222, 222)')};
+  color: : ${p => (p.enabled ? p.theme.submitBtn : p.theme.disabledSubmitBtn)};
 `;

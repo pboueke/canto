@@ -35,26 +35,26 @@ export default ({availableTags, page, onChange}) => {
 
 const AddButton = styled.Pressable`
   flex-direction: row;
-  background-color: white;
+  background-color: ${p => p.theme.editBar.bg};
   justify-content: center;
   align-items: center;
   border-width: 2px;
   border-radius: 5px;
   border-style: solid;
-  border-color: ${() => addColor};
+  border-color: ${p => p.theme.editBar.borderColor};
   margin: 10px 25px 10px 25px;
   height: 30px;
 `;
 
 const AddButtonIcon = styled(Icon)`
   margin: 0 0 0 0px;
-  color: ${() => addColor};
+  color: ${p => p.theme.editBar.borderColor};
 `;
 
 const AddButtonText = styled.Text`
   font-weight: 400;
   text-align: center;
-  color: ${() => addColor};
+  color: ${p => p.theme.editBar.borderColor};
 `;
 
 const Bold = styled(AddButtonText)`
@@ -71,5 +71,3 @@ const AttachmentBar = styled.View`
   margin-top: 55px;
   elevation: 10;
 `;
-
-const addColor = 'rgb(120, 120, 120)';

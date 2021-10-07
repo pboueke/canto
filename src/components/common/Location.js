@@ -33,11 +33,11 @@ const LocationTag = ({loc, removable, action}) => {
           onPress: () => {},
         });
       }}>
-      <Icon name={'map-pin'} size={20} />
+      <LocationIcon name={'map-pin'} size={20} />
       <LocationText>
         {`${loc.coords.latitude} , ${loc.coords.longitude}`}
       </LocationText>
-      <Icon name={icon} size={20} />
+      <LocationIcon name={icon} size={20} />
       {toastVisibility && <Toast config={toastConfig} ref={modalToastRef} />}
     </Wrapper>
   );
@@ -45,10 +45,15 @@ const LocationTag = ({loc, removable, action}) => {
 
 const LocationText = styled.Text`
   margin: 0 20px 0 20px;
+  color: ${p => p.theme.location.color};
+`;
+
+const LocationIcon = styled(Icon)`
+  color: ${p => p.theme.location.color};
 `;
 
 const Wrapper = styled.Pressable`
-  background-color: rgb(200, 200, 200);
+  background-color: ${p => p.theme.location.bg};
   flex-direction: row;
   justify-content: space-between;
   flex-grow: 1;
