@@ -1,13 +1,15 @@
 import React, {useState} from 'react';
 import styled from 'styled-components/native';
 import {Logo} from '../../components/common';
-import {Flex} from 'native-grid-styled';
+import {Flex, Box} from 'native-grid-styled';
 import {metadata} from '../..';
+import {CantoThemes} from '../..';
 import {
   JournalSelector,
   NewJournalSelector,
   JournalAccessModal,
 } from '../../components/Home';
+import {NativeModules} from 'react-native';
 import MMKVStorage, {useMMKVStorage} from 'react-native-mmkv-storage';
 
 const MMKV = new MMKVStorage.Loader()
@@ -51,11 +53,23 @@ export default ({navigation, route}) => {
     setReRender(reRender + 1);
   };
 
+  const [theme, setTheme] = useMMKVStorage('theme', MMKV, {name: 'main'});
+
   return (
     <Container>
-      <Logo />
+      <Flex css={{flexDirection: 'row'}}>
+        <Box width={1 / 2} css={{alignItems: 'center'}}>
+          <Logo />
+        </Box>
+        <InfoBox width={1 / 2}>
+          {Object.keys(CantoThemes)
+            .filter(t => t !== theme.name)
+            .map(t => (
+              <ThemeSelector key={t} themeName={t} onPress={setTheme} />
+            ))}
+        </InfoBox>
+      </Flex>
       <WelcomeText>
-        {' '}
         Welcome to Canto, your Journaling app. Please select one of your
         journals or create a new one:
       </WelcomeText>
@@ -75,6 +89,37 @@ export default ({navigation, route}) => {
         </JournalTable>
       </Scroll>
     </Container>
+  );
+};
+
+const InfoBox = styled(Box)`
+  align-items: center;
+  align-self: center;
+`;
+
+const ThemeSelector = ({themeName, onPress}) => {
+  const ThemePressable = styled.Pressable`
+    background-color: ${p => p.theme.foreground};
+    border-color: ${p => p.theme.borderColor};
+    border-width: 2px;
+    border-radius: 5px;
+    border-style: solid;
+    padding: 5px;
+  `;
+  const ThemeText = styled.Text`
+    color: ${p => p.theme.textColor};
+  `;
+  return (
+    <ThemePressable
+      theme={CantoThemes[themeName]}
+      onPress={() => {
+        onPress({name: themeName});
+        NativeModules.DevSettings.reload();
+      }}>
+      <ThemeText theme={CantoThemes[themeName]}>
+        {CantoThemes[themeName].displayName}
+      </ThemeText>
+    </ThemePressable>
   );
 };
 
@@ -100,7 +145,7 @@ const WelcomeText = styled.Text`
   font-weight: bold;
   text-align: center;
   font-size: 16px;
-  padding: 0 50px 0 50px;
+  padding: 0 0px 0 0px;
   color: ${p => p.theme.textColor};
 `;
 

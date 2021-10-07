@@ -7,6 +7,7 @@ const metadata = {
 
 const CantoThemes = {
   main: {
+    displayName: 'Light Theme',
     logo: 'dark',
     textColor: 'rgb(0, 0, 0)',
     textInputBg: 'rgb(255, 255, 255)',
@@ -54,6 +55,12 @@ const CantoThemes = {
       trackColorOn: 'red',
       trackColorOff: 'green',
     },
+    themeSwitch: {
+      thumbColorOn: 'rgb(200, 200, 200)',
+      thumbColorOff: 'rgb(200, 200, 200)',
+      trackColorOn: 'red',
+      trackColorOff: 'green',
+    },
     editBar: {
       bg: 'rgb(232, 202, 51)',
       borderColor: 'rgb(0, 0, 0)',
@@ -65,6 +72,7 @@ const CantoThemes = {
     },
   },
   dark: {
+    displayName: 'Dark Theme',
     logo: 'white',
     textColor: 'rgb(255, 255, 255)',
     textInputBg: 'rgb(50, 50, 50)',

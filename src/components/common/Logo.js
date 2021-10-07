@@ -9,7 +9,7 @@ const Container = styled.View`
 `;
 
 const Logo = props => {
-  const size = props.size ?? 200;
+  const size = props.size ?? 180;
   let Img;
   switch (props.theme.logo) {
     case 'dark':

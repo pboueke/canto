@@ -58,9 +58,9 @@ const Item = props => {
           <TagsRow
             tags={props.tags}
             scale={0.75}
-            maxWidth={props.thumb ? 295 : '100%'}
+            maxWidth={props.thumb ? '295px' : '100%'}
           />
-          <ItemText maxWidth={props.thumb ? 295 : '100%'}>
+          <ItemText maxWidth={props.thumb ? '295px' : '100%'}>
             <ThemedMarkdown>{text}</ThemedMarkdown>
           </ItemText>
         </Flex>

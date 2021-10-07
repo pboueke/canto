@@ -1,6 +1,7 @@
 import React from 'react';
 import {NavigationContainer} from '@react-navigation/native';
 import {createNativeStackNavigator} from '@react-navigation/native-stack';
+import MMKVStorage, {useMMKVStorage} from 'react-native-mmkv-storage';
 import HomeScreen from './src/screens/Home';
 import JournalScreen from './src/screens/Journal';
 import PageScreen from './src/screens/Page';
@@ -8,16 +9,25 @@ import Toast from 'react-native-toast-message';
 import {toastConfig} from './src/components/common';
 import {ThemeProvider} from 'styled-components/native';
 import {CantoThemes} from './src';
+import {metadata} from './src';
 
 const Stack = createNativeStackNavigator();
 
 const App = () => {
+  const MMKV = new MMKVStorage.Loader()
+    .withInstanceID(metadata.mmkvInstance)
+    .initialize();
+  const themeObj = MMKV.getMap('theme');
+  const theme = themeObj ?? {name: 'main'};
   console.log(
-    '\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\nCANTO DEBUG\n-------------------------------\n\n\n\n',
+    `\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n
+    CANTO DEBUG\n-----------------------------------
+    Theme: ${theme.name}
+    Time: ${new Date().toLocaleString()}\n\n`,
   );
-  const theme = CantoThemes.main;
+
   return (
-    <ThemeProvider theme={theme}>
+    <ThemeProvider theme={CantoThemes[theme.name]}>
       <NavigationContainer>
         <Stack.Navigator initialRouteName="Home">
           <Stack.Screen
