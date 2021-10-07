@@ -24,6 +24,7 @@ const CantoThemes = {
     tableBg: 'rgb(200, 200, 200)',
     headerBg: 'rgb(255, 255, 255)',
     filterRowBg: 'rgb(150, 150, 150)',
+    filterItemBg: 'rgb(255, 255, 255)',
     imgViewerBg: 'rgb(100, 100, 100)',
     fileRowBg: 'rgb(190, 190, 190)',
     filterItemsBg: 'rgb(255, 255, 255)',
@@ -44,9 +45,10 @@ const CantoThemes = {
     },
     md: {
       textColor: 'rgb(0, 0, 0)',
-      fontSize: 12,
+      fontSize: 14,
       background: 'rgb(255, 255, 255)',
-      link: 'blue',
+      quote: 'rgb(190, 190, 190)',
+      box: 'rgb(222, 222, 222)',
     },
     tag: {
       color: 'rgb(0, 0, 0)',
@@ -115,10 +117,11 @@ const CantoThemes = {
       title: 'rgb(0, 0, 0)',
     },
     md: {
-      textColor: 'rgb(255, 255, 255)',
-      fontSize: 12,
+      textColor: 'rgb(222, 222, 222)',
+      fontSize: 14,
       background: 'rgb(40, 40, 40)',
-      link: 'red',
+      quote: 'rgb(50, 50, 50)',
+      box: 'rgb(30, 30, 30)',
     },
     tag: {
       color: 'rgb(222, 222, 222)',
