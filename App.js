@@ -15,7 +15,7 @@ const App = () => {
   console.log(
     '\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\nCANTO DEBUG\n-------------------------------\n\n\n\n',
   );
-  const theme = CantoThemes.dark;
+  const theme = CantoThemes.main;
   return (
     <ThemeProvider theme={theme}>
       <NavigationContainer>
