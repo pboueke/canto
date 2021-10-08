@@ -40,7 +40,12 @@ export default ({navigation, route}) => {
     const unsubscribe = navigation.addListener('focus', () => {
       const data = MMKV.getMap(props.journal.id);
       setJournalDataState(data);
-      setPageList(Filter.sort(data.content.pages));
+      console.log(data.settings);
+      if (data.settings.sort === 'ascending') {
+        setPageList(Filter.sortAscending(data.content.pages));
+      } else if (data.settings.sort === 'descending') {
+        setPageList(Filter.sortDescending(data.content.pages));
+      }
     });
     return unsubscribe;
   }, [navigation, props, MMKV, setJournalDataState, pageList]);
@@ -86,6 +91,7 @@ export default ({navigation, route}) => {
             newPage: false,
             key: props.key,
             parent: props.journal.id,
+            settings: journalDataState.settings,
             tags: Filter.getAvailableProperties(journalDataState.content.pages)
               .tags,
           });
@@ -99,6 +105,7 @@ export default ({navigation, route}) => {
             newPage: true,
             key: props.key,
             parent: props.journal.id,
+            settings: journalDataState.settings,
             tags: Filter.getAvailableProperties(journalDataState.content.pages)
               .tags,
           });
@@ -109,9 +116,20 @@ export default ({navigation, route}) => {
           journal={journalDataState}
           show={settingsVisibility}
           unShow={() => setSettingsVisibility(!settingsVisibility)}
-          onChange={val => {
+          onChange={(val, sort) => {
             setJournalDataState({settings: val, ...journalDataState});
             MMKV.setMap(props.journal.id, {settings: val, ...journalDataState});
+            if (sort) {
+              if (val.sort === 'ascending') {
+                setPageList(
+                  Filter.sortAscending(journalDataState.content.pages),
+                );
+              } else if (val.sort === 'descending') {
+                setPageList(
+                  Filter.sortDescending(journalDataState.content.pages),
+                );
+              }
+            }
           }}
         />
       )}

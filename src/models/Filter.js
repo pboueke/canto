@@ -23,8 +23,12 @@ export default class Filter {
     return {tags: Array.from(tags)};
   }
 
-  static sort(pages) {
+  static sortAscending(pages) {
     return pages.sort((p1, p2) => p1.date < p2.date);
+  }
+
+  static sortDescending(pages) {
+    return pages.sort((p1, p2) => p1.date > p2.date);
   }
 
   static getOldestDate(pages, journalCreation) {

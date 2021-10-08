@@ -5,6 +5,7 @@ export default class JournalSettings {
     previewThumbnail = true,
     previewIcons = true,
     filterBar = true,
+    sort = 'ascending',
   } = {}) {
     Object.assign(this, {
       use24h,
@@ -12,6 +13,7 @@ export default class JournalSettings {
       previewThumbnail,
       previewIcons,
       filterBar,
+      sort,
     });
   }
 
@@ -41,5 +43,10 @@ const options = {
     label: 'Enable the journal filter bar',
     ui: 'switch',
     values: [true, false],
+  },
+  sort: {
+    label: 'Page list sort method by date',
+    ui: 'picker',
+    values: ['ascending', 'descending', 'none'],
   },
 };

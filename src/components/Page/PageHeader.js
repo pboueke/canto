@@ -19,6 +19,7 @@ export default props => (
       onChange={props.setDateTime}
     />
     <PageTime
+      use24h={props.use24h}
       editMode={props.editMode}
       date={props.date}
       onChange={props.setDateTime}
@@ -50,7 +51,7 @@ const PageDate = props => {
           testID="dateTimePicker"
           value={date}
           mode={'date'}
-          is24Hour={true}
+          is24Hour={props.use24h}
           display="default"
           onChange={onChange}
         />
@@ -78,13 +79,13 @@ const PageTime = props => {
         }
       }}>
       <HeaderIcon name="clock" size={20} />
-      <HeaderTitle size={20}>{getTime(time)}</HeaderTitle>
+      <HeaderTitle size={20}>{getTime(time, props.use24h)}</HeaderTitle>
       {show && (
         <DateTimePicker
           testID="dateTimePicker"
           value={time}
           mode={'time'}
-          is24Hour={true}
+          is24Hour={props.use24h}
           display="default"
           onChange={onChange}
         />

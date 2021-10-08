@@ -4,6 +4,7 @@ import styled from 'styled-components/native';
 import {withTheme} from 'styled-components';
 import Icon from 'react-native-vector-icons/Feather';
 import {JournalSettings} from '../../models';
+import {SlidePicker} from '../common';
 
 export default ({journal, show, unShow, onChange}) => {
   const [settings, setSettings] = useState(
@@ -13,11 +14,34 @@ export default ({journal, show, unShow, onChange}) => {
 
   const states = settingLabels.map(l => useState(settings[l]));
 
+  const getPickers = () =>
+    settingLabels
+      .filter(l => JournalSettings.getOptions(l).ui === 'picker')
+      .map(p => {
+        return (
+          <ModalRow border key={p}>
+            <StaticText>{JournalSettings.getOptions(p).label}</StaticText>
+            <SlidePicker
+              value={states[settingLabels.indexOf(p)][0]}
+              values={JournalSettings.getOptions(p).values}
+              onChangeValue={val => {
+                states[settingLabels.indexOf(p)][1](val);
+                let newSettings = settings;
+                newSettings[p] = val;
+                setSettings(newSettings);
+                onChange(newSettings, p === 'sort');
+              }}
+            />
+          </ModalRow>
+        );
+      });
+
   const getSwitches = () =>
     settingLabels
       .filter(l => JournalSettings.getOptions(l).ui === 'switch')
       .map(s => (
-        <ModalRow border>
+        <ModalRow border key={s}>
+          <StaticText>{JournalSettings.getOptions(s).label}</StaticText>
           <SettingSwitch
             value={states[settingLabels.indexOf(s)][0]}
             onValueChange={val => {
@@ -25,10 +49,9 @@ export default ({journal, show, unShow, onChange}) => {
               states[settingLabels.indexOf(s)][1](val);
               newSettings[s] = val;
               setSettings(newSettings);
-              onChange(newSettings);
+              onChange(newSettings, false);
             }}
           />
-          <StaticText>{JournalSettings.getOptions(s).label}</StaticText>
         </ModalRow>
       ));
 
@@ -48,17 +71,19 @@ export default ({journal, show, unShow, onChange}) => {
           </ModalRow>
           <ModalRow border>
             <StaticText size={20}>
-              Since:{' '}
+              <StaticText bold>{journal.content.pages.length}</StaticText> page
+              {journal.content.pages.length === 1 ? '' : 's'} created
+            </StaticText>
+            <StaticText size={20}>
+              since{' '}
               <StaticText bold size={20}>
                 {new Date(journal.content.date).toLocaleDateString()}
               </StaticText>
             </StaticText>
-            <StaticText size={20}>
-              Number of pages:{' '}
-              <StaticText bold>{journal.content.pages.length}</StaticText>
-            </StaticText>
           </ModalRow>
           {getSwitches()}
+          {getPickers()}
+          <EmptyBlock />
         </ModalInterior>
       </Scroll>
     </SettingsModal>
@@ -107,7 +132,6 @@ const ModalInterior = styled.View`
 `;
 
 const ModalRow = ({children, border}) => {
-  const chld = children.length ? children : [children];
   const Row = styled.View`
     width: 100%;
     flex: 1;
@@ -122,6 +146,10 @@ const ModalRow = ({children, border}) => {
     flex-shrink: 1;
     padding: 2px 0 2px 10px;
   `;
+  if (!children) {
+    return <Row />;
+  }
+  const chld = children.length ? children : [children];
   return (
     <Row>
       {chld.map((c, i) => (
@@ -150,7 +178,7 @@ const SettingSwitch = withTheme(({value, onValueChange, theme}) => (
 const StaticText = styled.Text`
   font-family: ${p =>
     p.bold ? p.theme.font.menu.bold : p.theme.font.menu.reg};
-  font-size: ${p => p.size ?? 18};
+  font-size: ${p => p.size ?? 18}px;
   color: ${p => p.theme.textColor};
 `;
 
@@ -164,4 +192,10 @@ const ModalTitle = styled.Text`
 
 const TextLight = styled.Text`
   font-family: ${p => p.theme.font.menu.lght};
+`;
+
+const EmptyBlock = styled.View`
+  width: 100%;
+  height: 200px;
+  elevation: -1;
 `;

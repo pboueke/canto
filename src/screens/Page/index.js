@@ -157,6 +157,7 @@ export default ({navigation, route}) => {
         date={dateTime}
         setDateTime={setDateTime}
         editMode={editMode}
+        use24h={props.settings.use24h}
       />
       <Scroll contentInsetAdjustmentBehavior="automatic">
         <ImageCarousel
