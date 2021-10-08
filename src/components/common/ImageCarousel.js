@@ -1,9 +1,12 @@
-import React, {useState} from 'react';
+import React, {useState, useRef} from 'react';
 import Icon from 'react-native-vector-icons/Feather';
 import {Image, Dimensions, Modal} from 'react-native';
 import styled from 'styled-components/native';
 import {SliderBox} from 'react-native-image-slider-box';
 import ImageViewer from 'react-native-image-zoom-viewer';
+import {saveImage} from '../../lib';
+import Toast from 'react-native-toast-message';
+import {toastConfig} from './CustomToast';
 
 export default ({images, action}) => {
   if (!images || images.length < 1) {
@@ -12,6 +15,7 @@ export default ({images, action}) => {
   const urls = images.map(i => ({
     url: i,
   }));
+  const modalToastRef = useRef({});
   const [galeryVisibility, setGaleryVisibility] = useState(false);
   return (
     <Container>
@@ -40,11 +44,41 @@ export default ({images, action}) => {
                   action: () => setGaleryVisibility(!galeryVisibility),
                 },
                 {icon: 'share', action: () => action(i)},
-                {icon: 'save', action: () => console.log(images[i])},
+                {
+                  icon: 'save',
+                  action: () => {
+                    modalToastRef.current.show({
+                      type: 'simpleInfo',
+                      position: 'bottom',
+                      text1: 'saving image...',
+                      text2: "to 'Canto' image folder",
+                      visibilityTime: 800,
+                      autoHide: true,
+                      bottomOffset: 100,
+                      onShow: () => {},
+                      onHide: () => {},
+                      onPress: () => {},
+                    });
+                    saveImage(images[i], msg =>
+                      modalToastRef.current.show({
+                        type: 'simpleInfo',
+                        position: 'bottom',
+                        text1: msg,
+                        visibilityTime: 1000,
+                        autoHide: true,
+                        bottomOffset: 100,
+                        onShow: () => {},
+                        onHide: () => {},
+                        onPress: () => {},
+                      }),
+                    );
+                  },
+                },
               ]}
             />
           )}
         />
+        <Toast config={toastConfig} ref={modalToastRef} />
       </Modal>
     </Container>
   );

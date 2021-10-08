@@ -1,6 +1,7 @@
 import {PermissionsAndroid, Alert} from 'react-native';
 import {launchImageLibrary} from 'react-native-image-picker';
 import DocumentPicker from 'react-native-document-picker';
+import CameraRoll from '@react-native-community/cameraroll';
 import Share from 'react-native-share';
 import {hashCode} from '.';
 import RNFS from 'react-native-fs';
@@ -29,6 +30,40 @@ const addLocation = async (setLocation, callback) => {
     Alert.alert(
       'Permission Denied',
       'Couldn´t get permission to use location services.',
+      [
+        {
+          text: 'Close',
+          style: 'cancel',
+        },
+      ],
+    );
+  }
+};
+
+const saveImage = async (imagePath, callback) => {
+  const granted = await PermissionsAndroid.request(
+    PermissionsAndroid.PERMISSIONS.WRITE_EXTERNAL_STORAGE,
+    {
+      title: "Canto's Write to Storage Permission",
+      message: 'Canto needs access to save your files to your phone storage.',
+      buttonNeutral: 'Ask Me Later',
+      buttonNegative: 'Cancel',
+      buttonPositive: 'OK',
+    },
+  );
+  if (granted === PermissionsAndroid.RESULTS.GRANTED) {
+    try {
+      CameraRoll.save(imagePath, {type: 'photo', album: 'Canto'});
+      callback && callback('Image saved!');
+    } catch (err) {
+      console.log(err);
+      callback && callback('Could not save image :s');
+      throw err;
+    }
+  } else {
+    Alert.alert(
+      'Permission Denied',
+      "Couldn´t get permission to use the device's file storage.",
       [
         {
           text: 'Close',
@@ -190,4 +225,4 @@ const shareFile = async (path, name, date) => {
     });
 };
 
-export {removeFile, addImage, addFile, addLocation, shareFile};
+export {removeFile, addImage, addFile, addLocation, shareFile, saveImage};

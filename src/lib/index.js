@@ -12,4 +12,5 @@ export {
   addFile,
   addLocation,
   shareFile,
+  saveImage,
 } from './Attachments';
