@@ -3,6 +3,7 @@ export {default as Loader} from './Loader';
 export {default as IconListModal} from './IconListModal';
 export {default as PopAction} from './PopAction';
 export {default as TextInputModal} from './TextInputModal';
+export {default as ConfirmModal} from './ConfirmModal';
 export {default as ImageRow} from './ImageRow';
 export {default as FileRow} from './FileRow';
 export {default as ImageCarousel} from './ImageCarousel';

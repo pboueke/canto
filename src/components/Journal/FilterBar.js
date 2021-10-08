@@ -148,7 +148,7 @@ const CalenarTitle = styled.Text`
   border-color: ${p => p.theme.calendar.border};
   border-top-left-radius: 5px;
   border-top-right-radius: 5px;
-  letter-spacing: 8px;
+  letter-spacing: 6px;
   font-size: 8px;
   margin: 0;
   width: 60px;
@@ -158,14 +158,14 @@ const CalenarTitle = styled.Text`
 const DayPreview = styled.Text`
   font-family: ${p => p.theme.font.menu.bold};
   color: ${p => p.theme.calendar.day};
-  font-size: 20px;
+  font-size: 18px;
   margin-right: 1px;
   margin-top: 2px;
 `;
 const MonthPreview = styled.Text`
   font-family: ${p => p.theme.font.menu.reg};
   color: ${p => p.theme.calendar.month};
-  font-size: 18px;
+  font-size: 16px;
   margin-top: 4px;
 `;
 const YearPreview = styled.Text`

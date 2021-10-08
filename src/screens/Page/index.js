@@ -8,6 +8,7 @@ import {
   LocationTag,
   ImageCarousel,
   FileRow,
+  ConfirmModal,
 } from '../../components/common';
 import {PageText, PageHeader, EditPageAttachments} from '../../components/Page';
 import {Page} from '../../models';
@@ -38,6 +39,7 @@ export default ({navigation, route}) => {
     JSON.stringify(pageData),
   );
 
+  const [deleteModalVisibility, setDeleteModalVisibility] = useState(false);
   const [stored, setStored] = useState(!props.newPage);
   const [editMode, setEditMode] = useState(props.newPage);
   const [dateTime, setDateTime] = useState(new Date(props.page.date));
@@ -188,6 +190,25 @@ export default ({navigation, route}) => {
             setEditMode(true);
           }
         }}
+      />
+      {editMode && (
+        <PopAction
+          icon="trash-2"
+          action="delete"
+          position={'bottom left'}
+          size={30}
+          onPress={() => {
+            setDeleteModalVisibility(!deleteModalVisibility);
+          }}
+        />
+      )}
+      <ConfirmModal
+        marginTop={60}
+        shadow={true}
+        animationType="slide"
+        show={deleteModalVisibility}
+        unShow={() => setDeleteModalVisibility(!deleteModalVisibility)}
+        onDelete={() => console.log('deleting..')}
       />
     </Container>
   );

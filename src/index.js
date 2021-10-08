@@ -35,6 +35,7 @@ const CantoThemes = {
     submitBtnBg: 'white',
     disabledSubmitBtnBg: 'white',
     cancelBtnBg: 'rgb(252, 212, 210)',
+    disabledCancelBtn: 'white',
     calendar: {
       bg: 'white',
       title: 'rgb(255, 255, 255)',
@@ -80,6 +81,7 @@ const CantoThemes = {
       save: {bg: 'rgb(232, 202, 51)', color: 'rgb(0, 0, 0)'},
       edit: {bg: 'white', color: 'rgb(0, 0, 0)'},
       new: {bg: 'white', color: 'rgb(0, 0, 0)'},
+      delete: {bg: 'rgb(255, 109, 5)', color: 'rgb(0, 0, 0)'},
     },
     newJournalInvite: {
       text: 'rgb(0, 0, 0)',
@@ -133,6 +135,7 @@ const CantoThemes = {
     submitBtnBg: 'rgb(57, 143, 108)',
     disabledSubmitBtnBg: 'rgb(24, 61, 46)',
     cancelBtnBg: 'rgb(255, 109, 5)',
+    disabledCancelBtn: 'rgb(112, 47, 0)',
     calendar: {
       day: 'rgb(200, 200, 200)',
       month: 'rgb(150, 150, 150)',
@@ -171,6 +174,7 @@ const CantoThemes = {
       save: {bg: 'rgb(232, 202, 51)', color: 'rgb(0, 0, 0)'},
       edit: {bg: 'rgb(50, 50, 50)', color: 'white'},
       new: {bg: 'rgb(50, 50, 50)', color: 'white'},
+      delete: {bg: 'rgb(255, 109, 5)', color: 'rgb(0, 0, 0)'},
     },
     newJournalInvite: {
       text: 'rgb(222, 222, 222)',
