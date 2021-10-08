@@ -37,7 +37,7 @@ export default ({navigation, route}) => {
     const unsubscribe = navigation.addListener('focus', () => {
       const data = MMKV.getMap(props.journal.id);
       setJournalDataState(data);
-      setPageList(Filter.sort(pageList));
+      setPageList(Filter.sort(data.content.pages));
     });
     return unsubscribe;
   }, [navigation, props, MMKV, setJournalDataState, pageList]);
