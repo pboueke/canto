@@ -17,6 +17,7 @@ export default ({images, action}) => {
   }));
   const modalToastRef = useRef({});
   const [galeryVisibility, setGaleryVisibility] = useState(false);
+  const [index, setIndex] = useState(0);
   return (
     <Container>
       <SliderBox
@@ -26,13 +27,17 @@ export default ({images, action}) => {
         ImageComponent={ImageComponent}
         dotColor="rgba(255, 255, 255, 0.9)"
         inactiveDotColor="rgba(255, 255, 255, 0.6)"
-        onCurrentImagePressed={i => setGaleryVisibility(!galeryVisibility)}
+        onCurrentImagePressed={i => {
+          setIndex(i);
+          setGaleryVisibility(!galeryVisibility);
+        }}
       />
       <Modal
         visible={galeryVisibility}
         transparent={true}
         onRequestClose={() => setGaleryVisibility(!galeryVisibility)}>
         <ImageViewer
+          index={index}
           imageUrls={urls}
           enableSwipeDown={true}
           onSwipeDown={() => setGaleryVisibility(!galeryVisibility)}
