@@ -52,6 +52,20 @@ export default ({navigation, route}) => {
     thumbnail: pageData.content.thumbnail,
   });
 
+  const deletePageData = id => {
+    let tmp = journalData;
+    for (let i = 0; i < tmp.content.pages.length; i++) {
+      if (tmp.content.pages[i].id === id) {
+        tmp.content.pages.splice(i, 1);
+        break;
+      }
+    }
+    MMKV.setMap(props.parent, tmp);
+    MMKV.removeItem(id);
+    deleteAllFiles();
+    navigation.goBack();
+  };
+
   const saveJournalData = (page, update) => {
     let tmp = journalData;
     if (update) {
@@ -74,6 +88,11 @@ export default ({navigation, route}) => {
     tmp.content.date = new Date(dateTime).toISOString();
     tmp.content = new Page(tmp.content);
     return tmp;
+  };
+
+  const deleteAllFiles = async () => {
+    attachments.files.forEach(file => removeFile(file));
+    attachments.images.forEach(file => removeFile(file));
   };
 
   const deletePendingFiles = async discarding => {
@@ -208,7 +227,7 @@ export default ({navigation, route}) => {
         animationType="slide"
         show={deleteModalVisibility}
         unShow={() => setDeleteModalVisibility(!deleteModalVisibility)}
-        onDelete={() => console.log('deleting..')}
+        onDelete={() => deletePageData(pageData.content.id)}
       />
     </Container>
   );

@@ -95,7 +95,7 @@ const addFile = async (pageId, callback) => {
         const dest =
           'file://' +
           RNFS.DocumentDirectoryPath +
-          `/img-${pageId}-${hashCode(r.name)}.${ext}`;
+          `/fl-${pageId}-${hashCode(r.name)}.${ext}`;
         RNFS.copyFile(r.uri, dest).then(() => {
           callback(dest, r.name);
         });
@@ -165,7 +165,8 @@ const addImage = async (pageId, callback, mode = 0) => {
 };
 
 const removeFile = async (filePath, callback) => {
-  RNFS.unlink(filePath.substr(6))
+  const path = filePath.path ?? filePath;
+  RNFS.unlink(path.substr(6))
     .then(() => {
       if (callback) {
         callback();
