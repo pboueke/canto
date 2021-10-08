@@ -10,7 +10,7 @@ import {
   NewJournalSelector,
   JournalAccessModal,
 } from '../../components/Home';
-import {NativeModules} from 'react-native';
+import RNRestart from 'react-native-restart';
 import MMKVStorage, {useMMKVStorage} from 'react-native-mmkv-storage';
 
 const MMKV = new MMKVStorage.Loader()
@@ -164,7 +164,7 @@ const ThemeSelector = ({themeName, onPress}) => {
       theme={CantoThemes[themeName]}
       onPress={() => {
         onPress({name: themeName});
-        NativeModules.DevSettings.reload();
+        RNRestart.Restart();
       }}>
       <ThemeText theme={CantoThemes[themeName]}>
         {CantoThemes[themeName].displayName}
