@@ -61,7 +61,7 @@ const Item = props => {
             maxWidth={props.thumb ? '295px' : '100%'}
           />
           <ItemText maxWidth={props.thumb ? '295px' : '100%'}>
-            <ThemedMarkdown>{text}</ThemedMarkdown>
+            <ThemedMarkdown>{text + '&nbsp;'}</ThemedMarkdown>
           </ItemText>
         </Flex>
         <ItemThumbnail image={props.thumb} />

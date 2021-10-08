@@ -10,7 +10,7 @@ import {
   JournalHeaderTitle,
   JournalHeaderRight,
 } from '../../components/Journal';
-import {Page, Filter, JournalContent} from '../../models';
+import {Page, Filter, JournalContent, JournalSettings} from '../../models';
 import {metadata} from '../..';
 
 export default ({navigation, route}) => {
@@ -26,6 +26,7 @@ export default ({navigation, route}) => {
   if (!journalDataStorage) {
     MMKV.setMap(props.journal.id, {
       content: new JournalContent({cover: props.journal}),
+      settings: new JournalSettings(),
       rand: (Math.random() + 1).toString(36).substring(7),
     });
   }
