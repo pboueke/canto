@@ -8,7 +8,7 @@ import PageScreen from './src/screens/Page';
 import Toast from 'react-native-toast-message';
 import {toastConfig} from './src/components/common';
 import {ThemeProvider} from 'styled-components/native';
-import {CantoThemes} from './src';
+import {CantoThemes} from './src/styles';
 import {metadata} from './src';
 
 const Stack = createNativeStackNavigator();

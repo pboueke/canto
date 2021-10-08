@@ -4,7 +4,7 @@ import styled from 'styled-components/native';
 import {Logo} from '../../components/common';
 import {Flex, Box} from 'native-grid-styled';
 import {metadata} from '../..';
-import {CantoThemes} from '../..';
+import {CantoThemes} from '../../styles';
 import {
   JournalSelector,
   NewJournalSelector,
