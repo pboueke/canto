@@ -44,8 +44,7 @@ export default props => {
       startDateRef.current,
       endDateRef.current,
     );
-    const filtered = filter.apply(props.data);
-    props.onChange(filtered);
+    props.onChange(filter.apply(props.data));
   };
 
   return (
@@ -70,13 +69,12 @@ export default props => {
         }}
       />
 
-      <FilterInput
+      <FilterIput
         autoCorrect={false}
         placeholder="search filter"
         value={query}
         onChange={event => {
-          const {text} = event.nativeEvent;
-          setQuery(text);
+          setQuery(event.nativeEvent.text);
           changeCaller();
         }}
       />
@@ -192,8 +190,9 @@ const DatePickerButton = props => {
   );
 };
 
-const FilterInput = withTheme(props => {
-  const UnthemedFilterIput = styled.TextInput`
+const FilterIput = styled.TextInput.attrs(p => ({
+  placeholderTextColor: p.theme.placeholderColor,
+}))`
   font-family: ${p => p.theme.font.text.reg};
   height: 50px;
   margin: 10px 10px 0 10px;
@@ -207,13 +206,6 @@ const FilterInput = withTheme(props => {
   color: ${p => p.theme.textColor}
   font-size: 16px;
 `;
-  return (
-    <UnthemedFilterIput
-      {...props}
-      placeholderTextColor={props.theme.placeholderColor}
-    />
-  );
-});
 
 const FilterButtonWithClear = ({empty, onPress, clear}) => (
   <Flex
