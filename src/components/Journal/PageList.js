@@ -5,10 +5,12 @@ import {Flex} from 'native-grid-styled';
 import Icon from 'react-native-vector-icons/Feather';
 import {getTime, getDate} from '../../lib';
 import {TagsRow, ThemedMarkdown} from '../common';
+import {JournalSettings} from '../../models';
 
 export default props => {
   const renderItem = (i, last) => (
     <Item
+      settings={props.settings}
       onPress={() => props.onClick(i.item)}
       date={i.item.date}
       text={i.item.text}
@@ -39,11 +41,12 @@ const Container = styled(SafeAreaView)`
 `;
 
 const Item = props => {
+  const settings = props.settings ?? new JournalSettings();
   const date = getDate(props.date);
   let tmpText = props.text.split('\n')[0];
   const text =
     tmpText.length > 200 ? tmpText.substring(0, 200) + '...' : tmpText;
-  const time = getTime(props.date);
+  const time = getTime(props.date, settings.use24h);
   return (
     <ItemBackground isLast={props.isLast} onPress={props.onPress}>
       <Flex css={{flexDirection: 'row', flex: 1}}>
@@ -53,7 +56,7 @@ const Item = props => {
             {props.file && <ItemFile name="paperclip" />}
             {props.img && <ItemImage name="image" />}
             {props.loc && <ItemLocation name="map-pin" />}
-            <ItemTime>{time}</ItemTime>
+            <ItemTime small={!settings.use24h}>{time}</ItemTime>
           </ItemTitle>
           <TagsRow
             tags={props.tags}
@@ -126,11 +129,11 @@ const ItemDate = styled.Text`
 
 const ItemTime = styled.Text`
   font-family: ${p => p.theme.font.menu.reg};
-  font-size: 16px;
+  font-size: ${p => (p.small ? 12 : 16)}px;
   margin: 6px 0 0 100px;
   position: absolute;
-  right: 10px;
-  bottom: 6px;
+  right: ${p => (p.small ? 6 : 10)}px;
+  bottom: ${p => (p.small ? 8 : 6)}px;
   color: ${p => p.theme.textColor};
 `;
 

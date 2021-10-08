@@ -3,12 +3,12 @@ import styled from 'styled-components/native';
 import Icon from 'react-native-vector-icons/Feather';
 import {Flex} from 'native-grid-styled';
 
-export default () => (
+export default ({showSettings}) => (
   <Flex css={{flexDirection: 'row'}}>
     <HeaderButton onPress={() => console.log('backup')}>
       <HeaderIcon name="hard-drive" size={22} />
     </HeaderButton>
-    <HeaderButton onPress={() => console.log('settings')}>
+    <HeaderButton onPress={showSettings}>
       <HeaderIcon name="settings" size={22} />
     </HeaderButton>
   </Flex>

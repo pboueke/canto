@@ -1,7 +1,6 @@
 import React, {useState, useMemo} from 'react';
 import useStateRef from 'react-usestateref';
 import styled from 'styled-components/native';
-import {withTheme} from 'styled-components';
 import {Flex} from 'native-grid-styled';
 import Icon from 'react-native-vector-icons/Feather';
 import DateTimePicker from '@react-native-community/datetimepicker';

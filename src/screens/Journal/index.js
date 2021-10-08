@@ -9,6 +9,7 @@ import {
   PageList,
   JournalHeaderTitle,
   JournalHeaderRight,
+  SettingsModal,
 } from '../../components/Journal';
 import {Page, Filter, JournalContent, JournalSettings} from '../../models';
 import {metadata} from '../..';
@@ -33,6 +34,7 @@ export default ({navigation, route}) => {
   journalDataStorage = MMKV.getMap(props.journal.id);
   const [journalDataState, setJournalDataState] = useState(journalDataStorage);
   const [pageList, setPageList] = useState(journalDataState.content.pages);
+  const [settingsVisibility, setSettingsVisibility] = useState(false);
 
   React.useEffect(() => {
     const unsubscribe = navigation.addListener('focus', () => {
@@ -57,9 +59,13 @@ export default ({navigation, route}) => {
           icon={props.journal.icon}
         />
       ),
-      headerRight: () => <JournalHeaderRight />,
+      headerRight: () => (
+        <JournalHeaderRight
+          showSettings={() => setSettingsVisibility(!settingsVisibility)}
+        />
+      ),
     });
-  }, [navigation, props, theme]);
+  }, [navigation, props, theme, settingsVisibility]);
 
   return (
     <Container onPress={() => Keyboard.dismiss()}>
@@ -71,6 +77,7 @@ export default ({navigation, route}) => {
 
       <PageList
         data={pageList}
+        settings={journalDataState.settings}
         onClick={page => {
           navigation.navigate('Page', {
             page: page,
@@ -95,6 +102,17 @@ export default ({navigation, route}) => {
           });
         }}
       />
+      {settingsVisibility && (
+        <SettingsModal
+          journal={journalDataState}
+          show={settingsVisibility}
+          unShow={() => setSettingsVisibility(!settingsVisibility)}
+          onChange={val => {
+            setJournalDataState({settings: val, ...journalDataState});
+            MMKV.setMap(props.journal.id, {settings: val, ...journalDataState});
+          }}
+        />
+      )}
     </Container>
   );
 };

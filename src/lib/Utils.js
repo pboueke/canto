@@ -28,7 +28,13 @@ export const randomString = () => (Math.random() + 1).toString(36).substring(7);
 
 export const getDate = date => new Date(date).toDateString();
 
-export const getTime = date =>
-  new Date(date).getHours() +
-  ':' +
-  ('0' + new Date(date).getMinutes()).slice(-2);
+export const getTime = (date, is24 = true) => {
+  const dt = new Date(date);
+  if (is24) {
+    return dt.getHours() + ':' + ('0' + dt.getMinutes()).slice(-2);
+  } else {
+    const hrs = dt.getHours();
+    const amPm = hrs > 12 ? ' PM' : ' AM';
+    return (hrs % 12) + ':' + ('0' + dt.getMinutes()).slice(-2) + amPm;
+  }
+};
