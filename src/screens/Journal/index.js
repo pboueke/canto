@@ -37,10 +37,10 @@ export default ({navigation, route}) => {
     const unsubscribe = navigation.addListener('focus', () => {
       const data = MMKV.getMap(props.journal.id);
       setJournalDataState(data);
-      setPageList(Filter.sort(data.content.pages));
+      setPageList(Filter.sort(pageList));
     });
     return unsubscribe;
-  }, [navigation, props, MMKV, setJournalDataState]);
+  }, [navigation, props, MMKV, setJournalDataState, pageList]);
 
   React.useLayoutEffect(() => {
     navigation.setOptions({
