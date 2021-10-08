@@ -24,7 +24,7 @@ export default props => {
     />
   );
   return (
-    <Container>
+    <Container filterVisible={props.settings.filterBar}>
       <FlatList
         data={props.data}
         renderItem={item => renderItem(item, props.data.length - 1)}
@@ -36,7 +36,7 @@ export default props => {
 
 const Container = styled(SafeAreaView)`
   flex: 1;
-  margin-top: 75px;
+  margin-top: ${p => (p.filterVisible ? 75 : 0)}px;
   background-color: ${p => p.theme.tableBg};
 `;
 
@@ -53,21 +53,30 @@ const Item = props => {
         <Flex css={{flexDirection: 'column', flexGrow: 1}}>
           <ItemTitle>
             <ItemDate>{date}</ItemDate>
-            {props.file && <ItemFile name="paperclip" />}
-            {props.img && <ItemImage name="image" />}
-            {props.loc && <ItemLocation name="map-pin" />}
+            {props.file && settings.previewIcons && (
+              <ItemFile name="paperclip" />
+            )}
+            {props.img && settings.previewIcons && <ItemImage name="image" />}
+            {props.loc && settings.previewIcons && (
+              <ItemLocation name="map-pin" />
+            )}
             <ItemTime small={!settings.use24h}>{time}</ItemTime>
           </ItemTitle>
-          <TagsRow
-            tags={props.tags}
-            scale={0.75}
-            maxWidth={props.thumb ? '295px' : '100%'}
-          />
+          {settings.previewTags && (
+            <TagsRow
+              tags={props.tags}
+              scale={0.75}
+              maxWidth={props.thumb ? '295px' : '100%'}
+            />
+          )}
           <ItemText maxWidth={props.thumb ? '295px' : '100%'}>
             <ThemedMarkdown>{text + '&nbsp;'}</ThemedMarkdown>
           </ItemText>
         </Flex>
-        <ItemThumbnail image={props.thumb} />
+        <ItemThumbnail
+          image={props.thumb}
+          enabled={settings.previewThumbnail}
+        />
       </Flex>
     </ItemBackground>
   );
@@ -100,7 +109,7 @@ const ThumbnailImage = styled.Image`
 `;
 
 const ItemThumbnail = props => {
-  if (!props.image) {
+  if (!props.image || !props.enabled) {
     return null;
   }
   return (

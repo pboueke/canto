@@ -84,6 +84,7 @@ const IconBtn = ({onPress, name}) => {
   `;
   const Btn = styled(Icon)`
     font-size: 40px;
+    color: ${p => p.theme.textColor};
   `;
   return (
     <Wrapper onPress={onPress}>
@@ -150,6 +151,7 @@ const StaticText = styled.Text`
   font-family: ${p =>
     p.bold ? p.theme.font.menu.bold : p.theme.font.menu.reg};
   font-size: ${p => p.size ?? 18};
+  color: ${p => p.theme.textColor};
 `;
 
 const ModalTitle = styled.Text`

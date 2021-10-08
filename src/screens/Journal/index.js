@@ -69,11 +69,13 @@ export default ({navigation, route}) => {
 
   return (
     <Container onPress={() => Keyboard.dismiss()}>
-      <FilterBar
-        data={journalDataState.content.pages}
-        journal={props.journal}
-        onChange={setPageList}
-      />
+      {journalDataState.settings.filterBar && (
+        <FilterBar
+          data={journalDataState.content.pages}
+          journal={props.journal}
+          onChange={setPageList}
+        />
+      )}
 
       <PageList
         data={pageList}

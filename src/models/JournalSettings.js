@@ -4,12 +4,14 @@ export default class JournalSettings {
     previewTags = true,
     previewThumbnail = true,
     previewIcons = true,
+    filterBar = true,
   } = {}) {
     Object.assign(this, {
       use24h,
       previewTags,
       previewThumbnail,
       previewIcons,
+      filterBar,
     });
   }
 
@@ -32,6 +34,11 @@ const options = {
   },
   previewIcons: {
     label: 'Show content indicators on page listing',
+    ui: 'switch',
+    values: [true, false],
+  },
+  filterBar: {
+    label: 'Enable the journal filter bar',
     ui: 'switch',
     values: [true, false],
   },
