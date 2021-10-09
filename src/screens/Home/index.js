@@ -83,11 +83,6 @@ export default ({navigation, route}) => {
             .map(t => (
               <ThemeSelector key={t} themeName={t} onPress={setTheme} />
             ))}
-          <InfoBoxText>{dic('About Canto')}:</InfoBoxText>
-          <InfoBoxLink
-            text={dic('visit our project page')}
-            url={metadata.url}
-          />
           <InfoBoxText>{dic('Change language')}:</InfoBoxText>
           <LanguageRow>
             <LanguageSelector
@@ -99,6 +94,11 @@ export default ({navigation, route}) => {
               onPress={() => setLang({name: 'pt'})}
             />
           </LanguageRow>
+          <InfoBoxText>{dic('About Canto')}:</InfoBoxText>
+          <InfoBoxLink
+            text={dic('visit our project page')}
+            url={metadata.url}
+          />
           <Version>{dic('Version') + ': ' + metadata.srcVersion}</Version>
         </InfoBox>
       </Flex>

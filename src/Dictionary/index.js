@@ -28,9 +28,6 @@ const text = {
   'Confirm password (you can´t change it later)': {
     pt: 'Confirme a senha (você não poderá mudá-la)',
   },
-  'About Canto': {
-    pt: 'Sobre o Canto',
-  },
   'Select a Journal or create a new one': {
     pt: 'Selecione um diário ou crie um novo',
   },
