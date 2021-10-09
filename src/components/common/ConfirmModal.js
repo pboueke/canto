@@ -3,6 +3,7 @@ import styled from 'styled-components/native';
 import {Flex, Box} from 'native-grid-styled';
 
 export default props => {
+  const dic = props.dic;
   const [value, setValue] = useState('');
   const confirmationSting = props.confirmationSting;
   const requireValidation = confirmationSting || confirmationSting === '';
@@ -19,10 +20,10 @@ export default props => {
       onRequestClose={close}>
       {props.shadow && <ModalBackground />}
       <ModalInterior marginTop={props.marginTop} large={requireValidation}>
-        <ModalTitle>Are you sure to delete this page?</ModalTitle>
+        <ModalTitle>{dic('Are you sure to delete this page?')}</ModalTitle>
         {requireValidation && (
           <TextFieldConfirmation>
-            Please write the text below to confirm deletion
+            {dic('Please write the text below to confirm deletion')}
           </TextFieldConfirmation>
         )}
         {requireValidation && (
@@ -44,7 +45,7 @@ export default props => {
           }}>
           <Box width={1 / 3}>
             <CancelButton onPress={close}>
-              <ButtonText enabled={true}>Cancel</ButtonText>
+              <ButtonText enabled={true}>{dic('Cancel')}</ButtonText>
             </CancelButton>
           </Box>
           <Box width={1 / 3}>
@@ -57,7 +58,7 @@ export default props => {
                 }
               }}>
               <ButtonText enabled={ready}>
-                {props.submit ?? 'Delete'}
+                {props.submit ?? dic('Delete')}
               </ButtonText>
             </SubmitButton>
           </Box>

@@ -10,6 +10,7 @@ import {
   FileRow,
   ConfirmModal,
 } from '../../components/common';
+import Dictionary from '../../Dictionary';
 import {PageText, PageHeader, EditPageAttachments} from '../../components/Page';
 import {Page} from '../../models';
 import {openLocationExternally, getDate} from '../../lib';
@@ -25,6 +26,8 @@ export default ({navigation, route}) => {
     .withEncryption()
     .encryptWithCustomKey((props.key || [...metadata.defaultKey]).join(''))
     .initialize();
+
+  const dic = Dictionary(props.lang);
 
   const journalData = MMKV.getMap(props.parent);
   let pageData = MMKV.getMap(props.page.id);
@@ -134,12 +137,12 @@ export default ({navigation, route}) => {
     }
 
     Alert.alert(
-      'Discard changes?',
-      'You have unsaved changes. Are you sure to discard them and leave?',
+      dic('Discard changes?'),
+      dic('You have unsaved changes. Are you sure to discard them and leave?'),
       [
-        {text: "Don't leave", style: 'cancel', onPress: () => {}},
+        {text: dic("Don't leave"), style: 'cancel', onPress: () => {}},
         {
-          text: 'Discard',
+          text: dic('Discard'),
           style: 'destructive',
           onPress: () => {
             deletePendingFiles(true);
@@ -161,6 +164,7 @@ export default ({navigation, route}) => {
       />
       <Scroll contentInsetAdjustmentBehavior="automatic">
         <ImageCarousel
+          dic={dic}
           images={attachments.images}
           action={index =>
             !editMode &&
@@ -176,7 +180,12 @@ export default ({navigation, route}) => {
           align="center"
         />
 
-        <PageText value={text} onChange={setText} editMode={editMode} />
+        <PageText
+          value={text}
+          onChange={setText}
+          editMode={editMode}
+          dic={dic}
+        />
 
         <LocationTag
           loc={attachments.location}
@@ -194,6 +203,7 @@ export default ({navigation, route}) => {
       </Scroll>
       {editMode && (
         <EditPageAttachments
+          dic={dic}
           availableTags={props.tags}
           page={pageData.content}
           onChange={val => setAttachments(val)}
@@ -223,6 +233,7 @@ export default ({navigation, route}) => {
         />
       )}
       <ConfirmModal
+        dic={dic}
         marginTop={60}
         shadow={true}
         animationType="slide"

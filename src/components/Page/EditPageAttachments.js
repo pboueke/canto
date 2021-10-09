@@ -3,26 +3,27 @@ import styled from 'styled-components/native';
 import Icon from 'react-native-vector-icons/Feather';
 import {AddAttachmentModal} from '.';
 
-export default ({availableTags, page, onChange}) => {
+export default ({availableTags, page, dic, onChange}) => {
   const [attachmentModalVisible, setAttachmentModalVisible] = useState(false);
   return (
     <AttachmentBar>
       <AddButton
         onPress={() => setAttachmentModalVisible(!attachmentModalVisible)}>
-        <AddButtonText>Edit/add a</AddButtonText>
-        <Bold>Tag </Bold>
+        <AddButtonText>{dic('Edit/add a')}</AddButtonText>
+        <Bold>{dic('Tag')} </Bold>
         <AddButtonIcon name="tag" size={14} />
         <AddButtonText>,</AddButtonText>
-        <Bold>Location </Bold>
+        <Bold>{dic('Location')} </Bold>
         <AddButtonIcon name="map-pin" size={14} />
         <AddButtonText>,</AddButtonText>
-        <Bold>Image </Bold>
+        <Bold>{dic('Image')} </Bold>
         <AddButtonIcon name="image" size={14} />
-        <AddButtonText> or</AddButtonText>
-        <Bold>File</Bold>
+        <AddButtonText> {dic('or')}</AddButtonText>
+        <Bold>{dic('File')}</Bold>
         <AddButtonIcon name="paperclip" size={14} />
       </AddButton>
       <AddAttachmentModal
+        dic={dic}
         availableTags={availableTags}
         page={page}
         show={attachmentModalVisible}
@@ -42,7 +43,7 @@ const AddButton = styled.Pressable`
   border-radius: 5px;
   border-style: solid;
   border-color: ${p => p.theme.editBar.borderColor};
-  margin: 10px 25px 10px 25px;
+  margin: 10px 15px 10px 15px;
   height: 30px;
 `;
 

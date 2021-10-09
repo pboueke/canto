@@ -7,10 +7,11 @@ import {JournalCover} from '../../models';
 import {Loader} from '../common';
 
 export default props => {
+  const dic = props.dic;
   const [modalVisible, setModalVisible] = useState(props.show);
   const [loading, setLoading] = useState(false);
   const [status, setStatus] = useState(true);
-  const [statusText, setStatusText] = useState('Password');
+  const [statusText, setStatusText] = useState(dic('Password'));
   const [journalKey, setJournalKey] = useState('');
   return (
     <AccessModal
@@ -49,7 +50,7 @@ export default props => {
                   props.unShow();
                   setModalVisible(!modalVisible);
                 }}>
-                <ButtonText enabled={true}>Cancel</ButtonText>
+                <ButtonText enabled={true}>{dic('Cancel')}</ButtonText>
               </CancelButton>
             </Box>
             <Box width={1 / 3}>
@@ -68,19 +69,19 @@ export default props => {
                       setModalVisible(false);
                       props.unShow();
                       setStatus(true);
-                      setStatusText('Password');
+                      setStatusText(dic('Password'));
                       setLoading(false);
                       setModalVisible(false);
                       props.navigate(journal, [...journalKey]);
                     } else {
                       setStatus(false);
                       setLoading(false);
-                      setStatusText('Wrong Password');
+                      setStatusText(dic('Wrong Password'));
                       setJournalKey('');
                     }
                   });
                 }}>
-                <ButtonText enabled={true}>Open</ButtonText>
+                <ButtonText enabled={true}>{dic('Open')}</ButtonText>
               </SubmitButton>
             </Box>
           </Flex>

@@ -8,7 +8,7 @@ import {saveImage} from '../../lib';
 import Toast from 'react-native-toast-message';
 import {toastConfig} from './CustomToast';
 
-export default ({images, action}) => {
+export default ({images, action, dic}) => {
   if (!images || images.length < 1) {
     return <Empty />;
   }
@@ -55,8 +55,8 @@ export default ({images, action}) => {
                     modalToastRef.current.show({
                       type: 'simpleInfo',
                       position: 'bottom',
-                      text1: 'saving image...',
-                      text2: "to 'Canto' image folder",
+                      text1: dic('saving image...'),
+                      text2: dic("to 'Canto' image folder"),
                       visibilityTime: 800,
                       autoHide: true,
                       bottomOffset: 100,
@@ -68,7 +68,7 @@ export default ({images, action}) => {
                       modalToastRef.current.show({
                         type: 'simpleInfo',
                         position: 'bottom',
-                        text1: msg,
+                        text1: dic(msg),
                         visibilityTime: 1000,
                         autoHide: true,
                         bottomOffset: 100,

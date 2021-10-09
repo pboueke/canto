@@ -5,6 +5,7 @@ import {Logo} from '../../components/common';
 import {Flex, Box} from 'native-grid-styled';
 import {metadata} from '../..';
 import {CantoThemes} from '../../styles';
+import Dictionary from '../../Dictionary';
 import {
   JournalSelector,
   NewJournalSelector,
@@ -26,14 +27,22 @@ export default ({navigation, route}) => {
     version: metadata.srcVersion,
     journals: [],
   });
+
+  const [theme, setTheme] = useMMKVStorage('theme', MMKV, {name: 'main'});
+  const [lang, setLang] = useMMKVStorage('user-language', MMKV, {name: 'en'});
+  const dic = Dictionary(lang.name);
+
   const goToJournal = (j, k) => {
     navigation.navigate('Journal', {
       journal: j,
       key: k,
+      lang: lang.name,
     });
   };
+
   const journals = appData.journals.map((j, i) => (
     <JournalSelector
+      dic={dic}
       key={i}
       onPress={() => {
         setSelectedJournal(j);
@@ -54,8 +63,6 @@ export default ({navigation, route}) => {
     setReRender(reRender + 1);
   };
 
-  const [theme, setTheme] = useMMKVStorage('theme', MMKV, {name: 'main'});
-
   return (
     <Container>
       <Flex
@@ -70,24 +77,38 @@ export default ({navigation, route}) => {
           <Logo />
         </Box>
         <InfoBox width={2 / 5}>
-          <InfoBoxText>Switch theme:</InfoBoxText>
+          <InfoBoxText>{dic('Switch theme')}:</InfoBoxText>
           {Object.keys(CantoThemes)
             .filter(t => t !== theme.name)
             .map(t => (
               <ThemeSelector key={t} themeName={t} onPress={setTheme} />
             ))}
-          <InfoBoxText>About Canto:</InfoBoxText>
-          <InfoBoxLink text="visit our project page" url={metadata.url} />
-          <InfoBoxText>Version:</InfoBoxText>
-          <Version>{metadata.srcVersion}</Version>
+          <InfoBoxText>{dic('About Canto')}:</InfoBoxText>
+          <InfoBoxLink
+            text={dic('visit our project page')}
+            url={metadata.url}
+          />
+          <InfoBoxText>{dic('Change language')}:</InfoBoxText>
+          <LanguageRow>
+            <LanguageSelector
+              name="English"
+              onPress={() => setLang({name: 'en'})}
+            />
+            <LanguageSelector
+              name="Português"
+              onPress={() => setLang({name: 'pt'})}
+            />
+          </LanguageRow>
+          <Version>{dic('Version') + ': ' + metadata.srcVersion}</Version>
         </InfoBox>
       </Flex>
-      <NewJournalSelector save={saveJournal} />
+      <NewJournalSelector dic={dic} save={saveJournal} />
       <Scroll>
         <JournalTable>
           {journals}
 
           <JournalAccessModal
+            dic={dic}
             journal={selectedJournal}
             show={accessModalVisible}
             unShow={() => setAccessModalVisible(!accessModalVisible)}
@@ -108,7 +129,7 @@ const InfoBox = styled(Box)`
   border-radius: 5px;
   border-style: solid;
   background-color: ${p => p.theme.highlightBg};
-  height: 180px;
+  height: 200px;
   justify-content: space-evenly;
 `;
 
@@ -116,6 +137,28 @@ const InfoBoxText = styled.Text`
   font-family: ${p => p.theme.font.menu.bold};
   margin: 2px 0 0 0;
   color: ${p => p.theme.textColor};
+`;
+
+const LanguageSelector = ({name, onPress}) => {
+  const LangWrapper = styled.Pressable`
+    background-color: ${p => p.theme.background};
+    padding: 5px;
+    margin: 2px;
+    border-radius: 5px;
+  `;
+  const LangTitle = styled.Text`
+    color: ${p => p.theme.textColor};
+    font-family: ${p => p.theme.font.menu.reg};
+  `;
+  return (
+    <LangWrapper onPress={onPress}>
+      <LangTitle>{name}</LangTitle>
+    </LangWrapper>
+  );
+};
+
+const LanguageRow = styled.View`
+  flex-flow: row wrap;
 `;
 
 const Version = styled.Text`

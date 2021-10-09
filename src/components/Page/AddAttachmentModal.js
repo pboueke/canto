@@ -13,7 +13,7 @@ import {
   FileRow,
 } from '../common';
 
-export default ({show, unShow, page, onChange, availableTags}) => {
+export default ({show, unShow, page, onChange, availableTags, dic}) => {
   const [addTagModalVisibility, setAddTagModalVisibility] = useState(false);
   const [tags, setTags, tagsRef] = useStateRef(page.tags);
   const [images, setImages, imagesRef] = useStateRef(page.images);
@@ -37,18 +37,19 @@ export default ({show, unShow, page, onChange, availableTags}) => {
       <EmptyBlock />
       <Scroll>
         <CloseButton onPress={unShow}>
-          <ModalTitle>Edit page attachments</ModalTitle>
+          <ModalTitle>{dic('Edit page attachments')}</ModalTitle>
           <CloseIcon name="x" size={30} />
         </CloseButton>
         <AttachmentModalInterior>
           <AttachmentRow
-            name="Tags"
+            name={dic('Tag') + 's'}
             icon="tag"
             addAction={() => setAddTagModalVisibility(!addTagModalVisibility)}
           />
           <TextInputModal
-            submit="Add"
-            placeholder="add a new tag"
+            dic={dic}
+            submit={dic('Add')}
+            placeholder={dic('add a new tag')}
             shadow={true}
             onSubmit={tag => {
               setTags(Array.from(new Set(tags).add(tag)));
@@ -58,11 +59,12 @@ export default ({show, unShow, page, onChange, availableTags}) => {
             unShow={() => setAddTagModalVisibility(!addTagModalVisibility)}>
             <AddTagScroll>
               <AttachmentRow
-                name="Or pick one of your tags:"
+                name={dic('Or pick one of your tags') + ':'}
                 icon="tag"
                 mt="10px"
               />
               <TagsTable
+                dic={dic}
                 mode="add"
                 tags={tags}
                 allTags={availableTags.filter(t => !tags.includes(t))}
@@ -75,6 +77,7 @@ export default ({show, unShow, page, onChange, availableTags}) => {
             </AddTagScroll>
           </TextInputModal>
           <TagsTable
+            dic={dic}
             tags={tags}
             mode="in-use"
             onChange={t => {
@@ -83,7 +86,7 @@ export default ({show, unShow, page, onChange, availableTags}) => {
             }}
           />
           <AttachmentRow
-            name="Images"
+            name={dic('Image') + 's'}
             icon="image"
             addAction={() =>
               addImage(page.id, val => {
@@ -100,7 +103,7 @@ export default ({show, unShow, page, onChange, availableTags}) => {
             }}
           />
           <AttachmentRow
-            name="Files"
+            name={dic('File') + 's'}
             icon="paperclip"
             addAction={() =>
               addFile(
@@ -126,7 +129,7 @@ export default ({show, unShow, page, onChange, availableTags}) => {
             }}
           />
           <AttachmentRow
-            name="Location"
+            name={dic('Location')}
             icon="map-pin"
             actionEnabled={!location}
             addAction={() =>

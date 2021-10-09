@@ -11,11 +11,12 @@ import {JournalCover} from '../../models';
 import {Loader} from '../common';
 
 export default props => {
+  const dic = props.dic;
   const [journalModalVisible, setJournalModalVisible] = useState(false);
   const [iconsModalVisible, setIconsModalVisible] = useState(false);
   const [isSaving, setIsSaving] = useStateWithCallback(false);
   const [loading, setLoading] = useStateRef(false);
-  const [title, setTitle] = useState('My Journal');
+  const [title, setTitle] = useState(dic('My Journal'));
   const [password1, setPassword1] = useState('');
   const [password2, setPassword2] = useState('');
   const [icon, setIcon] = useState('book');
@@ -27,7 +28,7 @@ export default props => {
     return (
       <Box>
         <TextFieldTitle ok={top === bottom} validate={true}>
-          Confirm password (you can´t change it later)
+        {dic('Confirm password (you can´t change it later)')}
         </TextFieldTitle>
         <TextField
           secureTextEntry={true}
@@ -48,7 +49,7 @@ export default props => {
               justifyContent: 'space-evenly',
               width: '100%',
             }}>
-            <Invite>Select a Journal or create a new one:</Invite>
+            <Invite>{dic('Select a Journal or create a new one')}:</Invite>
             <InviteIcon name="file-plus" />
           </Flex>
           <NewJournalModal
@@ -62,13 +63,13 @@ export default props => {
             <Scroll>
               <NewJournalModalInterior>
                 <NewJournalModalTitle>
-                  Create a new Journal?
+                {dic('Create a new Journal?')}
                 </NewJournalModalTitle>
 
-                <TextFieldTitle>Title</TextFieldTitle>
+                <TextFieldTitle>{dic('Title')}</TextFieldTitle>
                 <TextField value={title} onChangeText={setTitle} />
 
-                <TextFieldTitle>Password (leave empty for none)</TextFieldTitle>
+                <TextFieldTitle>{dic('Password (leave empty for none)')}</TextFieldTitle>
                 <TextField
                   secureTextEntry={true}
                   value={password1}
@@ -85,7 +86,7 @@ export default props => {
                   />
                 </Preview>
 
-                <IconIndicatorText>(click to change icon)</IconIndicatorText>
+                <IconIndicatorText>({dic('click to change icon')})</IconIndicatorText>
                 <Flex
                   css={{flexDirection: 'row', justifyContent: 'space-evenly'}}>
                   <Box width={1 / 3}>
@@ -93,7 +94,7 @@ export default props => {
                       onPress={() =>
                         setJournalModalVisible(!journalModalVisible)
                       }>
-                      <ButtonText enabled={true}>Cancel</ButtonText>
+                      <ButtonText enabled={true}>{dic('Cancel')}</ButtonText>
                     </CancelButton>
                   </Box>
                   <Box width={1 / 3}>
@@ -122,7 +123,7 @@ export default props => {
                       }}>
                       <ButtonText
                         enabled={password1 === password2 || password1 === ''}>
-                        Create
+                        {dic('Create')}
                       </ButtonText>
                     </CreateButton>
                   </Box>

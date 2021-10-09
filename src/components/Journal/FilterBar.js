@@ -8,6 +8,7 @@ import {FilterModal} from '.';
 import {Filter} from '../../models';
 
 export default props => {
+  const dic = props.dic;
   const availableTags = useMemo(
     () => Filter.getAvailableProperties(props.data),
     [props.data],
@@ -49,6 +50,7 @@ export default props => {
   return (
     <FilterBar>
       <FilterModal
+        dic={dic}
         show={filterModalVisibility}
         unShow={() => setFilterModalVisibility(!filterModalVisibility)}
         availableTags={availableTags.tags}
@@ -70,7 +72,7 @@ export default props => {
 
       <FilterIput
         autoCorrect={false}
-        placeholder="search filter"
+        placeholder={dic('search filter')}
         value={query}
         onChange={event => {
           setQuery(event.nativeEvent.text);

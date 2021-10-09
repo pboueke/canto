@@ -6,7 +6,7 @@ import Icon from 'react-native-vector-icons/Feather';
 import {JournalSettings} from '../../models';
 import {SlidePicker} from '../common';
 
-export default ({journal, show, unShow, onChange}) => {
+export default ({journal, show, unShow, dic, onChange}) => {
   const [settings, setSettings] = useState(
     journal.settings ?? new JournalSettings(),
   );
@@ -20,10 +20,13 @@ export default ({journal, show, unShow, onChange}) => {
       .map(p => {
         return (
           <ModalRow border key={p}>
-            <StaticText>{JournalSettings.getOptions(p).label}</StaticText>
+            <StaticText>{dic(JournalSettings.getOptions(p).label)}</StaticText>
             <SlidePicker
               value={states[settingLabels.indexOf(p)][0]}
-              values={JournalSettings.getOptions(p).values}
+              values={JournalSettings.getOptions(p).values.map(v => ({
+                value: v,
+                label: dic(v),
+              }))}
               onChangeValue={val => {
                 states[settingLabels.indexOf(p)][1](val);
                 let newSettings = settings;
@@ -41,7 +44,7 @@ export default ({journal, show, unShow, onChange}) => {
       .filter(l => JournalSettings.getOptions(l).ui === 'switch')
       .map(s => (
         <ModalRow border key={s}>
-          <StaticText>{JournalSettings.getOptions(s).label}</StaticText>
+          <StaticText>{dic(JournalSettings.getOptions(s).label)}</StaticText>
           <SettingSwitch
             value={states[settingLabels.indexOf(s)][0]}
             onValueChange={val => {
@@ -65,17 +68,18 @@ export default ({journal, show, unShow, onChange}) => {
         <ModalInterior>
           <ModalRow>
             <ModalTitle>
-              {journal.content.title} <TextLight>Settings</TextLight>
+              {journal.content.title} <TextLight>{dic('Settings')}</TextLight>
             </ModalTitle>
             <IconBtn onPress={unShow} name="x" />
           </ModalRow>
           <ModalRow border>
             <StaticText size={20}>
-              <StaticText bold>{journal.content.pages.length}</StaticText> page
-              {journal.content.pages.length === 1 ? '' : 's'} created
+              <StaticText bold>{journal.content.pages.length}</StaticText>{' '}
+              {dic('page')}
+              {journal.content.pages.length === 1 ? '' : 's'} {dic('created')}
             </StaticText>
             <StaticText size={20}>
-              since{' '}
+              {dic('since')}{' '}
               <StaticText bold size={20}>
                 {new Date(journal.content.date).toLocaleDateString()}
               </StaticText>
@@ -180,6 +184,7 @@ const StaticText = styled.Text`
     p.bold ? p.theme.font.menu.bold : p.theme.font.menu.reg};
   font-size: ${p => p.size ?? 18}px;
   color: ${p => p.theme.textColor};
+  max-width: 250px;
 `;
 
 const ModalTitle = styled.Text`

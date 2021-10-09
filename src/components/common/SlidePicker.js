@@ -3,21 +3,24 @@ import styled from 'styled-components';
 import Icon from 'react-native-vector-icons/Feather';
 
 export default ({onChangeValue, values, value, width}) => {
-  const currentIndex = values.indexOf(value) === -1 ? 0 : values.indexOf(value);
+  const currentIndex =
+    values.map(v => v.value).indexOf(value) === -1
+      ? 0
+      : values.map(v => v.value).indexOf(value);
   const getValueToTheLeft = () => {
     const id = currentIndex === 0 ? values.length - 1 : currentIndex - 1;
-    return values[id];
+    return values[id].value;
   };
   const getValueToTheRight = () => {
     const id = currentIndex === values.length - 1 ? 0 : currentIndex + 1;
-    return values[id];
+    return values[id].value;
   };
   return (
     <Wrapper width={width}>
       <Btn onPress={() => onChangeValue(getValueToTheLeft())}>
         <IconBtn name="chevron-left" />
       </Btn>
-      <TextValue>{values[currentIndex]}</TextValue>
+      <TextValue>{values[currentIndex].label}</TextValue>
       <Btn onPress={() => onChangeValue(getValueToTheRight())}>
         <IconBtn name="chevron-right" />
       </Btn>

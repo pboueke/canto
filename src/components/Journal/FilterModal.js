@@ -6,7 +6,7 @@ import Icon from 'react-native-vector-icons/Feather';
 import {Flex, Box} from 'native-grid-styled';
 import {TagsTable} from '../common';
 
-export default ({show, unShow, data, availableTags, onChange}) => (
+export default ({show, unShow, data, availableTags, dic, onChange}) => (
   <FilterModal
     animationType="slide"
     transparent={true}
@@ -16,15 +16,15 @@ export default ({show, unShow, data, availableTags, onChange}) => (
     <EmptyBlock right={0} width={100} />
     <Scroll>
       <CloseButton onPress={unShow}>
-        <ModalTitle>Change filters</ModalTitle>
+        <ModalTitle>{dic('Change filters')}</ModalTitle>
         <CloseIcon name="x" size={30} />
       </CloseButton>
       <FilterModalInterior>
         <Flex css={binaryWrapperStyle.flex}>
           <BinaryBox width={1 / 3}>
-            <BinaryText size={10}>(must have)</BinaryText>
+            <BinaryText size={10}>({dic('must have')})</BinaryText>
             <Flex css={binaryWrapperStyle.innerFlex}>
-              <Bold>Image</Bold>
+              <Bold>{dic('Image')}</Bold>
               <BinaryIcon name="image" />
             </Flex>
             <BinarySwitch
@@ -33,9 +33,9 @@ export default ({show, unShow, data, availableTags, onChange}) => (
             />
           </BinaryBox>
           <BinaryBox width={1 / 3}>
-            <BinaryText size={10}>(must have)</BinaryText>
+            <BinaryText size={10}>({dic('must have')})</BinaryText>
             <Flex css={binaryWrapperStyle.innerFlex}>
-              <Bold>File</Bold>
+              <Bold>{dic('File')}</Bold>
               <BinaryIcon name="paperclip" />
             </Flex>
             <BinarySwitch
@@ -44,9 +44,9 @@ export default ({show, unShow, data, availableTags, onChange}) => (
             />
           </BinaryBox>
           <BinaryBox width={1 / 3}>
-            <BinaryText size={10}>(must have)</BinaryText>
+            <BinaryText size={10}>({dic('must have')})</BinaryText>
             <Flex css={binaryWrapperStyle.innerFlex}>
-              <Bold>Location</Bold>
+              <Bold>{dic('Location')}</Bold>
               <BinaryIcon name="map-pin" />
             </Flex>
             <BinarySwitch
@@ -55,14 +55,16 @@ export default ({show, unShow, data, availableTags, onChange}) => (
             />
           </BinaryBox>
         </Flex>
-        <Row name="Selected Tags" icon="tag" action="remove" />
+        <Row name={dic('Selected Tags')} icon="tag" action={dic('remove')} />
         <TagsTable
+          dic={dic}
           mode="remove"
           tags={data.tags}
           onChange={newTags => onChange({...data, tags: newTags})}
         />
-        <Row name="Available Tags" icon="tag" action="add" />
+        <Row name={dic('Available Tags')} icon="tag" action={dic('add')} />
         <TagsTable
+          dic={dic}
           mode="add"
           tags={data.tags}
           allTags={availableTags}

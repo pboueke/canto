@@ -3,6 +3,7 @@ import styled from 'styled-components/native';
 import {Flex, Box} from 'native-grid-styled';
 
 export default props => {
+  const dic = props.dic;
   const [value, setValue] = useState('');
   return (
     <TextInputModal
@@ -32,7 +33,7 @@ export default props => {
                 }
                 props.unShow();
               }}>
-              <ButtonText enabled={true}>Cancel</ButtonText>
+              <ButtonText enabled={true}>{dic('Cancel')}</ButtonText>
             </CancelButton>
           </Box>
           <Box width={1 / 3}>
@@ -46,7 +47,7 @@ export default props => {
                 }
               }}>
               <ButtonText enabled={value !== ''}>
-                {props.submit ?? 'submit'}
+                {props.submit ?? dic('submit')}
               </ButtonText>
             </SubmitButton>
           </Box>

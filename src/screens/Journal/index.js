@@ -12,6 +12,7 @@ import {
   SettingsModal,
 } from '../../components/Journal';
 import {Page, Filter, JournalContent, JournalSettings} from '../../models';
+import Dictionary from '../../Dictionary';
 import {metadata} from '../..';
 
 export default ({navigation, route}) => {
@@ -36,11 +37,12 @@ export default ({navigation, route}) => {
   const [pageList, setPageList] = useState(journalDataState.content.pages);
   const [settingsVisibility, setSettingsVisibility] = useState(false);
 
+  const dic = Dictionary(props.lang);
+
   React.useEffect(() => {
     const unsubscribe = navigation.addListener('focus', () => {
       const data = MMKV.getMap(props.journal.id);
       setJournalDataState(data);
-      console.log(data.settings);
       if (data.settings.sort === 'ascending') {
         setPageList(Filter.sortAscending(data.content.pages));
       } else if (data.settings.sort === 'descending') {
@@ -76,6 +78,7 @@ export default ({navigation, route}) => {
     <Container onPress={() => Keyboard.dismiss()}>
       {journalDataState.settings.filterBar && (
         <FilterBar
+          dic={dic}
           data={journalDataState.content.pages}
           journal={props.journal}
           onChange={setPageList}
@@ -91,6 +94,7 @@ export default ({navigation, route}) => {
             newPage: false,
             key: props.key,
             parent: props.journal.id,
+            lang: props.lang,
             settings: journalDataState.settings,
             tags: Filter.getAvailableProperties(journalDataState.content.pages)
               .tags,
@@ -105,6 +109,7 @@ export default ({navigation, route}) => {
             newPage: true,
             key: props.key,
             parent: props.journal.id,
+            lang: props.lang,
             settings: journalDataState.settings,
             tags: Filter.getAvailableProperties(journalDataState.content.pages)
               .tags,
@@ -113,6 +118,7 @@ export default ({navigation, route}) => {
       />
       {settingsVisibility && (
         <SettingsModal
+          dic={dic}
           journal={journalDataState}
           show={settingsVisibility}
           unShow={() => setSettingsVisibility(!settingsVisibility)}

@@ -5,7 +5,7 @@ import Icon from 'react-native-vector-icons/Feather';
 import {Flex} from 'native-grid-styled';
 
 const TagsTable = withTheme(
-  ({tags, allTags, onChange, mode = 'in-use', theme}) => {
+  ({tags, allTags, onChange, mode = 'in-use', theme, dic}) => {
     let tagsToDisplay = allTags ?? tags;
     let action, color, icon, emptyMessage;
     switch (mode) {
@@ -13,19 +13,19 @@ const TagsTable = withTheme(
         action = tag => onChange(tags.filter(t => t !== tag));
         color = theme.tag.removeBg;
         icon = 'x';
-        emptyMessage = 'no tags selected';
+        emptyMessage = dic('no tags selected');
         break;
       case 'add':
         action = tag => onChange(Array.from(new Set(tags).add(tag)));
         color = theme.tag.addBg;
         icon = 'plus';
-        emptyMessage = 'no more tags in use in this journal';
+        emptyMessage = dic('no more tags in use in this journal');
         break;
       case 'in-use':
         action = tag => onChange(tags.filter(t => t !== tag));
         color = theme.tag.inUseBg;
         icon = 'x';
-        emptyMessage = 'no tags in use in this page';
+        emptyMessage = dic('no tags in use in this page');
         break;
     }
 

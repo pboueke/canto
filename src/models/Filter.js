@@ -99,13 +99,11 @@ export default class Filter {
       return res;
     };
 
-    return Filter.sort(
-      applyQuery(
-        this.query,
-        applyFilters(
-          this.properties,
-          applyDate(this.dateStart, this.dateEnd, pages),
-        ),
+    return applyQuery(
+      this.query,
+      applyFilters(
+        this.properties,
+        applyDate(this.dateStart, this.dateEnd, pages),
       ),
     );
   }
