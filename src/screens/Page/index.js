@@ -15,7 +15,7 @@ import {PageText, PageHeader, EditPageAttachments} from '../../components/Page';
 import {Page} from '../../models';
 import {openLocationExternally, getDate} from '../../lib';
 import {metadata} from '../..';
-import {removeFile, shareFile} from '../../lib';
+import {removeFile, shareFile, addLocation} from '../../lib';
 import reactUsestateref from 'react-usestateref';
 
 export default ({navigation, route}) => {
@@ -54,6 +54,10 @@ export default ({navigation, route}) => {
     location: pageData.content.location,
     thumbnail: pageData.content.thumbnail,
   });
+
+  if (props.newPage && props.settings.autoLocation && !attachments.location) {
+    addLocation(loc => setAttachments({...attachments, location: loc}));
+  }
 
   const deletePageData = id => {
     let tmp = journalData;
@@ -184,6 +188,7 @@ export default ({navigation, route}) => {
           value={text}
           onChange={setText}
           editMode={editMode}
+          showPlaceholder={props.settings.showMarkdownPlaceholder}
           dic={dic}
         />
 

@@ -24,7 +24,7 @@ const addLocation = async (setLocation, callback) => {
   if (granted === PermissionsAndroid.RESULTS.GRANTED) {
     Page.setLocation(loc => {
       setLocation(loc);
-      callback();
+      callback && callback();
     });
   } else {
     Alert.alert(

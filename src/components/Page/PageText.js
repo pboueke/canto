@@ -35,11 +35,14 @@ A formatação será aplicada depois que as mudanças forem salvas.
 `;
 
 export default props => {
-  let placeholder = enPlaceholder;
-  switch (props.dic('en')) {
-    case 'pt':
-      placeholder = ptPlaceholder;
-      break;
+  let placeholder = '';
+  if (props.showPlaceholder) {
+    placeholder = enPlaceholder;
+    switch (props.dic('en')) {
+      case 'pt':
+        placeholder = ptPlaceholder;
+        break;
+    }
   }
 
   return (

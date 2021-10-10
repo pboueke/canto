@@ -145,6 +145,7 @@ const ModalRow = ({children, border}) => {
     padding: 0 10px 0 5px;
     border-bottom-width: ${p => (border ? 1 : 0)}px;
     border-color: ${p => p.theme.borderColor};
+    align-items: center;
   `;
   const Item = styled.View`
     flex-shrink: 1;

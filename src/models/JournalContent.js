@@ -18,22 +18,5 @@ export default class JournalContent {
       pages,
       srcVersion,
     });
-    this.settings = new Settings(settings);
-  }
-}
-
-class Settings {
-  constructor({
-    showThumbnails = true,
-    showFirstLine = true,
-    showMarkdownPlaceholder = true,
-    autoLocation = false,
-  }) {
-    Object.assign(this, {
-      showThumbnails,
-      showFirstLine,
-      showMarkdownPlaceholder,
-      autoLocation,
-    });
   }
 }

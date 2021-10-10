@@ -94,13 +94,13 @@ const text = {
   'Use 24h format': {
     pt: 'Usar formato de tempo com 24h',
   },
-  'Show tags on page listing': {
+  'Show tags on page previews': {
     pt: 'Mostrar tags das páginas',
   },
-  'Show thumbnail on page listing': {
+  'Show thumbnail on page previews': {
     pt: 'Mostar imagem das páginas',
   },
-  'Show content indicators on page listing': {
+  'Show content indicators on page previews': {
     pt: 'Mostrar indicadores de conteúdo das páginas',
   },
   'Enable the journal filter bar': {
@@ -146,7 +146,7 @@ const text = {
     pt: 'Tem certeza que quer deletar essa página?',
   },
   'Please write the text below to confirm deletion': {
-    pt: 'Por favor escreva o texto abaixo para confirmar a delećão',
+    pt: 'Por favor escreva o texto abaixo para confirmar a deleção',
   },
   'Delete': {
     pt: 'Deletar',
@@ -189,6 +189,12 @@ const text = {
   },
   'Change language': {
     pt: 'Mudar idioma',
+  },
+  'Show markdown tips on new pages': {
+    pt: 'Mostrar dicas de markdown em novas páginas',
+  },
+  'Automatically add location data to new pages': {
+    pt: 'Adicionar localização automaticamente',
   },
 };
 

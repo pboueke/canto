@@ -6,6 +6,8 @@ export default class JournalSettings {
     previewIcons = true,
     filterBar = true,
     sort = 'ascending',
+    showMarkdownPlaceholder = true,
+    autoLocation = false,
   } = {}) {
     Object.assign(this, {
       use24h,
@@ -14,6 +16,8 @@ export default class JournalSettings {
       previewIcons,
       filterBar,
       sort,
+      showMarkdownPlaceholder,
+      autoLocation,
     });
   }
 
@@ -25,22 +29,32 @@ export default class JournalSettings {
 const options = {
   use24h: {label: 'Use 24h format', ui: 'switch', values: [true, false]},
   previewTags: {
-    label: 'Show tags on page listing',
+    label: 'Show tags on page previews',
     ui: 'switch',
     values: [true, false],
   },
   previewThumbnail: {
-    label: 'Show thumbnail on page listing',
+    label: 'Show thumbnail on page previews',
     ui: 'switch',
     values: [true, false],
   },
   previewIcons: {
-    label: 'Show content indicators on page listing',
+    label: 'Show content indicators on page previews',
     ui: 'switch',
     values: [true, false],
   },
   filterBar: {
     label: 'Enable the journal filter bar',
+    ui: 'switch',
+    values: [true, false],
+  },
+  showMarkdownPlaceholder: {
+    label: 'Show markdown tips on new pages',
+    ui: 'switch',
+    values: [true, false],
+  },
+  autoLocation: {
+    label: 'Automatically add location data to new pages',
     ui: 'switch',
     values: [true, false],
   },
