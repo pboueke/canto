@@ -13,31 +13,36 @@ import {
 import Dictionary from '../../Dictionary';
 import {PageText, PageHeader, EditPageAttachments} from '../../components/Page';
 import {Page} from '../../models';
-import {openLocationExternally, getDate} from '../../lib';
+import {openLocationExternally, getDate, kEnc, kDec} from '../../lib';
 import {metadata} from '../..';
 import {removeFile, shareFile, addLocation} from '../../lib';
 import reactUsestateref from 'react-usestateref';
 
 export default ({navigation, route}) => {
   const props = route.params;
+  const getKey = () => `${props.parent}${(props.key || ['']).join('')}`;
+  const enc = kEnc(getKey());
+  const dec = kDec(getKey());
 
   const MMKV = new MMKVStorage.Loader()
-    .withInstanceID(metadata.mmkvInstance)
+    .withInstanceID(`${metadata.mmkvInstance}`)
     .withEncryption()
-    .encryptWithCustomKey((props.key || [...metadata.defaultKey]).join(''))
     .initialize();
 
   const dic = Dictionary(props.lang);
 
-  const journalData = MMKV.getMap(props.parent);
-  let pageData = MMKV.getMap(props.page.id);
-  if (!pageData) {
-    MMKV.setMap(props.page.id, {
-      content: new Page(props.Page),
-      rand: (Math.random() + 1).toString(36).substring(7),
-    });
+  const journalData = dec(MMKV.getString(props.parent));
+  const storedData = MMKV.getString(props.page.id);
+  if (!storedData) {
+    MMKV.setString(
+      props.page.id,
+      enc({
+        content: new Page(props.Page),
+        rand: (Math.random() + 1).toString(36).substring(7),
+      }),
+    );
   }
-  pageData = MMKV.getMap(props.page.id);
+  const pageData = dec(MMKV.getString(props.page.id));
   const [orgValueString, setOrgValueString] = reactUsestateref(
     JSON.stringify(pageData),
   );
@@ -67,7 +72,7 @@ export default ({navigation, route}) => {
         break;
       }
     }
-    MMKV.setMap(props.parent, tmp);
+    MMKV.setString(props.parent, enc(tmp));
     MMKV.removeItem(id);
     deleteAllFiles();
     navigation.goBack();
@@ -85,7 +90,7 @@ export default ({navigation, route}) => {
     } else {
       tmp.content.pages.push(page);
     }
-    MMKV.setMap(props.parent, tmp);
+    MMKV.setString(props.parent, enc(tmp));
   };
 
   const createUpdatedPage = () => {
@@ -128,7 +133,7 @@ export default ({navigation, route}) => {
     let curr = createUpdatedPage();
     curr.thumbnail = updateThumbnail();
     deletePendingFiles(false);
-    MMKV.setMap(pageData.content.id, curr);
+    MMKV.setString(pageData.content.id, enc(curr));
     setOrgValueString(JSON.stringify(curr));
     saveJournalData(curr.content.getPreview(), stored);
     setStored(true);

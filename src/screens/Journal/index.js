@@ -12,28 +12,34 @@ import {
   SettingsModal,
 } from '../../components/Journal';
 import {Page, Filter, JournalContent, JournalSettings} from '../../models';
-import {removeFile} from '../../lib';
+import {removeFile, kEnc, kDec} from '../../lib';
 import Dictionary from '../../Dictionary';
 import {metadata} from '../..';
 
 export default ({navigation, route}) => {
   const props = route.params;
+  const getKey = () => `${props.journal.id}${(props.key || ['']).join('')}`;
+  const enc = kEnc(getKey());
+  const dec = kDec(getKey());
   const theme = useContext(ThemeContext);
   const MMKV = new MMKVStorage.Loader()
-    .withInstanceID(metadata.mmkvInstance)
+    .withInstanceID(`${metadata.mmkvInstance}`)
     .withEncryption()
-    .encryptWithCustomKey((props.key || [...metadata.defaultKey]).join(''))
     .initialize();
 
-  let journalDataStorage = MMKV.getMap(props.journal.id);
-  if (!journalDataStorage) {
-    MMKV.setMap(props.journal.id, {
-      content: new JournalContent({cover: props.journal}),
-      settings: new JournalSettings(),
-      rand: (Math.random() + 1).toString(36).substring(7),
-    });
+  const storedData = MMKV.getString(props.journal.id);
+  if (!storedData) {
+    MMKV.setString(
+      props.journal.id,
+      enc({
+        content: new JournalContent({cover: props.journal}),
+        settings: new JournalSettings(),
+        rand: (Math.random() + 1).toString(36).substring(7),
+      }),
+    );
   }
-  journalDataStorage = MMKV.getMap(props.journal.id);
+
+  const journalDataStorage = dec(MMKV.getString(props.journal.id), getKey());
   const [journalDataState, setJournalDataState] = useState(journalDataStorage);
   const [pageList, setPageList] = useState(journalDataState.content.pages);
   const [settingsVisibility, setSettingsVisibility] = useState(false);
@@ -41,17 +47,19 @@ export default ({navigation, route}) => {
   const dic = Dictionary(props.lang);
 
   React.useEffect(() => {
-    const unsubscribe = navigation.addListener('focus', () => {
-      const data = MMKV.getMap(props.journal.id);
-      setJournalDataState(data);
-      if (data.settings.sort === 'ascending') {
-        setPageList(Filter.sortAscending(data.content.pages));
-      } else if (data.settings.sort === 'descending') {
-        setPageList(Filter.sortDescending(data.content.pages));
-      }
-    });
-    return unsubscribe;
-  }, [navigation, props, MMKV, setJournalDataState, pageList]);
+    const unsubscribe = [
+      navigation.addListener('focus', () => {
+        const data = dec(MMKV.getString(props.journal.id));
+        setJournalDataState(data);
+        if (data.settings.sort === 'ascending') {
+          setPageList(Filter.sortAscending(data.content.pages));
+        } else if (data.settings.sort === 'descending') {
+          setPageList(Filter.sortDescending(data.content.pages));
+        }
+      }),
+    ];
+    return () => unsubscribe.forEach(u => u());
+  }, [navigation, props, MMKV, setJournalDataState, pageList, dec]);
 
   React.useLayoutEffect(() => {
     navigation.setOptions({
@@ -104,7 +112,7 @@ export default ({navigation, route}) => {
     journalDataState.content.pages
       .map(p => p.id)
       .forEach(id => {
-        const page = MMKV.getMap(id);
+        const page = dec(MMKV.getString(id));
         page.content.images.forEach(i => removeFile(i));
         page.content.files.forEach(f => removeFile(f.path));
         MMKV.removeItem(id);
@@ -169,7 +177,10 @@ export default ({navigation, route}) => {
           unShow={() => setSettingsVisibility(!settingsVisibility)}
           onChange={(val, sort) => {
             setJournalDataState({settings: val, ...journalDataState});
-            MMKV.setMap(props.journal.id, {settings: val, ...journalDataState});
+            MMKV.setString(
+              props.journal.id,
+              enc({settings: val, ...journalDataState}, getKey()),
+            );
             if (sort) {
               if (val.sort === 'ascending') {
                 setPageList(

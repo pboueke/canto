@@ -14,3 +14,4 @@ export {
   shareFile,
   saveImage,
 } from './Attachments';
+export {cryptoStorage, enc, dec, kEnc, kDec} from './CryptoStorage';
