@@ -1,16 +1,29 @@
 import React, {useState} from 'react';
 import styled from 'styled-components/native';
 import {Flex, Box} from 'native-grid-styled';
+import {Loader} from '.';
 
 export default props => {
   const dic = props.dic;
-  const [value, setValue] = useState('');
+  const [confirmValue, setConfirmValue] = useState('');
+  const [password, setPassword] = useState('');
+  const [passwordFailed, setPasswordFailed] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const passwordCheck = props.passwordCheck;
   const confirmationSting = props.confirmationSting;
   const requireValidation = confirmationSting || confirmationSting === '';
-  const ready = !requireValidation || value === confirmationSting;
+  const ready = !requireValidation || confirmValue === confirmationSting;
   const close = () => {
     props.unShow();
-    setValue('');
+    setConfirmValue('');
+    setLoading(false);
+  };
+  const getHeight = () => {
+    let h = 180;
+    h += requireValidation ? 150 : 0;
+    h += passwordCheck ? 60 : 0;
+    h += requireValidation && passwordCheck ? 20 : 0;
+    return h;
   };
   return (
     <ConfirmModal
@@ -19,8 +32,10 @@ export default props => {
       visible={props.show}
       onRequestClose={close}>
       {props.shadow && <ModalBackground />}
-      <ModalInterior marginTop={props.marginTop} large={requireValidation}>
-        <ModalTitle>{dic('Are you sure to delete this page?')}</ModalTitle>
+      <ModalInterior marginTop={props.marginTop} size={getHeight()}>
+        <ModalTitle>
+          {props.message ?? dic('Are you sure to delete this page?')}
+        </ModalTitle>
         {requireValidation && (
           <TextFieldConfirmation>
             {dic('Please write the text below to confirm deletion')}
@@ -31,9 +46,22 @@ export default props => {
         )}
         {requireValidation && (
           <TextField
-            value={value}
-            onChangeText={setValue}
+            value={confirmValue}
+            onChangeText={setConfirmValue}
             placeholder={props.placeholder ?? ''}
+          />
+        )}
+        {passwordCheck && (
+          <TextFieldConfirmation bad={passwordFailed}>
+            {dic(passwordFailed ? 'Wrong Password' : 'Confirm password')}
+          </TextFieldConfirmation>
+        )}
+        {passwordCheck && (
+          <TextField
+            value={password}
+            onChangeText={setPassword}
+            placeholder={dic('Password').toLowerCase()}
+            secureTextEntry={true}
           />
         )}
         <Flex
@@ -52,8 +80,25 @@ export default props => {
             <SubmitButton
               enabled={ready}
               onPress={() => {
-                if (ready) {
-                  props.onDelete();
+                if (passwordCheck) {
+                  setLoading(true);
+                  if (ready) {
+                    passwordCheck(password, (err, res) => {
+                      if (err) {
+                        console.log(err);
+                        setPasswordFailed(true);
+                      }
+                      setLoading(false);
+                      if (res) {
+                        props.onConfirm();
+                        close();
+                      } else {
+                        setPasswordFailed(true);
+                      }
+                    });
+                  }
+                } else if (ready) {
+                  props.onConfirm();
                   close();
                 }
               }}>
@@ -65,6 +110,7 @@ export default props => {
         </Flex>
       </ModalInterior>
       {props.children}
+      <Loader loading={loading} top={37} />
     </ConfirmModal>
   );
 };
@@ -97,7 +143,7 @@ const ModalInterior = styled.View`
   flex-direction: column;
   align-items: center;
   width: 350px;
-  height: ${p => (p.large ? 335 : 180)}px;
+  height: ${p => p.size ?? 180}px;
   background-color: ${p => p.theme.modalBg};
   border-width: ${p => p.theme.borderWidth};
   border-radius: 5px;
@@ -109,7 +155,7 @@ const ModalInterior = styled.View`
 
 const TextFieldConfirmation = styled.Text`
   font-family: ${p => p.theme.font.menu.reg};
-  color: ${p => p.theme.textColor};
+  color: ${p => (p.bad ? p.theme.failTextColor : p.theme.textColor)};
   font-size: 14px;
   text-align: center;
   margin: 5px;

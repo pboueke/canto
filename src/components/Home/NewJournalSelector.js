@@ -28,7 +28,7 @@ export default props => {
     return (
       <Box>
         <TextFieldTitle ok={top === bottom} validate={true}>
-        {dic('Confirm password (you can´t change it later)')}
+          {dic('Confirm password (you can´t change it later)')}
         </TextFieldTitle>
         <TextField
           secureTextEntry={true}
@@ -63,13 +63,15 @@ export default props => {
             <Scroll>
               <NewJournalModalInterior>
                 <NewJournalModalTitle>
-                {dic('Create a new Journal?')}
+                  {dic('Create a new Journal?')}
                 </NewJournalModalTitle>
 
                 <TextFieldTitle>{dic('Title')}</TextFieldTitle>
                 <TextField value={title} onChangeText={setTitle} />
 
-                <TextFieldTitle>{dic('Password (leave empty for none)')}</TextFieldTitle>
+                <TextFieldTitle>
+                  {dic('Password (leave empty for none)')}
+                </TextFieldTitle>
                 <TextField
                   secureTextEntry={true}
                   value={password1}
@@ -86,7 +88,9 @@ export default props => {
                   />
                 </Preview>
 
-                <IconIndicatorText>({dic('click to change icon')})</IconIndicatorText>
+                <IconIndicatorText>
+                  ({dic('click to change icon')})
+                </IconIndicatorText>
                 <Flex
                   css={{flexDirection: 'row', justifyContent: 'space-evenly'}}>
                   <Box width={1 / 3}>

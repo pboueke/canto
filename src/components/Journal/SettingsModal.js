@@ -3,10 +3,15 @@ import {Switch} from 'react-native';
 import styled from 'styled-components/native';
 import {withTheme} from 'styled-components';
 import Icon from 'react-native-vector-icons/Feather';
-import {JournalSettings} from '../../models';
-import {SlidePicker} from '../common';
+import {JournalCover, JournalSettings} from '../../models';
+import {SlidePicker, ConfirmModal, TextInputModal} from '../common';
 
-export default ({journal, show, unShow, dic, onChange}) => {
+export default ({journal, show, unShow, dic, danger, onChange}) => {
+  const [confirmVisibility, setConfirmVisibility] = useState(false);
+  const [inputVisibility, setInputVisibility] = useState(false);
+  const [inputValue, setInputValue] = useState('');
+  const [inputSubmit, setInputSubmit] = useState();
+  const [confirmSubmit, setConfirmSubmit] = useState();
   const [settings, setSettings] = useState(
     journal.settings ?? new JournalSettings(),
   );
@@ -72,24 +77,111 @@ export default ({journal, show, unShow, dic, onChange}) => {
             </ModalTitle>
             <IconBtn onPress={unShow} name="x" />
           </ModalRow>
-          <ModalRow border>
-            <StaticText size={20}>
+          <ModalRow border wrap>
+            <StaticText size={20} mw={400}>
               <StaticText bold>{journal.content.pages.length}</StaticText>{' '}
               {dic('page')}
-              {journal.content.pages.length === 1 ? '' : 's'} {dic('created')}
+              {journal.content.pages.length === 1 ? '' : 's'} {dic('created')}{' '}
+              {dic('since')}:
             </StaticText>
-            <StaticText size={20}>
-              {dic('since')}{' '}
+            <StaticText size={20} mw={400}>
+              {'  '}
               <StaticText bold size={20}>
-                {new Date(journal.content.date).toLocaleDateString()}
+                {new Date(journal.content.date).toDateString()}
               </StaticText>
             </StaticText>
           </ModalRow>
+          <EmptyBlock height={20} />
+          <ModalRow>
+            <StaticText size={26}>{dic('Toggles and Options')}</StaticText>
+          </ModalRow>
           {getSwitches()}
           {getPickers()}
+          <EmptyBlock height={20} />
+          <ModalRow>
+            <StaticText size={26}>{dic('Danger Zone')}</StaticText>
+          </ModalRow>
+          <ModalRow border>
+            <SettingsIcon name="type" />
+            <SettingsButton
+              text={dic('Change Journal Name')}
+              onPress={() => {
+                setInputValue('');
+                setInputSubmit(() => val => {
+                  if (journal.content.secure) {
+                    setConfirmSubmit(() => name => danger.setName(name));
+                    setConfirmVisibility(!confirmVisibility);
+                  } else {
+                    danger.setName(val);
+                  }
+                });
+                setInputVisibility(!inputVisibility);
+              }}
+            />
+            <SettingsIcon name="alert-triangle" />
+          </ModalRow>
+          {false /*&& notYetFUnctional*/ && (
+            <ModalRow border>
+              <SettingsIcon name="key" />
+              <SettingsButton
+                text={dic('Change Journal Password')}
+                onPress={() => {
+                  setInputValue('');
+                  setInputSubmit(() => val => {
+                    if (journal.content.secure) {
+                      setConfirmSubmit(() => pswd => danger.setPassword(pswd));
+                      setConfirmVisibility(!confirmVisibility);
+                    } else {
+                      danger.setPassword(val);
+                    }
+                  });
+                  setInputVisibility(!inputVisibility);
+                }}
+              />
+              <SettingsIcon name="alert-triangle" />
+            </ModalRow>
+          )}
+          {false /*&& notYetFUnctional*/ && (
+            <ModalRow border>
+              <SettingsIcon name="trash-2" />
+              <SettingsButton
+                text={dic('Delete Journal')}
+                onPress={() => {
+                  setConfirmSubmit(() => () => danger.doDelete());
+                  setConfirmVisibility(!confirmVisibility);
+                }}
+              />
+              <SettingsIcon name="alert-triangle" />
+            </ModalRow>
+          )}
           <EmptyBlock />
         </ModalInterior>
       </Scroll>
+      <TextInputModal
+        dic={dic}
+        submit={dic('Ok')}
+        placeholder={dic('new value')}
+        shadow={true}
+        onSubmit={val => {
+          setInputValue(val);
+          inputSubmit(val);
+        }}
+        show={inputVisibility}
+        unShow={() => setInputVisibility(!inputVisibility)}
+      />
+      <ConfirmModal
+        dic={dic}
+        message={dic('Confirm password')}
+        submit={dic('Change')}
+        show={confirmVisibility}
+        unShow={() => setConfirmVisibility(!confirmVisibility)}
+        passwordCheck={(key, callback) =>
+          JournalCover.unlock(key, journal.content.hash, callback)
+        }
+        onConfirm={() => {
+          confirmSubmit(inputValue);
+        }}
+      />
     </SettingsModal>
   );
 };
@@ -135,8 +227,9 @@ const ModalInterior = styled.View`
   background-color: ${p => p.theme.modalBg};
 `;
 
-const ModalRow = ({children, border}) => {
+const ModalRow = ({children, border, wrap}) => {
   const Row = styled.View`
+    ${p => (p.wrap ? 'flex-wrap: wrap;' : '')};
     width: 100%;
     flex: 1;
     flex-direction: row;
@@ -175,17 +268,45 @@ const SettingSwitch = withTheme(({value, onValueChange, theme}) => (
     }}
     style={{
       transform: [{scaleX: 1.2}, {scaleY: 1.2}],
-      marginTop: -10,
     }}
   />
 ));
+
+const SettingsButton = ({text, onPress}) => {
+  const Wrapper = styled.Pressable`
+    background-color: ${p => p.theme.cancelBtnBg};
+    border-width: ${p => p.theme.borderWidth};
+    border-color: ${p => p.theme.borderColor};
+    border-radius: 5px;
+    border-style: solid;
+    padding: 5px;
+    margin-bottom: 5px;
+    width: 250px;
+  `;
+  const Label = styled.Text`
+    font-family: ${p => p.theme.font.menu.bold};
+    color: ${p => p.theme.textColor};
+    font-size: 20px;
+    text-align: center;
+  `;
+  return (
+    <Wrapper onPress={onPress}>
+      <Label>{text}</Label>
+    </Wrapper>
+  );
+};
+
+const SettingsIcon = styled(Icon)`
+  color: ${p => p.theme.textColor};
+  font-size: 30px;
+`;
 
 const StaticText = styled.Text`
   font-family: ${p =>
     p.bold ? p.theme.font.menu.bold : p.theme.font.menu.reg};
   font-size: ${p => p.size ?? 18}px;
   color: ${p => p.theme.textColor};
-  max-width: 250px;
+  max-width: ${p => (p.mw ? p.mw : 250)}px;
 `;
 
 const ModalTitle = styled.Text`
@@ -202,6 +323,6 @@ const TextLight = styled.Text`
 
 const EmptyBlock = styled.View`
   width: 100%;
-  height: 200px;
+  height: ${p => p.height ?? 100}px;
   elevation: -1;
 `;

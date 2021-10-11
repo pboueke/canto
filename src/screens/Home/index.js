@@ -40,6 +40,13 @@ export default ({navigation, route}) => {
     });
   };
 
+  React.useEffect(() => {
+    const unsubscribe = navigation.addListener('focus', () => {
+      setAppData(MMKV.getMap('canto'));
+    });
+    return unsubscribe;
+  }, [navigation, setAppData]);
+
   const journals = appData.journals.map((j, i) => (
     <JournalSelector
       dic={dic}

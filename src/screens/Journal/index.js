@@ -54,7 +54,7 @@ export default ({navigation, route}) => {
 
   React.useLayoutEffect(() => {
     navigation.setOptions({
-      title: props.journal.title,
+      title: journalDataState.content.title,
       headerStyle: {
         backgroundColor: theme.headerBg,
         color: theme.textColor,
@@ -62,7 +62,7 @@ export default ({navigation, route}) => {
       headerTintColor: theme.textColor,
       headerTitle: () => (
         <JournalHeaderTitle
-          title={props.journal.title}
+          title={journalDataState.content.title}
           icon={props.journal.icon}
         />
       ),
@@ -72,7 +72,32 @@ export default ({navigation, route}) => {
         />
       ),
     });
-  }, [navigation, props, theme, settingsVisibility]);
+  }, [navigation, props, theme, settingsVisibility, journalDataState]);
+
+  const updateCover = changes => {
+    const homeMMKV = new MMKVStorage.Loader()
+      .withInstanceID(metadata.mmkvInstance)
+      .withEncryption()
+      .initialize();
+    let data = homeMMKV.getMap('canto');
+    for (let i = 0; i < data.journals.length; i++) {
+      if (data.journals[i].id === props.journal.id) {
+        data.journals[i] = {...data.journals[i], ...changes};
+      }
+    }
+    homeMMKV.setMap('canto', data);
+  };
+
+  const changeName = name => {
+    const newData = journalDataState;
+    newData.content.title = name;
+    MMKV.setMap(props.journal.id, journalDataState);
+    updateCover({title: name});
+    setJournalDataState(newData);
+  };
+
+  const changePassword = (oldOne, newOne) => {};
+  const deleteJournal = () => {};
 
   return (
     <Container onPress={() => Keyboard.dismiss()}>
@@ -119,6 +144,11 @@ export default ({navigation, route}) => {
       {settingsVisibility && (
         <SettingsModal
           dic={dic}
+          danger={{
+            setName: changeName,
+            setPassword: changePassword,
+            doDelete: deleteJournal,
+          }}
           journal={journalDataState}
           show={settingsVisibility}
           unShow={() => setSettingsVisibility(!settingsVisibility)}

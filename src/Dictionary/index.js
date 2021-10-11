@@ -86,7 +86,7 @@ const text = {
     pt: 'página',
   },
   'created': {
-    pt: 'criada(s)',
+    pt: '',
   },
   'since': {
     pt: 'desde',
@@ -195,6 +195,33 @@ const text = {
   },
   'Automatically add location data to new pages': {
     pt: 'Adicionar localização automaticamente',
+  },
+  'Toggles and Options': {
+    pt: 'Opções',
+  },
+  'Danger Zone': {
+    pt: 'Zona de Perigo',
+  },
+  'Change Journal Name': {
+    pt: 'Mudar o Nome',
+  },
+  'Change Journal Password': {
+    pt: 'Mudar a Senha',
+  },
+  'Delete Journal': {
+    pt: 'Deletar',
+  },
+  'Confirm password': {
+    pt: 'Confirme sua senha',
+  },
+  'Change': {
+    pt: 'Mudar',
+  },
+  'Ok': {
+    pt: 'OK',
+  }, 
+  'new value': {
+    pt: 'novo valor',
   },
 };
 

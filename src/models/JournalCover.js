@@ -33,9 +33,19 @@ export default class JournalCover {
 
   unlock(key, callback) {
     if (!this.secure) {
+      console.log(key);
       return callback(null, true);
     }
     bcrypt.compare(key, this.hash, (err, res) => {
+      if (err) {
+        console.log(err);
+      }
+      return callback(err, res);
+    });
+  }
+
+  static unlock(key, hash, callback) {
+    bcrypt.compare(key, hash, (err, res) => {
       if (err) {
         console.log(err);
       }

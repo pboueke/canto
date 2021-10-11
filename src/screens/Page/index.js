@@ -244,7 +244,7 @@ export default ({navigation, route}) => {
         animationType="slide"
         show={deleteModalVisibility}
         unShow={() => setDeleteModalVisibility(!deleteModalVisibility)}
-        onDelete={() => deletePageData(pageData.content.id)}
+        onConfirm={() => deletePageData(pageData.content.id)}
       />
     </Container>
   );
