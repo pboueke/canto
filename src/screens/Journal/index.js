@@ -12,6 +12,7 @@ import {
   SettingsModal,
 } from '../../components/Journal';
 import {Page, Filter, JournalContent, JournalSettings} from '../../models';
+import {removeFile} from '../../lib';
 import Dictionary from '../../Dictionary';
 import {metadata} from '../..';
 
@@ -74,7 +75,7 @@ export default ({navigation, route}) => {
     });
   }, [navigation, props, theme, settingsVisibility, journalDataState]);
 
-  const updateCover = changes => {
+  const updateCover = (changes, del = false) => {
     const homeMMKV = new MMKVStorage.Loader()
       .withInstanceID(metadata.mmkvInstance)
       .withEncryption()
@@ -82,22 +83,36 @@ export default ({navigation, route}) => {
     let data = homeMMKV.getMap('canto');
     for (let i = 0; i < data.journals.length; i++) {
       if (data.journals[i].id === props.journal.id) {
-        data.journals[i] = {...data.journals[i], ...changes};
+        if (del) {
+          data.journals.splice(i, 1);
+        } else {
+          data.journals[i] = {...data.journals[i], ...changes};
+        }
       }
     }
     homeMMKV.setMap('canto', data);
   };
 
   const changeName = name => {
-    const newData = journalDataState;
+    let newData = journalDataState;
     newData.content.title = name;
-    MMKV.setMap(props.journal.id, journalDataState);
     updateCover({title: name});
     setJournalDataState(newData);
   };
 
-  const changePassword = (oldOne, newOne) => {};
-  const deleteJournal = () => {};
+  const deleteJournal = () => {
+    journalDataState.content.pages
+      .map(p => p.id)
+      .forEach(id => {
+        const page = MMKV.getMap(id);
+        page.content.images.forEach(i => removeFile(i));
+        page.content.files.forEach(f => removeFile(f.path));
+        MMKV.removeItem(id);
+      });
+    MMKV.removeItem(props.journal.id);
+    updateCover({}, true);
+    navigation.goBack();
+  };
 
   return (
     <Container onPress={() => Keyboard.dismiss()}>
@@ -146,7 +161,7 @@ export default ({navigation, route}) => {
           dic={dic}
           danger={{
             setName: changeName,
-            setPassword: changePassword,
+            setPassword: null,
             doDelete: deleteJournal,
           }}
           journal={journalDataState}

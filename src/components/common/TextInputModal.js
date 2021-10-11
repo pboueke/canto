@@ -14,6 +14,7 @@ export default props => {
       {props.shadow && <ModalBackground />}
       <TextInputModalInterior>
         <TextField
+          secureTextEntry={props.secure}
           value={value}
           onChangeText={setValue}
           placeholder={props.placeholder ?? ''}

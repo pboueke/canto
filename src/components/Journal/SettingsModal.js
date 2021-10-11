@@ -12,6 +12,7 @@ export default ({journal, show, unShow, dic, danger, onChange}) => {
   const [inputValue, setInputValue] = useState('');
   const [inputSubmit, setInputSubmit] = useState();
   const [confirmSubmit, setConfirmSubmit] = useState();
+  const [confirmMessage, setConfirmMessage] = useState(null);
   const [settings, setSettings] = useState(
     journal.settings ?? new JournalSettings(),
   );
@@ -107,6 +108,7 @@ export default ({journal, show, unShow, dic, danger, onChange}) => {
               text={dic('Change Journal Name')}
               onPress={() => {
                 setInputValue('');
+                setConfirmMessage(null);
                 setInputSubmit(() => val => {
                   if (journal.content.secure) {
                     setConfirmSubmit(() => name => danger.setName(name));
@@ -127,6 +129,7 @@ export default ({journal, show, unShow, dic, danger, onChange}) => {
                 text={dic('Change Journal Password')}
                 onPress={() => {
                   setInputValue('');
+                  setConfirmMessage(null);
                   setInputSubmit(() => val => {
                     if (journal.content.secure) {
                       setConfirmSubmit(() => pswd => danger.setPassword(pswd));
@@ -141,19 +144,20 @@ export default ({journal, show, unShow, dic, danger, onChange}) => {
               <SettingsIcon name="alert-triangle" />
             </ModalRow>
           )}
-          {false /*&& notYetFUnctional*/ && (
+          {
             <ModalRow border>
               <SettingsIcon name="trash-2" />
               <SettingsButton
                 text={dic('Delete Journal')}
                 onPress={() => {
                   setConfirmSubmit(() => () => danger.doDelete());
+                  setConfirmMessage(`delete ${journal.content.title}`);
                   setConfirmVisibility(!confirmVisibility);
                 }}
               />
               <SettingsIcon name="alert-triangle" />
             </ModalRow>
-          )}
+          }
           <EmptyBlock />
         </ModalInterior>
       </Scroll>
@@ -172,11 +176,15 @@ export default ({journal, show, unShow, dic, danger, onChange}) => {
       <ConfirmModal
         dic={dic}
         message={dic('Confirm password')}
-        submit={dic('Change')}
+        submit={confirmMessage ? dic('Delete') : dic('Change')}
         show={confirmVisibility}
+        confirmationSting={confirmMessage}
         unShow={() => setConfirmVisibility(!confirmVisibility)}
-        passwordCheck={(key, callback) =>
-          JournalCover.unlock(key, journal.content.hash, callback)
+        passwordCheck={
+          journal.content.secure
+            ? (key, callback) =>
+                JournalCover.unlock(key, journal.content.hash, callback)
+            : null
         }
         onConfirm={() => {
           confirmSubmit(inputValue);
