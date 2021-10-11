@@ -81,14 +81,14 @@ export default props => {
               enabled={ready}
               onPress={() => {
                 if (passwordCheck) {
-                  setLoading(true);
                   if (ready) {
+                    setLoading(true);
                     passwordCheck(password, (err, res) => {
+                      setLoading(false);
                       if (err) {
                         console.log(err);
                         setPasswordFailed(true);
                       }
-                      setLoading(false);
                       if (res) {
                         props.onConfirm();
                         close();
