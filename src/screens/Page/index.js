@@ -11,9 +11,21 @@ import {
   ConfirmModal,
 } from '../../components/common';
 import Dictionary from '../../Dictionary';
-import {PageText, PageHeader, EditPageAttachments} from '../../components/Page';
-import {Page} from '../../models';
-import {openLocationExternally, getDate, encKv} from '../../lib';
+import {
+  PageText,
+  PageHeader,
+  EditPageAttachments,
+  CommentDisplay,
+  AddComment,
+  CommentModal,
+} from '../../components/Page';
+import {Page, Comment} from '../../models';
+import {
+  openLocationExternally,
+  getDate,
+  encKv,
+  useStateWithCallback,
+} from '../../lib';
 import {metadata} from '../..';
 import {removeFile, shareFile, addLocation} from '../../lib';
 import reactUsestateref from 'react-usestateref';
@@ -48,6 +60,7 @@ export default ({navigation, route}) => {
   const [editMode, setEditMode] = useState(props.newPage);
   const [dateTime, setDateTime] = useState(new Date(props.page.date));
   const [text, setText] = useState(pageData.content.text);
+  const [comments, setComments] = useState(pageData.content.comments);
   const [attachments, setAttachments] = useState({
     tags: pageData.content.tags,
     images: pageData.content.images,
@@ -55,6 +68,11 @@ export default ({navigation, route}) => {
     location: pageData.content.location,
     thumbnail: pageData.content.thumbnail,
   });
+  const [commentModalVisibility, setCommentModalVisibility] = useState(false);
+  const [commentModalValue, setCommentModalValue] = useStateWithCallback([
+    new Comment(),
+    -1,
+  ]);
 
   if (props.newPage && props.settings.autoLocation && !attachments.location) {
     addLocation(loc => setAttachments({...attachments, location: loc}));
@@ -93,6 +111,7 @@ export default ({navigation, route}) => {
     let tmp = pageData;
     Object.assign(tmp.content, attachments);
     tmp.content.text = text;
+    tmp.content.comments = comments;
     tmp.content.date = new Date(dateTime).toISOString();
     tmp.content = new Page(tmp.content);
     return tmp;
@@ -193,6 +212,59 @@ export default ({navigation, route}) => {
           dic={dic}
         />
 
+        {editMode && (
+          <AddComment
+            dic={dic}
+            onPress={() => {
+              setCommentModalValue([new Comment(), -1], () =>
+                setCommentModalVisibility(!commentModalVisibility),
+              );
+            }}
+          />
+        )}
+
+        {comments &&
+          comments.length > 0 &&
+          comments.map((c, i) => (
+            <CommentDisplay
+              editMode={editMode}
+              key={`cmt${i}`}
+              dic={dic}
+              comment={c}
+              onPress={() => {
+                if (editMode) {
+                  setCommentModalValue([c, i], () =>
+                    setCommentModalVisibility(!commentModalVisibility),
+                  );
+                }
+              }}
+            />
+          ))}
+
+        {editMode && (
+          <CommentModal
+            dic={dic}
+            show={commentModalVisibility}
+            unShow={() => setCommentModalVisibility(!commentModalVisibility)}
+            value={commentModalValue}
+            onSubmit={(comment, date, index) => {
+              const com = new Comment(comment, date);
+              if (index < 0) {
+                setComments([...comments, com]);
+              } else {
+                let tmp = comments;
+                tmp[index] = com;
+                setComments(tmp);
+              }
+            }}
+            onDelete={index => {
+              let tmp = comments;
+              tmp.splice(index, 1);
+              setComments(tmp);
+            }}
+          />
+        )}
+
         <LocationTag
           loc={attachments.location}
           removable={false}
@@ -206,6 +278,8 @@ export default ({navigation, route}) => {
           padding={10}
           action={f => shareFile(f.path, f.name, dateTime)}
         />
+
+        {!attachments.files || (attachments.files.length < 1 && <EmptyBlock />)}
       </Scroll>
       {editMode && (
         <EditPageAttachments
@@ -265,3 +339,9 @@ const Scroll = styled.ScrollView.attrs({
     };
   },
 })``;
+
+const EmptyBlock = styled.View`
+  width: 100%;
+  height: 100px;
+  elevation: -1;
+`;

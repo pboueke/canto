@@ -54,7 +54,7 @@ export default props => {
           placeholder={placeholder}
         />
       ) : (
-        <PageTextPreview value={props.value} />
+        <PageTextPreview value={props.value} minHeight={props.minHeight} />
       )}
     </TextWrapper>
   );
@@ -78,7 +78,7 @@ const PageTextEditor = props => {
 };
 
 const PageTextPreview = props => (
-  <TextPreview>
+  <TextPreview minHeight={props.minHeight}>
     <ThemedMarkdown>{props.value}</ThemedMarkdown>
   </TextPreview>
 );
@@ -96,7 +96,7 @@ const TextPreview = styled.View`
   margin: 5px;
   padding: 3px 12px 6px 13px;
   background-color: ${p => p.theme.foreground};
-  min-height: 400px;
+  min-height: ${p => p.minHeight ?? 400}px;
 `;
 
 const TextEditor = styled.TextInput.attrs(p => ({

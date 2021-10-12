@@ -1,5 +1,5 @@
 const metadata = {
-  srcVersion: '0.3.1',
+  srcVersion: '0.3.2',
   url: 'https://github.com/pboueke/canto',
   uuid: 'acc9c8e1-48b4-4b53-b207-5bff0010a839',
   mmkvInstance: 'CANTO-MMKV',

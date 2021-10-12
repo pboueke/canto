@@ -45,7 +45,9 @@ export default class Page {
   getPreview() {
     return {
       id: this.id,
-      text: this.text,
+      text:
+        this.text /* comments added for querying*/ +
+        this.comments.map(c => `\n${c.text}`).reduce((t1, t2) => t1 + t2),
       date: this.date,
       thumbnail: this.thumbnail,
       location: this.location,
@@ -54,5 +56,12 @@ export default class Page {
       numberOfImages: this.images.length,
       numberOfComments: this.comments.length,
     };
+  }
+}
+
+export class Comment {
+  constructor(text = '', date = new Date()) {
+    this.text = text;
+    this.date = date;
   }
 }

@@ -223,6 +223,21 @@ const text = {
   'new value': {
     pt: 'novo valor',
   },
+  'a Comment': {
+    pt: 'um Comentário',
+  },
+  'Save': {
+    pt: 'Salvar',
+  },
+  'Write your Comment': {
+    pt: 'Escreva seu comentário',
+  },
+  'Are you sure to delete this comment?': {
+    pt: "Tem certeza que quer deletar esse comentário?"
+  },
+  'click to edit': {
+    pt: 'clique para editar',
+  },
 };
 
 export default language => {

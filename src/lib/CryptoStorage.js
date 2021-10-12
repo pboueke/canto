@@ -12,7 +12,7 @@ const encKv = (storage, key) => {
   return [getter, setter];
 };
 
-const cryptoStorage = (key, useState) => (identity, defaultValue) => {
+const cryptoState = (key, useState) => (identity, defaultValue) => {
   const _k = [...key];
   const _key = () => _k.join('');
 
@@ -26,4 +26,4 @@ const cryptoStorage = (key, useState) => (identity, defaultValue) => {
   return [getValue(), setValue];
 };
 
-export {cryptoStorage, enc, dec, encKv};
+export {cryptoState, enc, dec, encKv};
