@@ -146,12 +146,14 @@ export default ({navigation, route}) => {
 
   const savePageData = () => {
     let curr = createUpdatedPage();
-    curr.thumbnail = updateThumbnail();
-    deletePendingFiles(false);
-    set(pageData.content.id, curr);
-    setOrgValueString(JSON.stringify(curr));
-    saveJournalData(curr.content.getPreview(), stored);
-    setStored(true);
+    if (JSON.stringify(curr) !== orgValueString) {
+      curr.thumbnail = updateThumbnail();
+      deletePendingFiles(false);
+      set(pageData.content.id, curr);
+      setOrgValueString(JSON.stringify(curr));
+      saveJournalData(curr.content.getPreview(), stored);
+      setStored(true);
+    }
   };
 
   const cautiousGoBack = () => {
