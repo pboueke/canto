@@ -32,7 +32,7 @@
     "react-native-image-slider-box": "^1.1.8",
     "react-native-image-zoom-viewer": "^3.0.1",
     "react-native-markdown-display": "^7.0.0-alpha.2",
-    "react-native-mmkv-storage": "^0.6.4",
+    "react-native-mmkv-storage": "^0.6.5",
     "react-native-restart": "^0.0.22",
     "react-native-safe-area-context": "^3.3.2",
     "react-native-screens": "^3.7.2",
