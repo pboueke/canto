@@ -38,7 +38,7 @@ export default ({navigation, route}) => {
     .withInstanceID(`${metadata.mmkvInstance}`)
     .withEncryption()
     .initialize();
-  const [get, set] = encKv(MMKV, getKey());
+  const [get, set] = encKv(MMKV, props.parent, getKey());
 
   const dic = Dictionary(props.lang);
 

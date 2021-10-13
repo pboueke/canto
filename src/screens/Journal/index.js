@@ -24,7 +24,7 @@ export default ({navigation, route}) => {
     .withInstanceID(`${metadata.mmkvInstance}`)
     .withEncryption()
     .initialize();
-  const [get, set] = encKv(MMKV, getKey());
+  const [get, set] = encKv(MMKV, props.journal.id, getKey());
 
   const storedData = MMKV.getString(props.journal.id);
   if (!storedData) {
