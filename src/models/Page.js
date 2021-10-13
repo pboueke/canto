@@ -47,7 +47,9 @@ export default class Page {
       id: this.id,
       text:
         this.text /* comments added for querying*/ +
-        this.comments.map(c => `\n${c.text}`).reduce((t1, t2) => t1 + t2),
+        [...this.comments, {text: ''}]
+          .map(c => `\n${c.text}`)
+          .reduce((t1, t2) => t1 + t2),
       date: this.date,
       thumbnail: this.thumbnail,
       location: this.location,
