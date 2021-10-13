@@ -9,6 +9,7 @@ export {default as FileRow} from './FileRow';
 export {default as ImageCarousel} from './ImageCarousel';
 export {default as ThemedMarkdown} from './ThemedMarkdown';
 export {default as SlidePicker} from './SlidePicker';
+export {default as ExternallyLoggedUser} from './ExternallyLoggedUser';
 export {BackButton} from './CustomNavigation';
 export {Tag, TagsTable, TagsRow} from './Tag';
 export {LocationTag} from './Location';

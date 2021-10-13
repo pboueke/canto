@@ -242,8 +242,14 @@ const text = {
     pt: 'Mudar o Ícone',
   },
   'confirm new password': {
-    pt: 'confirme a nova senha'
-  }
+    pt: 'confirme a nova senha',
+  },
+  'Signed in as ': {
+    pt: 'Logado como ',
+  },
+  'Sign Off': {
+    pt: 'Sair',
+  },
 };
 
 export default language => {

@@ -1,7 +1,7 @@
 import React, {useState} from 'react';
 import {Linking} from 'react-native';
 import styled from 'styled-components/native';
-import {Logo} from '../../components/common';
+import {Logo, ExternallyLoggedUser} from '../../components/common';
 import {Flex, Box} from 'native-grid-styled';
 import {metadata} from '../..';
 import {CantoThemes} from '../../styles';
@@ -13,6 +13,11 @@ import {
 } from '../../components/Home';
 import RNRestart from 'react-native-restart';
 import MMKVStorage, {useMMKVStorage} from 'react-native-mmkv-storage';
+import {
+  GoogleSignin,
+  GoogleSigninButton,
+  statusCodes,
+} from '@react-native-google-signin/google-signin';
 
 const MMKV = new MMKVStorage.Loader()
   .withInstanceID(metadata.mmkvInstance)
@@ -23,6 +28,8 @@ export default ({navigation, route}) => {
   const [reRender, setReRender] = useState(0);
   const [selectedJournal, setSelectedJournal] = useState(null);
   const [accessModalVisible, setAccessModalVisible] = useState(false);
+  const [isSigninInProgress, setIsSigninInProgress] = useState(false);
+  const [userState, setUserState] = useState(null);
   const [appData, setAppData] = useMMKVStorage('canto', MMKV, {
     version: metadata.srcVersion,
     journals: [],
@@ -70,18 +77,66 @@ export default ({navigation, route}) => {
     setReRender(reRender + 1);
   };
 
+  const _signIn = async () => {
+    setIsSigninInProgress(true);
+    try {
+      GoogleSignin.configure();
+      await GoogleSignin.hasPlayServices();
+      const userInfo = await GoogleSignin.signIn();
+      setUserState(userInfo);
+      console.log(userInfo);
+    } catch (error) {
+      setUserState(null);
+      console.log(error);
+      if (error.code === statusCodes.SIGN_IN_CANCELLED) {
+        // user cancelled the login flow
+      } else if (error.code === statusCodes.IN_PROGRESS) {
+        // operation (e.g. sign in) is in progress already
+      } else if (error.code === statusCodes.PLAY_SERVICES_NOT_AVAILABLE) {
+        // play services not available or outdated
+      } else {
+      }
+    }
+    setIsSigninInProgress(false);
+  };
+
   return (
     <Container>
+      <UserWrapper>
+        {userState ? (
+          <ExternallyLoggedUser
+            dic={dic}
+            userInfo={userState}
+            signOff={async () => {
+              console.log('offing');
+              try {
+                await GoogleSignin.signOut();
+                setUserState(null);
+              } catch (error) {
+                console.error(error);
+              }
+            }}
+          />
+        ) : (
+          <GoogleSigninButton
+            style={{width: 240, height: 48}}
+            size={GoogleSigninButton.Size.Wide}
+            color={GoogleSigninButton.Color.Dark}
+            onPress={_signIn}
+            disabled={isSigninInProgress}
+          />
+        )}
+      </UserWrapper>
       <Flex
         css={{
-          marginBottom: 15,
-          marginTop: 10,
+          marginBottom: 40,
+          marginTop: 40,
           flexDirection: 'row',
           justifyContent: 'space-evenly',
           width: '100%',
         }}>
         <Box width={2 / 5} css={{alignItems: 'center'}}>
-          <Logo />
+          <Logo size={170} />
         </Box>
         <InfoBox width={2 / 5}>
           <InfoBoxText>{dic('Switch theme')}:</InfoBoxText>
@@ -233,6 +288,13 @@ const Scroll = styled.ScrollView.attrs({
   width: 100%;
   margin: 25px 0 0 0;
   background-color: ${p => p.theme.tableBg};
+`;
+
+const UserWrapper = styled.View`
+  width: 100%;
+  height: 48px;
+  align-items: center;
+  background-color: ${p => p.theme.background};
 `;
 
 const Container = styled.View`
