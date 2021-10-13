@@ -68,7 +68,7 @@ export default ({navigation, route}) => {
       headerTitle: () => (
         <JournalHeaderTitle
           title={journalDataState.content.title}
-          icon={props.journal.icon}
+          icon={journalDataState.content.icon}
         />
       ),
       headerRight: () => (
@@ -101,6 +101,15 @@ export default ({navigation, route}) => {
     let newData = journalDataState;
     newData.content.title = name;
     updateCover({title: name});
+    set(props.journal.id, newData);
+    setJournalDataState(newData);
+  };
+
+  const changeIcon = icon => {
+    let newData = journalDataState;
+    newData.content.icon = icon;
+    updateCover({icon: icon});
+    set(props.journal.id, newData);
     setJournalDataState(newData);
   };
 
@@ -164,6 +173,7 @@ export default ({navigation, route}) => {
         <SettingsModal
           dic={dic}
           danger={{
+            setIcon: changeIcon,
             setName: changeName,
             setPassword: null,
             doDelete: deleteJournal,

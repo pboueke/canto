@@ -4,11 +4,18 @@ import styled from 'styled-components/native';
 import {withTheme} from 'styled-components';
 import Icon from 'react-native-vector-icons/Feather';
 import {JournalCover, JournalSettings} from '../../models';
-import {SlidePicker, ConfirmModal, TextInputModal} from '../common';
+import {
+  SlidePicker,
+  ConfirmModal,
+  TextInputModal,
+  IconListModal,
+} from '../common';
+import {JournalSelector} from '../Home';
 
 export default ({journal, show, unShow, dic, danger, onChange}) => {
   const [confirmVisibility, setConfirmVisibility] = useState(false);
   const [inputVisibility, setInputVisibility] = useState(false);
+  const [iconsModalVisible, setIconsModalVisible] = useState(false);
   const [inputValue, setInputValue] = useState('');
   const [inputSubmit, setInputSubmit] = useState();
   const [confirmSubmit, setConfirmSubmit] = useState();
@@ -100,6 +107,15 @@ export default ({journal, show, unShow, dic, danger, onChange}) => {
           {getPickers()}
           <EmptyBlock height={20} />
           <ModalRow>
+            <StaticText size={26}>{dic('Change Icon')}</StaticText>
+          </ModalRow>
+          <JournalSelector
+            title={journal.content.title}
+            icon={journal.content.icon}
+            onPress={() => setIconsModalVisible(!iconsModalVisible)}
+          />
+          <EmptyBlock height={20} />
+          <ModalRow>
             <StaticText size={26}>{dic('Danger Zone')}</StaticText>
           </ModalRow>
           <ModalRow border>
@@ -189,6 +205,12 @@ export default ({journal, show, unShow, dic, danger, onChange}) => {
         onConfirm={() => {
           confirmSubmit(inputValue);
         }}
+      />
+      <IconListModal
+        handleClose={icon => danger.setIcon(icon)}
+        show={iconsModalVisible}
+        unShow={() => setIconsModalVisible(false)}
+        key={'icons-' + iconsModalVisible}
       />
     </SettingsModal>
   );

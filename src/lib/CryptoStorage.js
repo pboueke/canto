@@ -15,8 +15,7 @@ const getStoredSalt = (storage, id, pswd) => {
     return CryptoJS.enc.Utf8.parse(dec(storedHash, pswd));
   } else {
     const salt = CryptoJS.enc.Utf8.parse(bcrypt.genSaltSync(10000)).toString();
-    const data = enc(salt, pswd);
-    storage.setString(storageKey, data);
+    storage.setString(storageKey, enc(salt, pswd));
     return CryptoJS.enc.Utf8.parse(salt);
   }
 };
@@ -30,7 +29,7 @@ const encKv = (storage, jId, pswd) => {
     key = dec(storedKey, pswd);
   } else {
     key = CryptoJS.enc.Utf8.parse(
-      CryptoJS.PBKDF2(pswd, salt, {iterations: 1000}),
+      CryptoJS.PBKDF2(pswd, salt, {iterations: 10000}),
     ).toString();
     storage.setString(storageKey, enc(key, pswd));
   }

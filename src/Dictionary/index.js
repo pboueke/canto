@@ -238,6 +238,9 @@ const text = {
   'click to edit': {
     pt: 'clique para editar',
   },
+  'Change Icon': {
+    pt: 'Mudar o Ícone',
+  },
 };
 
 export default language => {
