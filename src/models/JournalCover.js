@@ -17,7 +17,7 @@ export default class JournalCover {
     secure = false,
     hash = null,
     key = '',
-  }) {
+  } = {}) {
     Object.assign(this, {title, icon, date, id, secure, hash});
 
     if (!secure) {
@@ -26,9 +26,13 @@ export default class JournalCover {
 
     if (this.secure) {
       if (!this.hash) {
-        this.hash = bcrypt.hashSync(key, 10);
+        this.updatePassword(key);
       }
     }
+  }
+
+  updatePassword(newPswd) {
+    this.hash = bcrypt.hashSync(newPswd, 10);
   }
 
   unlock(key, callback) {

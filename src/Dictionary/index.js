@@ -241,6 +241,9 @@ const text = {
   'Change Icon': {
     pt: 'Mudar o Ícone',
   },
+  'confirm new password': {
+    pt: 'confirme a nova senha'
+  }
 };
 
 export default language => {

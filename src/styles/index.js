@@ -6,7 +6,7 @@ const CantoThemes = {
     placeholderColor: 'rgb(50, 50, 50)',
     linkColor: 'rgb(1, 85, 92)',
     textInputBg: 'rgb(255, 255, 255)',
-    failTextColor: 'red',
+    failTextColor: 'rgb(255, 0, 0)',
     successTextColor: 'green',
     foreground: 'rgb(255, 255, 255)',
     background: 'rgb(190, 190, 190)',

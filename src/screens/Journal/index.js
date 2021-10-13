@@ -11,8 +11,14 @@ import {
   JournalHeaderRight,
   SettingsModal,
 } from '../../components/Journal';
-import {Page, Filter, JournalContent, JournalSettings} from '../../models';
-import {removeFile, encKv} from '../../lib';
+import {
+  Page,
+  Filter,
+  JournalCover,
+  JournalContent,
+  JournalSettings,
+} from '../../models';
+import {removeFile, encKv, changeJournalEncryptionKey} from '../../lib';
 import Dictionary from '../../Dictionary';
 import {metadata} from '../..';
 
@@ -113,6 +119,18 @@ export default ({navigation, route}) => {
     setJournalDataState(newData);
   };
 
+  const changePassword = pswd => {
+    const newCover = new JournalCover();
+    newCover.updatePassword(pswd);
+    updateCover({hash: newCover.hash, secure: true});
+    const newData = journalDataState;
+    newData.content.hash = newCover.hash;
+    newData.content.secure = true;
+    set(props.journal.id, newData);
+    changeJournalEncryptionKey(MMKV, props.journal.id, getKey(), pswd);
+    navigation.goBack();
+  };
+
   const deleteJournal = () => {
     journalDataState.content.pages
       .map(p => p.id)
@@ -175,7 +193,7 @@ export default ({navigation, route}) => {
           danger={{
             setIcon: changeIcon,
             setName: changeName,
-            setPassword: null,
+            setPassword: changePassword,
             doDelete: deleteJournal,
           }}
           journal={journalDataState}

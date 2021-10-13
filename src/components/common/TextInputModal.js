@@ -5,6 +5,10 @@ import {Flex, Box} from 'native-grid-styled';
 export default props => {
   const dic = props.dic;
   const [value, setValue] = useState('');
+  const [confirm, setConfirm] = useState('');
+  const isReady = props.confirm
+    ? value !== '' && value === confirm
+    : value !== '';
   return (
     <TextInputModal
       animationType={props.animationType ?? 'fade'}
@@ -12,13 +16,21 @@ export default props => {
       visible={props.show}
       onRequestClose={() => props.unShow()}>
       {props.shadow && <ModalBackground />}
-      <TextInputModalInterior>
+      <TextInputModalInterior large={props.confirm}>
         <TextField
           secureTextEntry={props.secure}
           value={value}
           onChangeText={setValue}
           placeholder={props.placeholder ?? ''}
         />
+        {props.confirm && (
+          <TextField
+            secureTextEntry={props.secure}
+            value={confirm}
+            onChangeText={setConfirm}
+            placeholder={props.confirmText ?? ''}
+          />
+        )}
         <Flex
           css={{
             flexGrow: 1,
@@ -39,15 +51,15 @@ export default props => {
           </Box>
           <Box width={1 / 3}>
             <SubmitButton
-              enabled={value !== ''}
+              enabled={isReady}
               onPress={() => {
-                if (value !== '') {
+                if (isReady) {
                   props.onSubmit(value);
                   props.unShow();
                   setValue('');
                 }
               }}>
-              <ButtonText enabled={value !== ''}>
+              <ButtonText enabled={isReady}>
                 {props.submit ?? dic('submit')}
               </ButtonText>
             </SubmitButton>
@@ -78,7 +90,7 @@ const ModalBackground = styled.View`
 const TextInputModalInterior = styled.View`
   flex-direction: column;
   width: 300px;
-  height: 150px;
+  height: ${p => (p.large ? 250 : 150)}px;
   background-color: ${p => p.theme.modalBg};
   border-width: ${p => p.theme.borderWidth};
   border-radius: 5px;

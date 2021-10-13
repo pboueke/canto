@@ -122,6 +122,9 @@ export default props => {
                             setJournalModalVisible(false);
                             setIsSaving(false);
                             setLoading(false);
+                            setPassword1('');
+                            setPassword2('');
+                            setTitle(dic('My Journal'));
                           });
                         }
                       }}>

@@ -13,6 +13,7 @@ import {
 import {JournalSelector} from '../Home';
 
 export default ({journal, show, unShow, dic, danger, onChange}) => {
+  const [confirmTextInput, setConfirmTextInput] = useState(false);
   const [confirmVisibility, setConfirmVisibility] = useState(false);
   const [inputVisibility, setInputVisibility] = useState(false);
   const [iconsModalVisible, setIconsModalVisible] = useState(false);
@@ -125,6 +126,7 @@ export default ({journal, show, unShow, dic, danger, onChange}) => {
               onPress={() => {
                 setInputValue('');
                 setConfirmMessage(null);
+                setConfirmTextInput(false);
                 setInputSubmit(() => val => {
                   if (journal.content.secure) {
                     setConfirmSubmit(() => name => danger.setName(name));
@@ -138,46 +140,47 @@ export default ({journal, show, unShow, dic, danger, onChange}) => {
             />
             <SettingsIcon name="alert-triangle" />
           </ModalRow>
-          {false /*&& notYetFUnctional*/ && (
-            <ModalRow border>
-              <SettingsIcon name="key" />
-              <SettingsButton
-                text={dic('Change Journal Password')}
-                onPress={() => {
-                  setInputValue('');
-                  setConfirmMessage(null);
-                  setInputSubmit(() => val => {
-                    if (journal.content.secure) {
-                      setConfirmSubmit(() => pswd => danger.setPassword(pswd));
-                      setConfirmVisibility(!confirmVisibility);
-                    } else {
-                      danger.setPassword(val);
-                    }
-                  });
-                  setInputVisibility(!inputVisibility);
-                }}
-              />
-              <SettingsIcon name="alert-triangle" />
-            </ModalRow>
-          )}
-          {
-            <ModalRow border>
-              <SettingsIcon name="trash-2" />
-              <SettingsButton
-                text={dic('Delete Journal')}
-                onPress={() => {
-                  setConfirmSubmit(() => () => danger.doDelete());
-                  setConfirmMessage(`delete ${journal.content.title}`);
-                  setConfirmVisibility(!confirmVisibility);
-                }}
-              />
-              <SettingsIcon name="alert-triangle" />
-            </ModalRow>
-          }
+          <ModalRow border>
+            <SettingsIcon name="key" />
+            <SettingsButton
+              text={dic('Change Journal Password')}
+              onPress={() => {
+                setInputValue('');
+                setConfirmMessage(null);
+                setConfirmTextInput(true);
+                setInputSubmit(() => val => {
+                  if (journal.content.secure) {
+                    setConfirmSubmit(() => () => danger.setPassword(val));
+                    setConfirmVisibility(!confirmVisibility);
+                  } else {
+                    danger.setPassword(val);
+                  }
+                });
+                setInputVisibility(!inputVisibility);
+              }}
+            />
+            <SettingsIcon name="alert-triangle" />
+          </ModalRow>
+          <ModalRow border>
+            <SettingsIcon name="trash-2" />
+            <SettingsButton
+              text={dic('Delete Journal')}
+              onPress={() => {
+                setConfirmSubmit(() => () => danger.doDelete());
+                setConfirmMessage(`delete ${journal.content.title}`);
+                setConfirmVisibility(!confirmVisibility);
+              }}
+            />
+            <SettingsIcon name="alert-triangle" />
+          </ModalRow>
+
           <EmptyBlock />
         </ModalInterior>
       </Scroll>
       <TextInputModal
+        confirm={confirmTextInput}
+        confirmText={dic('confirm new password')}
+        secure={confirmTextInput}
         dic={dic}
         submit={dic('Ok')}
         placeholder={dic('new value')}

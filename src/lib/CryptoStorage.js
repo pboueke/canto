@@ -8,8 +8,11 @@ const enc = (value, key) =>
 const dec = (value, key) =>
   JSON.parse(rnCryptoJS.AES.decrypt(value, key).toString(rnCryptoJS.enc.Utf8));
 
+const getStorageKey = (label, id) =>
+  CryptoJS.SHA256(`${label}:${id}`).toString();
+
 const getStoredSalt = (storage, id, pswd) => {
-  const storageKey = CryptoJS.SHA256(`salt:${id}`).toString();
+  const storageKey = getStorageKey('salt', id);
   const storedHash = storage.getString(storageKey);
   if (storedHash) {
     return CryptoJS.enc.Utf8.parse(dec(storedHash, pswd));
@@ -20,14 +23,19 @@ const getStoredSalt = (storage, id, pswd) => {
   }
 };
 
+const removeEncryptionData = (storage, id) => {
+  storage.removeItem(getStorageKey('key', id));
+  storage.removeItem(getStorageKey('salt', id));
+};
+
 const encKv = (storage, jId, pswd) => {
-  const salt = getStoredSalt(storage, jId, pswd);
-  const storageKey = CryptoJS.SHA256(`key:${jId}`).toString();
+  const storageKey = getStorageKey('key', jId);
   const storedKey = storage.getString(storageKey);
   let key;
   if (storedKey) {
     key = dec(storedKey, pswd);
   } else {
+    const salt = getStoredSalt(storage, jId, pswd);
     key = CryptoJS.enc.Utf8.parse(
       CryptoJS.PBKDF2(pswd, salt, {iterations: 10000}),
     ).toString();
@@ -38,4 +46,17 @@ const encKv = (storage, jId, pswd) => {
   return [getter, setter];
 };
 
-export {enc, dec, encKv};
+const changeJournalEncryptionKey = (storage, jId, oldPswd, newPswd) => {
+  const oldGet = encKv(storage, jId, oldPswd)[0];
+  const jData = oldGet(jId);
+  removeEncryptionData(storage, jId);
+  const newSet = encKv(storage, jId, `${jId}${newPswd}`)[1];
+  jData.content.pages.forEach(p => {
+    console.log(p);
+    const pData = oldGet(p.id);
+    newSet(p.id, pData);
+  });
+  newSet(jId, jData);
+};
+
+export {enc, dec, encKv, changeJournalEncryptionKey};
