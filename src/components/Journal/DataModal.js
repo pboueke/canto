@@ -11,8 +11,10 @@ import {
 } from '@react-native-google-signin/google-signin';
 import {
   GDrive,
+  ListQueryBuilder,
   MimeTypes,
 } from '@robinbobin/react-native-google-drive-api-wrapper';
+import DriveCredentials from '../../../gdriveCredentials';
 
 export default ({journal, show, unShow, onSettingsChange, storage, dic}) => {
   const [userState, setUserState] = useMMKVStorage('canto-user', storage, null);
@@ -21,15 +23,19 @@ export default ({journal, show, unShow, onSettingsChange, storage, dic}) => {
   const checkIfIsSynced = async () => {
     try {
       GoogleSignin.configure({
+        webClientId: DriveCredentials.web.client_id,
+        offlineAccess: true,
+        //https://developers.google.com/identity/protocols/oauth2/scopes
         scopes: [
-          'https://www.googleapis.com/auth/drive',
+          'https://www.googleapis.com/auth/drive.appdata',
           'https://www.googleapis.com/auth/drive.file',
         ],
       });
       const isSignedIn = await GoogleSignin.isSignedIn();
       if (!isSignedIn) {
         console.log('singing in...');
-        setUserState(await GoogleSignin.signInSilently());
+        const userInfo = await GoogleSignin.signInSilently();
+        setUserState(userInfo);
       }
       console.log('singined in!');
       const gdrive = new GDrive();
@@ -37,11 +43,16 @@ export default ({journal, show, unShow, onSettingsChange, storage, dic}) => {
       gdrive.accessToken = (await GoogleSignin.getTokens()).accessToken;
       console.log(gdrive.accessToken);
       console.log('getting files!');
-      const files = await gdrive.files.list();
+      const files = await gdrive.files.list({
+        q: new ListQueryBuilder()
+          .e('name', 'Untitled')
+          .and()
+          .in('root', 'parents'),
+      });
       console.log('got files!');
       console.log(files);
     } catch (error) {
-      console.log(error);
+      console.error(error);
       throw error;
     }
   };

@@ -18,6 +18,7 @@ import {
   GoogleSigninButton,
   statusCodes,
 } from '@react-native-google-signin/google-signin';
+import DriveCredentials from '../../../gdriveCredentials';
 
 const MMKV = new MMKVStorage.Loader()
   .withInstanceID(metadata.mmkvInstance)
@@ -81,9 +82,11 @@ export default ({navigation, route}) => {
     setIsSigninInProgress(true);
     try {
       GoogleSignin.configure({
+        webClientId: DriveCredentials.web.client_id,
+        offlineAccess: true,
         //https://developers.google.com/identity/protocols/oauth2/scopes
         scopes: [
-          'https://www.googleapis.com/auth/drive',
+          'https://www.googleapis.com/auth/drive.appdata',
           'https://www.googleapis.com/auth/drive.file',
         ],
       });
