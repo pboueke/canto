@@ -15,3 +15,4 @@ export {
   saveImage,
 } from './Attachments';
 export {enc, dec, encKv, changeJournalEncryptionKey} from './CryptoStorage';
+export {getFolderId, getJournalMetadata} from './GDriveSync';

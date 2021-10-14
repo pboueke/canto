@@ -9,11 +9,8 @@ import {
   GoogleSignin,
   statusCodes,
 } from '@react-native-google-signin/google-signin';
-import {
-  GDrive,
-  ListQueryBuilder,
-  MimeTypes,
-} from '@robinbobin/react-native-google-drive-api-wrapper';
+import {GDrive} from '@robinbobin/react-native-google-drive-api-wrapper';
+import {getFolderId, getJournalMetadata} from '../../lib';
 import DriveCredentials from '../../../gdriveCredentials';
 
 export default ({journal, show, unShow, onSettingsChange, storage, dic}) => {
@@ -33,26 +30,27 @@ export default ({journal, show, unShow, onSettingsChange, storage, dic}) => {
       });
       const isSignedIn = await GoogleSignin.isSignedIn();
       if (!isSignedIn) {
-        console.log('singing in...');
         const userInfo = await GoogleSignin.signInSilently();
         setUserState(userInfo);
       }
-      console.log('singined in!');
       const gdrive = new GDrive();
-      console.log('getting access codes');
       gdrive.accessToken = (await GoogleSignin.getTokens()).accessToken;
-      console.log(gdrive.accessToken);
-      console.log('getting files!');
-      const files = await gdrive.files.list({
-        q: new ListQueryBuilder()
-          .e('name', 'Untitled')
-          .and()
-          .in('root', 'parents'),
-      });
-      console.log('got files!');
-      console.log(files);
+
+      const journalFolderId = await getFolderId(journal.content.id, gdrive);
+
+      console.log('journal folder id:');
+      console.log(journalFolderId);
+
+      const storedJournal = await getJournalMetadata(
+        journal,
+        journalFolderId,
+        gdrive,
+      );
+
+      console.log(storedJournal);
+      console.log('DONE');
     } catch (error) {
-      console.error(error);
+      console.log(error);
       throw error;
     }
   };
