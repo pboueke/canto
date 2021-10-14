@@ -57,6 +57,7 @@ export default class Page {
       numberOfFiles: this.files.length,
       numberOfImages: this.images.length,
       numberOfComments: this.comments.length,
+      modified: new Date().toISOString(),
     };
   }
 }

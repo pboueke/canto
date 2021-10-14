@@ -1,29 +1,28 @@
 import React from 'react';
 import styled from 'styled-components';
 
-export default ({userInfo, signOff, dic}) => {
-  console.log(userInfo);
+export default ({userInfo, signOff, dic, light = false}) => {
   return (
-    <Wrapper>
-      <DisplayText>{dic('Signed in as ')}</DisplayText>
+    <Wrapper background={!light}>
+      {!light && <DisplayText>{dic('Signed in as ')}</DisplayText>}
       <UserWrapper>
         <UserName>{userInfo.user.name} </UserName>
         <UserImage source={{uri: userInfo.user.photo}} />
       </UserWrapper>
-      <LogOff text={dic('Sign Off')} onPress={signOff} />
+      {!light && <LogOff text={dic('Sign Off')} onPress={signOff} />}
     </Wrapper>
   );
 };
 
 const Wrapper = styled.View`
-  width: 100%;
+  ${p => (p.background ? 'width: 100%' : '')};
   height: 48px;
   flex: 1;
   flex-direction: row;
   align-items: center;
   align-text: center;
   justify-content: space-evenly;
-  background-color: ${p => p.theme.background};
+  ${p => (p.background ? `background-color: ${p.theme.background}` : '')};
 `;
 
 const LogOff = ({text, onPress}) => {
@@ -46,7 +45,7 @@ const UserWrapper = styled.View`
   flex-direction: row;
   border-color: ${p => p.theme.borderColor};
   border-width: 1px;
-  padding: 5px;
+  padding: 1px 1px 1px 5px;
   margin-top: 5px;
   border-radius: 15px;
   background-color: ${p => p.theme.foreground};
@@ -56,6 +55,7 @@ const UserImage = styled.Image`
   width: 30px;
   height: 30px;
   border-radius: 15px;
+  margin-left: 5px;
 `;
 
 const DisplayText = styled.Text`

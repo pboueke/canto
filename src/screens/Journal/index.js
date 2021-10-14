@@ -10,6 +10,7 @@ import {
   JournalHeaderTitle,
   JournalHeaderRight,
   SettingsModal,
+  DataModal,
 } from '../../components/Journal';
 import {
   Page,
@@ -45,6 +46,7 @@ export default ({navigation, route}) => {
   const [journalDataState, setJournalDataState] = useState(journalDataStorage);
   const [pageList, setPageList] = useState(journalDataState.content.pages);
   const [settingsVisibility, setSettingsVisibility] = useState(false);
+  const [dataModalVisibility, setDataModalVisibility] = useState(false);
 
   const dic = Dictionary(props.lang);
 
@@ -80,10 +82,18 @@ export default ({navigation, route}) => {
       headerRight: () => (
         <JournalHeaderRight
           showSettings={() => setSettingsVisibility(!settingsVisibility)}
+          showData={() => setDataModalVisibility(!dataModalVisibility)}
         />
       ),
     });
-  }, [navigation, props, theme, settingsVisibility, journalDataState]);
+  }, [
+    navigation,
+    props,
+    theme,
+    settingsVisibility,
+    dataModalVisibility,
+    journalDataState,
+  ]);
 
   const updateCover = (changes, del = false) => {
     const homeMMKV = new MMKVStorage.Loader()
@@ -187,6 +197,18 @@ export default ({navigation, route}) => {
           });
         }}
       />
+      <DataModal
+        dic={dic}
+        journal={journalDataState}
+        storage={MMKV}
+        show={dataModalVisibility}
+        unShow={() => setDataModalVisibility(!dataModalVisibility)}
+        onSettingsChange={(val, sort) => {
+          setJournalDataState({settings: val, ...journalDataState});
+          set(props.journal.id, {settings: val, ...journalDataState});
+        }}
+      />
+
       {settingsVisibility && (
         <SettingsModal
           dic={dic}

@@ -29,7 +29,7 @@ export default ({navigation, route}) => {
   const [selectedJournal, setSelectedJournal] = useState(null);
   const [accessModalVisible, setAccessModalVisible] = useState(false);
   const [isSigninInProgress, setIsSigninInProgress] = useState(false);
-  const [userState, setUserState] = useState(null);
+  const [userState, setUserState] = useMMKVStorage('canto-user', MMKV, null);
   const [appData, setAppData] = useMMKVStorage('canto', MMKV, {
     version: metadata.srcVersion,
     journals: [],
@@ -80,11 +80,16 @@ export default ({navigation, route}) => {
   const _signIn = async () => {
     setIsSigninInProgress(true);
     try {
-      GoogleSignin.configure();
+      GoogleSignin.configure({
+        //https://developers.google.com/identity/protocols/oauth2/scopes
+        scopes: [
+          'https://www.googleapis.com/auth/drive',
+          'https://www.googleapis.com/auth/drive.file',
+        ],
+      });
       await GoogleSignin.hasPlayServices();
       const userInfo = await GoogleSignin.signIn();
       setUserState(userInfo);
-      console.log(userInfo);
     } catch (error) {
       setUserState(null);
       console.log(error);
@@ -108,8 +113,8 @@ export default ({navigation, route}) => {
             dic={dic}
             userInfo={userState}
             signOff={async () => {
-              console.log('offing');
               try {
+                GoogleSignin.configure();
                 await GoogleSignin.signOut();
                 setUserState(null);
               } catch (error) {

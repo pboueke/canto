@@ -1476,6 +1476,15 @@
   dependencies:
     nanoid "^3.1.23"
 
+"@robinbobin/react-native-google-drive-api-wrapper@^0.6.0":
+  version "0.6.0"
+  resolved "https://registry.yarnpkg.com/@robinbobin/react-native-google-drive-api-wrapper/-/react-native-google-drive-api-wrapper-0.6.0.tgz#b8e4b70b9793c704a5ce555aee5d6b67eb18da4a"
+  integrity sha512-QqsbICDzgLbxrqnWHbJX7dq6cwWGXn8PGQ7br6nBwVC5kGnIRhKn2jVuLY4pZrZEk5FOg2e/HeGHBIy6j+McBw==
+  dependencies:
+    base64-js "^1.5.1"
+    simple-common-utils "^2.3.0"
+    utf8 "^3.0.0"
+
 "@sideway/address@^4.1.0":
   version "4.1.2"
   resolved "https://registry.npmjs.org/@sideway/address/-/address-4.1.2.tgz"
@@ -8230,6 +8239,11 @@ signal-exit@^3.0.0, signal-exit@^3.0.2, signal-exit@^3.0.3:
   version "3.0.4"
   resolved "https://registry.npmjs.org/signal-exit/-/signal-exit-3.0.4.tgz"
   integrity sha512-rqYhcAnZ6d/vTPGghdrw7iumdcbXpsk1b8IG/rz+VWV51DM0p7XCtMoJ3qhPLIbp3tvyt3pKRbaaEMZYpHto8Q==
+
+simple-common-utils@^2.3.0:
+  version "2.6.0"
+  resolved "https://registry.yarnpkg.com/simple-common-utils/-/simple-common-utils-2.6.0.tgz#457f126c20c82ba10212427886f4c8ebe86cc6d7"
+  integrity sha512-K0gtyfMQ1+iDQvZKgdY2L+pbaG0MHp1ke6ho7IL6UKR8f59st+QJgw27FADF+3Hut19C3WUb7IhgENdY/OJG8w==
 
 simple-plist@^1.0.0:
   version "1.1.1"

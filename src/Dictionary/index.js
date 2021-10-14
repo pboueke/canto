@@ -250,6 +250,21 @@ const text = {
   'Sign Off': {
     pt: 'Sair',
   },
+  'Data Management': {
+    pt: 'Gerenciamento de Dados',
+  },
+  'Automated synchronization with Google Drive': {
+    pt: 'Sincronização automática usando o Google Drive',
+  },
+  "Log-in with your account at Canto's home screen": {
+    pt: 'Faça o login com sua conta na tela inicial',
+  },
+  'Keep this journal synced': {
+    pt: 'Manter sincronizado',
+  },
+  'Export your data': {
+    pt: 'Exporte seus dados',
+  },
 };
 
 export default language => {

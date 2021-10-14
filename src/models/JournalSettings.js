@@ -8,6 +8,7 @@ export default class JournalSettings {
     sort = 'ascending',
     showMarkdownPlaceholder = true,
     autoLocation = false,
+    gdriveSync = false,
   } = {}) {
     Object.assign(this, {
       use24h,
@@ -18,6 +19,7 @@ export default class JournalSettings {
       sort,
       showMarkdownPlaceholder,
       autoLocation,
+      gdriveSync,
     });
   }
 

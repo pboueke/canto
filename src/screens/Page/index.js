@@ -47,6 +47,7 @@ export default ({navigation, route}) => {
   if (!storedData) {
     set(props.page.id, {
       content: new Page(props.Page),
+      modified: new Date().toISOString(),
       rand: (Math.random() + 1).toString(36).substring(7),
     });
   }
@@ -147,7 +148,8 @@ export default ({navigation, route}) => {
   const savePageData = () => {
     let curr = createUpdatedPage();
     if (JSON.stringify(curr) !== orgValueString) {
-      curr.thumbnail = updateThumbnail();
+      curr.modified = new Date().toISOString();
+      updateThumbnail();
       deletePendingFiles(false);
       set(pageData.content.id, curr);
       setOrgValueString(JSON.stringify(curr));
