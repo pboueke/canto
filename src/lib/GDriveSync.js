@@ -1,10 +1,39 @@
 import {
+  GoogleSignin,
+  statusCodes,
+} from '@react-native-google-signin/google-signin';
+import {
+  GDrive,
   ListQueryBuilder,
   MimeTypes,
 } from '@robinbobin/react-native-google-drive-api-wrapper';
+import DriveCredentials from '../../gdriveCredentials';
 
-const getJournalMetadata = async (journal, gdrive) => {
-  //https://stackoverflow.com/questions/38213298/using-google-drive-appdatafolder-to-store-app-state-with-javascript-on-the-clien
+const signInWithGDrive = async setUser => {
+  try {
+    GoogleSignin.configure({
+      webClientId: DriveCredentials.web.client_id,
+      offlineAccess: true,
+      //https://developers.google.com/identity/protocols/oauth2/scopes
+      scopes: [
+        'https://www.googleapis.com/auth/drive.appdata',
+        'https://www.googleapis.com/auth/drive.file',
+      ],
+    });
+    const isSignedIn = await GoogleSignin.isSignedIn();
+    if (!isSignedIn) {
+      setUser(await GoogleSignin.signInSilently());
+    }
+    const gdrive = new GDrive();
+    gdrive.accessToken = (await GoogleSignin.getTokens()).accessToken;
+
+    return gdrive;
+  } catch (error) {
+    console.log(error);
+  }
+};
+
+const getJournalMetadata = async (salt, journal, gdrive) => {
   const name = `${journal.content.id}.mtdt`;
   const query = new ListQueryBuilder()
     .e('name', name)
@@ -17,8 +46,12 @@ const getJournalMetadata = async (journal, gdrive) => {
   let id;
   if (files.files.length === 0) {
     console.log(`WRITING ${name} to store: `);
-    let data = journal.content;
-    data.pages = data.pages.map(p => ({id: p.id, modified: p.modified}));
+    let data = journal;
+    data.salt = salt;
+    data.content.pages = data.content.pages.map(p => ({
+      id: p.id,
+      modified: p.modified,
+    }));
     const resp = await gdrive.files
       .newMultipartUploader()
       .setData(JSON.stringify(data), MimeTypes.TEXT)
@@ -34,29 +67,4 @@ const getJournalMetadata = async (journal, gdrive) => {
   return JSON.parse(await gdrive.files.getText(id));
 };
 
-const getFolderId = async (journalId, gdrive) => {
-  let folders = await gdrive.files.list({
-    q: new ListQueryBuilder()
-      .e('name', journalId)
-      .and()
-      .e('mimeType', MimeTypes.FOLDER)
-      .and()
-      .in('appDataFolder', 'parents'),
-  });
-  if (folders.files.length < 1) {
-    return (
-      await gdrive.files
-        .newMetadataOnlyUploader()
-        .setRequestBody({
-          name: journalId,
-          parents: ['appDataFolder'],
-          mimeType: MimeTypes.FOLDER,
-        })
-        .execute()
-    ).id;
-  } else {
-    return folders.files[0].id;
-  }
-};
-
-export {getFolderId, getJournalMetadata};
+export {signInWithGDrive, getJournalMetadata};

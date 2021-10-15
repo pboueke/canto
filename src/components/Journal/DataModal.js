@@ -5,44 +5,25 @@ import {withTheme} from 'styled-components';
 import Icon from 'react-native-vector-icons/Feather';
 import {ExternallyLoggedUser} from '../common';
 import {useMMKVStorage} from 'react-native-mmkv-storage';
-import {
-  GoogleSignin,
-  statusCodes,
-} from '@react-native-google-signin/google-signin';
-import {GDrive} from '@robinbobin/react-native-google-drive-api-wrapper';
-import {getFolderId, getJournalMetadata} from '../../lib';
-import {JournalContent, JournalCover} from '../../models';
-import DriveCredentials from '../../../gdriveCredentials';
+import {signInWithGDrive, getJournalMetadata} from '../../lib';
+import {JournalContent} from '../../models';
 
-export default ({journal, show, unShow, onSettingsChange, storage, dic}) => {
+export default ({
+  journal,
+  show,
+  unShow,
+  onSettingsChange,
+  salt,
+  storage,
+  dic,
+}) => {
   const [userState, setUserState] = useMMKVStorage('canto-user', storage, null);
   const [keepGDSynced, setKeepGDSynced] = useState(journal.settings.gdriveSync);
 
-  const checkIfIsSynced = async () => {
-    try {
-      GoogleSignin.configure({
-        webClientId: DriveCredentials.web.client_id,
-        offlineAccess: true,
-        //https://developers.google.com/identity/protocols/oauth2/scopes
-        scopes: [
-          'https://www.googleapis.com/auth/drive.appdata',
-          'https://www.googleapis.com/auth/drive.file',
-        ],
-      });
-      const isSignedIn = await GoogleSignin.isSignedIn();
-      if (!isSignedIn) {
-        const userInfo = await GoogleSignin.signInSilently();
-        setUserState(userInfo);
-      }
-      const gdrive = new GDrive();
-      gdrive.accessToken = (await GoogleSignin.getTokens()).accessToken;
-
-      const storedJournal = await getJournalMetadata(journal, gdrive);
-
-      return new JournalContent(journal).isUpToDate(storedJournal);
-    } catch (error) {
-      console.log(error);
-    }
+  const testBtn = async () => {
+    const gdrive = await signInWithGDrive(setUserState);
+    const remoteJournal = await getJournalMetadata(salt, journal, gdrive);
+    console.log(new JournalContent(journal).isUpToDate(remoteJournal));
   };
 
   return (
@@ -88,7 +69,7 @@ export default ({journal, show, unShow, onSettingsChange, storage, dic}) => {
             </ModalRow>
           )}
           <ModalRow border>
-            <Button title="TEST" onPress={() => checkIfIsSynced()} />
+            <Button title="TEST" onPress={() => testBtn()} />
           </ModalRow>
           <EmptyBlock height={20} />
           <ModalRow>

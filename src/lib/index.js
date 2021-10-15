@@ -14,5 +14,9 @@ export {
   shareFile,
   saveImage,
 } from './Attachments';
-export {enc, dec, encKv, changeJournalEncryptionKey} from './CryptoStorage';
-export {getFolderId, getJournalMetadata} from './GDriveSync';
+export {
+  getStoredSalt,
+  encKv,
+  changeJournalEncryptionKey,
+} from './CryptoStorage';
+export {signInWithGDrive, getJournalMetadata} from './GDriveSync';

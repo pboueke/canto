@@ -19,7 +19,12 @@ import {
   JournalContent,
   JournalSettings,
 } from '../../models';
-import {removeFile, encKv, changeJournalEncryptionKey} from '../../lib';
+import {
+  removeFile,
+  encKv,
+  changeJournalEncryptionKey,
+  getStoredSalt,
+} from '../../lib';
 import Dictionary from '../../Dictionary';
 import {metadata} from '../..';
 
@@ -201,6 +206,7 @@ export default ({navigation, route}) => {
         dic={dic}
         journal={journalDataState}
         storage={MMKV}
+        salt={getStoredSalt(MMKV, props.journal.id, getKey())}
         show={dataModalVisibility}
         unShow={() => setDataModalVisibility(!dataModalVisibility)}
         onSettingsChange={(val, sort) => {
