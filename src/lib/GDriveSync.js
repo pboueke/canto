@@ -131,6 +131,7 @@ const updateJournalMetadata = async (
   changes,
   salt,
   gdrive,
+  callback,
 ) => {
   //console.log('UPDATING METADATA');
   const {pagesToDeleteRemotely: deletions} = changes;

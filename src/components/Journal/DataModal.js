@@ -1,5 +1,5 @@
 import React, {useState} from 'react';
-import {Switch, Button} from 'react-native';
+import {Switch, Easing, Animated} from 'react-native';
 import styled from 'styled-components/native';
 import {withTheme} from 'styled-components';
 import Icon from 'react-native-vector-icons/Feather';
@@ -14,6 +14,8 @@ import {
   downloadPage,
 } from '../../lib';
 import {JournalContent} from '../../models';
+import Toast from 'react-native-toast-message';
+import {toastConfig} from '../common';
 
 export default ({
   journal,
@@ -26,24 +28,44 @@ export default ({
 }) => {
   const [userState, setUserState] = useMMKVStorage('canto-user', storage, null);
   const [keepGDSynced, setKeepGDSynced] = useState(journal.settings.gdriveSync);
+  const [syncing, setSyncing] = useState(false);
+  const modalToastRef = React.useRef({});
 
-  const testBtn = async () => {
+  const pushToast = (text1, text2) =>
+    modalToastRef.current.show({
+      type: 'simpleInfo',
+      position: 'bottom',
+      text1: text1,
+      text2: text2,
+      visibilityTime: 1000,
+      autoHide: true,
+      bottomOffset: 0,
+      onShow: () => {},
+      onHide: () => {}, //setToastVisibility(false),
+      onPress: () => {},
+    });
+
+  const syncJournal = async () => {
+    //console.log('syncing...');
+    let success = true;
+    setSyncing(true);
+    pushToast('Syncing journal...', 'starting');
     try {
-      console.log(`\n\nLocal PAGES: ${journal.content.pages.length}`);
-      console.log(journal.content.pages);
+      //console.log(`\n\nLocal PAGES: ${journal.content.pages.length}`);
+      //console.log(journal.content.pages);
       const gdrive = await signInWithGDrive(setUserState);
       const {id: remoteJournalId, data: remoteJournal} =
         await getJournalMetadata(journal, salt, gdrive);
       const localJournal = new JournalContent().overwrite(journal.content);
       const isSynced = localJournal.isUpToDate(remoteJournal);
-      console.log(`\n\nREMOTE PAGES: ${remoteJournal.content.pages.length}`);
+      /*console.log(`\n\nREMOTE PAGES: ${remoteJournal.content.pages.length}`);
       console.log(remoteJournal.content.pages);
-      console.log(isSynced ? 'journal synced' : 'journal not synced');
+      console.log(isSynced ? 'journal synced' : 'journal not synced');*/
 
       if (!isSynced) {
-        console.log('\n\nCHANGES:');
+        //console.log('\n\nCHANGES:');
         const changes = localJournal.getPedingChanges(remoteJournal);
-        console.log(changes);
+        //console.log(changes);
         changes.pagesToDeleteRemotely.forEach(
           async pId => await deletePage(pId, gdrive),
         );
@@ -62,11 +84,16 @@ export default ({
           salt,
           gdrive,
         );
-        console.log('DONE');
       }
     } catch (error) {
+      success = false;
       console.log(error);
+      setSyncing(true);
+      pushToast('Syncing Failed', `ERROR: ${error}`);
     }
+    //console.log('DONE');
+    setSyncing(false);
+    success && pushToast('Journal synced!', 'success');
   };
 
   return (
@@ -106,13 +133,20 @@ export default ({
                 value={keepGDSynced}
                 onValueChange={val => {
                   setKeepGDSynced(val);
+                  val && syncJournal();
                   onSettingsChange({...journal.settings, gdriveSync: val});
                 }}
               />
             </ModalRow>
           )}
+          <Toast config={toastConfig} ref={modalToastRef} />
+
           <ModalRow border>
-            <Button title="TEST" onPress={() => testBtn()} />
+            <SyncBtn
+              title="Manual Synchronization"
+              onPress={() => syncJournal()}
+            />
+            <SyncSpinner spin={syncing} />
           </ModalRow>
           <EmptyBlock height={20} />
           <ModalRow>
@@ -137,6 +171,63 @@ const Scroll = styled.ScrollView.attrs({
   width: 100%;
   background-color: ${p => p.theme.modalBg};
 `;
+
+const SyncSpinner = ({spin}) => {
+  const Btn = styled(Icon)`
+    font-size: 40px;
+    color: ${p => p.theme.textColor};
+  `;
+  const Wrapper = styled.View`
+    width: 120px;
+    align-items: center;
+    margin-bottom: 10px;
+  `;
+  const animation = new Animated.Value(0);
+  const config = Animated.loop(
+    Animated.timing(animation, {
+      toValue: 1,
+      duration: 3000,
+      useNativeDriver: false,
+      easing: Easing.linear,
+    }),
+  );
+  if (spin) {
+    config.start();
+  }
+  const RotateData = animation.interpolate({
+    inputRange: [0, 1],
+    outputRange: ['0deg', '360deg'],
+  });
+  return (
+    <Wrapper>
+      <Animated.View style={{transform: [{rotate: RotateData}]}}>
+        <Btn name="refresh-cw" />
+      </Animated.View>
+    </Wrapper>
+  );
+};
+
+const SyncBtn = ({onPress, title}) => {
+  const Wrapper = styled.Pressable`
+    height: 40px;
+    margin: 0;
+    border-color: ${p => p.theme.borderColor};
+    background-color: ${p => p.theme.highlightBg}
+    border-radius: 5px;
+    border-width: 1px;
+    padding: 5px;
+  `;
+  const Label = styled.Text`
+    font-size: 20px;
+    color: ${p => p.theme.textColor};
+  `;
+
+  return (
+    <Wrapper onPress={onPress}>
+      <Label>{title}</Label>
+    </Wrapper>
+  );
+};
 
 const IconBtn = ({onPress, name}) => {
   const Wrapper = styled.Pressable`
