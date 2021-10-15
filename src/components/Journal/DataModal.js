@@ -11,6 +11,7 @@ import {
 } from '@react-native-google-signin/google-signin';
 import {GDrive} from '@robinbobin/react-native-google-drive-api-wrapper';
 import {getFolderId, getJournalMetadata} from '../../lib';
+import {JournalContent, JournalCover} from '../../models';
 import DriveCredentials from '../../../gdriveCredentials';
 
 export default ({journal, show, unShow, onSettingsChange, storage, dic}) => {
@@ -36,22 +37,11 @@ export default ({journal, show, unShow, onSettingsChange, storage, dic}) => {
       const gdrive = new GDrive();
       gdrive.accessToken = (await GoogleSignin.getTokens()).accessToken;
 
-      const journalFolderId = await getFolderId(journal.content.id, gdrive);
+      const storedJournal = await getJournalMetadata(journal, gdrive);
 
-      console.log('journal folder id:');
-      console.log(journalFolderId);
-
-      const storedJournal = await getJournalMetadata(
-        journal,
-        journalFolderId,
-        gdrive,
-      );
-
-      console.log(storedJournal);
-      console.log('DONE');
+      return new JournalContent(journal).isUpToDate(storedJournal);
     } catch (error) {
       console.log(error);
-      throw error;
     }
   };
 

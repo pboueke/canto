@@ -19,4 +19,10 @@ export default class JournalContent {
       srcVersion,
     });
   }
+
+  isUpToDate(remoteJournal) {
+    const remoteData = {};
+    remoteJournal.pages.forEach(p => (remoteData[p.id] = p.modified));
+    return this.pages.every(p => p.modified === remoteData[p.id]);
+  }
 }
