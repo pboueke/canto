@@ -8,6 +8,7 @@ import {useMMKVStorage} from 'react-native-mmkv-storage';
 import {
   signInWithGDrive,
   getJournalMetadata,
+  updateJournalMetadata,
   uploadPage,
   deletePage,
   downloadPage,
@@ -27,26 +28,44 @@ export default ({
   const [keepGDSynced, setKeepGDSynced] = useState(journal.settings.gdriveSync);
 
   const testBtn = async () => {
-    const gdrive = await signInWithGDrive(setUserState);
-    const remoteJournal = await getJournalMetadata(journal, salt, gdrive);
-    const localJournal = new JournalContent().overwrite(journal.content);
-    const isSynced = localJournal.isUpToDate(remoteJournal);
-    console.log(isSynced ? 'journal synced' : 'journal not synced');
-    if (!isSynced) {
-      const changes = localJournal.getPedingChanges(remoteJournal);
-      console.log(changes);
-      changes.pagesToDeleteRemotely.forEach(
-        async pId => await deletePage(pId, gdrive),
-      );
-      changes.pagesToUpload.forEach(
-        async pId => await uploadPage(pId, storage, gdrive),
-      );
-      changes.pagesToDeleteLocally.forEach(pId =>
-        storage.engine.removeItem(pId),
-      );
-      changes.pagesToUpload.forEach(pId =>
-        downloadPage(pId, storage, gdrive),
-      );
+    try {
+      console.log(`\n\nLocal PAGES: ${journal.content.pages.length}`);
+      console.log(journal.content.pages);
+      const gdrive = await signInWithGDrive(setUserState);
+      const {id: remoteJournalId, data: remoteJournal} =
+        await getJournalMetadata(journal, salt, gdrive);
+      const localJournal = new JournalContent().overwrite(journal.content);
+      const isSynced = localJournal.isUpToDate(remoteJournal);
+      console.log(`\n\nREMOTE PAGES: ${remoteJournal.content.pages.length}`);
+      console.log(remoteJournal.content.pages);
+      console.log(isSynced ? 'journal synced' : 'journal not synced');
+
+      if (!isSynced) {
+        console.log('\n\nCHANGES:');
+        const changes = localJournal.getPedingChanges(remoteJournal);
+        console.log(changes);
+        changes.pagesToDeleteRemotely.forEach(
+          async pId => await deletePage(pId, gdrive),
+        );
+        changes.pagesToUpload.forEach(
+          async pId => await uploadPage(pId, storage, gdrive),
+        );
+        changes.pagesToDeleteLocally.forEach(pId => storage.removeItem(pId));
+        changes.pagesToDownload.forEach(
+          async pId => await downloadPage(pId, storage, gdrive),
+        );
+        await updateJournalMetadata(
+          remoteJournalId,
+          remoteJournal,
+          journal,
+          changes,
+          salt,
+          gdrive,
+        );
+        console.log('DONE');
+      }
+    } catch (error) {
+      console.log(error);
     }
   };
 

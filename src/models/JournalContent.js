@@ -28,32 +28,40 @@ export default class JournalContent {
 
   isUpToDate(remoteJournal) {
     const remoteData = {};
-    remoteJournal.content.pages.forEach(p => (remoteData[p.id] = p.modified));
-    return this.pages.every(p => p.modified === remoteData[p.id]);
+    remoteJournal.content.pages.forEach(p => (remoteData[p.id] = p));
+    return this.pages.every(
+      p =>
+        remoteData[p.id] &&
+        p.modified === remoteData[p.id].modified &&
+        p.deleted === remoteData[p.id].deleted,
+    );
   }
 
   getPedingChanges(remoteJournal) {
     const remoteData = {};
-    const remoteIds = [];
-    const localIds = this.pages.map(lp => lp.id);
+    const remoteNotDeletedIds = [];
+    const localDeletedIds = this.pages.filter(p => p.deleted).map(p => p.id);
     remoteJournal.content.pages.forEach(p => {
-      remoteIds.push(p.id);
       remoteData[p.id] = p;
+      if (!p.deleted) {
+        remoteNotDeletedIds.push(p.id);
+      }
     });
     let res = {
       pagesToUpload: [],
       pagesToDownload: [],
       pagesToDeleteLocally: [],
-      pagesToDeleteRemotely: [],
+      pagesToDeleteRemotely: remoteNotDeletedIds.filter(id =>
+        localDeletedIds.includes(id),
+      ),
     };
-    res.pagesToDeleteRemotely = remoteIds.filter(id => !localIds.includes(id));
     for (let i = 0; i < this.pages.length; i++) {
       const id = this.pages[i].id;
       const localPage = this.pages[i];
       const remotePage = remoteData[id];
       if (!remotePage) {
         res.pagesToUpload.push(id);
-      } else if (remotePage.deleted) {
+      } else if (remotePage.deleted && !localPage.deleted) {
         res.pagesToDeleteLocally.push(id);
       } else if (remotePage.modified > localPage.modified) {
         res.pagesToDownload.push(id);

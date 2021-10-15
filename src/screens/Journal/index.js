@@ -47,9 +47,13 @@ export default ({navigation, route}) => {
     });
   }
 
+  const getValidPages = pages => pages.filter(p => !p.deleted);
+
   const journalDataStorage = get(props.journal.id);
   const [journalDataState, setJournalDataState] = useState(journalDataStorage);
-  const [pageList, setPageList] = useState(journalDataState.content.pages);
+  const [pageList, setPageList] = useState(
+    getValidPages(journalDataState.content.pages),
+  );
   const [settingsVisibility, setSettingsVisibility] = useState(false);
   const [dataModalVisibility, setDataModalVisibility] = useState(false);
 
@@ -61,9 +65,9 @@ export default ({navigation, route}) => {
         const data = get(props.journal.id);
         setJournalDataState(data);
         if (data.settings.sort === 'ascending') {
-          setPageList(Filter.sortAscending(data.content.pages));
+          setPageList(Filter.sortAscending(getValidPages(data.content.pages)));
         } else if (data.settings.sort === 'descending') {
-          setPageList(Filter.sortDescending(data.content.pages));
+          setPageList(Filter.sortDescending(getValidPages(data.content.pages)));
         }
       }),
     ];
@@ -167,7 +171,7 @@ export default ({navigation, route}) => {
           dic={dic}
           data={journalDataState.content.pages}
           journal={props.journal}
-          onChange={setPageList}
+          onChange={pages => setPageList(getValidPages(pages))}
         />
       )}
 
@@ -233,11 +237,15 @@ export default ({navigation, route}) => {
             if (sort) {
               if (val.sort === 'ascending') {
                 setPageList(
-                  Filter.sortAscending(journalDataState.content.pages),
+                  Filter.sortAscending(
+                    getValidPages(journalDataState.content.pages),
+                  ),
                 );
               } else if (val.sort === 'descending') {
                 setPageList(
-                  Filter.sortDescending(journalDataState.content.pages),
+                  Filter.sortDescending(
+                    getValidPages(journalDataState.content.pages),
+                  ),
                 );
               }
             }

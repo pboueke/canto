@@ -58,6 +58,7 @@ export default class Page {
       numberOfImages: this.images.length,
       numberOfComments: this.comments.length,
       modified: new Date().toISOString(),
+      deleted: false,
     };
   }
 }

@@ -22,6 +22,7 @@ export {
 export {
   signInWithGDrive,
   getJournalMetadata,
+  updateJournalMetadata,
   uploadPage,
   deletePage,
   downloadPage,

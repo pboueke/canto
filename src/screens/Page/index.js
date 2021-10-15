@@ -83,7 +83,10 @@ export default ({navigation, route}) => {
     let tmp = journalData;
     for (let i = 0; i < tmp.content.pages.length; i++) {
       if (tmp.content.pages[i].id === id) {
-        tmp.content.pages.splice(i, 1);
+        tmp.content.pages[i] = {
+          id: id,
+          deleted: true,
+        };
         break;
       }
     }
