@@ -5,7 +5,13 @@ import {withTheme} from 'styled-components';
 import Icon from 'react-native-vector-icons/Feather';
 import {ExternallyLoggedUser} from '../common';
 import {useMMKVStorage} from 'react-native-mmkv-storage';
-import {signInWithGDrive, getJournalMetadata, uploadPage} from '../../lib';
+import {
+  signInWithGDrive,
+  getJournalMetadata,
+  uploadPage,
+  deletePage,
+  downloadPage,
+} from '../../lib';
 import {JournalContent} from '../../models';
 
 export default ({
@@ -29,8 +35,17 @@ export default ({
     if (!isSynced) {
       const changes = localJournal.getPedingChanges(remoteJournal);
       console.log(changes);
+      changes.pagesToDeleteRemotely.forEach(
+        async pId => await deletePage(pId, gdrive),
+      );
       changes.pagesToUpload.forEach(
         async pId => await uploadPage(pId, storage, gdrive),
+      );
+      changes.pagesToDeleteLocally.forEach(pId =>
+        storage.engine.removeItem(pId),
+      );
+      changes.pagesToUpload.forEach(pId =>
+        downloadPage(pId, storage, gdrive),
       );
     }
   };

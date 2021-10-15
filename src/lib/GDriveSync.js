@@ -7,12 +7,7 @@ import {
 import DriveCredentials from '../../gdriveCredentials';
 
 const uploadPage = async (pageId, storage, gdrive) => {
-  console.log('Uploading page...');
   const pageData = storage.getString(pageId);
-  const reqBody = {
-    name: pageId,
-    parents: ['appDataFolder'],
-  };
   const query = new ListQueryBuilder()
     .e('name', pageId)
     .and()
@@ -27,9 +22,37 @@ const uploadPage = async (pageId, storage, gdrive) => {
   if (files.files.length > 0) {
     uploader.setIdOfFileToUpdate(files.files[0].id);
   } else {
-    uploader.setRequestBody(reqBody);
+    uploader.setRequestBody({
+      name: pageId,
+      parents: ['appDataFolder'],
+    });
   }
   await uploader.execute();
+};
+
+const downloadPage = async (pageId, storage, gdrive) => {
+  const query = new ListQueryBuilder()
+    .e('name', pageId)
+    .and()
+    .e('mimeType', MimeTypes.TEXT);
+  let files = await gdrive.files.list({
+    q: query,
+    spaces: ['appDataFolder'],
+  });
+  const data = await gdrive.files.getText(files.files[0].id);
+  storage.setString(pageId, data);
+};
+
+const deletePage = async (pageId, gdrive) => {
+  const query = new ListQueryBuilder()
+    .e('name', pageId)
+    .and()
+    .e('mimeType', MimeTypes.TEXT);
+  let files = await gdrive.files.list({
+    q: query,
+    spaces: ['appDataFolder'],
+  });
+  files.files.foreEach(async f => await gdrive.files.delete(f.id));
 };
 
 const signInWithGDrive = async setUser => {
@@ -91,4 +114,10 @@ const getJournalMetadata = async (journal, salt, gdrive) => {
   return JSON.parse(await gdrive.files.getText(id));
 };
 
-export {signInWithGDrive, getJournalMetadata, uploadPage};
+export {
+  signInWithGDrive,
+  getJournalMetadata,
+  uploadPage,
+  deletePage,
+  downloadPage,
+};
