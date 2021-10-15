@@ -5,7 +5,7 @@ import {withTheme} from 'styled-components';
 import Icon from 'react-native-vector-icons/Feather';
 import {ExternallyLoggedUser} from '../common';
 import {useMMKVStorage} from 'react-native-mmkv-storage';
-import {signInWithGDrive, getJournalMetadata} from '../../lib';
+import {signInWithGDrive, getJournalMetadata, uploadPage} from '../../lib';
 import {JournalContent} from '../../models';
 
 export default ({
@@ -22,8 +22,17 @@ export default ({
 
   const testBtn = async () => {
     const gdrive = await signInWithGDrive(setUserState);
-    const remoteJournal = await getJournalMetadata(salt, journal, gdrive);
-    console.log(new JournalContent(journal).isUpToDate(remoteJournal));
+    const remoteJournal = await getJournalMetadata(journal, salt, gdrive);
+    const localJournal = new JournalContent().overwrite(journal.content);
+    const isSynced = localJournal.isUpToDate(remoteJournal);
+    console.log(isSynced ? 'journal synced' : 'journal not synced');
+    if (!isSynced) {
+      const changes = localJournal.getPedingChanges(remoteJournal);
+      console.log(changes);
+      changes.pagesToUpload.forEach(
+        async pId => await uploadPage(pId, storage, gdrive),
+      );
+    }
   };
 
   return (
