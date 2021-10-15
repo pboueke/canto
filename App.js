@@ -5,8 +5,6 @@ import MMKVStorage from 'react-native-mmkv-storage';
 import HomeScreen from './src/screens/Home';
 import JournalScreen from './src/screens/Journal';
 import PageScreen from './src/screens/Page';
-import Toast from 'react-native-toast-message';
-import {toastConfig} from './src/components/common';
 import {ThemeProvider} from 'styled-components/native';
 import {CantoThemes} from './src/styles';
 import {metadata} from './src';
@@ -51,7 +49,6 @@ const App = () => {
             options={{headerShown: false}}
           />
         </Stack.Navigator>
-        <Toast config={toastConfig} ref={ref => Toast.setRef(ref)} />
       </NavigationContainer>
     </ThemeProvider>
   );

@@ -1,9 +1,11 @@
-import React, {useState, useContext} from 'react';
+import React, {useState, useContext, useCallback} from 'react';
 import styled from 'styled-components/native';
 import {ThemeContext} from 'styled-components';
 import {Keyboard} from 'react-native';
+import Toast from 'react-native-toast-message';
 import MMKVStorage from 'react-native-mmkv-storage';
-import {PopAction} from '../../components/common';
+import {PopAction, toastConfig} from '../../components/common';
+import {syncJournal} from '../../lib';
 import {
   FilterBar,
   PageList,
@@ -30,7 +32,11 @@ import {metadata} from '../..';
 
 export default ({navigation, route}) => {
   const props = route.params;
-  const getKey = () => `${props.journal.id}${(props.key || ['']).join('')}`;
+  const getKey = useCallback(
+    () => `${props.journal.id}${(props.key || ['']).join('')}`,
+    [props],
+  );
+
   const theme = useContext(ThemeContext);
   const MMKV = new MMKVStorage.Loader()
     .withInstanceID(`${metadata.mmkvInstance}`)
@@ -56,13 +62,59 @@ export default ({navigation, route}) => {
   );
   const [settingsVisibility, setSettingsVisibility] = useState(false);
   const [dataModalVisibility, setDataModalVisibility] = useState(false);
+  const [syncing, setSyncing] = useState(false);
 
   const dic = Dictionary(props.lang);
+
+  const toastRef = React.useRef({});
+  const showToast = (text1, text2, type = 'simpleInfo', timeout = 1000) => {
+    toastRef &&
+      toastRef.current &&
+      toastRef.current.show({
+        type: type,
+        position: 'bottom',
+        text1: text1,
+        text2: text2,
+        visibilityTime: timeout,
+        autoHide: true,
+        bottomOffSet: 1,
+      });
+  };
 
   React.useEffect(() => {
     const unsubscribe = [
       navigation.addListener('focus', () => {
         const data = get(props.journal.id);
+
+        if (data.settings.gdriveSync) {
+          !syncing &&
+            syncJournal(
+              journalDataState,
+              MMKV,
+              getStoredSalt(MMKV, props.journal.id, getKey()),
+              (/*start*/) => setSyncing(true),
+              success => {
+                setSyncing(false);
+                success &&
+                  showToast(
+                    'synced success',
+                    'with Google Drive',
+                    'quickSmall',
+                    10,
+                  );
+              },
+              error => {
+                setSyncing(false);
+                console.log(error);
+                showToast(
+                  'FAILED TO SYNC JOURNAL WITH GOOGLE DRIVE',
+                  `${error}`,
+                  2000,
+                );
+              },
+            );
+        }
+
         setJournalDataState(data);
         if (data.settings.sort === 'ascending') {
           setPageList(Filter.sortAscending(getValidPages(data.content.pages)));
@@ -72,7 +124,17 @@ export default ({navigation, route}) => {
       }),
     ];
     return () => unsubscribe.forEach(u => u());
-  }, [navigation, props, MMKV, setJournalDataState, pageList, get]);
+  }, [
+    navigation,
+    props,
+    MMKV,
+    journalDataState,
+    setJournalDataState,
+    pageList,
+    syncing,
+    get,
+    getKey,
+  ]);
 
   React.useLayoutEffect(() => {
     navigation.setOptions({
@@ -191,6 +253,7 @@ export default ({navigation, route}) => {
           });
         }}
       />
+
       <PopAction
         action="new"
         onPress={() => {
@@ -213,9 +276,9 @@ export default ({navigation, route}) => {
         salt={getStoredSalt(MMKV, props.journal.id, getKey())}
         show={dataModalVisibility}
         unShow={() => setDataModalVisibility(!dataModalVisibility)}
-        onSettingsChange={(val, sort) => {
-          setJournalDataState({settings: val, ...journalDataState});
-          set(props.journal.id, {settings: val, ...journalDataState});
+        onSettingsChange={val => {
+          setJournalDataState({...journalDataState, settings: val});
+          set(props.journal.id, {...journalDataState, settings: val});
         }}
       />
 
@@ -252,6 +315,7 @@ export default ({navigation, route}) => {
           }}
         />
       )}
+      <Toast config={toastConfig} ref={toastRef} />
     </Container>
   );
 };

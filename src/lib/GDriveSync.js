@@ -5,6 +5,7 @@ import {
   MimeTypes,
 } from '@robinbobin/react-native-google-drive-api-wrapper';
 import DriveCredentials from '../../gdriveCredentials';
+import {JournalContent} from '../models';
 
 const uploadPage = async (pageId, storage, gdrive) => {
   //console.log('UPLOADING FILE ' + pageId);
@@ -77,7 +78,8 @@ const signInWithGDrive = async setUser => {
     });
     const isSignedIn = await GoogleSignin.isSignedIn();
     if (!isSignedIn) {
-      setUser(await GoogleSignin.signInSilently());
+      const user = await GoogleSignin.signInSilently();
+      setUser && setUser(user);
     }
     const gdrive = new GDrive();
     gdrive.accessToken = (await GoogleSignin.getTokens()).accessToken;
@@ -158,11 +160,54 @@ const updateJournalMetadata = async (
     .execute();
 };
 
-export {
-  signInWithGDrive,
-  getJournalMetadata,
-  uploadPage,
-  deletePage,
-  downloadPage,
-  updateJournalMetadata,
+const syncJournal = async (
+  journal,
+  storage,
+  salt,
+  onStart,
+  onFinish,
+  onError,
+  setUser,
+) => {
+  let success = true;
+  onStart();
+  try {
+    const gdrive = await signInWithGDrive(setUser);
+    const {id: remoteJournalId, data: remoteJournal} = await getJournalMetadata(
+      journal,
+      salt,
+      gdrive,
+    );
+    const localJournal = new JournalContent().overwrite(journal.content);
+    const isSynced = localJournal.isUpToDate(remoteJournal);
+
+    if (!isSynced) {
+      const changes = localJournal.getPedingChanges(remoteJournal);
+      changes.pagesToDeleteRemotely.forEach(
+        async pId => await deletePage(pId, gdrive),
+      );
+      changes.pagesToUpload.forEach(
+        async pId => await uploadPage(pId, storage, gdrive),
+      );
+      changes.pagesToDeleteLocally.forEach(pId => storage.removeItem(pId));
+      changes.pagesToDownload.forEach(
+        async pId => await downloadPage(pId, storage, gdrive),
+      );
+      await updateJournalMetadata(
+        remoteJournalId,
+        remoteJournal,
+        journal,
+        changes,
+        salt,
+        gdrive,
+      );
+    }
+  } catch (error) {
+    success = false;
+    console.log(error);
+    onError(error);
+  }
+  onFinish(success);
 };
+
+export {syncJournal};

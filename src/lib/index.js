@@ -26,4 +26,5 @@ export {
   uploadPage,
   deletePage,
   downloadPage,
+  syncJournal,
 } from './GDriveSync';

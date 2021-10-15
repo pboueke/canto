@@ -5,15 +5,7 @@ import {withTheme} from 'styled-components';
 import Icon from 'react-native-vector-icons/Feather';
 import {ExternallyLoggedUser} from '../common';
 import {useMMKVStorage} from 'react-native-mmkv-storage';
-import {
-  signInWithGDrive,
-  getJournalMetadata,
-  updateJournalMetadata,
-  uploadPage,
-  deletePage,
-  downloadPage,
-} from '../../lib';
-import {JournalContent} from '../../models';
+import {syncJournal} from '../../lib';
 import Toast from 'react-native-toast-message';
 import {toastConfig} from '../common';
 
@@ -32,6 +24,8 @@ export default ({
   const modalToastRef = React.useRef({});
 
   const pushToast = (text1, text2) =>
+    modalToastRef &&
+    modalToastRef.current &&
     modalToastRef.current.show({
       type: 'simpleInfo',
       position: 'bottom',
@@ -39,61 +33,27 @@ export default ({
       text2: text2,
       visibilityTime: 1000,
       autoHide: true,
-      bottomOffset: 0,
-      onShow: () => {},
-      onHide: () => {}, //setToastVisibility(false),
-      onPress: () => {},
     });
 
-  const syncJournal = async () => {
-    //console.log('syncing...');
-    let success = true;
-    setSyncing(true);
-    pushToast('Syncing journal...', 'starting');
-    try {
-      //console.log(`\n\nLocal PAGES: ${journal.content.pages.length}`);
-      //console.log(journal.content.pages);
-      const gdrive = await signInWithGDrive(setUserState);
-      const {id: remoteJournalId, data: remoteJournal} =
-        await getJournalMetadata(journal, salt, gdrive);
-      const localJournal = new JournalContent().overwrite(journal.content);
-      const isSynced = localJournal.isUpToDate(remoteJournal);
-      /*console.log(`\n\nREMOTE PAGES: ${remoteJournal.content.pages.length}`);
-      console.log(remoteJournal.content.pages);
-      console.log(isSynced ? 'journal synced' : 'journal not synced');*/
-
-      if (!isSynced) {
-        //console.log('\n\nCHANGES:');
-        const changes = localJournal.getPedingChanges(remoteJournal);
-        //console.log(changes);
-        changes.pagesToDeleteRemotely.forEach(
-          async pId => await deletePage(pId, gdrive),
-        );
-        changes.pagesToUpload.forEach(
-          async pId => await uploadPage(pId, storage, gdrive),
-        );
-        changes.pagesToDeleteLocally.forEach(pId => storage.removeItem(pId));
-        changes.pagesToDownload.forEach(
-          async pId => await downloadPage(pId, storage, gdrive),
-        );
-        await updateJournalMetadata(
-          remoteJournalId,
-          remoteJournal,
-          journal,
-          changes,
-          salt,
-          gdrive,
-        );
-      }
-    } catch (error) {
-      success = false;
-      console.log(error);
-      setSyncing(true);
-      pushToast('Syncing Failed', `ERROR: ${error}`);
-    }
-    //console.log('DONE');
-    setSyncing(false);
-    success && pushToast('Journal synced!', 'success');
+  const syncJournalPress = async () => {
+    await syncJournal(
+      journal,
+      storage,
+      salt,
+      () => {
+        setSyncing(true);
+        pushToast('Syncing journal...', 'starting');
+      },
+      success => {
+        setSyncing(false);
+        success && pushToast('Journal synced!', 'success');
+      },
+      error => {
+        setSyncing(true);
+        pushToast('Syncing Failed', `ERROR: ${error}`);
+      },
+      setUserState,
+    );
   };
 
   return (
@@ -133,7 +93,7 @@ export default ({
                 value={keepGDSynced}
                 onValueChange={val => {
                   setKeepGDSynced(val);
-                  val && syncJournal();
+                  val && syncJournalPress();
                   onSettingsChange({...journal.settings, gdriveSync: val});
                 }}
               />
@@ -144,7 +104,7 @@ export default ({
           <ModalRow border>
             <SyncBtn
               title="Manual Synchronization"
-              onPress={() => syncJournal()}
+              onPress={() => syncJournalPress()}
             />
             <SyncSpinner spin={syncing} />
           </ModalRow>
