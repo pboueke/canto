@@ -5,7 +5,7 @@ import {
   MimeTypes,
 } from '@robinbobin/react-native-google-drive-api-wrapper';
 import DriveCredentials from '../../gdriveCredentials';
-import {JournalContent} from '../models';
+import {JournalCover, JournalContent} from '../models';
 
 const uploadPage = async (pageId, storage, gdrive) => {
   //console.log('UPLOADING FILE ' + pageId);
@@ -117,6 +117,10 @@ const getJournalMetadata = async (journal, enc, dec, gdrive) => {
       })
       .execute();
     id = resp.id;
+    await journalLibrary({
+      gdrive: gdrive,
+      newJournal: new JournalCover(journal.content),
+    });
   } else {
     id = files.files[0].id;
   }
@@ -210,7 +214,37 @@ const syncJournal = async (
 };
 
 const journalLibrary = async ({gdrive, newJournal, setUser}) => {
-  const _gdrive = gdrive ?? signInWithGDrive(setUser)
+  let lib = [];
+  const _gdrive = gdrive ?? signInWithGDrive(setUser);
+  const query = new ListQueryBuilder()
+    .e('name', 'canto-journals')
+    .and()
+    .e('mimeType', MimeTypes.TEXT);
+  let files = await gdrive.files.list({
+    q: query,
+    spaces: ['appDataFolder'],
+  });
+  if (files.files.length !== 0) {
+    id = files.files[0].id;
+    lib = JSON.parse(await _gdrive.files.getText(id));
+  }
+  if (newJournal) {
+    lib.push(newJournal);
+    let uploader = gdrive.files
+      .newMultipartUploader()
+      .setData(JSON.stringify(lib), MimeTypes.TEXT);
+    if (files.files.length > 0) {
+      uploader.setIdOfFileToUpdate(files.files[0].id);
+    } else {
+      uploader.setRequestBody({
+        name: 'canto-journals',
+        parents: ['appDataFolder'],
+      });
+    }
+    await uploader.execute();
+  }
+  console.log(lib);
+  return lib;
 };
 
-export {syncJournal};
+export {syncJournal, journalLibrary};

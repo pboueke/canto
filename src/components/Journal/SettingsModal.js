@@ -194,6 +194,7 @@ export default ({journal, show, unShow, dic, danger, onChange}) => {
       />
       <ConfirmModal
         dic={dic}
+        marginTop={20}
         message={dic('Confirm password')}
         submit={confirmMessage ? dic('Delete') : dic('Change')}
         show={confirmVisibility}
