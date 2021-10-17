@@ -213,14 +213,14 @@ const syncJournal = async (
   onFinish(success);
 };
 
-const journalLibrary = async ({gdrive, newJournal, setUser}) => {
+const journalLibrary = async ({gdrive, newJournal, setUser} = {}) => {
   let lib = [];
-  const _gdrive = gdrive ?? signInWithGDrive(setUser);
+  const _gdrive = gdrive ?? (await signInWithGDrive(setUser));
   const query = new ListQueryBuilder()
     .e('name', 'canto-journals')
     .and()
     .e('mimeType', MimeTypes.TEXT);
-  let files = await gdrive.files.list({
+  let files = await _gdrive.files.list({
     q: query,
     spaces: ['appDataFolder'],
   });
@@ -230,7 +230,7 @@ const journalLibrary = async ({gdrive, newJournal, setUser}) => {
   }
   if (newJournal) {
     lib.push(newJournal);
-    let uploader = gdrive.files
+    let uploader = _gdrive.files
       .newMultipartUploader()
       .setData(JSON.stringify(lib), MimeTypes.TEXT);
     if (files.files.length > 0) {
@@ -243,7 +243,6 @@ const journalLibrary = async ({gdrive, newJournal, setUser}) => {
     }
     await uploader.execute();
   }
-  console.log(lib);
   return lib;
 };
 

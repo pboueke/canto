@@ -172,7 +172,14 @@ export default ({navigation, route}) => {
           <Version>{dic('Version') + ': ' + metadata.srcVersion}</Version>
         </InfoBox>
       </Flex>
-      <NewJournalSelector dic={dic} save={saveJournal} />
+      <NewJournalSelector
+        dic={dic}
+        save={saveJournal}
+        user={userState}
+        localJournalsIds={appData.journals
+          .filter(j => !j.deleted)
+          .map(j => j.id)}
+      />
       <Scroll>
         <JournalTable>
           {journals}

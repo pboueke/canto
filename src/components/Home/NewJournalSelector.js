@@ -9,9 +9,11 @@ import {IconListModal} from '../common';
 import JournalSelector from './JournalSelector';
 import {JournalCover} from '../../models';
 import {Loader} from '../common';
+import {GDriveLibraryModal} from '.';
 
 export default props => {
   const dic = props.dic;
+  const [gdriveModalVisible, setGdriveModalVisible] = useState(true);
   const [journalModalVisible, setJournalModalVisible] = useState(false);
   const [iconsModalVisible, setIconsModalVisible] = useState(false);
   const [isSaving, setIsSaving] = useStateWithCallback(false);
@@ -65,6 +67,11 @@ export default props => {
                 <NewJournalModalTitle>
                   {dic('Create a new Journal?')}
                 </NewJournalModalTitle>
+
+                <ImportBtn
+                  name={dic('...or Import from Google Drive')}
+                  onPress={() => setGdriveModalVisible(!gdriveModalVisible)}
+                />
 
                 <TextFieldTitle>{dic('Title')}</TextFieldTitle>
                 <TextField value={title} onChangeText={setTitle} />
@@ -144,6 +151,15 @@ export default props => {
               unShow={() => setIconsModalVisible(false)}
               key={'icons-' + iconsModalVisible}
             />
+
+            {props.user && (
+              <GDriveLibraryModal
+                localJournalsIds={props.localJournalsIds}
+                show={gdriveModalVisible}
+                unShow={() => setGdriveModalVisible(!gdriveModalVisible)}
+                dic={dic}
+              />
+            )}
           </NewJournalModal>
         </SelectorSkeleton>
       </TouchableNativeFeedback>
@@ -265,6 +281,23 @@ const Preview = styled.View`
   justify-content: space-evenly;
 `;
 
+const ImportBtn = ({name, onPress}) => {
+  const BtnWrapper = styled.Pressable`
+    align-self: center;
+    border-bottom-width: 1px;
+    border-color: ${p => p.theme.textColor};
+  `;
+  const BtnText = styled.Text`
+  font-family: ${p => p.theme.font.menu.reg};
+  color: : ${p => p.theme.textColor};
+`;
+  return (
+    <BtnWrapper onPress={onPress}>
+      <BtnText>{name}</BtnText>
+    </BtnWrapper>
+  );
+};
+
 const CancelButton = styled.Pressable`
   border-width: ${p => p.theme.borderWidth};
   border-radius: 5px;
@@ -295,5 +328,5 @@ const ButtonText = styled.Text`
   font-family: ${p => p.theme.font.menu.reg};
   padding: 10px;
   font-weight: 700;
-  color: : ${p => (p.enabled ? p.theme.submitBtn : p.theme.disabledSubmitBtn)};;
+  color: : ${p => (p.enabled ? p.theme.submitBtn : p.theme.disabledSubmitBtn)};
 `;

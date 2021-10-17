@@ -265,6 +265,9 @@ const text = {
   'Export your data': {
     pt: 'Exporte seus dados',
   },
+  'Your Journals on Google Drive': {
+    pt: 'Seus Diários no Google Drive',
+  },
 };
 
 export default language => {
