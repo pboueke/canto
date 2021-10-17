@@ -29,8 +29,7 @@ const uploadPage = async (pageId, storage, gdrive) => {
       parents: ['appDataFolder'],
     });
   }
-  const res = await uploader.execute();
-  console.log(res);
+  await uploader.execute();
 };
 
 const downloadPage = async (pageId, storage, gdrive) => {
@@ -90,7 +89,7 @@ const signInWithGDrive = async setUser => {
   }
 };
 
-const getJournalMetadata = async (journal, salt, gdrive) => {
+const getJournalMetadata = async (journal, enc, dec, gdrive) => {
   //console.log('GETTING METADATA FILE ');
   const name = `${journal.content.id}.mtdt`;
   const query = new ListQueryBuilder()
@@ -103,9 +102,7 @@ const getJournalMetadata = async (journal, salt, gdrive) => {
   });
   let id;
   if (files.files.length === 0) {
-    console.log(`WRITING ${name} to store: `);
     let data = journal;
-    data.salt = salt;
     data.content.pages = data.content.pages.map(p => ({
       id: p.id,
       modified: p.modified,
@@ -113,7 +110,7 @@ const getJournalMetadata = async (journal, salt, gdrive) => {
     }));
     const resp = await gdrive.files
       .newMultipartUploader()
-      .setData(JSON.stringify(data), MimeTypes.TEXT)
+      .setData(enc(data), MimeTypes.TEXT)
       .setRequestBody({
         name: name,
         parents: ['appDataFolder'],
@@ -123,7 +120,7 @@ const getJournalMetadata = async (journal, salt, gdrive) => {
   } else {
     id = files.files[0].id;
   }
-  return {id: id, data: JSON.parse(await gdrive.files.getText(id))};
+  return {id: id, data: dec(await gdrive.files.getText(id))};
 };
 
 const updateJournalMetadata = async (
@@ -131,7 +128,7 @@ const updateJournalMetadata = async (
   metadata,
   journal,
   changes,
-  salt,
+  enc,
   gdrive,
   callback,
 ) => {
@@ -155,7 +152,7 @@ const updateJournalMetadata = async (
   data.content.pages = [...notDeleted, ...previouslyDeleted, ...newDeletions];
   await gdrive.files
     .newMultipartUploader()
-    .setData(JSON.stringify(data), MimeTypes.TEXT)
+    .setData(enc(JSON.stringify(data)), MimeTypes.TEXT)
     .setIdOfFileToUpdate(metadataId)
     .execute();
 };
@@ -163,7 +160,8 @@ const updateJournalMetadata = async (
 const syncJournal = async (
   journal,
   storage,
-  salt,
+  enc,
+  dec,
   onStart,
   onFinish,
   onError,
@@ -175,7 +173,8 @@ const syncJournal = async (
     const gdrive = await signInWithGDrive(setUser);
     const {id: remoteJournalId, data: remoteJournal} = await getJournalMetadata(
       journal,
-      salt,
+      enc,
+      dec,
       gdrive,
     );
     const localJournal = new JournalContent().overwrite(journal.content);
@@ -198,7 +197,7 @@ const syncJournal = async (
         remoteJournal,
         journal,
         changes,
-        salt,
+        enc,
         gdrive,
       );
     }
@@ -208,6 +207,10 @@ const syncJournal = async (
     onError(error);
   }
   onFinish(success);
+};
+
+const journalLibrary = async ({gdrive, newJournal, setUser}) => {
+  const _gdrive = gdrive ?? signInWithGDrive(setUser)
 };
 
 export {syncJournal};

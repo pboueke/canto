@@ -16,6 +16,8 @@ export default ({
   onSettingsChange,
   salt,
   storage,
+  enc,
+  dec,
   dic,
 }) => {
   const [userState, setUserState] = useMMKVStorage('canto-user', storage, null);
@@ -39,7 +41,8 @@ export default ({
     await syncJournal(
       journal,
       storage,
-      salt,
+      enc,
+      dec,
       () => {
         setSyncing(true);
         pushToast('Syncing journal...', 'starting');

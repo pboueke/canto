@@ -42,7 +42,7 @@ export default ({navigation, route}) => {
     .withInstanceID(`${metadata.mmkvInstance}`)
     .withEncryption()
     .initialize();
-  const [get, set] = encKv(MMKV, props.journal.id, getKey());
+  const [get, set, enc, dec] = encKv(MMKV, props.journal.id, getKey());
 
   const storedData = MMKV.getString(props.journal.id);
   if (!storedData) {
@@ -91,6 +91,9 @@ export default ({navigation, route}) => {
             syncJournal(
               journalDataState,
               MMKV,
+              enc,
+              dec,
+              getStoredSalt(MMKV, props.journal.id, getKey()),
               getStoredSalt(MMKV, props.journal.id, getKey()),
               (/*start*/) => setSyncing(true),
               success => {
@@ -273,7 +276,8 @@ export default ({navigation, route}) => {
         dic={dic}
         journal={journalDataState}
         storage={MMKV}
-        salt={getStoredSalt(MMKV, props.journal.id, getKey())}
+        enc={enc}
+        dec={dec}
         show={dataModalVisibility}
         unShow={() => setDataModalVisibility(!dataModalVisibility)}
         onSettingsChange={val => {
