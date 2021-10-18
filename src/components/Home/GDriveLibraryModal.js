@@ -28,6 +28,13 @@ export default ({localJournalsIds, show, unShow, dic}) => {
       <Scroll>
         <GDLibraryModalInterior>
           <ModalRow>
+            <IconBtn
+              name="refresh-ccw"
+              onPress={() => {
+                setLoading(true);
+                setFirstLoad(true);
+              }}
+            />
             <GDLibraryModalTitle>
               {dic('Your Journals on Google Drive')}
             </GDLibraryModalTitle>
@@ -41,13 +48,17 @@ export default ({localJournalsIds, show, unShow, dic}) => {
             />
           )}
           {!loading &&
-            lib.map(j => (
-              <StoredJournal
-                alsoLocal={localJournalsIds.includes(j.id)}
-                key={j.id}
-                journal={j}
-              />
-            ))}
+            lib.map(j => {
+              const local = localJournalsIds.includes(j.id);
+              return (
+                <StoredJournal
+                  alsoLocal={local}
+                  key={j.id}
+                  journal={j}
+                  onPress={() => !local && console.log('should download...')}
+                />
+              );
+            })}
         </GDLibraryModalInterior>
       </Scroll>
     </GDLibraryModal>
@@ -76,6 +87,8 @@ const StoredJournal = ({alsoLocal, onPress, journal}) => {
     border-top-width: 1px;
     border-radius: 10px;
     align-items: center;
+    background-color: ${p =>
+      alsoLocal ? p.theme.modalBg : p.theme.highlightBg};
   `;
   const SJIcon = styled(Icon)`
     font-size: ${p => (p.big ? 50 : 40)}px;
@@ -107,7 +120,7 @@ const GDLibraryModalTitle = styled.Text`
   font-size: 30px;
   text-align: center;
   width: 100%;
-  margin: 50px 0 50px 0;
+  margin: 30px 0 30px 0;
   color: ${p => p.theme.textColor};
 `;
 
@@ -130,16 +143,13 @@ const ModalRow = ({children, border, wrap}) => {
     width: 100%;
     flex: 1;
     flex-direction: row;
-    margin: 10px 0 10px 0;
     justify-content: space-between;
-    padding: 0 10px 0 5px;
     border-bottom-width: ${p => (border ? 1 : 0)}px;
     border-color: ${p => p.theme.borderColor};
     align-items: center;
   `;
   const Item = styled.View`
     flex-shrink: 1;
-    padding: 2px 0 2px 10px;
   `;
   if (!children) {
     return <Row />;
@@ -158,7 +168,7 @@ const IconBtn = ({onPress, name}) => {
   const Wrapper = styled.Pressable`
     height: 40px;
     width: 40px;
-    margin: 10px 20px 10px 20px;
+    margin: 0 50px 0 20px;
   `;
   const Btn = styled(Icon)`
     font-size: 40px;

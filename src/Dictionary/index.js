@@ -268,6 +268,9 @@ const text = {
   'Your Journals on Google Drive': {
     pt: 'Seus Diários no Google Drive',
   },
+  '...or import from Google Drive': {
+    pt: '...ou importe do Google Drive',
+  },
 };
 
 export default language => {

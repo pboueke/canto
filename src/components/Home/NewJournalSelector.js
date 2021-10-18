@@ -143,6 +143,15 @@ export default props => {
                   </Box>
                 </Flex>
               </NewJournalModalInterior>
+
+              {props.user && (
+                <GDriveLibraryModal
+                  localJournalsIds={props.localJournalsIds}
+                  show={gdriveModalVisible}
+                  unShow={() => setGdriveModalVisible(!gdriveModalVisible)}
+                  dic={dic}
+                />
+              )}
             </Scroll>
 
             <IconListModal
@@ -151,15 +160,6 @@ export default props => {
               unShow={() => setIconsModalVisible(false)}
               key={'icons-' + iconsModalVisible}
             />
-
-            {props.user && (
-              <GDriveLibraryModal
-                localJournalsIds={props.localJournalsIds}
-                show={gdriveModalVisible}
-                unShow={() => setGdriveModalVisible(!gdriveModalVisible)}
-                dic={dic}
-              />
-            )}
           </NewJournalModal>
         </SelectorSkeleton>
       </TouchableNativeFeedback>
@@ -283,6 +283,7 @@ const Preview = styled.View`
 
 const ImportBtn = ({name, onPress}) => {
   const BtnWrapper = styled.Pressable`
+    margin-bottom: 20px;
     align-self: center;
     border-bottom-width: 1px;
     border-color: ${p => p.theme.textColor};
