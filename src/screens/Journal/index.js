@@ -228,6 +228,11 @@ export default ({navigation, route}) => {
     navigation.goBack();
   };
 
+  const updateGDriveMetadata = async changes => {
+    const jId = journalDataState.content.id;
+    GDrive.updateJournalMetadata(jId, changes, enc, dec);
+  };
+
   const removeFromGDrive = async () => {
     try {
       const jId = journalDataState.content.id;
@@ -309,6 +314,7 @@ export default ({navigation, route}) => {
             setPassword: changePassword,
             doDelete: deleteJournal,
             doRemoveGdrive: removeFromGDrive,
+            doUpdateGdrive: updateGDriveMetadata,
           }}
           journal={journalDataState}
           show={settingsVisibility}

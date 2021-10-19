@@ -8,7 +8,6 @@ import DriveCredentials from '../../gdriveCredentials';
 import {JournalCover, JournalContent} from '../models';
 
 const uploadPage = async (pageId, storage, gdrive) => {
-  //console.log('UPLOADING FILE ' + pageId);
   const pageData = storage.getString(pageId);
   const query = new ListQueryBuilder()
     .e('name', pageId)
@@ -33,7 +32,6 @@ const uploadPage = async (pageId, storage, gdrive) => {
 };
 
 const downloadPage = async (pageId, storage, gdrive) => {
-  //console.log('DOWNLOADING FILE ' + pageId);
   const query = new ListQueryBuilder()
     .e('name', pageId)
     .and()
@@ -47,7 +45,6 @@ const downloadPage = async (pageId, storage, gdrive) => {
 };
 
 const deletePage = async (pageId, gdrive) => {
-  //console.log('DELETING FILE ' + pageId);
   const query = new ListQueryBuilder()
     .e('name', pageId)
     .and()
@@ -59,7 +56,6 @@ const deletePage = async (pageId, gdrive) => {
   if (files.files[0]) {
     await gdrive.files.delete(files.files[0].id);
   } else {
-    // Ignore in case this page was deleted before first synchronization.
     console.warn(`Tried to delete page:${pageId} from drive, but none found`);
   }
 };
@@ -126,7 +122,7 @@ const getJournalMetadata = async (journal, enc, dec, salt, gdrive) => {
   return {id: id, data: dec(await gdrive.files.getText(id))};
 };
 
-const updateJournalMetadata = async (
+const updateJournalPageData = async (
   metadataId,
   metadata,
   journal,
@@ -158,6 +154,50 @@ const updateJournalMetadata = async (
     .setData(enc(JSON.stringify(data)), MimeTypes.TEXT)
     .setIdOfFileToUpdate(metadataId)
     .execute();
+};
+
+const updateJournalMetadata = async (
+  jId,
+  changes,
+  enc,
+  dec,
+  callback,
+  gdrive,
+) => {
+  const _gdrive = gdrive ?? (await signInWithGDrive());
+  const {lib: library, id: libId} = await journalLibrary({
+    gdrive: _gdrive,
+    getId: true,
+  });
+  const {id: metadataId, data: metadata} = await getJournalMetadata(
+    {content: {id: jId}},
+    enc,
+    dec,
+    null,
+    _gdrive,
+  );
+  let newLibrary = library;
+  for (let i = 0; i < library.length; i++) {
+    if (library[i].id === jId) {
+      newLibrary[i] = {...library[i], ...changes};
+      break;
+    }
+  }
+  try {
+    await _gdrive.files
+      .newMultipartUploader()
+      .setData(enc({...metadata, ...changes}), MimeTypes.TEXT)
+      .setIdOfFileToUpdate(metadataId)
+      .execute();
+    await _gdrive.files
+      .newMultipartUploader()
+      .setData(JSON.stringify(newLibrary), MimeTypes.TEXT)
+      .setIdOfFileToUpdate(libId)
+      .execute();
+    callback && callback();
+  } catch (error) {
+    console.log(error);
+  }
 };
 
 const syncJournal = async (
@@ -197,7 +237,7 @@ const syncJournal = async (
       changes.pagesToDownload.forEach(
         async pId => await downloadPage(pId, storage, gdrive),
       );
-      await updateJournalMetadata(
+      await updateJournalPageData(
         remoteJournalId,
         remoteJournal,
         journal,
@@ -287,4 +327,9 @@ const journalLibrary = async ({gdrive, newJournal, getId, setUser} = {}) => {
   }
 };
 
-export default {syncJournal, journalLibrary, removeJournal};
+export default {
+  syncJournal,
+  journalLibrary,
+  removeJournal,
+  updateJournalMetadata,
+};

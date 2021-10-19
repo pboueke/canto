@@ -129,10 +129,18 @@ export default ({journal, show, unShow, dic, danger, onChange}) => {
                 setConfirmTextInput(false);
                 setInputSubmit(() => val => {
                   if (journal.content.secure) {
-                    setConfirmSubmit(() => name => danger.setName(name));
+                    setConfirmSubmit(() => name => {
+                      danger.setName(name);
+                      if (settings.gdriveSync) {
+                        danger.doUpdateGdrive({title: name});
+                      }
+                    });
                     setConfirmVisibility(!confirmVisibility);
                   } else {
                     danger.setName(val);
+                    if (settings.gdriveSync) {
+                      danger.doUpdateGdrive({title: val});
+                    }
                   }
                 });
                 setInputVisibility(!inputVisibility);
@@ -244,7 +252,12 @@ export default ({journal, show, unShow, dic, danger, onChange}) => {
         }}
       />
       <IconListModal
-        handleClose={icon => danger.setIcon(icon)}
+        handleClose={icon => {
+          danger.setIcon(icon);
+          if (settings.gdriveSync) {
+            danger.doUpdateGdrive({icon: icon});
+          }
+        }}
         show={iconsModalVisible}
         unShow={() => setIconsModalVisible(false)}
         key={'icons-' + iconsModalVisible}
