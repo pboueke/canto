@@ -228,4 +228,45 @@ const shareFile = async (path, name, date) => {
     });
 };
 
-export {removeFile, addImage, addFile, addLocation, shareFile, saveImage};
+const Album = (jId, get, set) => {
+  const getAlbum = () => get(`${jId}.album`);
+  const updateAlbum = ({toAdd = [], toUpdate = [], toRemove = []}) => {
+    const toRemoveIds = toRemove.map(f => f.id);
+    const toUpdateFiles = [{}, ...toUpdate].reduce((o, f) => {
+      let tmp = o;
+      tmp[f.id] = f;
+      return tmp;
+    });
+    let newAlbum = getAlbum();
+    const changes = toUpdate.length + toRemove.length;
+    if (changes > 0) {
+      for (
+        let i = 0, changed = 0;
+        i < newAlbum.length && changed < changes;
+        i++
+      ) {
+        const fileId = newAlbum[i].id;
+        if (Object.keys(toUpdateFiles).includes(fileId)) {
+          newAlbum[i] = toUpdateFiles[fileId];
+          changed += 1;
+        } else if (toRemoveIds.includes(fileId)) {
+          newAlbum[i] = {id: fileId, deleted: true};
+          changed += 1;
+        }
+      }
+    }
+    toAdd.forEach(f => newAlbum.push(f));
+    set(`${jId}.album`, newAlbum);
+  };
+  return [getAlbum, updateAlbum];
+};
+
+export {
+  Album,
+  removeFile,
+  addImage,
+  addFile,
+  addLocation,
+  shareFile,
+  saveImage,
+};

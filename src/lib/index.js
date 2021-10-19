@@ -7,6 +7,7 @@ export {
 } from './Utils';
 export {openLocationExternally} from './Location';
 export {
+  Album,
   removeFile,
   addImage,
   addFile,

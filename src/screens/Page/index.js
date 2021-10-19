@@ -21,6 +21,7 @@ import {
 } from '../../components/Page';
 import {Page, Comment} from '../../models';
 import {
+  Album,
   openLocationExternally,
   getDate,
   encKv,
@@ -55,26 +56,7 @@ export default ({navigation, route}) => {
   const [orgValueString, setOrgValueString] = reactUsestateref(
     JSON.stringify(pageData),
   );
-  const getAlbum = () => get(`${props.parent}.album`);
-  const updateAlbum = ({toAdd = [], toUpdate = [], toRemove = []}) => {
-    console.log({toAdd, toUpdate, toRemove});
-    const toRemoveIds = toRemove.map(f => f.id);
-    const toUpdateFiles = [{}, ...toUpdate].reduce((o, f) => {
-      let tmp = o;
-      tmp[f.id] = f;
-      return tmp;
-    });
-    let newAlbum = getAlbum().filter(f => !toRemoveIds.includes(f.id));
-    if (toUpdate.length > 0) {
-      for (let i = 0; i < newAlbum.length; i++) {
-        if (Object.keys(toUpdateFiles).includes(newAlbum[i].id)) {
-          newAlbum[i] = toUpdateFiles[newAlbum[i].id];
-        }
-      }
-    }
-    toAdd.forEach(f => newAlbum.push(f));
-    set(`${props.parent}.album`, newAlbum);
-  };
+  const [getAlbum, updateAlbum] = Album(props.parent, get, set);
 
   const [deleteModalVisibility, setDeleteModalVisibility] = useState(false);
   const [stored, setStored] = useState(!props.newPage);

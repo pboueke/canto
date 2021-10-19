@@ -22,6 +22,7 @@ import {
   JournalSettings,
 } from '../../models';
 import {
+  Album,
   removeFile,
   encKv,
   changeJournalEncryptionKey,
@@ -56,27 +57,7 @@ export default ({navigation, route}) => {
   if (!albumData) {
     set(`${props.journal.id}.album`, []);
   }
-  const getAlbum = () => get(`${props.journal.id}.album`);
-  const updateAlbum = ({toAdd = [], toUpdate = [], toRemove = []}) => {
-    console.log({toAdd, toUpdate, toRemove});
-    const toRemoveIds = toRemove.map(f => f.id);
-    const toUpdateFiles = [{}, ...toUpdate].reduce((o, f) => {
-      let tmp = o;
-      tmp[f.id] = f;
-      return tmp;
-    });
-    let newAlbum = getAlbum().filter(f => !toRemoveIds.includes(f.id));
-    if (toUpdate.length > 0) {
-      for (let i = 0; i < newAlbum.length; i++) {
-        if (Object.keys(toUpdateFiles).includes(newAlbum[i].id)) {
-          newAlbum[i] = toUpdateFiles[newAlbum[i].id];
-        }
-      }
-    }
-    toAdd.forEach(f => newAlbum.push(f));
-    set(`${props.parent}.album`, newAlbum);
-    setAlbum(newAlbum);
-  };
+  const [getAlbum, updateAlbum] = Album(props.journal.id, get, set);
   const getValidPages = pages => pages.filter(p => !p.deleted);
 
   const journalDataStorage = get(props.journal.id);
