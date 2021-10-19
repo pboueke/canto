@@ -7,6 +7,8 @@ import {hashCode} from '.';
 import RNFS from 'react-native-fs';
 import {Page} from '../models';
 import {getDate} from '../lib';
+import {v5 as uuidv5} from 'uuid';
+import {metadata} from '..';
 
 const addLocation = async (setLocation, callback) => {
   const granted = await PermissionsAndroid.request(
@@ -97,7 +99,7 @@ const addFile = async (pageId, callback) => {
           RNFS.DocumentDirectoryPath +
           `/fl-${pageId}-${hashCode(r.name)}.${ext}`;
         RNFS.copyFile(r.uri, dest).then(() => {
-          callback(dest, r.name);
+          callback(dest, r.name, uuidv5(r.name, metadata.uuid));
         });
       });
     } catch (err) {
@@ -145,7 +147,7 @@ const addImage = async (pageId, callback, mode = 0) => {
             RNFS.DocumentDirectoryPath +
             `/img-${pageId}-${hashCode(f.fileName)}.${ext}`;
           RNFS.copyFile(f.uri, dest).then(() => {
-            callback(dest);
+            callback(dest, uuidv5(f.fileName, metadata.uuid));
           });
         });
       }

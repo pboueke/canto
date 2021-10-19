@@ -52,11 +52,36 @@ export default ({navigation, route}) => {
       rand: (Math.random() + 1).toString(36).substring(7),
     });
   }
-
+  const albumData = MMKV.getString(`${props.journal.id}.album`);
+  if (!albumData) {
+    set(`${props.journal.id}.album`, []);
+  }
+  const getAlbum = () => get(`${props.journal.id}.album`);
+  const updateAlbum = ({toAdd = [], toUpdate = [], toRemove = []}) => {
+    console.log({toAdd, toUpdate, toRemove});
+    const toRemoveIds = toRemove.map(f => f.id);
+    const toUpdateFiles = [{}, ...toUpdate].reduce((o, f) => {
+      let tmp = o;
+      tmp[f.id] = f;
+      return tmp;
+    });
+    let newAlbum = getAlbum().filter(f => !toRemoveIds.includes(f.id));
+    if (toUpdate.length > 0) {
+      for (let i = 0; i < newAlbum.length; i++) {
+        if (Object.keys(toUpdateFiles).includes(newAlbum[i].id)) {
+          newAlbum[i] = toUpdateFiles[newAlbum[i].id];
+        }
+      }
+    }
+    toAdd.forEach(f => newAlbum.push(f));
+    set(`${props.parent}.album`, newAlbum);
+    setAlbum(newAlbum);
+  };
   const getValidPages = pages => pages.filter(p => !p.deleted);
 
   const journalDataStorage = get(props.journal.id);
   const [journalDataState, setJournalDataState] = useState(journalDataStorage);
+  const [album, setAlbum] = useState(getAlbum());
   const [pageList, setPageList] = useState(
     getValidPages(journalDataState.content.pages),
   );
@@ -116,7 +141,7 @@ export default ({navigation, route}) => {
               },
             );
         }
-
+        setAlbum(getAlbum());
         setJournalDataState(data);
         if (data.settings.sort === 'ascending') {
           setPageList(Filter.sortAscending(getValidPages(data.content.pages)));

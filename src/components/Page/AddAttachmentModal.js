@@ -13,7 +13,15 @@ import {
   FileRow,
 } from '../common';
 
-export default ({show, unShow, page, onChange, availableTags, dic}) => {
+export default ({
+  show,
+  unShow,
+  page,
+  onChange,
+  onAddFile,
+  availableTags,
+  dic,
+}) => {
   const [addTagModalVisibility, setAddTagModalVisibility] = useState(false);
   const [tags, setTags, tagsRef] = useStateRef(page.tags);
   const [images, setImages, imagesRef] = useStateRef(page.images);
@@ -89,16 +97,18 @@ export default ({show, unShow, page, onChange, availableTags, dic}) => {
             name={dic('Image') + 's'}
             icon="image"
             addAction={() =>
-              addImage(page.id, val => {
-                setImages(imagesRef.current.concat(val));
+              addImage(page.id, (val, id) => {
+                const newImage = {path: val, id: id};
+                setImages(imagesRef.current.concat(newImage));
                 onChange(createDataObject());
+                onAddFile(newImage);
               })
             }
           />
           <ImageRow
             images={images}
             action={i => {
-              setImages(imagesRef.current.filter(img => i !== img));
+              setImages(imagesRef.current.filter(img => i.id !== img.id));
               onChange(createDataObject());
             }}
           />
@@ -109,13 +119,14 @@ export default ({show, unShow, page, onChange, availableTags, dic}) => {
               addFile(
                 page.id,
                 (uri, name) => {
-                  setFiles(
-                    filesRef.current.concat({
-                      path: uri,
-                      name: name,
-                    }),
-                  );
+                  const newFile = {
+                    path: uri,
+                    name: name,
+                    id: id,
+                  };
+                  setFiles(filesRef.current.concat(newFile));
                   onChange(createDataObject());
+                  onAddFile(newFile);
                 },
                 3,
               )

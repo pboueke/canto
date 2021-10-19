@@ -1,7 +1,7 @@
 import React, {useState} from 'react';
 import styled from 'styled-components/native';
 import {Alert} from 'react-native';
-import MMKVStorage from 'react-native-mmkv-storage';
+import MMKVStorage, {useMMKVStorage} from 'react-native-mmkv-storage';
 import {
   PopAction,
   TagsRow,
@@ -55,6 +55,26 @@ export default ({navigation, route}) => {
   const [orgValueString, setOrgValueString] = reactUsestateref(
     JSON.stringify(pageData),
   );
+  const getAlbum = () => get(`${props.parent}.album`);
+  const updateAlbum = ({toAdd = [], toUpdate = [], toRemove = []}) => {
+    console.log({toAdd, toUpdate, toRemove});
+    const toRemoveIds = toRemove.map(f => f.id);
+    const toUpdateFiles = [{}, ...toUpdate].reduce((o, f) => {
+      let tmp = o;
+      tmp[f.id] = f;
+      return tmp;
+    });
+    let newAlbum = getAlbum().filter(f => !toRemoveIds.includes(f.id));
+    if (toUpdate.length > 0) {
+      for (let i = 0; i < newAlbum.length; i++) {
+        if (Object.keys(toUpdateFiles).includes(newAlbum[i].id)) {
+          newAlbum[i] = toUpdateFiles[newAlbum[i].id];
+        }
+      }
+    }
+    toAdd.forEach(f => newAlbum.push(f));
+    set(`${props.parent}.album`, newAlbum);
+  };
 
   const [deleteModalVisibility, setDeleteModalVisibility] = useState(false);
   const [stored, setStored] = useState(!props.newPage);
@@ -123,7 +143,8 @@ export default ({navigation, route}) => {
 
   const deleteAllFiles = async () => {
     attachments.files.forEach(file => removeFile(file));
-    attachments.images.forEach(file => removeFile(file));
+    attachments.images.forEach(img => removeFile(img));
+    updateAlbum({toRemove: [...attachments.files, ...attachments.images]});
   };
 
   const deletePendingFiles = async discarding => {
@@ -131,16 +152,18 @@ export default ({navigation, route}) => {
     let good = discarding ? JSON.parse(orgValueString).content : curr;
     let bad = discarding ? curr : JSON.parse(orgValueString).content;
     let goodFiles = good.files.map(f => f.path);
+    let goodImages = good.images.map(i => i.path);
     let filesToDelete = bad.files.filter(f => !goodFiles.includes(f.path));
-    let imagesToDelete = bad.images.filter(i => !good.images.includes(i));
+    let imagesToDelete = bad.images.filter(i => !goodImages.includes(i.path));
     filesToDelete.forEach(file => removeFile(file.path));
-    imagesToDelete.forEach(file => removeFile(file));
+    imagesToDelete.forEach(img => removeFile(img.path));
+    updateAlbum({toRemove: [...filesToDelete, ...imagesToDelete]});
   };
 
   const updateThumbnail = (id = 0) => {
     let newAttachments = attachments;
     if (attachments.images && attachments.images.length > 0) {
-      newAttachments.thumbnail = attachments.images[id];
+      newAttachments.thumbnail = attachments.images[id].path;
     } else {
       newAttachments.thumbnail = null;
     }
@@ -199,7 +222,11 @@ export default ({navigation, route}) => {
           images={attachments.images}
           action={index =>
             !editMode &&
-            shareFile(attachments.images[index], `Image #${index}`, dateTime)
+            shareFile(
+              attachments.images[index].path,
+              `Image #${index}`,
+              dateTime,
+            )
           }
         />
         <TagsRow
@@ -294,6 +321,7 @@ export default ({navigation, route}) => {
           availableTags={props.tags}
           page={pageData.content}
           onChange={val => setAttachments(val)}
+          onAddFile={f => updateAlbum({toAdd: [f]})}
         />
       )}
       <PopAction

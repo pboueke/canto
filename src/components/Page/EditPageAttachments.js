@@ -3,7 +3,7 @@ import styled from 'styled-components/native';
 import Icon from 'react-native-vector-icons/Feather';
 import {AddAttachmentModal} from '.';
 
-export default ({availableTags, page, dic, onChange}) => {
+export default ({availableTags, page, dic, onChange, onAddFile}) => {
   const [attachmentModalVisible, setAttachmentModalVisible] = useState(false);
   return (
     <AttachmentBar>
@@ -28,6 +28,7 @@ export default ({availableTags, page, dic, onChange}) => {
         page={page}
         show={attachmentModalVisible}
         onChange={onChange}
+        onAddFile={onAddFile}
         unShow={() => setAttachmentModalVisible(!attachmentModalVisible)}
       />
     </AttachmentBar>
@@ -43,7 +44,7 @@ const AddButton = styled.Pressable`
   border-radius: 5px;
   border-style: solid;
   border-color: ${p => p.theme.editBar.borderColor};
-  margin: 10px 15px 10px 15px;
+  margin: 10px 5px 10px 5px;
   height: 30px;
 `;
 

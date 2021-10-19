@@ -131,7 +131,6 @@ const updateJournalPageData = async (
   gdrive,
   callback,
 ) => {
-  //console.log('UPDATING METADATA');
   const {pagesToDeleteRemotely: deletions} = changes;
   let data = metadata;
   data.salt = salt;
@@ -154,6 +153,7 @@ const updateJournalPageData = async (
     .setData(enc(JSON.stringify(data)), MimeTypes.TEXT)
     .setIdOfFileToUpdate(metadataId)
     .execute();
+  callback && callback();
 };
 
 const updateJournalMetadata = async (

@@ -13,7 +13,7 @@ import {GDriveLibraryModal} from '.';
 
 export default props => {
   const dic = props.dic;
-  const [gdriveModalVisible, setGdriveModalVisible] = useState(true);
+  const [gdriveModalVisible, setGdriveModalVisible] = useState(false);
   const [journalModalVisible, setJournalModalVisible] = useState(false);
   const [iconsModalVisible, setIconsModalVisible] = useState(false);
   const [isSaving, setIsSaving] = useStateWithCallback(false);

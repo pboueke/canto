@@ -13,7 +13,7 @@ export default ({images, action, dic}) => {
     return <Empty />;
   }
   const urls = images.map(i => ({
-    url: i,
+    url: i.path,
   }));
   const modalToastRef = useRef({});
   const [galeryVisibility, setGaleryVisibility] = useState(false);
@@ -21,7 +21,7 @@ export default ({images, action, dic}) => {
   return (
     <Container>
       <SliderBox
-        images={images}
+        images={images.map(i => i.path)}
         sliderBoxHeight={Dimensions.get('window').width}
         circleLoop={true}
         ImageComponent={ImageComponent}
@@ -64,7 +64,7 @@ export default ({images, action, dic}) => {
                       onHide: () => {},
                       onPress: () => {},
                     });
-                    saveImage(images[i], msg =>
+                    saveImage(images[i].path, msg =>
                       modalToastRef.current.show({
                         type: 'simpleInfo',
                         position: 'bottom',

@@ -7,7 +7,7 @@ export default ({images, action, icon = 'x'}) => (
   <Row>
     {images.map(i => (
       <ImageItem onPress={() => action(i)} key={i + randomString()}>
-        <Background source={{uri: i}}>
+        <Background source={{uri: i.path}}>
           <ActionIcon name={icon} />
         </Background>
       </ImageItem>
