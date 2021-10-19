@@ -2,7 +2,7 @@ import React, {useState, useContext} from 'react';
 import useStateRef from 'react-usestateref';
 import {ActivityIndicator} from 'react-native';
 import styled, {ThemeContext} from 'styled-components/native';
-import {journalLibrary} from '../../lib/GDriveSync';
+import {GDrive} from '../../lib';
 import Icon from 'react-native-vector-icons/Feather';
 
 export default ({localJournalsIds, show, unShow, dic}) => {
@@ -12,7 +12,7 @@ export default ({localJournalsIds, show, unShow, dic}) => {
   const [loading, setLoading] = useState(true);
   if (firstLoadRef.current) {
     setFirstLoad(false);
-    journalLibrary().then(lib => {
+    GDrive.journalLibrary().then(lib => {
       setLoading(false);
       setLib(lib);
     });

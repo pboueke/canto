@@ -208,9 +208,15 @@ const text = {
   'Change Journal Password': {
     pt: 'Mudar a Senha',
   },
-  'Delete Journal': {
-    pt: 'Deletar',
+  'Delete Journal Locally': {
+    pt: 'Deletar do Dispositivo',
   },
+  'Delete Journal from Google Cloud': {
+    pt: 'Remover do GoogleDrive',
+  },
+  'Delete Journal Everywhere': {
+    pt: 'Deletar Totalmente',
+  },  
   'Confirm password': {
     pt: 'Confirme sua senha',
   },

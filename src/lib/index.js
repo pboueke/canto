@@ -19,12 +19,4 @@ export {
   encKv,
   changeJournalEncryptionKey,
 } from './CryptoStorage';
-export {
-  signInWithGDrive,
-  getJournalMetadata,
-  updateJournalMetadata,
-  uploadPage,
-  deletePage,
-  downloadPage,
-  syncJournal,
-} from './GDriveSync';
+export {default as GDrive} from './GDriveSync';

@@ -1,4 +1,4 @@
-import React, {useState} from 'react';
+import React, {useState, useEffect} from 'react';
 import {Switch} from 'react-native';
 import styled from 'styled-components/native';
 import {withTheme} from 'styled-components';
@@ -24,8 +24,8 @@ export default ({journal, show, unShow, dic, danger, onChange}) => {
   const [settings, setSettings] = useState(
     journal.settings ?? new JournalSettings(),
   );
-  const settingLabels = JournalSettings.getKeys();
 
+  const settingLabels = JournalSettings.getKeys();
   const states = settingLabels.map(l => useState(settings[l]));
 
   const getPickers = () =>
@@ -162,17 +162,50 @@ export default ({journal, show, unShow, dic, danger, onChange}) => {
             <SettingsIcon name="alert-triangle" />
           </ModalRow>
           <ModalRow border>
-            <SettingsIcon name="trash-2" />
+            <SettingsIcon name="trash" />
             <SettingsButton
-              text={dic('Delete Journal')}
+              text={dic('Delete Journal Locally')}
               onPress={() => {
                 setConfirmSubmit(() => () => danger.doDelete());
-                setConfirmMessage(`delete ${journal.content.title}`);
+                setConfirmMessage(`delete ${journal.content.title} locally`);
                 setConfirmVisibility(!confirmVisibility);
               }}
             />
             <SettingsIcon name="alert-triangle" />
           </ModalRow>
+          {settings.gdriveSync && (
+            <ModalRow border>
+              <SettingsIcon name="cloud-off" />
+              <SettingsButton
+                text={dic('Delete Journal from Google Cloud')}
+                onPress={() => {
+                  setConfirmSubmit(() => () => danger.doRemoveGdrive());
+                  setConfirmMessage(
+                    `delete ${journal.content.title} from Google`,
+                  );
+                  setConfirmVisibility(!confirmVisibility);
+                }}
+              />
+              <SettingsIcon name="alert-triangle" />
+            </ModalRow>
+          )}
+          {settings.gdriveSync && (
+            <ModalRow border>
+              <SettingsIcon name="trash-2" />
+              <SettingsButton
+                text={dic('Delete Journal Everywhere')}
+                onPress={() => {
+                  setConfirmSubmit(() => () => {
+                    danger.doRemoveGdrive();
+                    danger.doDelete();
+                  });
+                  setConfirmMessage(`delete ${journal.content.title}`);
+                  setConfirmVisibility(!confirmVisibility);
+                }}
+              />
+              <SettingsIcon name="alert-triangle" />
+            </ModalRow>
+          )}
 
           <EmptyBlock />
         </ModalInterior>

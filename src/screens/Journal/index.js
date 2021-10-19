@@ -5,7 +5,7 @@ import {Keyboard} from 'react-native';
 import Toast from 'react-native-toast-message';
 import MMKVStorage from 'react-native-mmkv-storage';
 import {PopAction, toastConfig} from '../../components/common';
-import {syncJournal} from '../../lib';
+import {GDrive} from '../../lib';
 import {
   FilterBar,
   PageList,
@@ -88,12 +88,11 @@ export default ({navigation, route}) => {
 
         if (data.settings.gdriveSync) {
           !syncing &&
-            syncJournal(
+            GDrive.syncJournal(
               journalDataState,
               MMKV,
               enc,
               dec,
-              getStoredSalt(MMKV, props.journal.id, getKey()),
               getStoredSalt(MMKV, props.journal.id, getKey()),
               (/*start*/) => setSyncing(true),
               success => {
@@ -229,6 +228,20 @@ export default ({navigation, route}) => {
     navigation.goBack();
   };
 
+  const removeFromGDrive = async () => {
+    try {
+      const jId = journalDataState.content.id;
+      GDrive.removeJournal({jId, enc, dec}, success => {
+        let tmp = journalDataState;
+        tmp.settings.gdriveSync = false;
+        setJournalDataState(tmp);
+        set(props.journal.id, tmp);
+      });
+    } catch (error) {
+      console.log(error);
+    }
+  };
+
   return (
     <Container onPress={() => Keyboard.dismiss()}>
       {journalDataState.settings.filterBar && (
@@ -278,6 +291,7 @@ export default ({navigation, route}) => {
         storage={MMKV}
         enc={enc}
         dec={dec}
+        salt={getStoredSalt(MMKV, props.journal.id, getKey())}
         show={dataModalVisibility}
         unShow={() => setDataModalVisibility(!dataModalVisibility)}
         onSettingsChange={val => {
@@ -294,6 +308,7 @@ export default ({navigation, route}) => {
             setName: changeName,
             setPassword: changePassword,
             doDelete: deleteJournal,
+            doRemoveGdrive: removeFromGDrive,
           }}
           journal={journalDataState}
           show={settingsVisibility}

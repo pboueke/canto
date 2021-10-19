@@ -5,7 +5,7 @@ import {withTheme} from 'styled-components';
 import Icon from 'react-native-vector-icons/Feather';
 import {ExternallyLoggedUser} from '../common';
 import {useMMKVStorage} from 'react-native-mmkv-storage';
-import {syncJournal} from '../../lib';
+import {GDrive} from '../../lib';
 import Toast from 'react-native-toast-message';
 import {toastConfig} from '../common';
 
@@ -14,14 +14,13 @@ export default ({
   show,
   unShow,
   onSettingsChange,
-  salt,
   storage,
   enc,
   dec,
+  salt,
   dic,
 }) => {
   const [userState, setUserState] = useMMKVStorage('canto-user', storage, null);
-  const [keepGDSynced, setKeepGDSynced] = useState(journal.settings.gdriveSync);
   const [syncing, setSyncing] = useState(false);
   const modalToastRef = React.useRef({});
 
@@ -38,11 +37,12 @@ export default ({
     });
 
   const syncJournalPress = async () => {
-    await syncJournal(
+    await GDrive.syncJournal(
       journal,
       storage,
       enc,
       dec,
+      salt,
       () => {
         setSyncing(true);
         pushToast('Syncing journal...', 'starting');
@@ -93,9 +93,8 @@ export default ({
             <ModalRow border>
               <StaticText>{dic('Keep this journal synced')}</StaticText>
               <DataSwitch
-                value={keepGDSynced}
+                value={journal.settings.gdriveSync}
                 onValueChange={val => {
-                  setKeepGDSynced(val);
                   val && syncJournalPress();
                   onSettingsChange({...journal.settings, gdriveSync: val});
                 }}

@@ -89,8 +89,7 @@ const signInWithGDrive = async setUser => {
   }
 };
 
-const getJournalMetadata = async (journal, enc, dec, gdrive) => {
-  //console.log('GETTING METADATA FILE ');
+const getJournalMetadata = async (journal, enc, dec, salt, gdrive) => {
   const name = `${journal.content.id}.mtdt`;
   const query = new ListQueryBuilder()
     .e('name', name)
@@ -119,7 +118,7 @@ const getJournalMetadata = async (journal, enc, dec, gdrive) => {
     id = resp.id;
     await journalLibrary({
       gdrive: gdrive,
-      newJournal: new JournalCover(journal.content),
+      newJournal: {...new JournalCover(journal.content), salt},
     });
   } else {
     id = files.files[0].id;
@@ -166,6 +165,7 @@ const syncJournal = async (
   storage,
   enc,
   dec,
+  salt,
   onStart,
   onFinish,
   onError,
@@ -179,6 +179,7 @@ const syncJournal = async (
       journal,
       enc,
       dec,
+      salt,
       gdrive,
     );
     const localJournal = new JournalContent().overwrite(journal.content);
@@ -213,7 +214,43 @@ const syncJournal = async (
   onFinish(success);
 };
 
-const journalLibrary = async ({gdrive, newJournal, setUser} = {}) => {
+const removeJournal = async ({gdrive, jId, enc, dec}, onSuccess, onError) => {
+  const _gdrive = gdrive ?? (await signInWithGDrive());
+  const {lib: library, id: libId} = await journalLibrary({
+    gdrive: _gdrive,
+    getId: true,
+  });
+  const {id: metadataId, data: metadata} = await getJournalMetadata(
+    {content: {id: jId}},
+    enc,
+    dec,
+    null,
+    _gdrive,
+  );
+  for (let i = 0; i < metadata.content.pages.length; i++) {
+    try {
+      const page = metadata.content.pages[i];
+      await deletePage(page.id, _gdrive);
+    } catch (error) {
+      console.log(error);
+    }
+  }
+  try {
+    const newLibrary = library.filter(j => j.id !== jId);
+    await _gdrive.files.delete(metadataId);
+    await _gdrive.files
+      .newMultipartUploader()
+      .setData(JSON.stringify(newLibrary), MimeTypes.TEXT)
+      .setIdOfFileToUpdate(libId)
+      .execute();
+    onSuccess && onSuccess();
+  } catch (error) {
+    console.log(error);
+    onError && onError(error);
+  }
+};
+
+const journalLibrary = async ({gdrive, newJournal, getId, setUser} = {}) => {
   let lib = [];
   const _gdrive = gdrive ?? (await signInWithGDrive(setUser));
   const query = new ListQueryBuilder()
@@ -243,7 +280,11 @@ const journalLibrary = async ({gdrive, newJournal, setUser} = {}) => {
     }
     await uploader.execute();
   }
-  return lib;
+  if (getId) {
+    return {lib, id};
+  } else {
+    return lib;
+  }
 };
 
-export {syncJournal, journalLibrary};
+export default {syncJournal, journalLibrary, removeJournal};

@@ -143,17 +143,7 @@ export default props => {
                   </Box>
                 </Flex>
               </NewJournalModalInterior>
-
-              {props.user && (
-                <GDriveLibraryModal
-                  localJournalsIds={props.localJournalsIds}
-                  show={gdriveModalVisible}
-                  unShow={() => setGdriveModalVisible(!gdriveModalVisible)}
-                  dic={dic}
-                />
-              )}
             </Scroll>
-
             <IconListModal
               handleClose={changeIcon}
               show={iconsModalVisible}
@@ -161,6 +151,14 @@ export default props => {
               key={'icons-' + iconsModalVisible}
             />
           </NewJournalModal>
+          {props.user && (
+            <GDriveLibraryModal
+              localJournalsIds={props.localJournalsIds}
+              show={gdriveModalVisible}
+              unShow={() => setGdriveModalVisible(!gdriveModalVisible)}
+              dic={dic}
+            />
+          )}
         </SelectorSkeleton>
       </TouchableNativeFeedback>
     </Selector>
