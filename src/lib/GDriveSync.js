@@ -4,6 +4,7 @@ import {
   ListQueryBuilder,
   MimeTypes,
 } from '@robinbobin/react-native-google-drive-api-wrapper';
+import {getFileAsBinary, saveBinaryFile} from '.';
 import DriveCredentials from '../../gdriveCredentials';
 import {JournalCover, JournalContent} from '../models';
 
@@ -252,6 +253,143 @@ const syncJournal = async (
     onError(error);
   }
   onFinish(success);
+};
+
+const uploadFile = async (id, path, gdrive) => {
+  try {
+    const bin = await getFileAsBinary(path);
+    await gdrive.files
+      .newMultipartUploader()
+      .setData(bin, MimeTypes.BINARY)
+      .setRequestBody({name: id, spaces: ['appDataFolder']})
+      .execute();
+  } catch (error) {
+    console.warn(`Failed to upload file ${id}`);
+    console.log(error);
+  }
+};
+
+const downloadFile = async (file, gdrive) => {
+  const query = new ListQueryBuilder()
+    .e('name', file.id)
+    .and()
+    .e('mimeType', MimeTypes.BINARY);
+  let files = await gdrive.files.list({
+    q: query,
+    spaces: ['appDataFolder'],
+  });
+  const data = await gdrive.files.getBinary(files.files[0].id);
+  const name = file.name ?? new Date().toLocaleString();
+  const ext = file.path.split('').pop();
+  return await saveBinaryFile(file.id, data, name, ext);
+};
+
+const deleteFile = async (id, gdrive) => {
+  const query = new ListQueryBuilder()
+    .e('name', id)
+    .and()
+    .e('mimeType', MimeTypes.BINARY);
+  let files = await gdrive.files.list({
+    q: query,
+    spaces: ['appDataFolder'],
+  });
+  if (files.files[0]) {
+    await gdrive.files.delete(files.files[0].id);
+  } else {
+    console.warn(`Tried to delete page:${pageId} from drive, but none found`);
+  }
+};
+
+const getAlbum = async (jId, enc, dec, gdrive) => {
+  const name = `${jId}.album`;
+  const query = new ListQueryBuilder()
+    .e('name', name)
+    .and()
+    .e('mimeType', MimeTypes.TEXT);
+  let files = await gdrive.files.list({
+    q: query,
+    spaces: ['appDataFolder'],
+  });
+  let id;
+  if (files.files.length === 0) {
+    let data = [];
+    const resp = await gdrive.files
+      .newMultipartUploader()
+      .setData(enc(data), MimeTypes.TEXT)
+      .setRequestBody({
+        name: name,
+        parents: ['appDataFolder'],
+      })
+      .execute();
+    id = resp.id;
+  } else {
+    id = files.files[0].id;
+  }
+  return {id: id, data: dec(await gdrive.files.getText(id))};
+};
+
+const syncAlbum = async (jId, enc, dec, album, updateAlbum, gdrive) => {
+  //TODO: TEST
+  const {id: remoteAlbumId, data: remoteAlbum} = await getAlbum(
+    jId,
+    enc,
+    dec,
+    gdrive,
+  );
+  let localAlbumChanges = {toAdd: [], toRemove: []};
+  let updatedRemoteAlbum = remoteAlbum;
+  const remoteDic = [{}, ...remoteAlbum].reduce((o, f) => (o[f.id] = f) && o);
+  const localDic = [{}, ...album].reduce((o, f) => (o[f.id] = f) && o);
+  const changes = {
+    deleteLocally: new Set(),
+    deleteRemotelly: new Set(),
+    upload: new Set(),
+    download: new Set(),
+  };
+  album.forEach(lF => {
+    if (lF.deleted && remoteDic[lF.id] && !remoteDic[lF.id].deleted) {
+      changes.deleteRemotelly.add(lF);
+    } else if (!lF.deleted && remoteDic[lF.id] && remoteDic[lF.id].deleted) {
+      changes.deleteLocally.add(lF);
+    } else if (!lF.deleted && !remoteDic[lF.id]) {
+      changes.upload.add(lF);
+    }
+  });
+  remoteAlbum.forEach(rF => {
+    if (rF.deleted && localDic[rF.id] && !localDic[rF.id].deleted) {
+      changes.deleteLocally.add(rF);
+    } else if (!rF.deleted && localDic[rF.id] && localDic[rF.id].deleted) {
+      changes.deleteRemotelly.add(rF);
+    } else if (!rF.deleted && !localDic[rF.id]) {
+      changes.download.add(rF);
+    }
+  });
+  Object.keys(changes).forEach(c => (changes[c] = Array.from(changes[c])));
+  for (let i = 0; i < changes.deleteRemotelly.length; i++) {
+    await deleteFile(changes.deleteRemotelly[i].id, gdrive);
+    updatedRemoteAlbum = updatedRemoteAlbum.filter(
+      f => f.id !== changes.deleteRemotelly[i].id,
+    );
+  }
+  for (let i = 0; i < changes.upload.length; i++) {
+    const {id, path} = changes.upload[i];
+    await uploadFile(id, path, gdrive);
+    updatedRemoteAlbum.push(changes.upload[i]);
+  }
+  for (let i = 0; i < changes.download.length; i++) {
+    const {id, name} = changes.download[i];
+    const path = await downloadFile(changes.deleteRemotelly[i], gdrive);
+    localAlbumChanges.toAdd.push({id, path, name});
+  }
+  for (let i = 0; i < changes.deleteLocally.length; i++) {
+    localAlbumChanges.toRemove.push({id: changes.deleteLocally[i].id});
+  }
+  updateAlbum(localAlbumChanges);
+  await gdrive.files
+    .newMultipartUploader()
+    .setData(enc(updatedRemoteAlbum), MimeTypes.TEXT)
+    .setIdOfFileToUpdate(remoteAlbumId)
+    .execute();
 };
 
 const removeJournal = async ({gdrive, jId, enc, dec}, onSuccess, onError) => {

@@ -5,6 +5,7 @@ import CameraRoll from '@react-native-community/cameraroll';
 import Share from 'react-native-share';
 import {hashCode} from '.';
 import RNFS from 'react-native-fs';
+import Buffer from 'buffer';
 import {Page} from '../models';
 import {getDate} from '../lib';
 import {v5 as uuidv5} from 'uuid';
@@ -261,8 +262,26 @@ const Album = (jId, get, set) => {
   return [getAlbum, updateAlbum];
 };
 
+const getFileAsBinary = async path => {
+  const base64 = await RNFS.readFile(path, 'base64');
+  const buffer = Buffer.from(base64, 'base64');
+  return buffer;
+};
+
+const saveBinaryFile = async (id, data, name, ext) => {
+  //const buffer = Buffer.from(data, 'base64');
+  const dest =
+    'file://' +
+    RNFS.DocumentDirectoryPath +
+    `/fl-${id}-${hashCode(name)}.${ext}`;
+  await RNFS.writeFile(dest, data, 'base64');
+  return dest;
+};
+
 export {
   Album,
+  getFileAsBinary,
+  saveBinaryFile,
   removeFile,
   addImage,
   addFile,

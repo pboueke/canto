@@ -8,6 +8,8 @@ export {
 export {openLocationExternally} from './Location';
 export {
   Album,
+  getFileAsBinary,
+  saveBinaryFile,
   removeFile,
   addImage,
   addFile,
