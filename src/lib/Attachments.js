@@ -4,8 +4,8 @@ import DocumentPicker from 'react-native-document-picker';
 import CameraRoll from '@react-native-community/cameraroll';
 import Share from 'react-native-share';
 import {hashCode} from '.';
+import RNFetchBlob from 'rn-fetch-blob';
 import RNFS from 'react-native-fs';
-import Buffer from 'buffer';
 import {Page} from '../models';
 import {getDate} from '../lib';
 import {v5 as uuidv5} from 'uuid';
@@ -263,13 +263,11 @@ const Album = (jId, get, set) => {
 };
 
 const getFileAsBinary = async path => {
-  const base64 = await RNFS.readFile(path, 'base64');
-  const buffer = Buffer.from(base64, 'base64');
-  return buffer;
+  //const data = await RNFS.readFile(path, 'base64');
+  return await RNFetchBlob.fs.readFile(path, 'base64');
 };
 
 const saveBinaryFile = async (id, data, name, ext) => {
-  //const buffer = Buffer.from(data, 'base64');
   const dest =
     'file://' +
     RNFS.DocumentDirectoryPath +

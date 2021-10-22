@@ -100,6 +100,8 @@ export default ({navigation, route}) => {
               enc,
               dec,
               getStoredSalt(MMKV, props.journal.id, getKey()),
+              getAlbum(),
+              updateAlbum,
               (/*start*/) => setSyncing(true),
               success => {
                 setSyncing(false);
@@ -117,6 +119,7 @@ export default ({navigation, route}) => {
                 showToast(
                   'FAILED TO SYNC JOURNAL WITH GOOGLE DRIVE',
                   `${error}`,
+                  `simpleInfo`,
                   2000,
                 );
               },
@@ -128,6 +131,8 @@ export default ({navigation, route}) => {
           setPageList(Filter.sortAscending(getValidPages(data.content.pages)));
         } else if (data.settings.sort === 'descending') {
           setPageList(Filter.sortDescending(getValidPages(data.content.pages)));
+        } else {
+          setPageList(getValidPages(data.content.pages));
         }
       }),
     ];
@@ -303,6 +308,8 @@ export default ({navigation, route}) => {
         enc={enc}
         dec={dec}
         salt={getStoredSalt(MMKV, props.journal.id, getKey())}
+        album={getAlbum()}
+        updateAlbum={updateAlbum}
         show={dataModalVisibility}
         unShow={() => setDataModalVisibility(!dataModalVisibility)}
         onSettingsChange={val => {

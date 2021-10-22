@@ -19,7 +19,6 @@
     "@react-navigation/native": "^6.0.2",
     "@react-navigation/native-stack": "^6.1.0",
     "@robinbobin/react-native-google-drive-api-wrapper": "^0.6.0",
-    "buffer": "^6.0.3",
     "crypto-js": "^4.1.1",
     "install": "^0.13.0",
     "isaac": "^0.0.5",
@@ -45,6 +44,7 @@
     "react-native-toast-message": "^1.6.0",
     "react-native-vector-icons": "^8.1.0",
     "react-usestateref": "^1.0.5",
+    "rn-fetch-blob": "^0.12.0",
     "ss-search": "^1.6.1",
     "styled-components": "^5.3.1",
     "uuid": "^8.3.2"

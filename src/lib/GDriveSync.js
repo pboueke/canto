@@ -128,6 +128,7 @@ const updateJournalPageData = async (
   metadata,
   journal,
   changes,
+  salt,
   enc,
   gdrive,
   callback,
@@ -151,7 +152,7 @@ const updateJournalPageData = async (
   data.content.pages = [...notDeleted, ...previouslyDeleted, ...newDeletions];
   await gdrive.files
     .newMultipartUploader()
-    .setData(enc(JSON.stringify(data)), MimeTypes.TEXT)
+    .setData(enc(data), MimeTypes.TEXT)
     .setIdOfFileToUpdate(metadataId)
     .execute();
   callback && callback();
@@ -207,6 +208,8 @@ const syncJournal = async (
   enc,
   dec,
   salt,
+  album,
+  updateAlbum,
   onStart,
   onFinish,
   onError,
@@ -243,10 +246,12 @@ const syncJournal = async (
         remoteJournal,
         journal,
         changes,
+        salt,
         enc,
         gdrive,
       );
     }
+    await syncAlbum(journal.content.id, enc, dec, album, updateAlbum, gdrive, true);
   } catch (error) {
     success = false;
     console.log(error);
@@ -328,14 +333,22 @@ const getAlbum = async (jId, enc, dec, gdrive) => {
   return {id: id, data: dec(await gdrive.files.getText(id))};
 };
 
-const syncAlbum = async (jId, enc, dec, album, updateAlbum, gdrive) => {
-  //TODO: TEST
-  const {id: remoteAlbumId, data: remoteAlbum} = await getAlbum(
+const syncAlbum = async (
+  jId,
+  enc,
+  dec,
+  album,
+  updateAlbum,
+  gdrive,
+  force = false,
+) => {
+  const {id: remoteAlbumId, data: _remoteAlbum} = await getAlbum(
     jId,
     enc,
     dec,
     gdrive,
   );
+  const remoteAlbum = force ? [] : _remoteAlbum;
   let localAlbumChanges = {toAdd: [], toRemove: []};
   let updatedRemoteAlbum = remoteAlbum;
   const remoteDic = [{}, ...remoteAlbum].reduce((o, f) => (o[f.id] = f) && o);
@@ -365,6 +378,7 @@ const syncAlbum = async (jId, enc, dec, album, updateAlbum, gdrive) => {
     }
   });
   Object.keys(changes).forEach(c => (changes[c] = Array.from(changes[c])));
+  console.log(changes);
   for (let i = 0; i < changes.deleteRemotelly.length; i++) {
     await deleteFile(changes.deleteRemotelly[i].id, gdrive);
     updatedRemoteAlbum = updatedRemoteAlbum.filter(

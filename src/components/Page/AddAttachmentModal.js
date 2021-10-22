@@ -98,7 +98,7 @@ export default ({
             icon="image"
             addAction={() =>
               addImage(page.id, (val, id) => {
-                const newImage = {path: val, id: id};
+                const newImage = {path: val, id: id, type: 'image'};
                 setImages(imagesRef.current.concat(newImage));
                 onChange(createDataObject());
                 onAddFile(newImage);
@@ -123,6 +123,7 @@ export default ({
                     path: uri,
                     name: name,
                     id: id,
+                    type: 'file',
                   };
                   setFiles(filesRef.current.concat(newFile));
                   onChange(createDataObject());

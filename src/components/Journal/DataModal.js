@@ -18,6 +18,8 @@ export default ({
   enc,
   dec,
   salt,
+  album,
+  updateAlbum,
   dic,
 }) => {
   const [userState, setUserState] = useMMKVStorage('canto-user', storage, null);
@@ -43,6 +45,8 @@ export default ({
       enc,
       dec,
       salt,
+      album,
+      updateAlbum,
       () => {
         setSyncing(true);
         pushToast('Syncing journal...', 'starting');
