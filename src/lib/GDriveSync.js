@@ -251,15 +251,7 @@ const syncJournal = async (
         gdrive,
       );
     }
-    await syncAlbum(
-      journal.content.id,
-      enc,
-      dec,
-      album,
-      updateAlbum,
-      gdrive,
-      true,
-    );
+    await syncAlbum(journal.content.id, enc, dec, album, updateAlbum, gdrive);
   } catch (error) {
     success = false;
     console.log(error);
@@ -268,16 +260,16 @@ const syncJournal = async (
   onFinish(success);
 };
 
-const uploadFile = async (id, path, gdrive) => {
-    //TODO: create image directory for canto at user's root
-    try {
+const uploadFile = async (id, path, gdrive, onSuccess) => {
+  try {
     const bin = await getFileAsBinary(path);
     console.log(path);
     await gdrive.files
       .newMultipartUploader()
       .setData(bin, MimeTypes.BINARY)
-      .setRequestBody({name: id, parents: ['root']}) //spaces: ['appDataFolder']})
+      .setRequestBody({name: id, parents: ['appDataFolder']})
       .execute();
+    onSuccess && onSuccess();
     console.log(`uploaded ${id}`);
   } catch (error) {
     console.warn(`Failed to upload file ${id}`);
@@ -285,31 +277,33 @@ const uploadFile = async (id, path, gdrive) => {
   }
 };
 
-const downloadFile = async (file, gdrive) => {
+const downloadFile = async (file, gdrive, onSuccess) => {
   const query = new ListQueryBuilder()
     .e('name', file.id)
     .and()
     .e('mimeType', MimeTypes.BINARY);
   let files = await gdrive.files.list({
     q: query,
-    spaces: ['appDataFolder'],
+    parents: ['appDataFolder'],
   });
   const data = await gdrive.files.getBinary(files.files[0].id);
   const name = file.name ?? new Date().toLocaleString();
   const ext = file.path.split('').pop();
+  onSuccess && onSuccess();
   return await saveBinaryFile(file.id, data, name, ext);
 };
 
-const deleteFile = async (id, gdrive) => {
+const deleteFile = async (id, gdrive, onSuccess) => {
   const query = new ListQueryBuilder()
     .e('name', id)
     .and()
     .e('mimeType', MimeTypes.BINARY);
   let files = await gdrive.files.list({
     q: query,
-    spaces: ['appDataFolder'],
+    parents: ['appDataFolder'],
   });
   if (files.files[0]) {
+    onSuccess && onSuccess();
     await gdrive.files.delete(files.files[0].id);
   } else {
     console.warn(`Tried to delete page:${pageId} from drive, but none found`);
@@ -391,20 +385,23 @@ const syncAlbum = async (
   Object.keys(changes).forEach(c => (changes[c] = Array.from(changes[c])));
   console.log(changes);
   for (let i = 0; i < changes.deleteRemotelly.length; i++) {
-    await deleteFile(changes.deleteRemotelly[i].id, gdrive);
-    updatedRemoteAlbum = updatedRemoteAlbum.filter(
-      f => f.id !== changes.deleteRemotelly[i].id,
-    );
+    await deleteFile(changes.deleteRemotelly[i].id, gdrive, () => {
+      updatedRemoteAlbum = updatedRemoteAlbum.filter(
+        f => f.id !== changes.deleteRemotelly[i].id,
+      );
+    });
   }
   for (let i = 0; i < changes.upload.length; i++) {
     const {id, path} = changes.upload[i];
-    await uploadFile(id, path, gdrive);
-    updatedRemoteAlbum.push(changes.upload[i]);
+    await uploadFile(id, path, gdrive, () => {
+      updatedRemoteAlbum.push(changes.upload[i]);
+    });
   }
   for (let i = 0; i < changes.download.length; i++) {
     const {id, name} = changes.download[i];
-    const path = await downloadFile(changes.deleteRemotelly[i], gdrive);
-    localAlbumChanges.toAdd.push({id, path, name});
+    const path = await downloadFile(changes.deleteRemotelly[i], gdrive, () => {
+      localAlbumChanges.toAdd.push({id, path, name});
+    });
   }
   for (let i = 0; i < changes.deleteLocally.length; i++) {
     localAlbumChanges.toRemove.push({id: changes.deleteLocally[i].id});
