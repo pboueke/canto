@@ -383,7 +383,6 @@ const syncAlbum = async (
     }
   });
   Object.keys(changes).forEach(c => (changes[c] = Array.from(changes[c])));
-  console.log(changes);
   for (let i = 0; i < changes.deleteRemotelly.length; i++) {
     await deleteFile(changes.deleteRemotelly[i].id, gdrive, () => {
       updatedRemoteAlbum = updatedRemoteAlbum.filter(

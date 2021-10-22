@@ -49,6 +49,7 @@ export default props => {
     <TextWrapper>
       {props.editMode ? (
         <PageTextEditor
+          toggleFocus={props.toggleFocus}
           value={props.value}
           onChange={props.onChange}
           placeholder={placeholder}
@@ -68,6 +69,8 @@ const PageTextEditor = props => {
   };
   return (
     <TextEditor
+      onFocus={props.toggleFocus}
+      onEndEditing={props.toggleFocus}
       value={text}
       multiline={true}
       placeholder={props.placeholder}

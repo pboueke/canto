@@ -61,6 +61,7 @@ export default ({navigation, route}) => {
   const [deleteModalVisibility, setDeleteModalVisibility] = useState(false);
   const [stored, setStored] = useState(!props.newPage);
   const [editMode, setEditMode] = useState(props.newPage);
+  const [focusMode, setFocusMode] = useState(false);
   const [dateTime, setDateTime] = useState(new Date(props.page.date));
   const [text, setText] = useState(pageData.content.text);
   const [comments, setComments] = useState(pageData.content.comments);
@@ -189,6 +190,8 @@ export default ({navigation, route}) => {
     );
   };
 
+  const showOverlay = () => editMode && !focusMode;
+
   return (
     <Container>
       <PageHeader
@@ -224,11 +227,12 @@ export default ({navigation, route}) => {
           value={text}
           onChange={setText}
           editMode={editMode}
+          toggleFocus={() => setFocusMode(!focusMode)}
           showPlaceholder={props.settings.showMarkdownPlaceholder}
           dic={dic}
         />
 
-        {editMode && (
+        {showOverlay() && (
           <AddComment
             dic={dic}
             onPress={() => {
@@ -257,7 +261,7 @@ export default ({navigation, route}) => {
             />
           ))}
 
-        {editMode && (
+        {showOverlay() && (
           <CommentModal
             dic={dic}
             show={commentModalVisibility}
@@ -297,7 +301,7 @@ export default ({navigation, route}) => {
 
         {!attachments.files || (attachments.files.length < 1 && <EmptyBlock />)}
       </Scroll>
-      {editMode && (
+      {showOverlay() && (
         <EditPageAttachments
           dic={dic}
           availableTags={props.tags}
@@ -306,19 +310,21 @@ export default ({navigation, route}) => {
           onAddFile={f => updateAlbum({toAdd: [f]})}
         />
       )}
-      <PopAction
-        icon={editMode ? 'save' : 'edit-2'}
-        action={editMode ? 'save' : 'edit'}
-        onPress={() => {
-          if (editMode) {
-            savePageData();
-            setEditMode(false);
-          } else {
-            setEditMode(true);
-          }
-        }}
-      />
-      {editMode && (
+      {!focusMode && (
+        <PopAction
+          icon={editMode ? 'save' : 'edit-2'}
+          action={editMode ? 'save' : 'edit'}
+          onPress={() => {
+            if (editMode) {
+              savePageData();
+              setEditMode(false);
+            } else {
+              setEditMode(true);
+            }
+          }}
+        />
+      )}
+      {showOverlay() && (
         <PopAction
           icon="trash-2"
           action="delete"
