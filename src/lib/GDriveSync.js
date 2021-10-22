@@ -251,7 +251,15 @@ const syncJournal = async (
         gdrive,
       );
     }
-    await syncAlbum(journal.content.id, enc, dec, album, updateAlbum, gdrive, true);
+    await syncAlbum(
+      journal.content.id,
+      enc,
+      dec,
+      album,
+      updateAlbum,
+      gdrive,
+      true,
+    );
   } catch (error) {
     success = false;
     console.log(error);
@@ -261,13 +269,16 @@ const syncJournal = async (
 };
 
 const uploadFile = async (id, path, gdrive) => {
-  try {
+    //TODO: create image directory for canto at user's root
+    try {
     const bin = await getFileAsBinary(path);
+    console.log(path);
     await gdrive.files
       .newMultipartUploader()
       .setData(bin, MimeTypes.BINARY)
-      .setRequestBody({name: id, spaces: ['appDataFolder']})
+      .setRequestBody({name: id, parents: ['root']}) //spaces: ['appDataFolder']})
       .execute();
+    console.log(`uploaded ${id}`);
   } catch (error) {
     console.warn(`Failed to upload file ${id}`);
     console.log(error);

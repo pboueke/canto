@@ -44,7 +44,6 @@
     "react-native-toast-message": "^1.6.0",
     "react-native-vector-icons": "^8.1.0",
     "react-usestateref": "^1.0.5",
-    "rn-fetch-blob": "^0.12.0",
     "ss-search": "^1.6.1",
     "styled-components": "^5.3.1",
     "uuid": "^8.3.2"
