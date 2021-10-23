@@ -417,6 +417,7 @@ const syncAlbum = async (
 const updateEncryption = async ({
   journal,
   salt,
+  storage,
   oldEncryption,
   newEncryption,
   gdrive,
@@ -449,18 +450,7 @@ const updateEncryption = async ({
     let pagePromises = [];
     for (let i = 0; i < remoteJournal.content.pages.length; i++) {
       const currPage = remoteJournal.content.pages[i];
-      const {id: pgId, encryptedData: pgData} = await downloadPage(
-        currPage.id,
-        null,
-        _gdrive,
-      );
-      pagePromises.push(
-        _gdrive.files
-          .newMultipartUploader()
-          .setData(newEncryption.enc(oldEncryption.dec(pgData)), MimeTypes.TEXT)
-          .setIdOfFileToUpdate(pgId)
-          .execute(),
-      );
+      pagePromises.push(uploadPage(currPage.id, storage, _gdrive));
     }
     await Promise.all([albumPromise, journalPromise, ...pagePromises]);
   } catch (error) {

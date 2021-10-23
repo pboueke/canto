@@ -231,6 +231,7 @@ export default ({navigation, route}) => {
       GDrive.updateEncryption({
         journal: journalDataState,
         salt: getStoredSalt(MMKV, props.journal.id, getKey()),
+        storage: MMKV,
         oldEncryption: {enc, dec},
         newEncryption: {enc: newEnc, dec: newDec},
       });
