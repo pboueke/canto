@@ -42,7 +42,8 @@ const downloadPage = async (pageId, storage, gdrive) => {
     spaces: ['appDataFolder'],
   });
   const data = await gdrive.files.getText(files.files[0].id);
-  storage.setString(pageId, data);
+  storage && storage.setString(pageId, data);
+  return {id: files.files[0].id, encryptedData: data};
 };
 
 const deletePage = async (pageId, gdrive) => {
@@ -413,6 +414,61 @@ const syncAlbum = async (
     .execute();
 };
 
+const updateEncryption = async ({
+  journal,
+  salt,
+  oldEncryption,
+  newEncryption,
+  gdrive,
+}) => {
+  const _gdrive = gdrive ?? (await signInWithGDrive());
+  try {
+    const {id: remoteAlbumId, data: remoteAlbum} = await getAlbum(
+      journal.content.id,
+      oldEncryption.enc,
+      oldEncryption.dec,
+      _gdrive,
+    );
+    let albumPromise = _gdrive.files
+      .newMultipartUploader()
+      .setData(newEncryption.enc(remoteAlbum), MimeTypes.TEXT)
+      .setIdOfFileToUpdate(remoteAlbumId)
+      .execute();
+    const {id: remoteJournalId, data: remoteJournal} = await getJournalMetadata(
+      journal,
+      oldEncryption.enc,
+      oldEncryption.dec,
+      salt,
+      gdrive,
+    );
+    let journalPromise = _gdrive.files
+      .newMultipartUploader()
+      .setData(newEncryption.enc(remoteJournal), MimeTypes.TEXT)
+      .setIdOfFileToUpdate(remoteJournalId)
+      .execute();
+    let pagePromises = [];
+    for (let i = 0; i < remoteJournal.content.pages.length; i++) {
+      const currPage = remoteJournal.content.pages[i];
+      const {id: pgId, encryptedData: pgData} = await downloadPage(
+        currPage.id,
+        null,
+        _gdrive,
+      );
+      pagePromises.push(
+        _gdrive.files
+          .newMultipartUploader()
+          .setData(newEncryption.enc(oldEncryption.dec(pgData)), MimeTypes.TEXT)
+          .setIdOfFileToUpdate(pgId)
+          .execute(),
+      );
+    }
+    await Promise.all([albumPromise, journalPromise, ...pagePromises]);
+  } catch (error) {
+    console.error('Failed to change GDrive Journal Encryption');
+    console.log(error);
+  }
+};
+
 const removeJournal = async ({gdrive, jId, enc, dec}, onSuccess, onError) => {
   const _gdrive = gdrive ?? (await signInWithGDrive());
   const {lib: library, id: libId} = await journalLibrary({
@@ -487,6 +543,7 @@ const journalLibrary = async ({gdrive, newJournal, getId, setUser} = {}) => {
 };
 
 export default {
+  updateEncryption,
   syncJournal,
   journalLibrary,
   removeJournal,

@@ -34,15 +34,15 @@ const generateEncryptionKey = (pswd, salt) =>
   ).toString();
 
 const encKv = (storage, jId, pswd) => {
-  const storageKey = getStorageKey('key', jId);
-  const storedKey = storage.getString(storageKey);
+  const storedKeyStorageKey = getStorageKey('key', jId);
+  const storedKey = storage.getString(storedKeyStorageKey);
   let key;
   if (storedKey) {
     key = _dec(storedKey, pswd);
   } else {
     const salt = getStoredSalt(storage, jId, pswd);
     key = generateEncryptionKey(pswd, salt);
-    storage.setString(storageKey, _enc(key, pswd));
+    storage.setString(storedKeyStorageKey, _enc(key, pswd));
   }
   const enc = value => _enc(value, key);
   const dec = value => _dec(value, key);
@@ -55,13 +55,18 @@ const changeJournalEncryptionKey = (storage, jId, oldPswd, newPswd) => {
   const oldGet = encKv(storage, jId, oldPswd)[0];
   const jData = oldGet(jId);
   removeEncryptionData(storage, jId);
-  const newSet = encKv(storage, jId, `${jId}${newPswd}`)[1];
+  const [_newGet, newSet, newEnc, newDec] = encKv(
+    storage,
+    jId,
+    `${jId}${newPswd}`,
+  )[1];
   jData.content.pages.forEach(p => {
     console.log(p);
     const pData = oldGet(p.id);
     newSet(p.id, pData);
   });
   newSet(jId, jData);
+  return [newEnc, newDec];
 };
 
 export {

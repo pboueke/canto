@@ -221,7 +221,19 @@ export default ({navigation, route}) => {
     newData.content.hash = newCover.hash;
     newData.content.secure = true;
     set(props.journal.id, newData);
-    changeJournalEncryptionKey(MMKV, props.journal.id, getKey(), pswd);
+    const [newEnc, newDec] = changeJournalEncryptionKey(
+      MMKV,
+      props.journal.id,
+      getKey(),
+      pswd,
+    );
+    journalDataState.settings.gdriveSync &&
+      GDrive.updateEncryption({
+        journal: journalDataState,
+        salt: getStoredSalt(MMKV, props.journal.id, getKey()),
+        oldEncryption: {enc, dec},
+        newEncryption: {enc: newEnc, dec: newDec},
+      });
     navigation.goBack();
   };
 
