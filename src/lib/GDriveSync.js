@@ -440,7 +440,7 @@ const updateEncryption = async ({
       oldEncryption.enc,
       oldEncryption.dec,
       salt,
-      gdrive,
+      _gdrive,
     );
     let journalPromise = _gdrive.files
       .newMultipartUploader()

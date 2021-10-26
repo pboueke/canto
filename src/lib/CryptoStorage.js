@@ -51,21 +51,23 @@ const encKv = (storage, jId, pswd) => {
   return [getter, setter, enc, dec];
 };
 
-const changeJournalEncryptionKey = (storage, jId, oldPswd, newPswd) => {
+const changeJournalEncryptionKey = (storage, journal, oldPswd, newPswd) => {
+  const jId = journal.content.id;
   const oldGet = encKv(storage, jId, oldPswd)[0];
-  const jData = oldGet(jId);
+  const album = oldGet(`${jId}.album`);
   removeEncryptionData(storage, jId);
   const [_newGet, newSet, newEnc, newDec] = encKv(
     storage,
     jId,
     `${jId}${newPswd}`,
-  )[1];
-  jData.content.pages.forEach(p => {
+  );
+  journal.content.pages.forEach(p => {
     console.log(p);
     const pData = oldGet(p.id);
     newSet(p.id, pData);
   });
-  newSet(jId, jData);
+  newSet(`${jId}.album`, album);
+  newSet(jId, journal);
   return [newEnc, newDec];
 };
 
