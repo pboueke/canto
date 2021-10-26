@@ -156,6 +156,7 @@ export default props => {
               localJournalsIds={props.localJournalsIds}
               show={gdriveModalVisible}
               unShow={() => setGdriveModalVisible(!gdriveModalVisible)}
+              closeParent={() => setJournalModalVisible(false)}
               dic={dic}
               onLoad={props.loadRemoteJournal}
             />

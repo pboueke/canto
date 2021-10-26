@@ -99,7 +99,7 @@ export default ({navigation, route}) => {
               MMKV,
               enc,
               dec,
-              getStoredSalt(MMKV, props.journal.id, getKey()),
+              getStoredSalt(MMKV, props.journal.id, getKey(), false),
               getAlbum(),
               updateAlbum,
               (/*start*/) => setSyncing(true),
@@ -233,6 +233,7 @@ export default ({navigation, route}) => {
           MMKV,
           props.journal.id,
           `${props.journal.id}${pswd}`,
+          false,
         ),
         storage: MMKV,
         oldEncryption: {enc, dec},
@@ -323,7 +324,7 @@ export default ({navigation, route}) => {
         storage={MMKV}
         enc={enc}
         dec={dec}
-        salt={getStoredSalt(MMKV, props.journal.id, getKey())}
+        salt={getStoredSalt(MMKV, props.journal.id, getKey(), false)}
         album={getAlbum()}
         updateAlbum={updateAlbum}
         show={dataModalVisibility}

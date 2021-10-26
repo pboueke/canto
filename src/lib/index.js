@@ -22,5 +22,6 @@ export {
   setStoredSalt,
   encKv,
   changeJournalEncryptionKey,
+  removeEncryptionData,
 } from './CryptoStorage';
 export {default as GDrive} from './GDriveSync';

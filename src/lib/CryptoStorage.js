@@ -16,16 +16,17 @@ const setStoredSalt = (storage, pswd, salt, jId) => {
   storage.setString(storageKey, _enc(salt, pswd));
 };
 
-const getStoredSalt = (storage, id, pswd) => {
+const getStoredSalt = (storage, id, pswd, parsed = true) => {
+  let salt;
   const storageKey = getStorageKey('salt', id);
   const storedSalt = storage.getString(storageKey);
   if (storedSalt) {
-    return CryptoJS.enc.Utf8.parse(_dec(storedSalt, pswd));
+    salt = _dec(storedSalt, pswd);
   } else {
     const salt = CryptoJS.enc.Utf8.parse(bcrypt.genSaltSync(10000)).toString();
     setStoredSalt(storage, pswd, salt, id);
-    return CryptoJS.enc.Utf8.parse(salt);
   }
+  return parsed ? CryptoJS.enc.Utf8.parse(salt) : salt;
 };
 
 const removeEncryptionData = (storage, id) => {
@@ -82,4 +83,5 @@ export {
   getStoredSalt,
   setStoredSalt,
   generateEncryptionKey,
+  removeEncryptionData,
 };

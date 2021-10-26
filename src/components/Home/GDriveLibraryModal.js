@@ -7,10 +7,11 @@ import {JournalCover} from '../../models';
 import {ConfirmModal} from '../common';
 import Icon from 'react-native-vector-icons/Feather';
 
-export default ({localJournalsIds, onLoad, show, unShow, dic}) => {
+export default ({localJournalsIds, onLoad, show, unShow, closeParent, dic}) => {
   const theme = useContext(ThemeContext);
   const [firstLoad, setFirstLoad, firstLoadRef] = useStateRef(true);
-  const [selectedJournal, setSelectedJournal] = useState();
+  const [selectedJournal, setSelectedJournal, selectedJournalRef] =
+    useStateRef();
   const [password, setPassword, passwordRef] = useStateRef('');
   const [confirmVisibility, setConfirmVisibility] = useState(false);
   const [lib, setLib] = useState([]);
@@ -23,9 +24,14 @@ export default ({localJournalsIds, onLoad, show, unShow, dic}) => {
     });
   }
   const donwloadRemoteJournal = () => {
-    console.log(selectedJournal);
-    onLoad(selectedJournal, passwordRef.current, selectedJournal.salt);
+    console.log(selectedJournalRef.current);
+    onLoad(
+      selectedJournalRef.current,
+      passwordRef.current,
+      selectedJournalRef.current.salt,
+    );
     unShow();
+    closeParent();
   };
   return (
     <GDLibraryModal
