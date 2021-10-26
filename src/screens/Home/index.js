@@ -5,6 +5,8 @@ import {Logo, ExternallyLoggedUser} from '../../components/common';
 import {Flex, Box} from 'native-grid-styled';
 import {metadata} from '../..';
 import {CantoThemes} from '../../styles';
+import {JournalCover, JournalContent, Page} from '../../models';
+import {encKv, setStoredSalt, GDrive} from '../../lib';
 import Dictionary from '../../Dictionary';
 import {
   JournalSelector,
@@ -179,6 +181,32 @@ export default ({navigation, route}) => {
         localJournalsIds={appData.journals
           .filter(j => !j.deleted)
           .map(j => j.id)}
+        loadRemoteJournal={async (remoteJournal, pswd, salt) => {
+          let tmp = appData;
+          const newCover = new JournalCover(remoteJournal);
+          tmp.journals.push(newCover);
+          setStoredSalt(MMKV, pswd, salt, remoteJournal.id);
+          const jId = remoteJournal.id;
+          const [_jGet, jSet, jEnc, jDec] = encKv(MMKV, jId, `${jId}${pswd}`);
+          const gdrive = await GDrive.signInWithGDrive();
+          let journalContent = (
+            await GDrive.getJournalMetadata(
+              new JournalContent(remoteJournal),
+              jEnc,
+              jDec,
+              null,
+              gdrive,
+            )
+          ).data;
+          for (let i = 0; i < journalContent.content.pages.length; i++) {
+            const page = journalContent.content.pages[i];
+            const pageData = await GDrive.downloadPage(page.id, MMKV, gdrive);
+            const pagePreview = new Page(jDec(pageData)).getPreview();
+            journalContent.content.pages[i] = pagePreview;
+          }
+          jSet(jId, journalContent);
+          jSet(`${jId}.album`, []);
+        }}
       />
       <Scroll>
         <JournalTable>

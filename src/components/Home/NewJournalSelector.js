@@ -157,6 +157,7 @@ export default props => {
               show={gdriveModalVisible}
               unShow={() => setGdriveModalVisible(!gdriveModalVisible)}
               dic={dic}
+              onLoad={props.loadRemoteJournal}
             />
           )}
         </SelectorSkeleton>

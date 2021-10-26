@@ -19,6 +19,7 @@ export {
 } from './Attachments';
 export {
   getStoredSalt,
+  setStoredSalt,
   encKv,
   changeJournalEncryptionKey,
 } from './CryptoStorage';

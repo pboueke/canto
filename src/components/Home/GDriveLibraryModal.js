@@ -3,11 +3,16 @@ import useStateRef from 'react-usestateref';
 import {ActivityIndicator} from 'react-native';
 import styled, {ThemeContext} from 'styled-components/native';
 import {GDrive} from '../../lib';
+import {JournalCover} from '../../models';
+import {ConfirmModal} from '../common';
 import Icon from 'react-native-vector-icons/Feather';
 
-export default ({localJournalsIds, show, unShow, dic}) => {
+export default ({localJournalsIds, onLoad, show, unShow, dic}) => {
   const theme = useContext(ThemeContext);
   const [firstLoad, setFirstLoad, firstLoadRef] = useStateRef(true);
+  const [selectedJournal, setSelectedJournal] = useState();
+  const [password, setPassword, passwordRef] = useStateRef('');
+  const [confirmVisibility, setConfirmVisibility] = useState(false);
   const [lib, setLib] = useState([]);
   const [loading, setLoading] = useState(true);
   if (firstLoadRef.current) {
@@ -17,6 +22,11 @@ export default ({localJournalsIds, show, unShow, dic}) => {
       setLib(lib);
     });
   }
+  const donwloadRemoteJournal = () => {
+    console.log(selectedJournal);
+    onLoad(selectedJournal, passwordRef.current, selectedJournal.salt);
+    unShow();
+  };
   return (
     <GDLibraryModal
       animationType="slide"
@@ -55,11 +65,33 @@ export default ({localJournalsIds, show, unShow, dic}) => {
                   alsoLocal={local}
                   key={j.id}
                   journal={j}
-                  onPress={() => !local && console.log('should download...')}
+                  onPress={() => {
+                    if (!local) {
+                      setSelectedJournal(j);
+                      if (j.secure) {
+                        setConfirmVisibility(true);
+                      } else {
+                        setPassword('');
+                        donwloadRemoteJournal();
+                      }
+                    }
+                  }}
                 />
               );
             })}
         </GDLibraryModalInterior>
+        <ConfirmModal
+          dic={dic}
+          passwordCheck={(key, callback) => {
+            setPassword(key);
+            return JournalCover.unlock(key, selectedJournal.hash, callback);
+          }}
+          marginTop={20}
+          show={confirmVisibility}
+          unShow={() => setConfirmVisibility(false)}
+          onConfirm={donwloadRemoteJournal}
+          shadow
+        />
       </Scroll>
     </GDLibraryModal>
   );
@@ -83,7 +115,7 @@ const StoredJournal = ({alsoLocal, onPress, journal}) => {
     flex-direction: row;
     width: 100%;
     margin: 10px 0 10px 0px;
-    padding-top: 15px;
+    padding: 10px 0 10px 0;
     border-top-width: 1px;
     border-radius: 10px;
     align-items: center;

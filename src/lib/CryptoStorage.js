@@ -11,6 +11,11 @@ const _dec = (value, key) =>
 const getStorageKey = (label, id) =>
   CryptoJS.SHA256(`${label}:${id}`).toString();
 
+const setStoredSalt = (storage, pswd, salt, jId) => {
+  const storageKey = getStorageKey('salt', jId);
+  storage.setString(storageKey, _enc(salt, pswd));
+};
+
 const getStoredSalt = (storage, id, pswd) => {
   const storageKey = getStorageKey('salt', id);
   const storedSalt = storage.getString(storageKey);
@@ -18,7 +23,7 @@ const getStoredSalt = (storage, id, pswd) => {
     return CryptoJS.enc.Utf8.parse(_dec(storedSalt, pswd));
   } else {
     const salt = CryptoJS.enc.Utf8.parse(bcrypt.genSaltSync(10000)).toString();
-    storage.setString(storageKey, _enc(salt, pswd));
+    setStoredSalt(storage, pswd, salt, id);
     return CryptoJS.enc.Utf8.parse(salt);
   }
 };
@@ -75,5 +80,6 @@ export {
   encKv,
   changeJournalEncryptionKey,
   getStoredSalt,
+  setStoredSalt,
   generateEncryptionKey,
 };

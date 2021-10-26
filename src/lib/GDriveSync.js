@@ -88,12 +88,13 @@ const signInWithGDrive = async setUser => {
 };
 
 const getJournalMetadata = async (journal, enc, dec, salt, gdrive) => {
+  const _gdrive = gdrive ?? (await signInWithGDrive());
   const name = `${journal.content.id}.mtdt`;
   const query = new ListQueryBuilder()
     .e('name', name)
     .and()
     .e('mimeType', MimeTypes.TEXT);
-  let files = await gdrive.files.list({
+  let files = await _gdrive.files.list({
     q: query,
     spaces: ['appDataFolder'],
   });
@@ -105,7 +106,7 @@ const getJournalMetadata = async (journal, enc, dec, salt, gdrive) => {
       modified: p.modified,
       deleted: p.deleted,
     }));
-    const resp = await gdrive.files
+    const resp = await _gdrive.files
       .newMultipartUploader()
       .setData(enc(data), MimeTypes.TEXT)
       .setRequestBody({
@@ -115,13 +116,13 @@ const getJournalMetadata = async (journal, enc, dec, salt, gdrive) => {
       .execute();
     id = resp.id;
     await journalLibrary({
-      gdrive: gdrive,
+      gdrive: _gdrive,
       newJournal: {...new JournalCover(journal.content), salt},
     });
   } else {
     id = files.files[0].id;
   }
-  return {id: id, data: dec(await gdrive.files.getText(id))};
+  return {id: id, data: dec(await _gdrive.files.getText(id))};
 };
 
 const updateJournalPageData = async (
@@ -533,9 +534,11 @@ const journalLibrary = async ({gdrive, newJournal, getId, setUser} = {}) => {
 };
 
 export default {
+  signInWithGDrive,
   updateEncryption,
   syncJournal,
   journalLibrary,
   removeJournal,
+  getJournalMetadata,
   updateJournalMetadata,
 };
