@@ -101,11 +101,7 @@ const getJournalMetadata = async (journal, enc, dec, salt, gdrive) => {
   let id;
   if (files.files.length === 0) {
     let data = journal;
-    data.content.pages = data.content.pages.map(p => ({
-      id: p.id,
-      modified: p.modified,
-      deleted: p.deleted,
-    }));
+    data.content.pages = [];
     const resp = await _gdrive.files
       .newMultipartUploader()
       .setData(enc(data), MimeTypes.TEXT)
@@ -228,9 +224,12 @@ const syncJournal = async (
       salt,
       gdrive,
     );
-    const localJournal = new JournalContent().overwrite(journal.content);
+    const localJournal = new JournalContent({
+      cover: journal.content,
+      pages: journal.content.pages,
+    });
     const isSynced = localJournal.isUpToDate(remoteJournal);
-
+    console.log(`JOURNAL IS ${isSynced ? '' : 'NOT'} SYNCED`);
     if (!isSynced) {
       const changes = localJournal.getPedingChanges(remoteJournal);
       changes.pagesToDeleteRemotely.forEach(
@@ -537,6 +536,7 @@ export default {
   syncJournal,
   journalLibrary,
   removeJournal,
+  downloadPage,
   getJournalMetadata,
   updateJournalMetadata,
 };

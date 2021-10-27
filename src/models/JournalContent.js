@@ -1,10 +1,10 @@
 import {metadata} from '..';
-import {JournalCover} from '.';
+import {JournalCover, JournalSettings} from '.';
 
 export default class JournalContent {
   constructor({
     cover = new JournalCover(),
-    settings = {},
+    settings = new JournalSettings(),
     pages = [],
     srcVersion = metadata.srcVersion,
   } = {}) {
@@ -17,13 +17,9 @@ export default class JournalContent {
       secure,
       hash,
       pages,
+      settings,
       srcVersion,
     });
-  }
-
-  overwrite(data) {
-    Object.assign(this, data);
-    return this;
   }
 
   isUpToDate(remoteJournal) {

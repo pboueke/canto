@@ -206,8 +206,11 @@ export default ({navigation, route}) => {
             ).data;
             for (let i = 0; i < journalData.content.pages.length; i++) {
               const page = journalData.content.pages[i];
-              const pageData = await GDrive.downloadPage(page.id, MMKV, gdrive);
-              const pagePreview = new Page(jDec(pageData)).getPreview();
+              const encPageData = (
+                await GDrive.downloadPage(page.id, MMKV, gdrive)
+              ).encryptedData;
+              const pageData = jDec(encPageData);
+              const pagePreview = new Page(pageData.content).getPreview();
               journalData.content.pages[i] = pagePreview;
             }
             jSet(jId, journalData);
