@@ -130,7 +130,7 @@ const ItemTitle = styled.View`
 
 const ItemDate = styled.Text`
   font-family: ${p => p.theme.font.menu.bold};
-  font-size: 18px;
+  font-size: 16px;
   letter-spacing: 2px;
   margin: 5px 0 0 10px;
   color: ${p => p.theme.textColor};
@@ -141,28 +141,28 @@ const ItemTime = styled.Text`
   font-size: ${p => (p.small ? 12 : 16)}px;
   margin: 6px 0 0 100px;
   position: absolute;
-  right: ${p => (p.small ? 6 : 10)}px;
-  bottom: ${p => (p.small ? 8 : 6)}px;
+  right: ${p => (p.small ? 6 : 8)}px;
+  top: ${p => (p.small ? 4 : 0)}px;
   color: ${p => p.theme.textColor};
 `;
 
 const ItemTitleIcon = styled(Icon)`
   position: absolute
   font-size: 12px;
-  top: 10px;
+  top: 11px;
   color: ${p => p.theme.textColor};
 `;
 
 const ItemLocation = styled(ItemTitleIcon)`
-  left: 195px;
+  left: 193px;
 `;
 
 const ItemImage = styled(ItemTitleIcon)`
-  left: 212px;
+  left: 210px;
 `;
 
 const ItemFile = styled(ItemTitleIcon)`
-  left: 229px;
+  left: 227px;
 `;
 
 const ItemText = styled.View`

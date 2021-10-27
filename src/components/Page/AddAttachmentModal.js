@@ -118,7 +118,7 @@ export default ({
             addAction={() =>
               addFile(
                 page.id,
-                (uri, name) => {
+                (uri, name, id) => {
                   const newFile = {
                     path: uri,
                     name: name,
