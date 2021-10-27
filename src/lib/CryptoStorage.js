@@ -23,7 +23,7 @@ const getStoredSalt = (storage, id, pswd) => {
   if (storedSalt) {
     salt = _dec(storedSalt, pswd);
   } else {
-    const salt = bcrypt.genSaltSync(10000);
+    salt = bcrypt.genSaltSync(10000);
     setStoredSalt(storage, pswd, salt, id);
   }
   return salt;
@@ -37,7 +37,7 @@ const removeEncryptionData = (storage, id) => {
 const generateEncryptionKey = (pswd, salt) => {
   const parsedSalt = CryptoJS.enc.Utf8.parse(salt);
   return CryptoJS.enc.Utf8.parse(
-    CryptoJS.PBKDF2(pswd, salt, {iterations: 10000}),
+    CryptoJS.PBKDF2(pswd, parsedSalt, {iterations: 10000}),
   ).toString();
 };
 
