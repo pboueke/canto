@@ -265,14 +265,12 @@ const syncJournal = async (
 const uploadFile = async (id, path, gdrive, onSuccess) => {
   try {
     const bin = await getFileAsBinary(path);
-    console.log(path);
     await gdrive.files
       .newMultipartUploader()
       .setData(bin, MimeTypes.BINARY)
       .setRequestBody({name: id, parents: ['appDataFolder']})
       .execute();
     onSuccess && onSuccess();
-    console.log(`uploaded ${id}`);
   } catch (error) {
     console.warn(`Failed to upload file ${id}`);
     console.log(error);

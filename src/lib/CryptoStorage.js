@@ -16,17 +16,17 @@ const setStoredSalt = (storage, pswd, salt, jId) => {
   storage.setString(storageKey, _enc(salt, pswd));
 };
 
-const getStoredSalt = (storage, id, pswd, parsed = true) => {
+const getStoredSalt = (storage, id, pswd) => {
   let salt;
-  const storageKey = getStorageKey('salt', id);
-  const storedSalt = storage.getString(storageKey);
+  const saltStorageKey = getStorageKey('salt', id);
+  const storedSalt = storage.getString(saltStorageKey);
   if (storedSalt) {
     salt = _dec(storedSalt, pswd);
   } else {
-    const salt = CryptoJS.enc.Utf8.parse(bcrypt.genSaltSync(10000)).toString();
+    const salt = bcrypt.genSaltSync(10000);
     setStoredSalt(storage, pswd, salt, id);
   }
-  return parsed ? CryptoJS.enc.Utf8.parse(salt) : salt;
+  return salt;
 };
 
 const removeEncryptionData = (storage, id) => {
@@ -34,10 +34,12 @@ const removeEncryptionData = (storage, id) => {
   storage.removeItem(getStorageKey('salt', id));
 };
 
-const generateEncryptionKey = (pswd, salt) =>
-  CryptoJS.enc.Utf8.parse(
+const generateEncryptionKey = (pswd, salt) => {
+  const parsedSalt = CryptoJS.enc.Utf8.parse(salt);
+  return CryptoJS.enc.Utf8.parse(
     CryptoJS.PBKDF2(pswd, salt, {iterations: 10000}),
   ).toString();
+};
 
 const encKv = (storage, jId, pswd) => {
   const storedKeyStorageKey = getStorageKey('key', jId);
