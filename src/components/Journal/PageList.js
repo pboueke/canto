@@ -8,6 +8,10 @@ import {TagsRow, ThemedMarkdown} from '../common';
 import {JournalSettings} from '../../models';
 
 export default props => {
+  const cleanAlbum = props.album.filter(i => !i.deleted);
+  const pathsById = [{}, ...cleanAlbum].reduce(
+    (o, i) => (o[i.id] = i.path) && o,
+  );
   const renderItem = (i, last) => (
     <Item
       settings={props.settings}
@@ -16,7 +20,7 @@ export default props => {
       text={i.item.text}
       tags={i.item.tags}
       loc={i.item.location}
-      thumb={i.item.thumbnail}
+      thumb={i.item.thumbnail && pathsById[i.item.thumbnail]}
       img={i.item.numberOfImages > 0}
       file={i.item.numberOfFiles > 0}
       cmt={i.item.numberOfComment > 0}

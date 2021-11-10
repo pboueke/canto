@@ -1,6 +1,6 @@
 import React, {useState, useContext} from 'react';
 import useStateRef from 'react-usestateref';
-import {ActivityIndicator} from 'react-native';
+import {PermissionsAndroid, ActivityIndicator} from 'react-native';
 import styled, {ThemeContext} from 'styled-components/native';
 import {GDrive} from '../../lib';
 import {JournalCover} from '../../models';
@@ -23,8 +23,19 @@ export default ({localJournalsIds, onLoad, show, unShow, closeParent, dic}) => {
       setLib(lib);
     });
   }
-  const donwloadRemoteJournal = () => {
+  const donwloadRemoteJournal = async () => {
     console.log(selectedJournalRef.current);
+    await PermissionsAndroid.request(
+      PermissionsAndroid.PERMISSIONS.WRITE_EXTERNAL_STORAGE,
+      {
+        title: "Canto's Write to Storage Permission",
+        message:
+          'Canto needs access to your phone storage to save locally any files you have in your journal store remotely. If there are no files stored remotely, feel free to ignore this message.',
+        buttonNeutral: 'Ask Me Later',
+        buttonNegative: 'Cancel',
+        buttonPositive: 'OK',
+      },
+    );
     onLoad(
       selectedJournalRef.current,
       passwordRef.current,

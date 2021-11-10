@@ -6,7 +6,7 @@ import Share from 'react-native-share';
 import {hashCode} from '.';
 import RNFS from 'react-native-fs';
 import {Page} from '../models';
-import {getDate} from '../lib';
+import {getDate, ab2str, str2ab} from '../lib';
 import {v5 as uuidv5} from 'uuid';
 import {metadata} from '..';
 
@@ -262,17 +262,24 @@ const Album = (jId, get, set) => {
 };
 
 const getFileAsBinary = async path => {
-  const data = await RNFS.readFile(path, 'base64');
+  const b64 = await RNFS.readFile(path, 'base64');
+  const data = str2ab(b64);
   return data;
 };
 
 const saveBinaryFile = async (id, data, name, ext) => {
-  const dest =
-    'file://' +
-    RNFS.DocumentDirectoryPath +
-    `/fl-${id}-${hashCode(name)}.${ext}`;
-  await RNFS.writeFile(dest, data, 'base64');
-  return dest;
+  try {
+    const content = ab2str(data);
+    const dest =
+      'file://' +
+      RNFS.DocumentDirectoryPath +
+      `/fl-${id}-${hashCode(name)}.${ext}`;
+    await RNFS.writeFile(dest, content, 'base64');
+    return dest;
+  } catch (error) {
+    console.log(error);
+    throw error;
+  }
 };
 
 export {

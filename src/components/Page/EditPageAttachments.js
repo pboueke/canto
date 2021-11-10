@@ -3,7 +3,14 @@ import styled from 'styled-components/native';
 import Icon from 'react-native-vector-icons/Feather';
 import {AddAttachmentModal} from '.';
 
-export default ({availableTags, page, dic, onChange, onAddFile}) => {
+export default ({
+  availableTags,
+  page,
+  dic,
+  updatedPaths,
+  onChange,
+  onAddFile,
+}) => {
   const [attachmentModalVisible, setAttachmentModalVisible] = useState(false);
   return (
     <AttachmentBar>
@@ -24,6 +31,7 @@ export default ({availableTags, page, dic, onChange, onAddFile}) => {
       </AddButton>
       <AddAttachmentModal
         dic={dic}
+        updatedPaths={updatedPaths}
         availableTags={availableTags}
         page={page}
         show={attachmentModalVisible}

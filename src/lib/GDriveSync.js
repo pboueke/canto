@@ -264,6 +264,7 @@ const syncJournal = async (
 const uploadFile = async (id, path, gdrive, onSuccess) => {
   try {
     const bin = await getFileAsBinary(path);
+    console.log(bin);
     await gdrive.files
       .newMultipartUploader()
       .setData(bin, MimeTypes.BINARY)
@@ -283,13 +284,17 @@ const downloadFile = async (file, gdrive, onSuccess) => {
     .e('mimeType', MimeTypes.BINARY);
   let files = await gdrive.files.list({
     q: query,
-    parents: ['appDataFolder'],
+    spaces: ['appDataFolder'],
   });
+  console.log(files);
   const data = await gdrive.files.getBinary(files.files[0].id);
+  console.log(data);
   const name = file.name ?? new Date().toLocaleString();
-  const ext = file.path.split('').pop();
-  onSuccess && onSuccess();
-  return await saveBinaryFile(file.id, data, name, ext);
+  const ext = file.path.split('.').pop();
+  const localPath = await saveBinaryFile(file.id, data, name, ext);
+  onSuccess && onSuccess(localPath);
+  console.log(`FILE SAVED: ${localPath}`);
+  return localPath;
 };
 
 const deleteFile = async (id, gdrive, onSuccess) => {
@@ -397,9 +402,8 @@ const syncAlbum = async (
   }
   for (let i = 0; i < changes.download.length; i++) {
     const {id, name} = changes.download[i];
-    const path = await downloadFile(changes.deleteRemotelly[i], gdrive, () => {
-      localAlbumChanges.toAdd.push({id, path, name});
-    });
+    const path = await downloadFile(changes.download[i], gdrive);
+    localAlbumChanges.toAdd.push({id, path, name});
   }
   for (let i = 0; i < changes.deleteLocally.length; i++) {
     localAlbumChanges.toRemove.push({id: changes.deleteLocally[i].id});

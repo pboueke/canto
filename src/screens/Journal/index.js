@@ -120,7 +120,7 @@ export default ({navigation, route}) => {
                   'FAILED TO SYNC JOURNAL WITH GOOGLE DRIVE',
                   `${error}`,
                   `simpleInfo`,
-                  2000,
+                  5000,
                 );
               },
             );
@@ -288,6 +288,7 @@ export default ({navigation, route}) => {
 
       <PageList
         data={pageList}
+        album={getAlbum()}
         settings={journalDataState.settings}
         onClick={page => {
           navigation.navigate('Page', {

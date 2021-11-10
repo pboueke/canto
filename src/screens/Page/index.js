@@ -146,7 +146,7 @@ export default ({navigation, route}) => {
   const updateThumbnail = (id = 0) => {
     let newAttachments = attachments;
     if (attachments.images && attachments.images.length > 0) {
-      newAttachments.thumbnail = attachments.images[id].path;
+      newAttachments.thumbnail = attachments.images[id].id;
     } else {
       newAttachments.thumbnail = null;
     }
@@ -191,6 +191,16 @@ export default ({navigation, route}) => {
   };
 
   const showOverlay = () => editMode && !focusMode;
+  const cleanAlbum = getAlbum().filter(i => !i.deleted);
+  const pathsById = [{}, ...cleanAlbum].reduce((o, i) => (o[i.id] = i) && o);
+  const updatedImagePaths = attachments.images.map(i => ({
+    ...i,
+    path: (pathsById[i.id] ?? i).path,
+  }));
+  const updatedFilePaths = attachments.files.map(f => ({
+    ...f,
+    path: (pathsById[f.id] ?? f).path,
+  }));
 
   return (
     <Container>
@@ -204,11 +214,11 @@ export default ({navigation, route}) => {
       <Scroll contentInsetAdjustmentBehavior="automatic">
         <ImageCarousel
           dic={dic}
-          images={attachments.images}
+          images={updatedImagePaths}
           action={index =>
             !editMode &&
             shareFile(
-              attachments.images[index].path,
+              updatedImagePaths[index].path,
               `Image #${index}`,
               dateTime,
             )
@@ -293,7 +303,7 @@ export default ({navigation, route}) => {
           }
         />
         <FileRow
-          files={attachments.files}
+          files={updatedFilePaths}
           icon="share"
           padding={10}
           action={f => shareFile(f.path, f.name, dateTime)}
@@ -304,6 +314,7 @@ export default ({navigation, route}) => {
       {showOverlay() && (
         <EditPageAttachments
           dic={dic}
+          updatedPaths={{images: updatedImagePaths, files: updatedFilePaths}}
           availableTags={props.tags}
           page={pageData.content}
           onChange={val => setAttachments(val)}

@@ -4,7 +4,7 @@ export const useStateWithCallback = initialState => {
   const [state, setState] = useState(initialState);
   const callbackRef = useRef();
 
-  const handleSetState = (updatedState, callback?) => {
+  const handleSetState = (updatedState, callback) => {
     callbackRef.current = callback;
     setState(updatedState);
   };
@@ -37,4 +37,16 @@ export const getTime = (date, is24 = true) => {
     const amPm = hrs > 12 ? ' PM' : ' AM';
     return (hrs % 12) + ':' + ('0' + dt.getMinutes()).slice(-2) + amPm;
   }
+};
+
+export const ab2str = buf =>
+  String.fromCharCode.apply(null, new Uint8Array(buf));
+
+export const str2ab = str => {
+  var buf = new ArrayBuffer(str.length); // 1 byte for each char
+  var bufView = new Uint8Array(buf);
+  for (var i = 0, strLen = str.length; i < strLen; i++) {
+    bufView[i] = str.charCodeAt(i);
+  }
+  return bufView;
 };

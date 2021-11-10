@@ -20,6 +20,7 @@ export default ({
   onChange,
   onAddFile,
   availableTags,
+  updatedPaths,
   dic,
 }) => {
   const [addTagModalVisibility, setAddTagModalVisibility] = useState(false);
@@ -106,7 +107,7 @@ export default ({
             }
           />
           <ImageRow
-            images={images}
+            images={updatedPaths.images}
             action={i => {
               setImages(imagesRef.current.filter(img => i.id !== img.id));
               onChange(createDataObject());
@@ -134,9 +135,9 @@ export default ({
             }
           />
           <FileRow
-            files={files}
+            files={updatedPaths.files}
             action={f => {
-              setFiles(filesRef.current.filter(file => file.path !== f.path));
+              setFiles(filesRef.current.filter(file => file.id !== f.id));
               onChange(createDataObject());
             }}
           />

@@ -4,6 +4,8 @@ export {
   getTime,
   hashCode,
   randomString,
+  ab2str,
+  str2ab,
 } from './Utils';
 export {openLocationExternally} from './Location';
 export {
