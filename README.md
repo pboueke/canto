@@ -1,22 +1,62 @@
-<p align="center"><img height="175" src="./android/app/src/main/res/mipmap-hdpi/ic_launcher_round.png"></p>
+<p align="center"><img height="" src="./src/assets/images/canto_banner_v1.png"></p>
+
+&nbsp;
+
+## **WIP:** See the road map on this readme file
+
+&nbsp;
 
 # About
 
 Canto is am entirely free, simple journaling app for Android. 
-It's built with `react-native` and may one day be ported to *ios*. 
+It's built with `react-native` and may one day be ported to *ioPs*. 
 It's meant to resolve frustrations with the current *journaling mobile app*
 ecosystem - pointless features, insane charges and 'DiaryAsAService'-bs.
 
 Features:
 
-* Completely free and open source
-* Management of multiple journals
-* Local encryption
-* Automated backups with Drive
+* Completely **free and open source**
+* Management of **multiple journals**
+* **Encryption**. Always. Everywhere.
+* **Automated backups** with Google Drive
 
 &nbsp;
 
----
+
+# Contributing
+
+## BUG REPORT
+
+Please [create an issue](https://github.com/pboueke/canto/issues) tagged as `bug`. Include the platform, a description of the problem and how to reproduce it. 
+
+&nbsp;
+
+## Fixes, improvements, features
+
+Please [create an issue](https://github.com/pboueke/canto/issues) for discussing the changes. If all is well, your PR will be merged once reviwed.
+
+&nbsp;
+
+# Roadmap
+
+First release:
+
+* (being worked at) Finish Google Drive Integration for automated backups.
+   * Fix uploaded image download/upload (currently receiving empty data array from API)
+   * Check for bugs
+
+* Add option to create readable exports of a journal (doc or markdown file)
+* Add option to generate local exports that can be used as backups
+* Add option to load local exports
+* Add loading spin in areas it's needed
+* General compatibility test on other android API levels and devices
+
+Long term support:
+* Tests, none currently exists.
+* Migrate to TypeScript. 
+
+
+&nbsp;
 
 # Development
 
@@ -38,7 +78,6 @@ Features:
 
 &nbsp;
 
----
 
 # Google Drive Integration
 
@@ -49,8 +88,6 @@ Create a project at Google's API console, adding an OAuth 2.0 **web** credential
 Remember to enable access to the [Google Drive API](https://developers.google.com/drive/api/v3/enable-drive-api).
 
 &nbsp;
-
----
 
 # Build
 
