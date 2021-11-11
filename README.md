@@ -15,10 +15,15 @@ ecosystem - pointless features, insane charges and 'DiaryAsAService'-bs.
 
 Features:
 
-* Completely **free and open source**
-* Management of **multiple journals**
+* Completely **free and open source**.
+* Management of **multiple journals**.
 * **Encryption**. Always. Everywhere.
-* **Automated backups** with Google Drive
+* **Automated backups** with Google Drive.
+* Add **images, files, GPS data, tags and comments** to your entries.
+* Format using **markdown**.
+* **Optionally use a password** to lock your data.
+* **Filter and query** your previous entries.
+
 
 &nbsp;
 
@@ -34,6 +39,12 @@ Please [create an issue](https://github.com/pboueke/canto/issues) tagged as `bug
 ## Fixes, improvements, features
 
 Please [create an issue](https://github.com/pboueke/canto/issues) for discussing the changes. If all is well, your PR will be merged once reviwed.
+
+&nbsp;
+
+## Localization
+
+Create a PR that adds your language to `.src/Dictionary/index.js`. 
 
 &nbsp;
 
