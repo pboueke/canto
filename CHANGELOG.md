@@ -1,5 +1,40 @@
 # Changelog
 
+## v0.5.0 - Entries
+
+- feat: add full entry (page) creation, editing and preview with edit/preview mode toggle
+- feat: add markdown rendering in preview mode via react-native-markdown-display
+- feat: add mixed encrypted/non-encrypted attachment support per entry
+- feat: add image carousel with separate carousels for plain and encrypted images (lock icon)
+- feat: add image reorder (move left/right arrows) and remove in edit mode
+- feat: add fullscreen image viewer via react-native-image-viewing with pinch-zoom
+- feat: add file attachment display with extension badges, open/share via expo-sharing
+- feat: add encrypted file support with password-layer decryption before opening
+- feat: add geo tag with GPS coordinates, open in maps, long-press to copy
+- feat: add tag editor with journal-wide tag suggestions popup and new tag creation
+- feat: add comment system with add/edit/delete, each comment has UUID and timestamp
+- feat: add attachment popup (FAB + modal) with 6 options (image, encrypted image, file, encrypted file, location, comment)
+- feat: add page creation from journal FAB with navigation to edit mode
+- feat: add save/delete handlers with dirty state tracking and discard confirmation
+- feat: add useCreatePage, useDeletePage, useJournalTags, useAttachment hooks
+- feat: add encrypted attachment file naming with e-prefix (eimg-/efl-) for portability
+- feat: add derivedKey support to saveAttachment/getAttachment for encrypted attachments
+- feat: add Comment.id field (UUID) for edit/delete targeting
+- feat: add Attachment.encrypted field for mixed encryption per entry
+- feat: add PagePreview.firstImage for journal list thumbnails
+- feat: add journal screen auto-refresh on focus (useFocusEffect)
+- feat: add i18n strings for all new entry features (EN/PT)
+- feat: add file size display in file attachment preview (B/KB/MB)
+- feat: add first unencrypted image thumbnail in journal page list
+- feat: add Tag onRemove with colored X button inside tag pill
+- refactor: replace all emojis with Feather icons (calendar, clock, map-pin, image, paperclip, arrow-left, check, edit-2, trash-2)
+- refactor: replace attachment toolbar with FAB + popup modal
+- refactor: remove welcome page auto-creation from journal creation
+- style: save/confirm FAB is now green, + FAB and tag add button are now yellow
+- style: standardize component margins, centralize geo tag
+- style: page layout order — tags, images, encrypted images, geo tag, files, text body, comments
+- deps: react-native-markdown-display, react-native-image-viewing, expo-image-picker, expo-document-picker, expo-location, expo-sharing, expo-clipboard
+
 ## v0.4.0 - Journal Creation
 
 - feat: add journal creation modal with name, icon selection, and optional password

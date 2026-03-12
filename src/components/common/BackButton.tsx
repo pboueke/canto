@@ -1,5 +1,6 @@
-import { Pressable, StyleSheet, Text } from 'react-native';
+import { Pressable, StyleSheet } from 'react-native';
 import { useRouter } from 'expo-router';
+import { Feather } from '@expo/vector-icons';
 import { useTheme } from '@/hooks/useTheme';
 
 export function BackButton() {
@@ -8,7 +9,7 @@ export function BackButton() {
 
   return (
     <Pressable onPress={() => router.back()} style={styles.button}>
-      <Text style={[styles.arrow, { color: theme.colors.text }]}>{'\u{2190}'}</Text>
+      <Feather name="arrow-left" size={22} color={theme.colors.text} />
     </Pressable>
   );
 }
@@ -17,8 +18,5 @@ const styles = StyleSheet.create({
   button: {
     paddingRight: 12,
     paddingVertical: 4,
-  },
-  arrow: {
-    fontSize: 22,
   },
 });

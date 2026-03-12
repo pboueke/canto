@@ -90,16 +90,16 @@ export const lightTheme: CantoTheme = {
       border: 'rgb(0, 0, 0)',
     },
     popAction: {
-      save: { background: 'rgb(232, 202, 51)', text: 'rgb(0, 0, 0)' },
+      save: { background: 'rgb(76, 175, 80)', text: 'rgb(255, 255, 255)' },
       edit: { background: 'rgb(255, 255, 255)', text: 'rgb(0, 0, 0)' },
-      new: { background: 'rgb(255, 255, 255)', text: 'rgb(0, 0, 0)' },
+      new: { background: 'rgb(232, 202, 51)', text: 'rgb(0, 0, 0)' },
       delete: { background: 'rgb(255, 109, 5)', text: 'rgb(0, 0, 0)' },
     },
     tag: {
       default: 'rgb(222, 222, 222)',
       active: 'rgb(200, 200, 200)',
       text: 'rgb(0, 0, 0)',
-      add: 'rgb(237, 162, 71)',
+      add: 'rgb(232, 202, 51)',
       remove: 'rgb(87, 196, 173)',
     },
     markdown: {
@@ -153,16 +153,16 @@ export const darkTheme: CantoTheme = {
       border: 'rgb(255, 217, 23)',
     },
     popAction: {
-      save: { background: 'rgb(232, 202, 51)', text: 'rgb(0, 0, 0)' },
+      save: { background: 'rgb(56, 142, 60)', text: 'rgb(255, 255, 255)' },
       edit: { background: 'rgb(50, 50, 50)', text: 'rgb(255, 255, 255)' },
-      new: { background: 'rgb(50, 50, 50)', text: 'rgb(255, 255, 255)' },
+      new: { background: 'rgb(161, 140, 35)', text: 'rgb(0, 0, 0)' },
       delete: { background: 'rgb(255, 109, 5)', text: 'rgb(0, 0, 0)' },
     },
     tag: {
       default: 'rgb(66, 66, 66)',
       active: 'rgb(66, 66, 66)',
       text: 'rgb(222, 222, 222)',
-      add: 'rgb(133, 86, 29)',
+      add: 'rgb(161, 140, 35)',
       remove: 'rgb(57, 128, 113)',
     },
     markdown: {

@@ -1,9 +1,9 @@
-import { useMemo } from 'react';
+import { useCallback, useMemo } from 'react';
 import { ActivityIndicator, FlatList, StyleSheet, Text, View } from 'react-native';
-import { useLocalSearchParams } from 'expo-router';
+import { useLocalSearchParams, router, useFocusEffect } from 'expo-router';
 import { useTheme } from '@/hooks/useTheme';
 import { useI18n } from '@/hooks/useI18n';
-import { useJournal } from '@/hooks/useStorage';
+import { useJournal, useCreatePage } from '@/hooks/useStorage';
 import { useJournalKeys } from '@/contexts/JournalKeyContext';
 import { JournalHeader } from '@/components/journal/JournalHeader';
 import { PageListItem } from '@/components/journal/PageListItem';
@@ -17,7 +17,14 @@ export default function JournalScreen() {
   const { getKey } = useJournalKeys();
 
   const derivedKey = id ? getKey(id) : null;
-  const { journal, loading } = useJournal(id, derivedKey);
+  const { journal, loading, refresh } = useJournal(id, derivedKey);
+  const { create: createPage } = useCreatePage(id, derivedKey);
+
+  useFocusEffect(
+    useCallback(() => {
+      refresh();
+    }, [refresh]),
+  );
 
   const pages = useMemo(() => {
     if (!journal) return [];
@@ -66,8 +73,11 @@ export default function JournalScreen() {
 
       <FloatingActionButton
         icon="+"
-        onPress={() => {
-          /* TODO: create page */
+        onPress={async () => {
+          const pageId = await createPage();
+          if (pageId) {
+            router.push(`/page/${pageId}?journalId=${journal.id}&edit=true`);
+          }
         }}
         backgroundColor={theme.colors.popAction.new.background}
         color={theme.colors.popAction.new.text}

@@ -25,16 +25,17 @@ export interface LocalStore {
   /** Soft-delete a page (marks as deleted for sync). derivedKey for password-protected journals. */
   deletePage(journalId: string, pageId: string, derivedKey?: Uint8Array): Promise<void>;
 
-  /** Save an attachment file and return its storage path. */
+  /** Save an attachment file and return its storage path. derivedKey for encrypted attachments. */
   saveAttachment(
     journalId: string,
     pageId: string,
     attachment: Attachment,
     data: string, // base64 encoded
+    derivedKey?: Uint8Array,
   ): Promise<string>;
 
-  /** Read an attachment file as base64. */
-  getAttachment(path: string): Promise<string | null>;
+  /** Read an attachment file as base64. derivedKey for encrypted attachments. */
+  getAttachment(path: string, derivedKey?: Uint8Array): Promise<string | null>;
 
   /** Delete an attachment file from storage. */
   deleteAttachment(path: string): Promise<void>;

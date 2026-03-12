@@ -46,10 +46,14 @@ function hashCode(str: string): number {
 }
 
 function getAttachmentFile(journalId: string, pageId: string, attachment: Attachment): File {
-  const prefix = attachment.type === 'image' ? 'img' : 'fl';
+  const typePrefix = attachment.type === 'image' ? 'img' : 'fl';
+  const encPrefix = attachment.encrypted ? 'e' : '';
   const ext = attachment.name.split('.').pop() ?? 'bin';
   const hash = hashCode(attachment.name);
-  return new File(getAttachmentsDir(journalId), `${prefix}-${pageId}-${hash}.${ext}`);
+  return new File(
+    getAttachmentsDir(journalId),
+    `${encPrefix}${typePrefix}-${pageId}-${hash}.${ext}`,
+  );
 }
 
 function ensureDir(dir: Directory): void {
@@ -238,25 +242,36 @@ export function createLocalStore(encryption: EncryptionService): LocalStore {
       pageId: string,
       attachment: Attachment,
       data: string,
+      derivedKey?: Uint8Array,
     ): Promise<string> {
       ensureDir(getAttachmentsDir(journalId));
       const file = getAttachmentFile(journalId, pageId, attachment);
 
-      const encrypted = await encryption.encrypt(data);
+      // Layer 1: password encryption (if encrypted attachment + derivedKey)
+      const toDeviceEncrypt =
+        attachment.encrypted && derivedKey ? aesGcmEncrypt(data, derivedKey) : data;
+      // Layer 2: device encryption (always)
+      const ciphertext = await encryption.encrypt(toDeviceEncrypt);
       if (!file.exists) {
         file.create({ intermediates: true });
       }
-      file.write(encrypted);
+      file.write(ciphertext);
 
       return file.uri;
     },
 
-    async getAttachment(path: string): Promise<string | null> {
+    async getAttachment(path: string, derivedKey?: Uint8Array): Promise<string | null> {
       const file = new File(path);
       if (!file.exists) return null;
 
-      const encrypted = await file.text();
-      return encryption.decrypt(encrypted);
+      const ciphertext = await file.text();
+      // Layer 1: device decryption (always)
+      const deviceDecrypted = await encryption.decrypt(ciphertext);
+      // Layer 2: password decryption (if derivedKey provided)
+      if (derivedKey) {
+        return aesGcmDecrypt(deviceDecrypted, derivedKey);
+      }
+      return deviceDecrypted;
     },
 
     async deleteAttachment(path: string): Promise<void> {

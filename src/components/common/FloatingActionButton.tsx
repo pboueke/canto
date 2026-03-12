@@ -1,21 +1,26 @@
 import { Pressable, StyleSheet, Text } from 'react-native';
+import { Feather } from '@expo/vector-icons';
 
 interface FloatingActionButtonProps {
-  icon: string;
+  icon?: string;
+  featherIcon?: keyof typeof Feather.glyphMap;
   onPress: () => void;
   backgroundColor: string;
   color: string;
   position?: 'right' | 'left';
   size?: number;
+  bottom?: number;
 }
 
 export function FloatingActionButton({
   icon,
+  featherIcon,
   onPress,
   backgroundColor,
   color,
   position = 'right',
   size = 50,
+  bottom = 30,
 }: FloatingActionButtonProps) {
   return (
     <Pressable
@@ -27,11 +32,16 @@ export function FloatingActionButton({
           width: size,
           height: size,
           borderRadius: size / 2,
+          bottom,
           [position === 'right' ? 'right' : 'left']: 20,
         },
       ]}
     >
-      <Text style={[styles.icon, { color, fontSize: size * 0.45 }]}>{icon}</Text>
+      {featherIcon ? (
+        <Feather name={featherIcon} size={size * 0.45} color={color} />
+      ) : (
+        <Text style={[styles.icon, { color, fontSize: size * 0.45 }]}>{icon}</Text>
+      )}
     </Pressable>
   );
 }
@@ -39,7 +49,6 @@ export function FloatingActionButton({
 const styles = StyleSheet.create({
   button: {
     position: 'absolute',
-    bottom: 30,
     alignItems: 'center',
     justifyContent: 'center',
     elevation: 5,
