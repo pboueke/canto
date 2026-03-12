@@ -1,8 +1,12 @@
-import { StyleSheet, Text, View } from 'react-native';
+import { useState, useEffect } from 'react';
+import { Image, StyleSheet, Text, View } from 'react-native';
 import { useRouter } from 'expo-router';
+import { Feather } from '@expo/vector-icons';
 import { Card } from '@/components/common/Card';
 import { Tag } from '@/components/common/Tag';
 import { useTheme } from '@/hooks/useTheme';
+import { useAttachment } from '@/hooks/useStorage';
+import { useJournalKeys } from '@/contexts/JournalKeyContext';
 import type { PagePreview } from '@/models';
 
 interface PageListItemProps {
@@ -13,6 +17,23 @@ interface PageListItemProps {
 export function PageListItem({ page, journalId }: PageListItemProps) {
   const { theme } = useTheme();
   const router = useRouter();
+  const { getKey } = useJournalKeys();
+  const derivedKey = getKey(journalId);
+  const { getAttachment } = useAttachment(derivedKey);
+  const [thumbnailUri, setThumbnailUri] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!page.firstImage) return;
+    let cancelled = false;
+    getAttachment(page.firstImage, false).then((data) => {
+      if (!cancelled && data) {
+        setThumbnailUri(`data:image/jpeg;base64,${data}`);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [page.firstImage]);
 
   const dateObj = new Date(page.date);
   const dateStr = dateObj.toLocaleDateString();
@@ -23,56 +44,56 @@ export function PageListItem({ page, journalId }: PageListItemProps) {
       onPress={() => router.push(`/page/${page.id}?journalId=${journalId}`)}
       style={styles.card}
     >
-      <View style={styles.titleRow}>
-        <Text style={[styles.date, { color: theme.colors.text, fontFamily: theme.fonts.bold }]}>
-          {dateStr}
-        </Text>
-        <View style={styles.icons}>
-          {page.hasAttachment && (
-            <Text style={[styles.iconText, { color: theme.colors.textSecondary }]}>
-              {'\u{1F4CE}'}
+      <View style={styles.row}>
+        <View style={styles.textContent}>
+          <View style={styles.titleRow}>
+            <Text style={[styles.date, { color: theme.colors.text, fontFamily: theme.fonts.bold }]}>
+              {dateStr}
             </Text>
-          )}
-          {page.hasImage && (
-            <Text style={[styles.iconText, { color: theme.colors.textSecondary }]}>
-              {'\u{1F5BC}'}
+            <View style={styles.icons}>
+              {page.hasAttachment && (
+                <Feather name="paperclip" size={12} color={theme.colors.textSecondary} />
+              )}
+              {page.hasImage && (
+                <Feather name="image" size={12} color={theme.colors.textSecondary} />
+              )}
+              {page.hasLocation && (
+                <Feather name="map-pin" size={12} color={theme.colors.textSecondary} />
+              )}
+            </View>
+            <Text
+              style={[
+                styles.time,
+                { color: theme.colors.textSecondary, fontFamily: theme.fonts.regular },
+              ]}
+            >
+              {timeStr}
             </Text>
+          </View>
+
+          {page.tags.length > 0 && (
+            <View style={styles.tagsRow}>
+              {page.tags.map((tag) => (
+                <Tag key={tag} label={tag} />
+              ))}
+            </View>
           )}
-          {page.hasLocation && (
-            <Text style={[styles.iconText, { color: theme.colors.textSecondary }]}>
-              {'\u{1F4CD}'}
+
+          {page.previewText.length > 0 && (
+            <Text
+              style={[
+                styles.preview,
+                { color: theme.colors.textSecondary, fontFamily: theme.fonts.serif },
+              ]}
+              numberOfLines={1}
+            >
+              {page.previewText}
             </Text>
           )}
         </View>
-        <Text
-          style={[
-            styles.time,
-            { color: theme.colors.textSecondary, fontFamily: theme.fonts.regular },
-          ]}
-        >
-          {timeStr}
-        </Text>
+
+        {thumbnailUri && <Image source={{ uri: thumbnailUri }} style={styles.thumbnail} />}
       </View>
-
-      {page.tags.length > 0 && (
-        <View style={styles.tagsRow}>
-          {page.tags.map((tag) => (
-            <Tag key={tag} label={tag} />
-          ))}
-        </View>
-      )}
-
-      {page.previewText.length > 0 && (
-        <Text
-          style={[
-            styles.preview,
-            { color: theme.colors.textSecondary, fontFamily: theme.fonts.serif },
-          ]}
-          numberOfLines={2}
-        >
-          {page.previewText}
-        </Text>
-      )}
     </Card>
   );
 }
@@ -80,6 +101,12 @@ export function PageListItem({ page, journalId }: PageListItemProps) {
 const styles = StyleSheet.create({
   card: {
     marginBottom: 8,
+  },
+  row: {
+    flexDirection: 'row',
+  },
+  textContent: {
+    flex: 1,
   },
   titleRow: {
     flexDirection: 'row',
@@ -97,9 +124,6 @@ const styles = StyleSheet.create({
     gap: 4,
     flex: 1,
   },
-  iconText: {
-    fontSize: 12,
-  },
   time: {
     fontSize: 12,
     textAlign: 'right',
@@ -113,5 +137,11 @@ const styles = StyleSheet.create({
     fontSize: 13,
     lineHeight: 18,
     opacity: 0.7,
+  },
+  thumbnail: {
+    width: 80,
+    height: 80,
+    borderRadius: 8,
+    marginLeft: 10,
   },
 });

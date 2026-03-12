@@ -1,4 +1,5 @@
 import { StyleSheet, Text, View } from 'react-native';
+import { Feather } from '@expo/vector-icons';
 import { useTheme } from '@/hooks/useTheme';
 
 interface AttachmentBarProps {
@@ -10,10 +11,10 @@ interface AttachmentBarProps {
 export function AttachmentBar({ hasImage, hasAttachment, hasLocation }: AttachmentBarProps) {
   const { theme } = useTheme();
 
-  const items: { emoji: string; label: string }[] = [];
-  if (hasImage) items.push({ emoji: '\u{1F5BC}', label: 'Images' });
-  if (hasAttachment) items.push({ emoji: '\u{1F4CE}', label: 'Files' });
-  if (hasLocation) items.push({ emoji: '\u{1F4CD}', label: 'Location' });
+  const items: { icon: keyof typeof Feather.glyphMap; label: string }[] = [];
+  if (hasImage) items.push({ icon: 'image', label: 'Images' });
+  if (hasAttachment) items.push({ icon: 'paperclip', label: 'Files' });
+  if (hasLocation) items.push({ icon: 'map-pin', label: 'Location' });
 
   if (items.length === 0) return null;
 
@@ -30,7 +31,7 @@ export function AttachmentBar({ hasImage, hasAttachment, hasLocation }: Attachme
     >
       {items.map((item) => (
         <View key={item.label} style={styles.item}>
-          <Text style={styles.emoji}>{item.emoji}</Text>
+          <Feather name={item.icon} size={14} color={theme.colors.textSecondary} />
           <Text
             style={[
               styles.label,
@@ -57,9 +58,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-  },
-  emoji: {
-    fontSize: 14,
   },
   label: {
     fontSize: 12,

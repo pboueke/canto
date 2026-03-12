@@ -1,5 +1,6 @@
 import { StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Feather } from '@expo/vector-icons';
 import { useTheme } from '@/hooks/useTheme';
 import { BackButton } from '@/components/common/BackButton';
 
@@ -26,7 +27,7 @@ export function PageHeader({ date, time }: PageHeaderProps) {
     >
       <BackButton />
       <View style={styles.dateSection}>
-        <Text style={[styles.emoji]}>{'\u{1F4C5}'}</Text>
+        <Feather name="calendar" size={16} color={theme.colors.text} />
         <Text
           style={[styles.dateText, { color: theme.colors.text, fontFamily: theme.fonts.regular }]}
         >
@@ -34,7 +35,7 @@ export function PageHeader({ date, time }: PageHeaderProps) {
         </Text>
       </View>
       <View style={styles.timeSection}>
-        <Text style={[styles.emoji]}>{'\u{1F552}'}</Text>
+        <Feather name="clock" size={16} color={theme.colors.text} />
         <Text
           style={[styles.timeText, { color: theme.colors.text, fontFamily: theme.fonts.regular }]}
         >
@@ -68,9 +69,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-  },
-  emoji: {
-    fontSize: 16,
   },
   dateText: {
     fontSize: 15,

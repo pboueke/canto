@@ -44,6 +44,23 @@ export interface Dictionary {
     attachments: string;
     comments: string;
     location: string;
+    addImage: string;
+    addEncryptedImage: string;
+    addFile: string;
+    addEncryptedFile: string;
+    addLocation: string;
+    addComment: string;
+    addTag: string;
+    newTag: string;
+    noComments: string;
+    discardChanges: string;
+    discardMessage: string;
+    discard: string;
+    keep: string;
+    deleteConfirm: string;
+    deleteMessage: string;
+    locationCopied: string;
+    decrypting: string;
   };
   settings: {
     theme: string;
@@ -97,6 +114,23 @@ const en: Dictionary = {
     attachments: 'Attachments',
     comments: 'Comments',
     location: 'Location',
+    addImage: 'Image',
+    addEncryptedImage: 'Encrypted Image',
+    addFile: 'File',
+    addEncryptedFile: 'Encrypted File',
+    addLocation: 'Location',
+    addComment: 'Add comment',
+    addTag: 'Add tag',
+    newTag: 'New tag...',
+    noComments: 'No comments yet',
+    discardChanges: 'Discard changes?',
+    discardMessage: 'You have unsaved changes. Discard them?',
+    discard: 'Discard',
+    keep: 'Keep editing',
+    deleteConfirm: 'Delete entry?',
+    deleteMessage: 'This entry will be permanently deleted.',
+    locationCopied: 'Coordinates copied',
+    decrypting: 'Decrypting...',
   },
   settings: {
     theme: 'Theme',
@@ -150,6 +184,23 @@ const pt: Dictionary = {
     attachments: 'Anexos',
     comments: 'Comentarios',
     location: 'Localizacao',
+    addImage: 'Imagem',
+    addEncryptedImage: 'Imagem Criptografada',
+    addFile: 'Arquivo',
+    addEncryptedFile: 'Arquivo Criptografado',
+    addLocation: 'Localizacao',
+    addComment: 'Adicionar comentario',
+    addTag: 'Adicionar tag',
+    newTag: 'Nova tag...',
+    noComments: 'Sem comentarios ainda',
+    discardChanges: 'Descartar alteracoes?',
+    discardMessage: 'Voce tem alteracoes nao salvas. Descartar?',
+    discard: 'Descartar',
+    keep: 'Continuar editando',
+    deleteConfirm: 'Excluir entrada?',
+    deleteMessage: 'Esta entrada sera excluida permanentemente.',
+    locationCopied: 'Coordenadas copiadas',
+    decrypting: 'Descriptografando...',
   },
   settings: {
     theme: 'Tema',

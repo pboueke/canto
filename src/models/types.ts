@@ -6,6 +6,7 @@ export interface GeoLocation {
 }
 
 export interface Comment {
+  id: string;
   text: string;
   date: string; // ISO 8601
 }
@@ -15,6 +16,8 @@ export interface Attachment {
   path: string;
   name: string;
   type: 'image' | 'file';
+  encrypted: boolean;
+  size?: number; // bytes
   deleted: boolean;
 }
 
@@ -40,6 +43,7 @@ export interface PagePreview {
   hasImage: boolean;
   hasAttachment: boolean;
   hasLocation: boolean;
+  firstImage?: string;
 }
 
 export interface JournalSettings {
@@ -95,8 +99,10 @@ export const DEFAULT_JOURNAL_SETTINGS: JournalSettings = {
 };
 
 export function pageToPreview(page: Page): PagePreview {
-  const lines = page.text.split('\n').filter((l) => l.trim().length > 0);
-  const previewText = lines.slice(0, 2).join(' ').substring(0, 120);
+  const firstLine = page.text.split('\n').find((l) => l.trim().length > 0) ?? '';
+  const previewText = firstLine.substring(0, 120);
+
+  const firstNonEncryptedImage = page.images.find((img) => !img.encrypted && !img.deleted);
 
   return {
     id: page.id,
@@ -106,5 +112,6 @@ export function pageToPreview(page: Page): PagePreview {
     hasImage: page.images.length > 0,
     hasAttachment: page.files.length > 0,
     hasLocation: !!page.location,
+    firstImage: firstNonEncryptedImage?.path,
   };
 }
