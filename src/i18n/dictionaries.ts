@@ -21,6 +21,14 @@ export interface Dictionary {
     title: string;
     newJournal: string;
     noJournals: string;
+    journalName: string;
+    selectIcon: string;
+    password: string;
+    confirmPassword: string;
+    passwordMismatch: string;
+    passwordOptional: string;
+    wrongPassword: string;
+    unlockJournal: string;
   };
   journal: {
     title: string;
@@ -66,6 +74,14 @@ const en: Dictionary = {
     title: 'Journals',
     newJournal: 'New Journal',
     noJournals: 'No journals yet. Create one to get started!',
+    journalName: 'Journal name',
+    selectIcon: 'Select icon',
+    password: 'Password',
+    confirmPassword: 'Confirm password',
+    passwordMismatch: 'Passwords do not match',
+    passwordOptional: 'Optional — leave blank for no encryption',
+    wrongPassword: 'Wrong password',
+    unlockJournal: 'Unlock Journal',
   },
   journal: {
     title: 'Pages',
@@ -111,6 +127,14 @@ const pt: Dictionary = {
     title: 'Diarios',
     newJournal: 'Novo Diario',
     noJournals: 'Nenhum diario ainda. Crie um para comecar!',
+    journalName: 'Nome do diario',
+    selectIcon: 'Selecionar icone',
+    password: 'Senha',
+    confirmPassword: 'Confirmar senha',
+    passwordMismatch: 'As senhas nao coincidem',
+    passwordOptional: 'Opcional — deixe em branco para nao criptografar',
+    wrongPassword: 'Senha incorreta',
+    unlockJournal: 'Desbloquear Diario',
   },
   journal: {
     title: 'Paginas',

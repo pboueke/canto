@@ -3,25 +3,29 @@ import { useRouter } from 'expo-router';
 import { Card } from '@/components/common/Card';
 import { Tag } from '@/components/common/Tag';
 import { useTheme } from '@/hooks/useTheme';
-import type { MockPage } from '@/lib/mockData';
+import type { PagePreview } from '@/models';
 
 interface PageListItemProps {
-  page: MockPage;
+  page: PagePreview;
+  journalId: string;
 }
 
-export function PageListItem({ page }: PageListItemProps) {
+export function PageListItem({ page, journalId }: PageListItemProps) {
   const { theme } = useTheme();
   const router = useRouter();
 
-  const previewText =
-    page.content.split('\n').find((line) => !line.startsWith('#') && line.trim()) ?? '';
-  const truncated = previewText.length > 200 ? previewText.slice(0, 200) + '...' : previewText;
+  const dateObj = new Date(page.date);
+  const dateStr = dateObj.toLocaleDateString();
+  const timeStr = dateObj.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
   return (
-    <Card onPress={() => router.push(`/page/${page.id}`)} style={styles.card}>
+    <Card
+      onPress={() => router.push(`/page/${page.id}?journalId=${journalId}`)}
+      style={styles.card}
+    >
       <View style={styles.titleRow}>
         <Text style={[styles.date, { color: theme.colors.text, fontFamily: theme.fonts.bold }]}>
-          {page.date}
+          {dateStr}
         </Text>
         <View style={styles.icons}>
           {page.hasAttachment && (
@@ -46,7 +50,7 @@ export function PageListItem({ page }: PageListItemProps) {
             { color: theme.colors.textSecondary, fontFamily: theme.fonts.regular },
           ]}
         >
-          {page.time}
+          {timeStr}
         </Text>
       </View>
 
@@ -58,7 +62,7 @@ export function PageListItem({ page }: PageListItemProps) {
         </View>
       )}
 
-      {truncated && (
+      {page.previewText.length > 0 && (
         <Text
           style={[
             styles.preview,
@@ -66,7 +70,7 @@ export function PageListItem({ page }: PageListItemProps) {
           ]}
           numberOfLines={2}
         >
-          {truncated}
+          {page.previewText}
         </Text>
       )}
     </Card>

@@ -1,6 +1,7 @@
 import { Paths, File, Directory } from 'expo-file-system';
 import type { Journal, JournalContent, Page, Attachment } from '@/models';
 import type { EncryptionService } from '@/lib/encryption';
+import { aesGcmEncrypt, aesGcmDecrypt } from '@/lib/encryption/utils';
 import type { LocalStore } from './types';
 
 const BASE_DIR_NAME = 'canto';
@@ -57,18 +58,32 @@ function ensureDir(dir: Directory): void {
   }
 }
 
-async function readEncrypted(file: File, encryption: EncryptionService): Promise<string | null> {
+async function readEncrypted(
+  file: File,
+  encryption: EncryptionService,
+  derivedKey?: Uint8Array,
+): Promise<string | null> {
   if (!file.exists) return null;
   const ciphertext = await file.text();
-  return encryption.decrypt(ciphertext);
+  // Layer 1: device decryption (always)
+  const deviceDecrypted = await encryption.decrypt(ciphertext);
+  // Layer 2: password decryption (if derived key present)
+  if (derivedKey) {
+    return aesGcmDecrypt(deviceDecrypted, derivedKey);
+  }
+  return deviceDecrypted;
 }
 
 async function writeEncrypted(
   file: File,
   data: string,
   encryption: EncryptionService,
+  derivedKey?: Uint8Array,
 ): Promise<void> {
-  const ciphertext = await encryption.encrypt(data);
+  // Layer 1: password encryption (if derived key present)
+  const toDeviceEncrypt = derivedKey ? aesGcmEncrypt(data, derivedKey) : data;
+  // Layer 2: device encryption (always)
+  const ciphertext = await encryption.encrypt(toDeviceEncrypt);
   if (!file.exists) {
     file.create({ intermediates: true });
   }
@@ -102,9 +117,9 @@ export function createLocalStore(encryption: EncryptionService): LocalStore {
       return index.journals;
     },
 
-    async getJournal(id: string): Promise<JournalContent | null> {
+    async getJournal(id: string, derivedKey?: Uint8Array): Promise<JournalContent | null> {
       const metaFile = getMetadataFile(id);
-      const raw = await readEncrypted(metaFile, encryption);
+      const raw = await readEncrypted(metaFile, encryption, derivedKey);
       if (!raw) return null;
 
       const metadata = JSON.parse(raw) as Omit<JournalContent, 'pages'>;
@@ -116,7 +131,7 @@ export function createLocalStore(encryption: EncryptionService): LocalStore {
         const entries = pagesDirectory.list();
         for (const entry of entries) {
           if (entry instanceof File && entry.uri.endsWith('.json')) {
-            const pageRaw = await readEncrypted(entry, encryption);
+            const pageRaw = await readEncrypted(entry, encryption, derivedKey);
             if (pageRaw) {
               pages.push(JSON.parse(pageRaw) as Page);
             }
@@ -127,21 +142,31 @@ export function createLocalStore(encryption: EncryptionService): LocalStore {
       return { ...metadata, pages };
     },
 
-    async saveJournal(journal: JournalContent): Promise<void> {
+    async saveJournal(journal: JournalContent, derivedKey?: Uint8Array): Promise<void> {
       ensureDir(getJournalDir(journal.id));
       ensureDir(getPagesDir(journal.id));
       ensureDir(getAttachmentsDir(journal.id));
 
       // Save metadata (without pages to avoid duplication)
       const { pages, ...metadata } = journal;
-      await writeEncrypted(getMetadataFile(journal.id), JSON.stringify(metadata), encryption);
+      await writeEncrypted(
+        getMetadataFile(journal.id),
+        JSON.stringify(metadata),
+        encryption,
+        derivedKey,
+      );
 
       // Save each page
       for (const page of pages) {
-        await writeEncrypted(getPageFile(journal.id, page.id), JSON.stringify(page), encryption);
+        await writeEncrypted(
+          getPageFile(journal.id, page.id),
+          JSON.stringify(page),
+          encryption,
+          derivedKey,
+        );
       }
 
-      // Update index
+      // Update index (never password-encrypted — needs to be readable without password)
       const index = await readIndex();
       const entry: Journal = {
         id: journal.id,
@@ -149,6 +174,7 @@ export function createLocalStore(encryption: EncryptionService): LocalStore {
         icon: journal.icon,
         date: journal.date,
         secure: journal.secure,
+        salt: journal.salt,
       };
 
       const existing = index.journals.findIndex((j) => j.id === journal.id);
@@ -171,26 +197,40 @@ export function createLocalStore(encryption: EncryptionService): LocalStore {
       await writeIndex(index);
     },
 
-    async getPage(journalId: string, pageId: string): Promise<Page | null> {
+    async getPage(
+      journalId: string,
+      pageId: string,
+      derivedKey?: Uint8Array,
+    ): Promise<Page | null> {
       const file = getPageFile(journalId, pageId);
-      const raw = await readEncrypted(file, encryption);
+      const raw = await readEncrypted(file, encryption, derivedKey);
       if (!raw) return null;
       return JSON.parse(raw) as Page;
     },
 
-    async savePage(journalId: string, page: Page): Promise<void> {
+    async savePage(journalId: string, page: Page, derivedKey?: Uint8Array): Promise<void> {
       ensureDir(getPagesDir(journalId));
       const updated = { ...page, modified: Date.now() };
-      await writeEncrypted(getPageFile(journalId, page.id), JSON.stringify(updated), encryption);
+      await writeEncrypted(
+        getPageFile(journalId, page.id),
+        JSON.stringify(updated),
+        encryption,
+        derivedKey,
+      );
     },
 
-    async deletePage(journalId: string, pageId: string): Promise<void> {
-      const page = await this.getPage(journalId, pageId);
+    async deletePage(journalId: string, pageId: string, derivedKey?: Uint8Array): Promise<void> {
+      const page = await this.getPage(journalId, pageId, derivedKey);
       if (!page) return;
 
       // Soft delete: mark as deleted, update modified timestamp
       const deleted = { ...page, deleted: true, modified: Date.now() };
-      await writeEncrypted(getPageFile(journalId, pageId), JSON.stringify(deleted), encryption);
+      await writeEncrypted(
+        getPageFile(journalId, pageId),
+        JSON.stringify(deleted),
+        encryption,
+        derivedKey,
+      );
     },
 
     async saveAttachment(

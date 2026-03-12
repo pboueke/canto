@@ -1,44 +1,37 @@
-import { StyleSheet, Text } from 'react-native';
-import { useRouter } from 'expo-router';
+import { StyleSheet, Text, View } from 'react-native';
+import { Feather } from '@expo/vector-icons';
 import { Card } from '@/components/common/Card';
 import { useTheme } from '@/hooks/useTheme';
-import type { MockJournal } from '@/lib/mockData';
+import type { Journal } from '@/models';
 
 interface JournalCardProps {
-  journal: MockJournal;
+  journal: Journal;
+  onPress: () => void;
 }
 
-export function JournalCard({ journal }: JournalCardProps) {
+export function JournalCard({ journal, onPress }: JournalCardProps) {
   const { theme } = useTheme();
-  const router = useRouter();
 
   return (
-    <Card onPress={() => router.push(`/journal/${journal.id}`)} style={styles.card}>
-      <Text style={[styles.icon]}>{getIconEmoji(journal.icon)}</Text>
+    <Card onPress={onPress} style={styles.card}>
+      <View style={styles.iconRow}>
+        <Feather
+          name={(journal.icon || 'book') as React.ComponentProps<typeof Feather>['name']}
+          size={28}
+          color={theme.colors.text}
+        />
+        {journal.secure && (
+          <Feather name="lock" size={12} color={theme.colors.textSecondary} style={styles.lock} />
+        )}
+      </View>
       <Text
         style={[styles.name, { color: theme.colors.text, fontFamily: theme.fonts.bold }]}
         numberOfLines={1}
       >
-        {journal.name}
-      </Text>
-      <Text
-        style={[styles.count, { color: theme.colors.textSecondary, fontFamily: theme.fonts.light }]}
-      >
-        {journal.entryCount} {journal.entryCount === 1 ? 'entry' : 'entries'}
+        {journal.title}
       </Text>
     </Card>
   );
-}
-
-function getIconEmoji(icon: string): string {
-  const icons: Record<string, string> = {
-    book: '\u{1F4D6}',
-    map: '\u{1F5FA}',
-    briefcase: '\u{1F4BC}',
-    heart: '\u{2764}',
-    star: '\u{2B50}',
-  };
-  return icons[icon] ?? '\u{1F4D3}';
 }
 
 const styles = StyleSheet.create({
@@ -49,16 +42,16 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     margin: 5,
   },
-  icon: {
-    fontSize: 32,
+  iconRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
     marginBottom: 8,
+  },
+  lock: {
+    marginLeft: 4,
   },
   name: {
     fontSize: 14,
-    marginBottom: 4,
     textAlign: 'center',
-  },
-  count: {
-    fontSize: 11,
   },
 });

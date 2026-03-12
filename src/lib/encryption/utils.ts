@@ -1,5 +1,10 @@
-import { getRandomBytes } from 'expo-crypto';
 import { gcm } from '@noble/ciphers/aes.js';
+
+function getRandomBytes(length: number): Uint8Array {
+  const bytes = new Uint8Array(length);
+  crypto.getRandomValues(bytes);
+  return bytes;
+}
 
 const NONCE_LENGTH = 12;
 

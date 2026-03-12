@@ -1,3 +1,4 @@
+import 'react-native-get-random-values'; // CSPRNG polyfill — must be first import
 import { useCallback, useEffect, useState } from 'react';
 import { Stack } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -6,6 +7,7 @@ import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import { ThemeContext } from '@/hooks/useTheme';
 import { I18nContext } from '@/hooks/useI18n';
+import { JournalKeyProvider } from '@/contexts/JournalKeyContext';
 import { type CantoTheme, lightTheme, darkTheme } from '@/styles/themes';
 import { type LangCode, dictionaries } from '@/i18n/dictionaries';
 
@@ -67,28 +69,30 @@ export default function RootLayout() {
   return (
     <ThemeContext.Provider value={{ theme, toggleTheme, isDark }}>
       <I18nContext.Provider value={{ lang, setLang, t: dictionaries[lang] }}>
-        <StatusBar style={isDark ? 'light' : 'dark'} />
-        <Stack
-          screenOptions={{
-            headerStyle: { backgroundColor: theme.colors.headerBackground },
-            headerTintColor: theme.colors.text,
-            contentStyle: { backgroundColor: theme.colors.background },
-          }}
-        >
-          <Stack.Screen name="index" options={{ headerShown: false }} />
-          <Stack.Screen
-            name="journal/[id]"
-            options={{
-              headerShown: false,
+        <JournalKeyProvider>
+          <StatusBar style={isDark ? 'light' : 'dark'} />
+          <Stack
+            screenOptions={{
+              headerStyle: { backgroundColor: theme.colors.headerBackground },
+              headerTintColor: theme.colors.text,
+              contentStyle: { backgroundColor: theme.colors.background },
             }}
-          />
-          <Stack.Screen
-            name="page/[id]"
-            options={{
-              headerShown: false,
-            }}
-          />
-        </Stack>
+          >
+            <Stack.Screen name="index" options={{ headerShown: false }} />
+            <Stack.Screen
+              name="journal/[id]"
+              options={{
+                headerShown: false,
+              }}
+            />
+            <Stack.Screen
+              name="page/[id]"
+              options={{
+                headerShown: false,
+              }}
+            />
+          </Stack>
+        </JournalKeyProvider>
       </I18nContext.Provider>
     </ThemeContext.Provider>
   );

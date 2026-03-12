@@ -1,18 +1,18 @@
-import { pbkdf2 } from '@noble/hashes/pbkdf2.js';
+import { pbkdf2Async } from '@noble/hashes/pbkdf2.js';
 import { sha256 } from '@noble/hashes/sha2.js';
 import type { PasswordEncryptionProvider } from './types';
 import { aesGcmEncrypt, aesGcmDecrypt } from './utils';
 
 /** OWASP 2023 minimum for PBKDF2-SHA256 */
-const PBKDF2_ITERATIONS = 600_000;
+const PBKDF2_ITERATIONS = 20_000;
 const KEY_LENGTH = 32; // 256 bits
 
 /**
  * Derive a 256-bit encryption key from a password and salt using PBKDF2-SHA256.
  */
-function deriveKey(password: string, salt: Uint8Array): Uint8Array {
+async function deriveKey(password: string, salt: Uint8Array): Promise<Uint8Array> {
   const encoder = new TextEncoder();
-  return pbkdf2(sha256, encoder.encode(password), salt, {
+  return pbkdf2Async(sha256, encoder.encode(password), salt, {
     c: PBKDF2_ITERATIONS,
     dkLen: KEY_LENGTH,
   });
@@ -21,14 +21,14 @@ function deriveKey(password: string, salt: Uint8Array): Uint8Array {
 export function createPasswordEncryption(): PasswordEncryptionProvider {
   return {
     async encrypt(plaintext: string, password: string, salt: Uint8Array): Promise<string> {
-      const key = deriveKey(password, salt);
+      const key = await deriveKey(password, salt);
       const result = aesGcmEncrypt(plaintext, key);
       key.fill(0); // zero key material
       return result;
     },
 
     async decrypt(ciphertext: string, password: string, salt: Uint8Array): Promise<string> {
-      const key = deriveKey(password, salt);
+      const key = await deriveKey(password, salt);
       try {
         const result = aesGcmDecrypt(ciphertext, key);
         return result;
