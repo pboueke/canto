@@ -1,40 +1,42 @@
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { ScrollView, StyleSheet, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '@/hooks/useTheme';
-import { useI18n } from '@/hooks/useI18n';
-import type { LangCode } from '@/i18n/dictionaries';
+import { Logo } from '@/components/common/Logo';
+import { InfoBox } from '@/components/home/InfoBox';
+import { JournalCard } from '@/components/home/JournalCard';
+import { NewJournalCard } from '@/components/home/NewJournalCard';
+import { mockJournals } from '@/lib/mockData';
 
 export default function HomeScreen() {
-  const { theme, toggleTheme, isDark } = useTheme();
-  const { lang, setLang, t } = useI18n();
-
-  const nextLang: LangCode = lang === 'en' ? 'pt' : 'en';
+  const { theme } = useTheme();
+  const insets = useSafeAreaInsets();
 
   return (
     <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
-      <Text style={[styles.title, { color: theme.colors.primary }]}>{t.app.name}</Text>
-      <Text style={[styles.tagline, { color: theme.colors.textSecondary }]}>{t.app.tagline}</Text>
-
-      <View style={styles.controls}>
-        <Pressable
-          style={[styles.button, { backgroundColor: theme.colors.buttonSubmit }]}
-          onPress={toggleTheme}
-        >
-          <Text style={styles.buttonText}>
-            {isDark ? t.settings.lightMode : t.settings.darkMode}
-          </Text>
-        </Pressable>
-
-        <Pressable
-          style={[styles.button, { backgroundColor: theme.colors.accent }]}
-          onPress={() => setLang(nextLang)}
-        >
-          <Text style={styles.buttonText}>
-            {t.settings.language}: {nextLang.toUpperCase()}
-          </Text>
-        </Pressable>
+      <View
+        style={[
+          styles.topSection,
+          { backgroundColor: theme.colors.foreground, paddingTop: insets.top + 10 },
+        ]}
+      >
+        <View style={styles.headerRow}>
+          <View style={styles.logoSection}>
+            <Logo size={170} />
+          </View>
+          <View style={styles.infoSection}>
+            <InfoBox />
+          </View>
+        </View>
       </View>
 
-      <Text style={[styles.info, { color: theme.colors.textSecondary }]}>{t.home.noJournals}</Text>
+      <ScrollView contentContainerStyle={styles.journalList}>
+        <View style={styles.journalRow}>
+          {mockJournals.map((journal) => (
+            <JournalCard key={journal.id} journal={journal} />
+          ))}
+          <NewJournalCard />
+        </View>
+      </ScrollView>
     </View>
   );
 }
@@ -42,36 +44,30 @@ export default function HomeScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 24,
   },
-  title: {
-    fontSize: 48,
-    fontWeight: 'bold',
-    marginBottom: 8,
+  topSection: {
+    paddingHorizontal: 15,
+    paddingBottom: 15,
+    marginBottom: 10,
   },
-  tagline: {
-    fontSize: 18,
-    marginBottom: 48,
-  },
-  controls: {
+  headerRow: {
     flexDirection: 'row',
-    gap: 16,
-    marginBottom: 48,
+    alignItems: 'center',
   },
-  button: {
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    borderRadius: 8,
+  logoSection: {
+    flex: 1,
+    alignItems: 'center',
   },
-  buttonText: {
-    color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: '600',
+  infoSection: {
+    flex: 1,
   },
-  info: {
-    fontSize: 14,
-    textAlign: 'center',
+  journalList: {
+    paddingHorizontal: 10,
+    paddingBottom: 20,
+  },
+  journalRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'center',
   },
 });

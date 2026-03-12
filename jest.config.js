@@ -1,6 +1,5 @@
-import type { Config } from 'jest';
-
-const config: Config = {
+/** @type {import('jest').Config} */
+const config = {
   preset: 'jest-expo',
   setupFiles: ['./jest.setup.ts'],
   moduleNameMapper: {
@@ -9,4 +8,4 @@ const config: Config = {
   collectCoverageFrom: ['src/**/*.{ts,tsx}', 'app/**/*.{ts,tsx}', '!**/*.d.ts'],
 };
 
-export default config;
+module.exports = config;
