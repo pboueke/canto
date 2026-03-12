@@ -1,23 +1,43 @@
-import { useState } from 'react';
-import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useState, useEffect } from 'react';
+import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useLocalSearchParams } from 'expo-router';
 import { useTheme } from '@/hooks/useTheme';
 import { useI18n } from '@/hooks/useI18n';
+import { usePage } from '@/hooks/useStorage';
+import { useJournalKeys } from '@/contexts/JournalKeyContext';
 import { PageHeader } from '@/components/page/PageHeader';
 import { TagsRow } from '@/components/page/TagsRow';
 import { PageContent } from '@/components/page/PageContent';
 import { AttachmentBar } from '@/components/page/AttachmentBar';
 import { FloatingActionButton } from '@/components/common/FloatingActionButton';
-import { getPage } from '@/lib/mockData';
 
 export default function PageScreen() {
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const { id, journalId } = useLocalSearchParams<{ id: string; journalId: string }>();
   const { theme } = useTheme();
   const { t } = useI18n();
-  const page = getPage(id);
+  const { getKey } = useJournalKeys();
+
+  const derivedKey = journalId ? getKey(journalId) : null;
+  const { page, loading } = usePage(journalId, id, derivedKey);
 
   const [isEditing, setIsEditing] = useState(false);
-  const [content, setContent] = useState(page?.content ?? '');
+  const [content, setContent] = useState('');
+
+  useEffect(() => {
+    if (page) {
+      setContent(page.text);
+    }
+  }, [page]);
+
+  if (loading) {
+    return (
+      <View
+        style={[styles.container, styles.centered, { backgroundColor: theme.colors.background }]}
+      >
+        <ActivityIndicator size="large" color={theme.colors.primary} />
+      </View>
+    );
+  }
 
   if (!page) {
     return (
@@ -27,9 +47,13 @@ export default function PageScreen() {
     );
   }
 
+  const dateObj = new Date(page.date);
+  const dateStr = dateObj.toLocaleDateString();
+  const timeStr = dateObj.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
   return (
     <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
-      <PageHeader date={page.date} time={page.time} />
+      <PageHeader date={dateStr} time={timeStr} />
 
       <ScrollView contentContainerStyle={styles.content}>
         <TagsRow tags={page.tags} />
@@ -38,13 +62,13 @@ export default function PageScreen() {
 
         <View style={styles.attachments}>
           <AttachmentBar
-            hasImage={page.hasImage}
-            hasAttachment={page.hasAttachment}
-            hasLocation={page.hasLocation}
+            hasImage={page.images.length > 0}
+            hasAttachment={page.files.length > 0}
+            hasLocation={!!page.location}
           />
         </View>
 
-        {page.hasLocation && (
+        {page.location && (
           <View
             style={[
               styles.locationTag,
@@ -56,7 +80,8 @@ export default function PageScreen() {
             ]}
           >
             <Text style={[styles.locationText, { color: theme.colors.location.text }]}>
-              {'\u{1F4CD}'} {t.page.location}: 38.7223, -9.1393
+              {'\u{1F4CD}'} {t.page.location}: {page.location.latitude.toFixed(4)},{' '}
+              {page.location.longitude.toFixed(4)}
             </Text>
           </View>
         )}
@@ -79,14 +104,28 @@ export default function PageScreen() {
           >
             {t.page.comments}
           </Text>
-          <Text
-            style={[
-              styles.commentsPlaceholder,
-              { color: theme.colors.textSecondary, fontFamily: theme.fonts.light },
-            ]}
-          >
-            No comments yet
-          </Text>
+          {page.comments.length === 0 ? (
+            <Text
+              style={[
+                styles.commentsPlaceholder,
+                { color: theme.colors.textSecondary, fontFamily: theme.fonts.light },
+              ]}
+            >
+              No comments yet
+            </Text>
+          ) : (
+            page.comments.map((comment, i) => (
+              <Text
+                key={i}
+                style={[
+                  styles.commentText,
+                  { color: theme.colors.text, fontFamily: theme.fonts.regular },
+                ]}
+              >
+                {comment.text}
+              </Text>
+            ))
+          )}
         </View>
       </ScrollView>
 
@@ -119,6 +158,10 @@ export default function PageScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+  },
+  centered: {
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   content: {
     padding: 10,
@@ -153,5 +196,10 @@ const styles = StyleSheet.create({
   commentsPlaceholder: {
     fontSize: 13,
     fontStyle: 'italic',
+  },
+  commentText: {
+    fontSize: 13,
+    lineHeight: 18,
+    marginBottom: 4,
   },
 });

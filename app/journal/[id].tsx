@@ -1,19 +1,41 @@
-import { FlatList, StyleSheet, Text, View } from 'react-native';
+import { useMemo } from 'react';
+import { ActivityIndicator, FlatList, StyleSheet, Text, View } from 'react-native';
 import { useLocalSearchParams } from 'expo-router';
 import { useTheme } from '@/hooks/useTheme';
 import { useI18n } from '@/hooks/useI18n';
+import { useJournal } from '@/hooks/useStorage';
+import { useJournalKeys } from '@/contexts/JournalKeyContext';
 import { JournalHeader } from '@/components/journal/JournalHeader';
 import { PageListItem } from '@/components/journal/PageListItem';
 import { FloatingActionButton } from '@/components/common/FloatingActionButton';
-import { getJournal, getJournalPages } from '@/lib/mockData';
+import { pageToPreview } from '@/models';
 
 export default function JournalScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { theme } = useTheme();
   const { t } = useI18n();
+  const { getKey } = useJournalKeys();
 
-  const journal = getJournal(id);
-  const pages = getJournalPages(id);
+  const derivedKey = id ? getKey(id) : null;
+  const { journal, loading } = useJournal(id, derivedKey);
+
+  const pages = useMemo(() => {
+    if (!journal) return [];
+    return journal.pages
+      .filter((p) => !p.deleted)
+      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+      .map(pageToPreview);
+  }, [journal]);
+
+  if (loading) {
+    return (
+      <View
+        style={[styles.container, styles.centered, { backgroundColor: theme.colors.background }]}
+      >
+        <ActivityIndicator size="large" color={theme.colors.primary} />
+      </View>
+    );
+  }
 
   if (!journal) {
     return (
@@ -38,7 +60,7 @@ export default function JournalScreen() {
           data={pages}
           keyExtractor={(item) => item.id}
           contentContainerStyle={styles.list}
-          renderItem={({ item }) => <PageListItem page={item} />}
+          renderItem={({ item }) => <PageListItem page={item} journalId={journal.id} />}
         />
       )}
 
@@ -57,6 +79,10 @@ export default function JournalScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+  },
+  centered: {
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   list: {
     padding: 10,

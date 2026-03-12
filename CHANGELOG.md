@@ -1,5 +1,24 @@
 # Changelog
 
+## v0.4.0 - Journal Creation
+
+- feat: add journal creation modal with name, icon selection, and optional password
+- feat: add Feather icon picker component with 28 curated flat icons via @expo/vector-icons
+- feat: add password-protected journal creation with salt generation and PBKDF2 key derivation
+- feat: add JournalKeyProvider context for session-level derived key caching (derive once, use many)
+- feat: add two-layer encryption support in LocalStore (password AES-GCM + device AES-GCM)
+- feat: add journal access modal for unlocking password-protected journals
+- feat: add salt field to Journal type for cross-device password encryption portability
+- feat: connect home screen to real encrypted filesystem storage via useJournals hook
+- feat: connect journal and page screens to real data via useJournal/usePage hooks
+- feat: add welcome page auto-creation for new journals
+- refactor: replace all mock data with real storage layer throughout the app
+- refactor: update JournalCard, JournalHeader, PageListItem to use real model types
+- refactor: pass journalId as query parameter to page route for storage context
+- chore: add @expo/vector-icons as direct dependency
+- chore: add i18n keys for journal creation and unlock flows (EN/PT)
+- chore: remove mockData.ts and associated test file
+
 ## v0.3.0 - Filesystem & Data Layer
 
 - feat: add data models for journals, pages, comments, attachments, filters and settings

@@ -1,6 +1,11 @@
 import * as SecureStore from 'expo-secure-store';
-import { getRandomBytes } from 'expo-crypto';
 import { bytesToHex, hexToBytes } from '@noble/ciphers/utils.js';
+
+function getRandomBytes(length: number): Uint8Array {
+  const bytes = new Uint8Array(length);
+  crypto.getRandomValues(bytes);
+  return bytes;
+}
 import type { EncryptionProvider } from './types';
 import { aesGcmEncrypt, aesGcmDecrypt } from './utils';
 

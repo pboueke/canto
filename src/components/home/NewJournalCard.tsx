@@ -2,14 +2,16 @@ import { StyleSheet, Text } from 'react-native';
 import { useTheme } from '@/hooks/useTheme';
 import { Card } from '@/components/common/Card';
 
-export function NewJournalCard() {
+interface NewJournalCardProps {
+  onPress: () => void;
+}
+
+export function NewJournalCard({ onPress }: NewJournalCardProps) {
   const { theme } = useTheme();
 
   return (
     <Card
-      onPress={() => {
-        /* TODO: create journal flow */
-      }}
+      onPress={onPress}
       style={[
         styles.card,
         {

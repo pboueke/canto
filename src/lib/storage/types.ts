@@ -7,23 +7,23 @@ export interface LocalStore {
   /** List all journals (metadata only, no pages). */
   listJournals(): Promise<Journal[]>;
 
-  /** Get full journal content including pages. */
-  getJournal(id: string): Promise<JournalContent | null>;
+  /** Get full journal content including pages. derivedKey for password-protected journals. */
+  getJournal(id: string, derivedKey?: Uint8Array): Promise<JournalContent | null>;
 
-  /** Save or update journal metadata and settings. */
-  saveJournal(journal: JournalContent): Promise<void>;
+  /** Save or update journal metadata and settings. derivedKey for password-protected journals. */
+  saveJournal(journal: JournalContent, derivedKey?: Uint8Array): Promise<void>;
 
   /** Delete a journal and all its contents. */
   deleteJournal(id: string): Promise<void>;
 
-  /** Get a single page from a journal. */
-  getPage(journalId: string, pageId: string): Promise<Page | null>;
+  /** Get a single page from a journal. derivedKey for password-protected journals. */
+  getPage(journalId: string, pageId: string, derivedKey?: Uint8Array): Promise<Page | null>;
 
-  /** Save or update a page in a journal. */
-  savePage(journalId: string, page: Page): Promise<void>;
+  /** Save or update a page in a journal. derivedKey for password-protected journals. */
+  savePage(journalId: string, page: Page, derivedKey?: Uint8Array): Promise<void>;
 
-  /** Soft-delete a page (marks as deleted for sync). */
-  deletePage(journalId: string, pageId: string): Promise<void>;
+  /** Soft-delete a page (marks as deleted for sync). derivedKey for password-protected journals. */
+  deletePage(journalId: string, pageId: string, derivedKey?: Uint8Array): Promise<void>;
 
   /** Save an attachment file and return its storage path. */
   saveAttachment(

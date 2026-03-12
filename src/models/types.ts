@@ -60,6 +60,7 @@ export interface Journal {
   icon: string;
   date: string; // ISO 8601 creation date
   secure: boolean;
+  salt?: string; // base64-encoded salt, present when secure === true
 }
 
 export interface JournalContent extends Journal {
