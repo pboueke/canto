@@ -3,6 +3,7 @@ export interface CantoTheme {
   colors: {
     background: string;
     surface: string;
+    foreground: string;
     text: string;
     textSecondary: string;
     primary: string;
@@ -14,10 +15,29 @@ export interface CantoTheme {
     buttonCancel: string;
     buttonDisabled: string;
     cardBackground: string;
+    highlight: string;
+    editBar: string;
+    deleteAction: string;
+    headerBackground: string;
+    filterRow: string;
+    newJournal: {
+      text: string;
+      icon: string;
+      background: string;
+      border: string;
+    };
+    popAction: {
+      save: { background: string; text: string };
+      edit: { background: string; text: string };
+      new: { background: string; text: string };
+      delete: { background: string; text: string };
+    };
     tag: {
       default: string;
       active: string;
       text: string;
+      add: string;
+      remove: string;
     };
     markdown: {
       text: string;
@@ -25,7 +45,12 @@ export interface CantoTheme {
       codeBackground: string;
       quote: string;
     };
+    location: {
+      text: string;
+      background: string;
+    };
   };
+  borderWidth: number;
   fonts: {
     regular: string;
     bold: string;
@@ -39,31 +64,56 @@ export interface CantoTheme {
 export const lightTheme: CantoTheme = {
   name: 'light',
   colors: {
-    background: '#FFFFFF',
-    surface: '#F5F5F5',
-    text: '#1A1A1A',
-    textSecondary: '#666666',
-    primary: '#E67E22',
-    accent: '#1ABC9C',
-    border: '#E0E0E0',
-    error: '#E74C3C',
-    success: '#27AE60',
-    buttonSubmit: '#E67E22',
-    buttonCancel: '#95A5A6',
-    buttonDisabled: '#BDC3C7',
-    cardBackground: '#FAFAFA',
+    background: 'rgb(190, 190, 190)',
+    surface: 'rgb(240, 240, 240)',
+    foreground: 'rgb(255, 255, 255)',
+    text: 'rgb(0, 0, 0)',
+    textSecondary: 'rgb(50, 50, 50)',
+    primary: 'rgb(1, 85, 92)',
+    accent: 'rgb(87, 196, 173)',
+    border: 'rgb(0, 0, 0)',
+    error: 'rgb(255, 0, 0)',
+    success: 'green',
+    buttonSubmit: 'rgb(0, 0, 0)',
+    buttonCancel: 'rgb(252, 212, 210)',
+    buttonDisabled: 'rgb(222, 222, 222)',
+    cardBackground: 'rgb(255, 255, 255)',
+    highlight: 'rgb(240, 240, 240)',
+    editBar: 'rgb(232, 202, 51)',
+    deleteAction: 'rgb(255, 109, 5)',
+    headerBackground: 'rgb(255, 255, 255)',
+    filterRow: 'rgb(150, 150, 150)',
+    newJournal: {
+      text: 'rgb(0, 0, 0)',
+      icon: 'rgb(0, 0, 0)',
+      background: 'rgb(255, 237, 145)',
+      border: 'rgb(0, 0, 0)',
+    },
+    popAction: {
+      save: { background: 'rgb(232, 202, 51)', text: 'rgb(0, 0, 0)' },
+      edit: { background: 'rgb(255, 255, 255)', text: 'rgb(0, 0, 0)' },
+      new: { background: 'rgb(255, 255, 255)', text: 'rgb(0, 0, 0)' },
+      delete: { background: 'rgb(255, 109, 5)', text: 'rgb(0, 0, 0)' },
+    },
     tag: {
-      default: '#ECF0F1',
-      active: '#E67E22',
-      text: '#2C3E50',
+      default: 'rgb(222, 222, 222)',
+      active: 'rgb(200, 200, 200)',
+      text: 'rgb(0, 0, 0)',
+      add: 'rgb(237, 162, 71)',
+      remove: 'rgb(87, 196, 173)',
     },
     markdown: {
-      text: '#1A1A1A',
-      background: '#FFFFFF',
-      codeBackground: '#F5F5F5',
-      quote: '#7F8C8D',
+      text: 'rgb(0, 0, 0)',
+      background: 'rgb(255, 255, 255)',
+      codeBackground: 'rgb(222, 222, 222)',
+      quote: 'rgb(230, 230, 230)',
+    },
+    location: {
+      text: 'rgb(0, 0, 0)',
+      background: 'rgb(222, 222, 222)',
     },
   },
+  borderWidth: 2,
   fonts: {
     regular: 'Lato-Regular',
     bold: 'Lato-Bold',
@@ -77,31 +127,56 @@ export const lightTheme: CantoTheme = {
 export const darkTheme: CantoTheme = {
   name: 'dark',
   colors: {
-    background: '#1A1A2E',
-    surface: '#16213E',
-    text: '#E0E0E0',
-    textSecondary: '#A0A0A0',
-    primary: '#E91E63',
-    accent: '#1ABC9C',
-    border: '#2C3E50',
-    error: '#E74C3C',
-    success: '#27AE60',
-    buttonSubmit: '#E91E63',
-    buttonCancel: '#7F8C8D',
-    buttonDisabled: '#4A4A4A',
-    cardBackground: '#0F3460',
+    background: 'rgb(0, 0, 0)',
+    surface: 'rgb(70, 70, 70)',
+    foreground: 'rgb(40, 40, 40)',
+    text: 'rgb(222, 222, 222)',
+    textSecondary: 'rgb(150, 150, 150)',
+    primary: 'rgb(255, 161, 186)',
+    accent: 'rgb(57, 128, 113)',
+    border: 'rgb(100, 100, 100)',
+    error: 'rgb(255, 109, 5)',
+    success: 'rgb(54, 245, 168)',
+    buttonSubmit: 'rgb(255, 255, 255)',
+    buttonCancel: 'rgb(255, 109, 5)',
+    buttonDisabled: 'rgb(50, 50, 50)',
+    cardBackground: 'rgb(50, 50, 50)',
+    highlight: 'rgb(70, 70, 70)',
+    editBar: 'rgb(232, 202, 51)',
+    deleteAction: 'rgb(255, 109, 5)',
+    headerBackground: 'rgb(25, 25, 25)',
+    filterRow: 'rgb(54, 54, 54)',
+    newJournal: {
+      text: 'rgb(222, 222, 222)',
+      icon: 'rgb(222, 222, 222)',
+      background: 'rgb(82, 69, 6)',
+      border: 'rgb(255, 217, 23)',
+    },
+    popAction: {
+      save: { background: 'rgb(232, 202, 51)', text: 'rgb(0, 0, 0)' },
+      edit: { background: 'rgb(50, 50, 50)', text: 'rgb(255, 255, 255)' },
+      new: { background: 'rgb(50, 50, 50)', text: 'rgb(255, 255, 255)' },
+      delete: { background: 'rgb(255, 109, 5)', text: 'rgb(0, 0, 0)' },
+    },
     tag: {
-      default: '#2C3E50',
-      active: '#E91E63',
-      text: '#ECF0F1',
+      default: 'rgb(66, 66, 66)',
+      active: 'rgb(66, 66, 66)',
+      text: 'rgb(222, 222, 222)',
+      add: 'rgb(133, 86, 29)',
+      remove: 'rgb(57, 128, 113)',
     },
     markdown: {
-      text: '#E0E0E0',
-      background: '#1A1A2E',
-      codeBackground: '#16213E',
-      quote: '#A0A0A0',
+      text: 'rgb(222, 222, 222)',
+      background: 'rgb(40, 40, 40)',
+      codeBackground: 'rgb(30, 30, 30)',
+      quote: 'rgb(50, 50, 50)',
+    },
+    location: {
+      text: 'rgb(222, 222, 222)',
+      background: 'rgb(66, 66, 66)',
     },
   },
+  borderWidth: 1,
   fonts: {
     regular: 'Lato-Regular',
     bold: 'Lato-Bold',
