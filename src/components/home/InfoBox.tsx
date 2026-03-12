@@ -1,9 +1,9 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Linking, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useTheme } from '@/hooks/useTheme';
 import { useI18n } from '@/hooks/useI18n';
 import type { LangCode } from '@/i18n/dictionaries';
-import { CHANGELOG, APP_VERSION } from '@/lib/changelog';
+import { APP_VERSION, loadChangelog } from '@/lib/changelog';
 
 const CANTO_REPO_URL = 'https://github.com/pboueke/canto';
 
@@ -11,6 +11,13 @@ export function InfoBox() {
   const { theme, toggleTheme, isDark } = useTheme();
   const { lang, setLang, t } = useI18n();
   const [showChangelog, setShowChangelog] = useState(false);
+  const [changelog, setChangelog] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (showChangelog && !changelog) {
+      loadChangelog().then(setChangelog);
+    }
+  }, [showChangelog, changelog]);
 
   const nextLang: LangCode = lang === 'en' ? 'pt' : 'en';
 
@@ -88,7 +95,7 @@ export function InfoBox() {
                   { color: theme.colors.text, fontFamily: theme.fonts.regular },
                 ]}
               >
-                {CHANGELOG}
+                {changelog ?? 'Loading...'}
               </Text>
             </ScrollView>
             <Pressable

@@ -1,5 +1,18 @@
 # Changelog
 
+## v0.3.0 - Filesystem & Data Layer
+
+- feat: add data models for journals, pages, comments, attachments, filters and settings
+- feat: add two-tier encryption system (device-level + password-based per journal)
+- feat: use AES-256-GCM authenticated encryption with PBKDF2-SHA256 (600k iterations)
+- feat: add encrypted local storage using expo-file-system with structured directory layout
+- feat: add remote store interface and sync engine with last-write-wins conflict resolution
+- feat: add React hooks for storage integration (useJournals, useJournal, usePage, useSavePage)
+- feat: add encryption and sync engine test suites (23 tests)
+- refactor: changelog module now reads bundled CHANGELOG.md asset instead of duplicating content
+- chore: add metro.config.js for .md asset bundling
+- chore: add @noble/ciphers, @noble/hashes, expo-file-system, expo-secure-store, expo-crypto
+
 ## v0.2.0 - Styling & Navigation
 
 - feat: replicate original home page layout with two-column design
