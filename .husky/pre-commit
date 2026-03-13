@@ -3,11 +3,18 @@
 # Sync version from CHANGELOG.md to package.json, app.json, and README.md
 VERSION=$(grep -m1 '^## v' CHANGELOG.md | sed 's/^## v\([^ ]*\).*/\1/')
 if [ -n "$VERSION" ]; then
-  CURRENT=$(node -p "require('./package.json').version")
-  if [ "$VERSION" != "$CURRENT" ]; then
-    sed -i "s/\"version\": \"$CURRENT\"/\"version\": \"$VERSION\"/" package.json
-    sed -i "s/\"version\": \"$CURRENT\"/\"version\": \"$VERSION\"/" app.json
-    sed -i "s/version-$CURRENT-/version-$VERSION-/" README.md
+  CHANGED=0
+  PKG_VERSION=$(node -p "require('./package.json').version")
+  if [ "$VERSION" != "$PKG_VERSION" ]; then
+    sed -i "s/\"version\": \"$PKG_VERSION\"/\"version\": \"$VERSION\"/" package.json
+    sed -i "s/\"version\": \"$PKG_VERSION\"/\"version\": \"$VERSION\"/" app.json
+    CHANGED=1
+  fi
+  if ! grep -q "version-$VERSION-" README.md; then
+    sed -i "s/version-[0-9.]*-/version-$VERSION-/" README.md
+    CHANGED=1
+  fi
+  if [ "$CHANGED" = 1 ]; then
     git add package.json app.json README.md
   fi
 fi

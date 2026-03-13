@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.8.4 - Pre-commit Hook Fix
+
+- fix: pre-commit version sync hook now updates README badge independently from package.json — previously skipped README when package.json was already at the target version
+- fix: README badge regex uses generic `version-[0-9.]*-` pattern instead of relying on the old package.json version
+
 ## v0.8.3 - Device Key Rotation Fix
 
 - fix: device key rotation now correctly re-encrypts all journal data, not just the index — `reencryptAll` parsed the journal list from `readIndex()` which silently failed with the old cached key, returning an empty list
