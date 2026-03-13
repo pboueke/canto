@@ -12,6 +12,7 @@ import {
 } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import * as DocumentPicker from 'expo-document-picker';
 import { useTheme } from '@/hooks/useTheme';
 import { useI18n } from '@/hooks/useI18n';
 import { IconPicker } from '@/components/common/IconPicker';
@@ -19,8 +20,19 @@ import { PasswordStrengthMeter } from '@/components/common/PasswordStrengthMeter
 import { KdfIterationPicker } from '@/components/common/KdfIterationPicker';
 import { ThemePickerModal } from '@/components/home/ThemePickerModal';
 import { isBiometricAvailable } from '@/lib/biometric';
-import { DEFAULT_KDF_ITERATIONS } from '@/lib/encryption/password';
+import { DEFAULT_KDF_ITERATIONS, LEGACY_KDF_ITERATIONS } from '@/lib/encryption/password';
+import { deriveKey } from '@/lib/encryption/password';
 import { type ThemeName, themes } from '@/styles/themes';
+import { inspectBackup, importJournal, hasNameConflict, resolveNameConflict } from '@/lib/backup';
+
+function base64ToUint8(base64: string): Uint8Array {
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) {
+    bytes[i] = binary.charCodeAt(i);
+  }
+  return bytes;
+}
 
 interface NewJournalModalProps {
   visible: boolean;
@@ -33,6 +45,8 @@ interface NewJournalModalProps {
     themeOverride?: string;
     kdfIterations?: number;
   }) => Promise<void>;
+  onImportComplete?: (journalId: string) => void;
+  existingTitles?: string[];
 }
 
 const THEME_DISPLAY_NAMES: Record<string, string> = {
@@ -44,7 +58,13 @@ const THEME_DISPLAY_NAMES: Record<string, string> = {
   dracula: 'Dracula',
 };
 
-export function NewJournalModal({ visible, onClose, onCreate }: NewJournalModalProps) {
+export function NewJournalModal({
+  visible,
+  onClose,
+  onCreate,
+  onImportComplete,
+  existingTitles = [],
+}: NewJournalModalProps) {
   const { theme } = useTheme();
   const { t } = useI18n();
   const insets = useSafeAreaInsets();
@@ -61,6 +81,18 @@ export function NewJournalModal({ visible, onClose, onCreate }: NewJournalModalP
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showPasswordExplain, setShowPasswordExplain] = useState(false);
+  const [importing, setImporting] = useState(false);
+  const [importError, setImportError] = useState<string | null>(null);
+  // Import sub-flow state
+  const [importFileUri, setImportFileUri] = useState<string | null>(null);
+  const [importNeedsPassword, setImportNeedsPassword] = useState(false);
+  const [importPassword, setImportPassword] = useState('');
+  const [importSalt, setImportSalt] = useState<string | null>(null);
+  const [importKdfIterations, setImportKdfIterations] = useState<number | null>(null);
+  const [importOriginalTitle, setImportOriginalTitle] = useState('');
+  const [importPasswordOptional, setImportPasswordOptional] = useState(false);
+  const [importRenameNeeded, setImportRenameNeeded] = useState(false);
+  const [importNewTitle, setImportNewTitle] = useState('');
 
   useEffect(() => {
     isBiometricAvailable().then(setBiometricSupported);
@@ -94,7 +126,7 @@ export function NewJournalModal({ visible, onClose, onCreate }: NewJournalModalP
   }
 
   function handleClose() {
-    if (busy) return;
+    if (busy || importing) return;
     resetForm();
     onClose();
   }
@@ -108,6 +140,155 @@ export function NewJournalModal({ visible, onClose, onCreate }: NewJournalModalP
     setKdfIterations(DEFAULT_KDF_ITERATIONS);
     setThemeOverride(undefined);
     setError(null);
+    setImportError(null);
+    resetImportState();
+  }
+
+  function resetImportState() {
+    setImportFileUri(null);
+    setImportNeedsPassword(false);
+    setImportPasswordOptional(false);
+    setImportPassword('');
+    setImportSalt(null);
+    setImportKdfIterations(null);
+    setImportOriginalTitle('');
+    setImportRenameNeeded(false);
+    setImportNewTitle('');
+  }
+
+  async function handleImport() {
+    setImportError(null);
+    try {
+      const result = await DocumentPicker.getDocumentAsync({
+        type: 'application/zip',
+        copyToCacheDirectory: true,
+      });
+      if (result.canceled || !result.assets?.[0]) return;
+
+      const fileUri = result.assets[0].uri;
+      setImporting(true);
+      await new Promise((r) => setTimeout(r, 100));
+
+      const info = await inspectBackup(fileUri);
+      setImportFileUri(fileUri);
+      setImportOriginalTitle(info.manifest.journalTitle);
+
+      if (info.needsPassword || info.canProvidePassword) {
+        // Show password sub-modal (required for encrypted ZIPs, optional for unencrypted)
+        setImportSalt(info.manifest.salt ?? null);
+        setImportKdfIterations(info.manifest.kdfIterations ?? null);
+        setImportPasswordOptional(info.canProvidePassword);
+        setImportNeedsPassword(true);
+        setImporting(false);
+        return;
+      }
+
+      // Check name conflicts
+      if (hasNameConflict(info.manifest.journalTitle, existingTitles)) {
+        setImportNewTitle(resolveNameConflict(info.manifest.journalTitle, existingTitles));
+        setImportRenameNeeded(true);
+        setImporting(false);
+        return;
+      }
+
+      // No password, no conflict — import directly
+      await finishImport(fileUri, info.manifest.journalTitle);
+    } catch (err) {
+      console.error('[Canto] Import failed:', err);
+      setImportError(err instanceof Error ? err.message : String(err));
+      setImporting(false);
+    }
+  }
+
+  async function handleImportPasswordSkip() {
+    if (!importFileUri) return;
+    setImportNeedsPassword(false);
+
+    // Check name conflicts
+    if (hasNameConflict(importOriginalTitle, existingTitles)) {
+      setImportNewTitle(resolveNameConflict(importOriginalTitle, existingTitles));
+      setImportRenameNeeded(true);
+      return;
+    }
+
+    // Import without password — encrypted attachments lose their password layer
+    setImporting(true);
+    await new Promise((r) => setTimeout(r, 100));
+    try {
+      await finishImport(importFileUri, importOriginalTitle);
+    } catch (err) {
+      console.error('[Canto] Import failed:', err);
+      setImportError(err instanceof Error ? err.message : String(err));
+      setImporting(false);
+    }
+  }
+
+  async function handleImportPasswordSubmit() {
+    if (!importFileUri || !importPassword) return;
+    setImporting(true);
+    setImportNeedsPassword(false);
+    await new Promise((r) => setTimeout(r, 100));
+
+    try {
+      let key: Uint8Array | undefined;
+      if (importSalt) {
+        const saltBytes = base64ToUint8(importSalt);
+        const iterations = importKdfIterations ?? LEGACY_KDF_ITERATIONS;
+        key = await deriveKey(importPassword, saltBytes, iterations);
+      }
+
+      // Check name conflicts
+      if (hasNameConflict(importOriginalTitle, existingTitles)) {
+        setImportNewTitle(resolveNameConflict(importOriginalTitle, existingTitles));
+        setImportRenameNeeded(true);
+        setImporting(false);
+        // Store the key temporarily for use after rename
+        // We pass it through the final import call
+        return;
+      }
+
+      await finishImport(importFileUri, importOriginalTitle, key);
+    } catch (err) {
+      console.error('[Canto] Import failed:', err);
+      setImportError(err instanceof Error ? err.message : String(err));
+      setImporting(false);
+    }
+  }
+
+  async function handleImportRenameSubmit() {
+    if (!importFileUri || !importNewTitle.trim()) return;
+    setImporting(true);
+    setImportRenameNeeded(false);
+    await new Promise((r) => setTimeout(r, 100));
+
+    try {
+      let key: Uint8Array | undefined;
+      if (importSalt && importPassword) {
+        const saltBytes = base64ToUint8(importSalt);
+        const iterations = importKdfIterations ?? LEGACY_KDF_ITERATIONS;
+        key = await deriveKey(importPassword, saltBytes, iterations);
+      }
+
+      await finishImport(importFileUri, importNewTitle.trim(), key);
+    } catch (err) {
+      console.error('[Canto] Import failed:', err);
+      setImportError(err instanceof Error ? err.message : String(err));
+      setImporting(false);
+    }
+  }
+
+  async function finishImport(fileUri: string, titleToUse: string, key?: Uint8Array) {
+    try {
+      const imported = await importJournal(fileUri, titleToUse, key);
+      resetForm();
+      onClose();
+      onImportComplete?.(imported.journalId);
+    } catch (err) {
+      console.error('[Canto] Import failed:', err);
+      setImportError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setImporting(false);
+    }
   }
 
   return (
@@ -131,7 +312,7 @@ export function NewJournalModal({ visible, onClose, onCreate }: NewJournalModalP
           <View style={{ width: 30 }} />
         </View>
 
-        {busy ? (
+        {busy || importing ? (
           <View style={styles.busyContainer}>
             <ActivityIndicator size="large" color={theme.colors.primary} />
             <Text
@@ -140,7 +321,7 @@ export function NewJournalModal({ visible, onClose, onCreate }: NewJournalModalP
                 { color: theme.colors.textSecondary, fontFamily: theme.fonts.regular },
               ]}
             >
-              {t.common.loading}
+              {importing ? t.backup.importing : t.common.loading}
             </Text>
           </View>
         ) : (
@@ -331,6 +512,52 @@ export function NewJournalModal({ visible, onClose, onCreate }: NewJournalModalP
                 </View>
               )}
 
+              {/* Import from backup */}
+              <View style={styles.dividerRow}>
+                <View style={[styles.dividerLine, { backgroundColor: theme.colors.border }]} />
+                <Text
+                  style={[
+                    styles.dividerText,
+                    { color: theme.colors.textSecondary, fontFamily: theme.fonts.regular },
+                  ]}
+                >
+                  {t.backup.or}
+                </Text>
+                <View style={[styles.dividerLine, { backgroundColor: theme.colors.border }]} />
+              </View>
+
+              <Pressable
+                onPress={handleImport}
+                style={[
+                  styles.importButton,
+                  { borderColor: theme.colors.border, backgroundColor: theme.colors.surface },
+                ]}
+              >
+                <Feather name="upload" size={18} color={theme.colors.primary} />
+                <Text
+                  style={[
+                    styles.importText,
+                    { color: theme.colors.primary, fontFamily: theme.fonts.regular },
+                  ]}
+                >
+                  {t.backup.importFromBackup}
+                </Text>
+              </Pressable>
+
+              {importError && (
+                <View style={[styles.errorBox, { borderColor: theme.colors.error }]}>
+                  <Feather name="alert-circle" size={14} color={theme.colors.error} />
+                  <Text
+                    style={[
+                      styles.errorBoxText,
+                      { color: theme.colors.text, fontFamily: theme.fonts.regular },
+                    ]}
+                  >
+                    {importError}
+                  </Text>
+                </View>
+              )}
+
               <View style={{ height: 20 }} />
             </ScrollView>
 
@@ -425,6 +652,224 @@ export function NewJournalModal({ visible, onClose, onCreate }: NewJournalModalP
                 {t.common.close}
               </Text>
             </Pressable>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Import password prompt */}
+      <Modal
+        visible={importNeedsPassword}
+        transparent
+        animationType="fade"
+        onRequestClose={() => {
+          setImportNeedsPassword(false);
+          resetImportState();
+        }}
+      >
+        <View style={styles.explainOverlay}>
+          <View
+            style={[
+              styles.explainContent,
+              { backgroundColor: theme.colors.background, borderColor: theme.colors.border },
+            ]}
+          >
+            <Text
+              style={[
+                styles.explainTitle,
+                { color: theme.colors.text, fontFamily: theme.fonts.bold },
+              ]}
+            >
+              {t.backup.importFromBackup}
+            </Text>
+            <Text
+              style={[
+                styles.explainBody,
+                {
+                  color: theme.colors.textSecondary,
+                  fontFamily: theme.fonts.regular,
+                  marginBottom: 16,
+                },
+              ]}
+            >
+              {t.backup.importPassword}
+            </Text>
+            <TextInput
+              style={[
+                styles.input,
+                {
+                  color: theme.colors.text,
+                  borderColor: theme.colors.border,
+                  borderWidth: theme.borderWidth || 1,
+                  backgroundColor: theme.colors.surface,
+                  fontFamily: theme.fonts.regular,
+                },
+              ]}
+              placeholder={t.home.password}
+              placeholderTextColor={theme.colors.textSecondary}
+              value={importPassword}
+              onChangeText={setImportPassword}
+              secureTextEntry
+              autoFocus
+              onSubmitEditing={handleImportPasswordSubmit}
+            />
+            <View style={styles.footer}>
+              <Pressable
+                onPress={() => {
+                  setImportNeedsPassword(false);
+                  resetImportState();
+                }}
+                style={[styles.button, { backgroundColor: theme.colors.highlight }]}
+              >
+                <Text
+                  style={[
+                    styles.buttonText,
+                    { color: theme.colors.text, fontFamily: theme.fonts.regular },
+                  ]}
+                >
+                  {t.common.cancel}
+                </Text>
+              </Pressable>
+              {importPasswordOptional && (
+                <Pressable
+                  onPress={handleImportPasswordSkip}
+                  style={[styles.button, { backgroundColor: theme.colors.highlight }]}
+                >
+                  <Text
+                    style={[
+                      styles.buttonText,
+                      { color: theme.colors.text, fontFamily: theme.fonts.regular },
+                    ]}
+                  >
+                    {t.common.skip}
+                  </Text>
+                </Pressable>
+              )}
+              <Pressable
+                onPress={handleImportPasswordSubmit}
+                disabled={!importPassword}
+                style={[
+                  styles.button,
+                  {
+                    backgroundColor: importPassword ? theme.colors.primary : theme.colors.highlight,
+                    opacity: importPassword ? 1 : 0.5,
+                  },
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.buttonText,
+                    {
+                      color: importPassword ? theme.colors.foreground : theme.colors.textSecondary,
+                      fontFamily: theme.fonts.bold,
+                    },
+                  ]}
+                >
+                  {t.common.confirm}
+                </Text>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Import rename prompt */}
+      <Modal
+        visible={importRenameNeeded}
+        transparent
+        animationType="fade"
+        onRequestClose={() => {
+          setImportRenameNeeded(false);
+          resetImportState();
+        }}
+      >
+        <View style={styles.explainOverlay}>
+          <View
+            style={[
+              styles.explainContent,
+              { backgroundColor: theme.colors.background, borderColor: theme.colors.border },
+            ]}
+          >
+            <Text
+              style={[
+                styles.explainTitle,
+                { color: theme.colors.text, fontFamily: theme.fonts.bold },
+              ]}
+            >
+              {t.backup.importRename}
+            </Text>
+            <Text
+              style={[
+                styles.explainBody,
+                {
+                  color: theme.colors.textSecondary,
+                  fontFamily: theme.fonts.regular,
+                  marginBottom: 16,
+                },
+              ]}
+            >
+              {t.backup.importConflict}
+            </Text>
+            <TextInput
+              style={[
+                styles.input,
+                {
+                  color: theme.colors.text,
+                  borderColor: theme.colors.border,
+                  borderWidth: theme.borderWidth || 1,
+                  backgroundColor: theme.colors.surface,
+                  fontFamily: theme.fonts.regular,
+                },
+              ]}
+              value={importNewTitle}
+              onChangeText={setImportNewTitle}
+              autoFocus
+              onSubmitEditing={handleImportRenameSubmit}
+            />
+            <View style={styles.footer}>
+              <Pressable
+                onPress={() => {
+                  setImportRenameNeeded(false);
+                  resetImportState();
+                }}
+                style={[styles.button, { backgroundColor: theme.colors.highlight }]}
+              >
+                <Text
+                  style={[
+                    styles.buttonText,
+                    { color: theme.colors.text, fontFamily: theme.fonts.regular },
+                  ]}
+                >
+                  {t.common.cancel}
+                </Text>
+              </Pressable>
+              <Pressable
+                onPress={handleImportRenameSubmit}
+                disabled={!importNewTitle.trim()}
+                style={[
+                  styles.button,
+                  {
+                    backgroundColor: importNewTitle.trim()
+                      ? theme.colors.primary
+                      : theme.colors.highlight,
+                    opacity: importNewTitle.trim() ? 1 : 0.5,
+                  },
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.buttonText,
+                    {
+                      color: importNewTitle.trim()
+                        ? theme.colors.foreground
+                        : theme.colors.textSecondary,
+                      fontFamily: theme.fonts.bold,
+                    },
+                  ]}
+                >
+                  {t.common.confirm}
+                </Text>
+              </Pressable>
+            </View>
           </View>
         </View>
       </Modal>
@@ -615,5 +1060,32 @@ const styles = StyleSheet.create({
   },
   explainCloseBtnText: {
     fontSize: 14,
+  },
+  dividerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginVertical: 16,
+  },
+  dividerLine: {
+    flex: 1,
+    height: 1,
+  },
+  dividerText: {
+    fontSize: 12,
+    textTransform: 'uppercase',
+  },
+  importButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+    borderRadius: 8,
+    borderWidth: 1,
+    paddingVertical: 14,
+    marginBottom: 8,
+  },
+  importText: {
+    fontSize: 15,
   },
 });

@@ -1,5 +1,22 @@
 # Changelog
 
+## v0.9.0 - Backup & Import
+
+- feat: export journals as `.canto.zip` files via system share sheet, with optional password encryption
+- feat: import journals from `.canto.zip` files with automatic UUID regeneration (safe to re-import)
+- feat: two-phase password handling on import — required for encrypted ZIPs, optional (skippable) for unencrypted exports of secure journals
+- feat: name conflict resolution on import with `(copy)`, `(copy 2)` suffixes
+- feat: progress reporting during export and import (pages, attachments, zipping phases)
+- feat: export menu in journal header with encryption toggle
+- feat: import flow integrated into new journal modal with file picker
+- fix: `readEncrypted` gracefully falls back to device-decrypted content when password decryption fails — prevents chicken-and-egg with auto-derive on non-secure journals that have encrypted attachments
+- fix: import auto-derives key with empty password for non-secure journals with salt, preserving encrypted attachment status
+- fix: import preserves original attachment filenames to prevent disk path hash collisions
+- fix: `File.bytes()` used instead of `File.text()` for reading ZIP binary data (prevents UTF-8 corruption)
+- chore: added `jszip` dependency
+- chore: i18n — backup/import strings and `skip` button in all 8 languages
+- test: 48 new tests for export, import, round-trip, and conflict resolution
+
 ## v0.8.4 - Pre-commit Hook Fix
 
 - fix: pre-commit version sync hook now updates README badge independently from package.json — previously skipped README when package.json was already at the target version

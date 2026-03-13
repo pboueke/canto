@@ -18,6 +18,7 @@ export interface Dictionary {
     loading: string;
     confirm: string;
     done: string;
+    skip: string;
   };
   home: {
     title: string;
@@ -166,6 +167,24 @@ export interface Dictionary {
     rotateSuccess: string;
     doNotClose: string;
   };
+  backup: {
+    export: string;
+    import: string;
+    exportJournal: string;
+    importFromBackup: string;
+    includeEncryption: string;
+    exporting: string;
+    exportComplete: string;
+    exportError: string;
+    importPassword: string;
+    importConflict: string;
+    importRename: string;
+    importSuccess: string;
+    importError: string;
+    invalidFile: string;
+    importing: string;
+    or: string;
+  };
 }
 
 const en: Dictionary = {
@@ -186,6 +205,7 @@ const en: Dictionary = {
     loading: 'Loading...',
     confirm: 'Confirm',
     done: 'Done',
+    skip: 'Skip',
   },
   home: {
     title: 'Journals',
@@ -339,6 +359,24 @@ const en: Dictionary = {
     rotateSuccess: 'Device key rotated successfully',
     doNotClose: 'Do not close the app',
   },
+  backup: {
+    export: 'Export',
+    import: 'Import',
+    exportJournal: 'Export Journal',
+    importFromBackup: 'Import from Backup',
+    includeEncryption: 'Include encryption',
+    exporting: 'Exporting...',
+    exportComplete: 'Export ready',
+    exportError: 'Export failed',
+    importPassword: 'This backup is encrypted. Enter the password:',
+    importConflict: 'A journal with this name already exists',
+    importRename: 'Rename journal',
+    importSuccess: 'Journal imported successfully',
+    importError: 'Import failed',
+    invalidFile: 'Invalid backup file',
+    importing: 'Importing...',
+    or: 'OR',
+  },
 };
 
 const pt: Dictionary = {
@@ -359,6 +397,7 @@ const pt: Dictionary = {
     loading: 'Carregando...',
     confirm: 'Confirmar',
     done: 'Pronto',
+    skip: 'Pular',
   },
   home: {
     title: 'Diarios',
@@ -512,6 +551,24 @@ const pt: Dictionary = {
     rotateSuccess: 'Chave do dispositivo rotacionada com sucesso',
     doNotClose: 'Nao feche o aplicativo',
   },
+  backup: {
+    export: 'Exportar',
+    import: 'Importar',
+    exportJournal: 'Exportar Diario',
+    importFromBackup: 'Importar de Backup',
+    includeEncryption: 'Incluir criptografia',
+    exporting: 'Exportando...',
+    exportComplete: 'Exportacao pronta',
+    exportError: 'Falha na exportacao',
+    importPassword: 'Este backup esta criptografado. Digite a senha:',
+    importConflict: 'Um diario com este nome ja existe',
+    importRename: 'Renomear diario',
+    importSuccess: 'Diario importado com sucesso',
+    importError: 'Falha na importacao',
+    invalidFile: 'Arquivo de backup invalido',
+    importing: 'Importando...',
+    or: 'OU',
+  },
 };
 
 const es: Dictionary = {
@@ -532,6 +589,7 @@ const es: Dictionary = {
     loading: 'Cargando...',
     confirm: 'Confirmar',
     done: 'Listo',
+    skip: 'Omitir',
   },
   home: {
     title: 'Diarios',
@@ -685,6 +743,24 @@ const es: Dictionary = {
     rotateSuccess: 'Clave del dispositivo rotada exitosamente',
     doNotClose: 'No cierre la aplicacion',
   },
+  backup: {
+    export: 'Exportar',
+    import: 'Importar',
+    exportJournal: 'Exportar Diario',
+    importFromBackup: 'Importar desde Respaldo',
+    includeEncryption: 'Incluir cifrado',
+    exporting: 'Exportando...',
+    exportComplete: 'Exportacion lista',
+    exportError: 'Error al exportar',
+    importPassword: 'Este respaldo esta cifrado. Ingrese la contrasena:',
+    importConflict: 'Ya existe un diario con este nombre',
+    importRename: 'Renombrar diario',
+    importSuccess: 'Diario importado exitosamente',
+    importError: 'Error al importar',
+    invalidFile: 'Archivo de respaldo invalido',
+    importing: 'Importando...',
+    or: 'O',
+  },
 };
 
 const de: Dictionary = {
@@ -705,6 +781,7 @@ const de: Dictionary = {
     loading: 'Laden...',
     confirm: 'Bestatigen',
     done: 'Fertig',
+    skip: 'Überspringen',
   },
   home: {
     title: 'Tagebucher',
@@ -858,6 +935,24 @@ const de: Dictionary = {
     rotateSuccess: 'Gerateschlussel erfolgreich rotiert',
     doNotClose: 'App nicht schliessen',
   },
+  backup: {
+    export: 'Exportieren',
+    import: 'Importieren',
+    exportJournal: 'Tagebuch exportieren',
+    importFromBackup: 'Aus Backup importieren',
+    includeEncryption: 'Verschlusselung einschliessen',
+    exporting: 'Exportiere...',
+    exportComplete: 'Export bereit',
+    exportError: 'Export fehlgeschlagen',
+    importPassword: 'Dieses Backup ist verschlusselt. Passwort eingeben:',
+    importConflict: 'Ein Tagebuch mit diesem Namen existiert bereits',
+    importRename: 'Tagebuch umbenennen',
+    importSuccess: 'Tagebuch erfolgreich importiert',
+    importError: 'Import fehlgeschlagen',
+    invalidFile: 'Ungultige Backup-Datei',
+    importing: 'Importiere...',
+    or: 'ODER',
+  },
 };
 
 const fr: Dictionary = {
@@ -878,6 +973,7 @@ const fr: Dictionary = {
     loading: 'Chargement...',
     confirm: 'Confirmer',
     done: 'Termine',
+    skip: 'Passer',
   },
   home: {
     title: 'Journaux',
@@ -1031,6 +1127,24 @@ const fr: Dictionary = {
     rotateSuccess: "Cle de l'appareil mise a jour avec succes",
     doNotClose: "Ne fermez pas l'application",
   },
+  backup: {
+    export: 'Exporter',
+    import: 'Importer',
+    exportJournal: 'Exporter le journal',
+    importFromBackup: 'Importer depuis une sauvegarde',
+    includeEncryption: 'Inclure le chiffrement',
+    exporting: 'Exportation...',
+    exportComplete: 'Exportation prete',
+    exportError: "Echec de l'exportation",
+    importPassword: 'Cette sauvegarde est chiffree. Entrez le mot de passe :',
+    importConflict: 'Un journal avec ce nom existe deja',
+    importRename: 'Renommer le journal',
+    importSuccess: 'Journal importe avec succes',
+    importError: "Echec de l'importation",
+    invalidFile: 'Fichier de sauvegarde invalide',
+    importing: 'Importation...',
+    or: 'OU',
+  },
 };
 
 const ru: Dictionary = {
@@ -1051,6 +1165,7 @@ const ru: Dictionary = {
     loading: 'Загрузка...',
     confirm: 'Подтвердить',
     done: 'Готово',
+    skip: 'Пропустить',
   },
   home: {
     title: 'Дневники',
@@ -1204,6 +1319,24 @@ const ru: Dictionary = {
     rotateSuccess: 'Ключ устройства успешно сменен',
     doNotClose: 'Не закрывайте приложение',
   },
+  backup: {
+    export: 'Экспорт',
+    import: 'Импорт',
+    exportJournal: 'Экспортировать дневник',
+    importFromBackup: 'Импортировать из резервной копии',
+    includeEncryption: 'Включить шифрование',
+    exporting: 'Экспорт...',
+    exportComplete: 'Экспорт готов',
+    exportError: 'Ошибка экспорта',
+    importPassword: 'Эта резервная копия зашифрована. Введите пароль:',
+    importConflict: 'Дневник с таким именем уже существует',
+    importRename: 'Переименовать дневник',
+    importSuccess: 'Дневник успешно импортирован',
+    importError: 'Ошибка импорта',
+    invalidFile: 'Недопустимый файл резервной копии',
+    importing: 'Импорт...',
+    or: 'ИЛИ',
+  },
 };
 
 const zh: Dictionary = {
@@ -1224,6 +1357,7 @@ const zh: Dictionary = {
     loading: '加载中...',
     confirm: '确认',
     done: '完成',
+    skip: '跳过',
   },
   home: {
     title: '日记本',
@@ -1376,6 +1510,24 @@ const zh: Dictionary = {
     rotateSuccess: '设备密钥轮换成功',
     doNotClose: '请勿关闭应用',
   },
+  backup: {
+    export: '导出',
+    import: '导入',
+    exportJournal: '导出日记',
+    importFromBackup: '从备份导入',
+    includeEncryption: '包含加密',
+    exporting: '正在导出...',
+    exportComplete: '导出完成',
+    exportError: '导出失败',
+    importPassword: '此备份已加密。请输入密码：',
+    importConflict: '已存在同名日记',
+    importRename: '重命名日记',
+    importSuccess: '日记导入成功',
+    importError: '导入失败',
+    invalidFile: '无效的备份文件',
+    importing: '正在导入...',
+    or: '或',
+  },
 };
 
 const it: Dictionary = {
@@ -1396,6 +1548,7 @@ const it: Dictionary = {
     loading: 'Caricamento...',
     confirm: 'Conferma',
     done: 'Fatto',
+    skip: 'Salta',
   },
   home: {
     title: 'Diari',
@@ -1548,6 +1701,24 @@ const it: Dictionary = {
     rotating: 'Rotazione della chiave del dispositivo...',
     rotateSuccess: 'Chiave del dispositivo ruotata con successo',
     doNotClose: "Non chiudere l'applicazione",
+  },
+  backup: {
+    export: 'Esporta',
+    import: 'Importa',
+    exportJournal: 'Esporta diario',
+    importFromBackup: 'Importa da backup',
+    includeEncryption: 'Includi crittografia',
+    exporting: 'Esportazione...',
+    exportComplete: 'Esportazione pronta',
+    exportError: 'Esportazione fallita',
+    importPassword: 'Questo backup e crittografato. Inserisci la password:',
+    importConflict: 'Un diario con questo nome esiste gia',
+    importRename: 'Rinomina diario',
+    importSuccess: 'Diario importato con successo',
+    importError: 'Importazione fallita',
+    invalidFile: 'File di backup non valido',
+    importing: 'Importazione...',
+    or: 'O',
   },
 };
 
