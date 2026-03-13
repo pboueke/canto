@@ -4,7 +4,7 @@ import { Feather } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTheme } from '@/hooks/useTheme';
 import { useI18n } from '@/hooks/useI18n';
-import { getLocalStore } from '@/hooks/useStorage';
+import { getLocalStore, getEncryptionService } from '@/hooks/useStorage';
 import { rotateKey } from '@/lib/encryption/device';
 import { aesGcmEncrypt, aesGcmDecrypt } from '@/lib/encryption/utils';
 
@@ -58,17 +58,32 @@ export function SecuritySettingsModal({ visible, onClose }: SecuritySettingsModa
           setRotating(true);
           try {
             const store = await getLocalStore();
-            // Get old and new keys via atomic rotation in SecureStore
-            const { oldKey, newKey } = await rotateKey();
+            const encryption = getEncryptionService();
 
-            const oldDecrypt = (ciphertext: string) =>
-              Promise.resolve(aesGcmDecrypt(ciphertext, oldKey));
+            // Grab the SecureStore key BEFORE rotation (may differ from
+            // the singleton's cached key if a previous rotation partially
+            // failed — re-encrypting the index but not journal data).
+            const { oldKey: secureStoreKey, newKey } = await rotateKey();
+
+            // Try the singleton's cached key first (for journal data that
+            // was never re-encrypted), fall back to the SecureStore key
+            // (for the index or any file that WAS re-encrypted previously).
+            const oldDecrypt = async (ciphertext: string) => {
+              try {
+                return await encryption.decrypt(ciphertext);
+              } catch {
+                return aesGcmDecrypt(ciphertext, secureStoreKey);
+              }
+            };
+
             const oldEncrypt = (plaintext: string) =>
-              Promise.resolve(aesGcmEncrypt(plaintext, oldKey));
+              Promise.resolve(aesGcmEncrypt(plaintext, newKey));
             const newEncrypt = (plaintext: string) =>
               Promise.resolve(aesGcmEncrypt(plaintext, newKey));
 
             await store.reencryptAll(oldDecrypt, oldEncrypt, newEncrypt);
+            // Clear the singleton's cached device key so it picks up the new one
+            encryption.clearSession();
             Alert.alert(t.security.rotateSuccess);
           } catch (err) {
             Alert.alert('Error', err instanceof Error ? err.message : String(err));

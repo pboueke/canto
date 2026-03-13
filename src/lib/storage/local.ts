@@ -394,8 +394,11 @@ export function createLocalStore(encryption: EncryptionService): LocalStore {
       newDeviceEncrypt: (plaintext: string) => Promise<string>,
       onProgress?: (current: number, total: number) => void,
     ): Promise<void> {
-      // Re-encrypt the index
+      // Re-encrypt the index and parse its content directly
+      // (we cannot call readIndex() here because the encryption singleton
+      // still has the old device key cached and would fail to decrypt)
       const indexFile = getJournalsIndexFile();
+      let journals: Journal[] = [];
       if (indexFile.exists) {
         const raw = await indexFile.text();
         const decrypted = await oldDeviceDecrypt(raw);
@@ -404,10 +407,8 @@ export function createLocalStore(encryption: EncryptionService): LocalStore {
         if (!tmp.exists) tmp.create({ intermediates: true });
         tmp.write(reencrypted);
         moveFile(tmp, indexFile);
+        journals = (JSON.parse(decrypted) as JournalIndex).journals;
       }
-
-      const index = await readIndex();
-      const journals = index.journals;
       let processed = 0;
       const total = journals.length;
 
