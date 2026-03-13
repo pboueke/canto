@@ -1,23 +1,31 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   ActivityIndicator,
   Modal,
   Pressable,
   ScrollView,
   StyleSheet,
+  Switch,
   Text,
   TextInput,
   View,
 } from 'react-native';
 import { useTheme } from '@/hooks/useTheme';
 import { useI18n } from '@/hooks/useI18n';
+import { Feather } from '@expo/vector-icons';
 import { IconPicker } from '@/components/common/IconPicker';
-import { validatePasswordStrength } from '@/lib/encryption/password';
+import { PasswordStrengthMeter } from '@/components/common/PasswordStrengthMeter';
+import { isBiometricAvailable } from '@/lib/biometric';
 
 interface NewJournalModalProps {
   visible: boolean;
   onClose: () => void;
-  onCreate: (journal: { title: string; icon: string; password?: string }) => Promise<void>;
+  onCreate: (journal: {
+    title: string;
+    icon: string;
+    password?: string;
+    biometric?: boolean;
+  }) => Promise<void>;
 }
 
 export function NewJournalModal({ visible, onClose, onCreate }: NewJournalModalProps) {
@@ -28,12 +36,16 @@ export function NewJournalModal({ visible, onClose, onCreate }: NewJournalModalP
   const [icon, setIcon] = useState('book');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [biometric, setBiometric] = useState(false);
+  const [biometricSupported, setBiometricSupported] = useState(false);
   const [busy, setBusy] = useState(false);
 
+  useEffect(() => {
+    isBiometricAvailable().then(setBiometricSupported);
+  }, []);
+
   const passwordsMatch = password === '' || password === confirmPassword;
-  const passwordStrength = password.length > 0 ? validatePasswordStrength(password) : null;
-  const passwordValid = !passwordStrength || passwordStrength.valid;
-  const canCreate = title.trim().length > 0 && passwordsMatch && passwordValid && !busy;
+  const canCreate = title.trim().length > 0 && passwordsMatch && !busy;
 
   function handleCreate() {
     if (!canCreate) return;
@@ -45,6 +57,7 @@ export function NewJournalModal({ visible, onClose, onCreate }: NewJournalModalP
           title: title.trim(),
           icon,
           password: password || undefined,
+          biometric: biometric || undefined,
         });
         resetForm();
       } catch {
@@ -66,6 +79,7 @@ export function NewJournalModal({ visible, onClose, onCreate }: NewJournalModalP
     setIcon('book');
     setPassword('');
     setConfirmPassword('');
+    setBiometric(false);
   }
 
   return (
@@ -156,6 +170,8 @@ export function NewJournalModal({ visible, onClose, onCreate }: NewJournalModalP
                   secureTextEntry
                 />
 
+                <PasswordStrengthMeter password={password} />
+
                 {password.length > 0 && (
                   <>
                     <TextInput
@@ -180,12 +196,40 @@ export function NewJournalModal({ visible, onClose, onCreate }: NewJournalModalP
                         {t.home.passwordMismatch}
                       </Text>
                     )}
-                    {!passwordValid && (
-                      <Text style={[styles.errorText, { color: theme.colors.error }]}>
-                        {t.home.passwordTooShort}
-                      </Text>
-                    )}
                   </>
+                )}
+
+                {password.length > 0 && (
+                  <View style={styles.warningRow}>
+                    <Feather name="alert-triangle" size={14} color={theme.colors.error} />
+                    <Text
+                      style={[
+                        styles.warningText,
+                        { color: theme.colors.error, fontFamily: theme.fonts.regular },
+                      ]}
+                    >
+                      {t.home.passwordWarning}
+                    </Text>
+                  </View>
+                )}
+
+                {biometricSupported && (
+                  <View style={styles.biometricRow}>
+                    <Feather name="smartphone" size={16} color={theme.colors.text} />
+                    <Text
+                      style={[
+                        styles.biometricLabel,
+                        { color: theme.colors.text, fontFamily: theme.fonts.regular },
+                      ]}
+                    >
+                      {t.home.biometricLock}
+                    </Text>
+                    <Switch
+                      value={biometric}
+                      onValueChange={setBiometric}
+                      trackColor={{ false: theme.colors.border, true: theme.colors.primary }}
+                    />
+                  </View>
                 )}
               </ScrollView>
 
@@ -281,6 +325,29 @@ const styles = StyleSheet.create({
     fontSize: 12,
     marginTop: -8,
     marginBottom: 8,
+  },
+  warningRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 8,
+    marginBottom: 10,
+    marginTop: 4,
+    paddingHorizontal: 2,
+  },
+  warningText: {
+    fontSize: 12,
+    flex: 1,
+  },
+  biometricRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginBottom: 12,
+    marginTop: 4,
+  },
+  biometricLabel: {
+    fontSize: 14,
+    flex: 1,
   },
   buttons: {
     flexDirection: 'row',

@@ -1,12 +1,16 @@
-import { useCallback, useMemo } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { ActivityIndicator, FlatList, StyleSheet, Text, View } from 'react-native';
 import { useLocalSearchParams, router, useFocusEffect } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '@/hooks/useTheme';
 import { useI18n } from '@/hooks/useI18n';
 import { useJournal, useCreatePage } from '@/hooks/useStorage';
 import { useJournalKeys } from '@/contexts/JournalKeyContext';
+import { useFilter } from '@/hooks/useFilter';
 import { JournalHeader } from '@/components/journal/JournalHeader';
 import { PageListItem } from '@/components/journal/PageListItem';
+import { FilterBar } from '@/components/journal/FilterBar';
+import { JournalSettings } from '@/components/journal/JournalSettings';
 import { FloatingActionButton } from '@/components/common/FloatingActionButton';
 import { pageToPreview } from '@/models';
 
@@ -15,10 +19,12 @@ export default function JournalScreen() {
   const { theme } = useTheme();
   const { t } = useI18n();
   const { getKey } = useJournalKeys();
+  const insets = useSafeAreaInsets();
 
   const derivedKey = id ? getKey(id) : null;
   const { journal, loading, refresh } = useJournal(id, derivedKey);
   const { create: createPage } = useCreatePage(id, derivedKey);
+  const [showSettings, setShowSettings] = useState(false);
 
   useFocusEffect(
     useCallback(() => {
@@ -28,16 +34,55 @@ export default function JournalScreen() {
 
   const pages = useMemo(() => {
     if (!journal) return [];
-    return journal.pages
+    const sorted = journal.pages
       .filter((p) => !p.deleted)
-      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+      .sort((a, b) => {
+        if (journal.settings.sort === 'ascending') {
+          return new Date(a.date).getTime() - new Date(b.date).getTime();
+        }
+        if (journal.settings.sort === 'descending') {
+          return new Date(b.date).getTime() - new Date(a.date).getTime();
+        }
+        return 0;
+      })
       .map(pageToPreview);
+    return sorted;
   }, [journal]);
+
+  // Collect all tags from journal for filter
+  const availableTags = useMemo(() => {
+    if (!journal) return [];
+    const tagSet = new Set<string>();
+    for (const page of journal.pages) {
+      if (!page.deleted) {
+        for (const tag of page.tags) {
+          tagSet.add(tag.toLowerCase());
+        }
+      }
+    }
+    return Array.from(tagSet).sort();
+  }, [journal]);
+
+  const {
+    filter,
+    filteredPages,
+    isActive: filterIsActive,
+    setQuery,
+    setDateStart,
+    setDateEnd,
+    toggleProperty,
+    toggleTag,
+    clearFilters,
+  } = useFilter(pages);
 
   if (loading) {
     return (
       <View
-        style={[styles.container, styles.centered, { backgroundColor: theme.colors.background }]}
+        style={[
+          styles.container,
+          styles.centered,
+          { backgroundColor: theme.colors.background, paddingTop: insets.top },
+        ]}
       >
         <ActivityIndicator size="large" color={theme.colors.primary} />
       </View>
@@ -46,28 +91,61 @@ export default function JournalScreen() {
 
   if (!journal) {
     return (
-      <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
+      <View
+        style={[
+          styles.container,
+          styles.centered,
+          { backgroundColor: theme.colors.background, paddingTop: insets.top },
+        ]}
+      >
         <Text style={[styles.empty, { color: theme.colors.text }]}>Journal not found</Text>
       </View>
     );
   }
 
+  if (showSettings) {
+    return (
+      <JournalSettings
+        journal={journal}
+        derivedKey={derivedKey}
+        onClose={() => setShowSettings(false)}
+        onJournalChanged={refresh}
+      />
+    );
+  }
+
   return (
     <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
-      <JournalHeader journal={journal} />
+      <JournalHeader journal={journal} onPressSettings={() => setShowSettings(true)} />
 
-      {pages.length === 0 ? (
+      {journal.settings.filterBar && (
+        <FilterBar
+          filter={filter}
+          isActive={filterIsActive}
+          availableTags={availableTags}
+          onSetQuery={setQuery}
+          onSetDateStart={setDateStart}
+          onSetDateEnd={setDateEnd}
+          onToggleProperty={toggleProperty}
+          onToggleTag={toggleTag}
+          onClearFilters={clearFilters}
+        />
+      )}
+
+      {filteredPages.length === 0 ? (
         <View style={styles.emptyContainer}>
           <Text style={[styles.empty, { color: theme.colors.textSecondary }]}>
-            {t.journal.noPages}
+            {filterIsActive ? `${t.journal.filter}: 0` : t.journal.noPages}
           </Text>
         </View>
       ) : (
         <FlatList
-          data={pages}
+          data={filteredPages}
           keyExtractor={(item) => item.id}
           contentContainerStyle={styles.list}
-          renderItem={({ item }) => <PageListItem page={item} journalId={journal.id} />}
+          renderItem={({ item }) => (
+            <PageListItem page={item} journalId={journal.id} settings={journal.settings} />
+          )}
         />
       )}
 

@@ -7,14 +7,15 @@ import { Tag } from '@/components/common/Tag';
 import { useTheme } from '@/hooks/useTheme';
 import { useAttachment } from '@/hooks/useStorage';
 import { useJournalKeys } from '@/contexts/JournalKeyContext';
-import type { PagePreview } from '@/models';
+import type { PagePreview, JournalSettings } from '@/models';
 
 interface PageListItemProps {
   page: PagePreview;
   journalId: string;
+  settings?: JournalSettings;
 }
 
-export function PageListItem({ page, journalId }: PageListItemProps) {
+export function PageListItem({ page, journalId, settings }: PageListItemProps) {
   const { theme } = useTheme();
   const router = useRouter();
   const { getKey } = useJournalKeys();
@@ -22,8 +23,13 @@ export function PageListItem({ page, journalId }: PageListItemProps) {
   const { getAttachment } = useAttachment(derivedKey);
   const [thumbnailUri, setThumbnailUri] = useState<string | null>(null);
 
+  const showTags = settings?.previewTags ?? true;
+  const showThumbnail = settings?.previewThumbnail ?? true;
+  const showIcons = settings?.previewIcons ?? true;
+  const use24h = settings?.use24h ?? false;
+
   useEffect(() => {
-    if (!page.firstImage) return;
+    if (!page.firstImage || !showThumbnail) return;
     let cancelled = false;
     getAttachment(page.firstImage, false).then((data) => {
       if (!cancelled && data) {
@@ -33,11 +39,13 @@ export function PageListItem({ page, journalId }: PageListItemProps) {
     return () => {
       cancelled = true;
     };
-  }, [page.firstImage]);
+  }, [page.firstImage, showThumbnail]);
 
   const dateObj = new Date(page.date);
   const dateStr = dateObj.toLocaleDateString();
-  const timeStr = dateObj.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  const timeStr = use24h
+    ? dateObj.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })
+    : dateObj.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
   return (
     <Card
@@ -50,17 +58,20 @@ export function PageListItem({ page, journalId }: PageListItemProps) {
             <Text style={[styles.date, { color: theme.colors.text, fontFamily: theme.fonts.bold }]}>
               {dateStr}
             </Text>
-            <View style={styles.icons}>
-              {page.hasAttachment && (
-                <Feather name="paperclip" size={12} color={theme.colors.textSecondary} />
-              )}
-              {page.hasImage && (
-                <Feather name="image" size={12} color={theme.colors.textSecondary} />
-              )}
-              {page.hasLocation && (
-                <Feather name="map-pin" size={12} color={theme.colors.textSecondary} />
-              )}
-            </View>
+            {showIcons && (
+              <View style={styles.icons}>
+                {page.hasAttachment && (
+                  <Feather name="paperclip" size={12} color={theme.colors.textSecondary} />
+                )}
+                {page.hasImage && (
+                  <Feather name="image" size={12} color={theme.colors.textSecondary} />
+                )}
+                {page.hasLocation && (
+                  <Feather name="map-pin" size={12} color={theme.colors.textSecondary} />
+                )}
+              </View>
+            )}
+            {!showIcons && <View style={styles.icons} />}
             <Text
               style={[
                 styles.time,
@@ -71,7 +82,7 @@ export function PageListItem({ page, journalId }: PageListItemProps) {
             </Text>
           </View>
 
-          {page.tags.length > 0 && (
+          {showTags && page.tags.length > 0 && (
             <View style={styles.tagsRow}>
               {page.tags.map((tag) => (
                 <Tag key={tag} label={tag} />
@@ -92,7 +103,9 @@ export function PageListItem({ page, journalId }: PageListItemProps) {
           )}
         </View>
 
-        {thumbnailUri && <Image source={{ uri: thumbnailUri }} style={styles.thumbnail} />}
+        {showThumbnail && thumbnailUri && (
+          <Image source={{ uri: thumbnailUri }} style={styles.thumbnail} />
+        )}
       </View>
     </Card>
   );

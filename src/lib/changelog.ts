@@ -1,14 +1,25 @@
 import { Asset } from 'expo-asset';
 
-export const APP_VERSION = '0.3.0';
-
 const changelogModule = require('../../CHANGELOG.md');
 
+let cachedChangelog: string | null = null;
+
 export async function loadChangelog(): Promise<string> {
+  if (cachedChangelog) return cachedChangelog;
   const [asset] = await Asset.loadAsync(changelogModule);
   if (!asset.localUri) {
     throw new Error('Failed to load changelog asset');
   }
   const response = await fetch(asset.localUri);
-  return response.text();
+  cachedChangelog = await response.text();
+  return cachedChangelog;
+}
+
+/**
+ * Extract the latest version from the changelog.
+ * Looks for the first line matching `## vX.Y.Z`.
+ */
+export function parseVersionFromChangelog(text: string): string {
+  const match = text.match(/^## v(\d+\.\d+\.\d+)/m);
+  return match ? match[1] : '0.0.0';
 }

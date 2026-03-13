@@ -1,5 +1,35 @@
 # Changelog
 
+## v0.7.0 - Journal Management and Password UX & Biometric Auth
+
+- feat: add biometric authentication (fingerprint/face) as optional journal lock via expo-local-authentication
+- feat: add biometric toggle in journal creation modal and journal settings
+- feat: biometric gate prompts before journal access (both secure and non-secure journals)
+- feat: add loading spinner with full UI swap during password change re-encryption
+- feat: add no-recovery warning on password creation and change ("if you forget your password, your data will be permanently lost")
+- feat: add biometric field to Journal model
+- feat: add i18n strings for biometric auth and password warning (EN/PT)
+- deps: expo-local-authentication
+- feat: add full-screen journal settings panel with statistics, display toggles, icon/name change and danger zone
+- feat: add 7 journal display settings toggles (24h time, preview tags/thumbnails/icons, filter bar, markdown tips, auto-location)
+- feat: add sort order picker (newest first, oldest first, no sorting)
+- feat: add change journal icon from settings
+- feat: add change journal name from settings
+- feat: add change/add/remove password with full re-encryption of all pages
+- feat: add delete journal with confirmation (password for secure, type "delete {name}" for non-secure)
+- feat: add filter bar with text search, date range pickers and property/tag filters
+- feat: add filter modal with attachment type toggles (image, file, location) and tag selection
+- feat: add useFilter hook for client-side page filtering (query, date range, properties, tags)
+- feat: add useDeleteJournal and useSaveJournal storage hooks
+- feat: add hasComments field to PagePreview model
+- feat: add i18n strings for journal settings and filter bar (EN/PT)
+- feat: respect journal sort order setting in page list
+- feat: filter bar visibility controlled by journal settings toggle
+- test: add useFilter hook tests (15 tests covering all filter types and combinations)
+- test: add hasComments tests for pageToPreview
+- test: add i18n tests for new dictionary sections
+- deps: @react-native-community/datetimepicker
+
 ## v0.6.0 - Cleanup 1
 
 - feat: add `clearKey()` to device encryption for zeroing cached keys on app background

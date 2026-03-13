@@ -179,6 +179,7 @@ export function createLocalStore(encryption: EncryptionService): LocalStore {
         date: journal.date,
         secure: journal.secure,
         salt: journal.salt,
+        biometric: journal.biometric,
       };
 
       const existing = index.journals.findIndex((j) => j.id === journal.id);
@@ -191,14 +192,16 @@ export function createLocalStore(encryption: EncryptionService): LocalStore {
     },
 
     async deleteJournal(id: string): Promise<void> {
+      // Always update the index first so the journal disappears from the list
+      // even if the directory cleanup fails
+      const index = await readIndex();
+      index.journals = index.journals.filter((j) => j.id !== id);
+      await writeIndex(index);
+
       const dir = getJournalDir(id);
       if (dir.exists) {
         dir.delete();
       }
-
-      const index = await readIndex();
-      index.journals = index.journals.filter((j) => j.id !== id);
-      await writeIndex(index);
     },
 
     async getPage(

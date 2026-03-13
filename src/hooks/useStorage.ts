@@ -172,6 +172,7 @@ interface CreateJournalInput {
   title: string;
   icon: string;
   password?: string;
+  biometric?: boolean;
 }
 
 export function useCreateJournal() {
@@ -213,6 +214,7 @@ export function useCreateJournal() {
           date: now,
           secure: hasPassword,
           salt,
+          biometric: input.biometric || undefined,
           pages: [],
           settings: { ...DEFAULT_JOURNAL_SETTINGS },
           version: 1,
@@ -342,6 +344,50 @@ export function useJournalTags(journalId: string | undefined, derivedKey?: Uint8
   }, [load]);
 
   return { tags, loading, refresh: load };
+}
+
+export function useDeleteJournal() {
+  const [deleting, setDeleting] = useState(false);
+  const [error, setError] = useState<Error | null>(null);
+
+  const deleteJournal = useCallback(async (id: string) => {
+    try {
+      setDeleting(true);
+      const store = await ensureInitialized();
+      await store.deleteJournal(id);
+      setError(null);
+    } catch (err) {
+      const e = err instanceof Error ? err : new Error(String(err));
+      setError(e);
+      throw e;
+    } finally {
+      setDeleting(false);
+    }
+  }, []);
+
+  return { deleteJournal, deleting, error };
+}
+
+export function useSaveJournal() {
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<Error | null>(null);
+
+  const saveJournal = useCallback(async (journal: JournalContent, derivedKey?: Uint8Array) => {
+    try {
+      setSaving(true);
+      const store = await ensureInitialized();
+      await store.saveJournal(journal, derivedKey);
+      setError(null);
+    } catch (err) {
+      const e = err instanceof Error ? err : new Error(String(err));
+      setError(e);
+      throw e;
+    } finally {
+      setSaving(false);
+    }
+  }, []);
+
+  return { saveJournal, saving, error };
 }
 
 export function useAttachment(derivedKey?: Uint8Array | null) {

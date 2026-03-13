@@ -18,16 +18,90 @@ async function deriveKey(password: string, salt: Uint8Array): Promise<Uint8Array
   });
 }
 
-const MIN_PASSWORD_LENGTH = 8;
+export type PasswordStrength = 'weak' | 'fair' | 'strong';
 
-export function validatePasswordStrength(password: string): {
-  valid: boolean;
-  reason?: string;
-} {
-  if (password.length < MIN_PASSWORD_LENGTH) {
-    return { valid: false, reason: `Password must be at least ${MIN_PASSWORD_LENGTH} characters` };
+export interface PasswordStrengthResult {
+  strength: PasswordStrength;
+  reasons: string[];
+}
+
+const HAS_LOWERCASE = /[a-z]/;
+const HAS_UPPERCASE = /[A-Z]/;
+const HAS_DIGIT = /[0-9]/;
+const HAS_SPECIAL = /[^a-zA-Z0-9]/;
+
+/**
+ * Evaluate password strength on a three-level scale.
+ *
+ * Criteria (each met = +1 point):
+ *   1. Length >= 8
+ *   2. Length >= 12
+ *   3. Contains lowercase letter
+ *   4. Contains uppercase letter
+ *   5. Contains digit
+ *   6. Contains special character (!@#$%… or any non-alphanumeric)
+ *
+ * Scoring:
+ *   0-2  → weak   (red)
+ *   3-4  → fair   (yellow)
+ *   5-6  → strong (green)
+ *
+ * "strong" requires at minimum: length >= 12, mixed case, digit AND special char.
+ */
+export function evaluatePasswordStrength(password: string): PasswordStrengthResult {
+  if (password.length === 0) {
+    return { strength: 'weak', reasons: [] };
   }
-  return { valid: true };
+
+  const reasons: string[] = [];
+  let score = 0;
+
+  if (password.length >= 8) {
+    score++;
+  } else {
+    reasons.push('min8');
+  }
+
+  if (password.length >= 12) {
+    score++;
+  } else {
+    reasons.push('min12');
+  }
+
+  if (HAS_LOWERCASE.test(password)) {
+    score++;
+  } else {
+    reasons.push('lowercase');
+  }
+
+  if (HAS_UPPERCASE.test(password)) {
+    score++;
+  } else {
+    reasons.push('uppercase');
+  }
+
+  if (HAS_DIGIT.test(password)) {
+    score++;
+  } else {
+    reasons.push('digit');
+  }
+
+  if (HAS_SPECIAL.test(password)) {
+    score++;
+  } else {
+    reasons.push('special');
+  }
+
+  let strength: PasswordStrength;
+  if (score <= 2) {
+    strength = 'weak';
+  } else if (score <= 4) {
+    strength = 'fair';
+  } else {
+    strength = 'strong';
+  }
+
+  return { strength, reasons };
 }
 
 export function createPasswordEncryption(): PasswordEncryptionProvider {
