@@ -79,6 +79,20 @@ describe('pageToPreview', () => {
     expect(preview.hasLocation).toBe(true);
   });
 
+  it('sets hasComments when comments array is non-empty', () => {
+    const preview = pageToPreview(
+      makePage({
+        comments: [{ id: 'c1', text: 'Nice!', date: '2026-03-12T10:00:00Z' }],
+      }),
+    );
+    expect(preview.hasComments).toBe(true);
+  });
+
+  it('sets hasComments to false when comments array is empty', () => {
+    const preview = pageToPreview(makePage());
+    expect(preview.hasComments).toBe(false);
+  });
+
   it('returns firstImage from first non-encrypted, non-deleted image', () => {
     const preview = pageToPreview(
       makePage({

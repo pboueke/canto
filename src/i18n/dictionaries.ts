@@ -16,6 +16,8 @@ export interface Dictionary {
     search: string;
     settings: string;
     loading: string;
+    confirm: string;
+    done: string;
   };
   home: {
     title: string;
@@ -31,6 +33,10 @@ export interface Dictionary {
     unlockJournal: string;
     passwordTooShort: string;
     tooManyAttempts: string;
+    passwordWarning: string;
+    biometricLock: string;
+    biometricReason: string;
+    biometricUnavailable: string;
   };
   journal: {
     title: string;
@@ -70,6 +76,65 @@ export interface Dictionary {
     darkMode: string;
     lightMode: string;
   };
+  passwordStrength: {
+    weak: string;
+    fair: string;
+    strong: string;
+    min8: string;
+    min12: string;
+    lowercase: string;
+    uppercase: string;
+    digit: string;
+    special: string;
+  };
+  journalSettings: {
+    title: string;
+    stats: string;
+    pageCount: string;
+    createdOn: string;
+    displaySettings: string;
+    use24h: string;
+    previewTags: string;
+    previewThumbnail: string;
+    previewIcons: string;
+    filterBarToggle: string;
+    showMarkdownPlaceholder: string;
+    autoLocation: string;
+    sortOrder: string;
+    ascending: string;
+    descending: string;
+    none: string;
+    changeIcon: string;
+    changeName: string;
+    newName: string;
+    changePassword: string;
+    currentPassword: string;
+    newPassword: string;
+    confirmNewPassword: string;
+    removePassword: string;
+    removePasswordHint: string;
+    passwordChanged: string;
+    passwordRemoved: string;
+    passwordAdded: string;
+    dangerZone: string;
+    deleteJournal: string;
+    deleteConfirmSecure: string;
+    typeToDelete: string;
+    reencrypting: string;
+    reencryptProgress: string;
+  };
+  filterBar: {
+    searchPlaceholder: string;
+    from: string;
+    to: string;
+    clearFilters: string;
+    hasImage: string;
+    hasFile: string;
+    hasLocation: string;
+    tags: string;
+    filterBy: string;
+    noTagsAvailable: string;
+  };
 }
 
 const en: Dictionary = {
@@ -88,6 +153,8 @@ const en: Dictionary = {
     search: 'Search',
     settings: 'Settings',
     loading: 'Loading...',
+    confirm: 'Confirm',
+    done: 'Done',
   },
   home: {
     title: 'Journals',
@@ -103,6 +170,11 @@ const en: Dictionary = {
     unlockJournal: 'Unlock Journal',
     passwordTooShort: 'Password must be at least 8 characters',
     tooManyAttempts: 'Too many attempts. Try again later.',
+    passwordWarning:
+      'There is no password recovery. If you forget your password, your data will be permanently lost.',
+    biometricLock: 'Biometric unlock',
+    biometricReason: 'Authenticate to unlock journal',
+    biometricUnavailable: 'Biometric authentication is not available on this device',
   },
   journal: {
     title: 'Pages',
@@ -142,6 +214,65 @@ const en: Dictionary = {
     darkMode: 'Dark Mode',
     lightMode: 'Light Mode',
   },
+  passwordStrength: {
+    weak: 'Weak',
+    fair: 'Fair',
+    strong: 'Strong',
+    min8: '8+ characters',
+    min12: '12+ characters',
+    lowercase: 'lowercase letter',
+    uppercase: 'uppercase letter',
+    digit: 'number',
+    special: 'special character',
+  },
+  journalSettings: {
+    title: 'Journal Settings',
+    stats: 'Statistics',
+    pageCount: 'Pages created',
+    createdOn: 'Created on',
+    displaySettings: 'Display',
+    use24h: '24-hour time',
+    previewTags: 'Show tags in preview',
+    previewThumbnail: 'Show thumbnail in preview',
+    previewIcons: 'Show content icons in preview',
+    filterBarToggle: 'Show filter bar',
+    showMarkdownPlaceholder: 'Show markdown tips',
+    autoLocation: 'Auto-add location',
+    sortOrder: 'Sort order',
+    ascending: 'Oldest first',
+    descending: 'Newest first',
+    none: 'No sorting',
+    changeIcon: 'Change icon',
+    changeName: 'Change name',
+    newName: 'New name',
+    changePassword: 'Change password',
+    currentPassword: 'Current password',
+    newPassword: 'New password',
+    confirmNewPassword: 'Confirm new password',
+    removePassword: 'Remove password',
+    removePasswordHint: 'Leave blank to remove password protection',
+    passwordChanged: 'Password changed successfully',
+    passwordRemoved: 'Password protection removed',
+    passwordAdded: 'Password protection added',
+    dangerZone: 'Danger zone',
+    deleteJournal: 'Delete journal',
+    deleteConfirmSecure: 'Enter your password to delete this journal',
+    typeToDelete: "Type 'delete {name}' to confirm",
+    reencrypting: 'Re-encrypting data...',
+    reencryptProgress: 'Processing {current} of {total}...',
+  },
+  filterBar: {
+    searchPlaceholder: 'Search...',
+    from: 'From',
+    to: 'To',
+    clearFilters: 'Clear',
+    hasImage: 'Images',
+    hasFile: 'Files',
+    hasLocation: 'Location',
+    tags: 'Tags',
+    filterBy: 'Filter by',
+    noTagsAvailable: 'No tags in this journal',
+  },
 };
 
 const pt: Dictionary = {
@@ -160,6 +291,8 @@ const pt: Dictionary = {
     search: 'Buscar',
     settings: 'Configuracoes',
     loading: 'Carregando...',
+    confirm: 'Confirmar',
+    done: 'Pronto',
   },
   home: {
     title: 'Diarios',
@@ -175,6 +308,11 @@ const pt: Dictionary = {
     unlockJournal: 'Desbloquear Diario',
     passwordTooShort: 'A senha deve ter pelo menos 8 caracteres',
     tooManyAttempts: 'Muitas tentativas. Tente novamente mais tarde.',
+    passwordWarning:
+      'Nao ha recuperacao de senha. Se voce esquecer sua senha, seus dados serao permanentemente perdidos.',
+    biometricLock: 'Desbloqueio biometrico',
+    biometricReason: 'Autentique-se para desbloquear o diario',
+    biometricUnavailable: 'Autenticacao biometrica nao esta disponivel neste dispositivo',
   },
   journal: {
     title: 'Paginas',
@@ -213,6 +351,65 @@ const pt: Dictionary = {
     language: 'Idioma',
     darkMode: 'Modo Escuro',
     lightMode: 'Modo Claro',
+  },
+  passwordStrength: {
+    weak: 'Fraca',
+    fair: 'Razoavel',
+    strong: 'Forte',
+    min8: '8+ caracteres',
+    min12: '12+ caracteres',
+    lowercase: 'letra minuscula',
+    uppercase: 'letra maiuscula',
+    digit: 'numero',
+    special: 'caractere especial',
+  },
+  journalSettings: {
+    title: 'Configuracoes do Diario',
+    stats: 'Estatisticas',
+    pageCount: 'Paginas criadas',
+    createdOn: 'Criado em',
+    displaySettings: 'Exibicao',
+    use24h: 'Horario 24 horas',
+    previewTags: 'Mostrar tags na previa',
+    previewThumbnail: 'Mostrar miniatura na previa',
+    previewIcons: 'Mostrar icones de conteudo na previa',
+    filterBarToggle: 'Mostrar barra de filtros',
+    showMarkdownPlaceholder: 'Mostrar dicas de markdown',
+    autoLocation: 'Adicionar localizacao automaticamente',
+    sortOrder: 'Ordem de classificacao',
+    ascending: 'Mais antigos primeiro',
+    descending: 'Mais recentes primeiro',
+    none: 'Sem ordenacao',
+    changeIcon: 'Alterar icone',
+    changeName: 'Alterar nome',
+    newName: 'Novo nome',
+    changePassword: 'Alterar senha',
+    currentPassword: 'Senha atual',
+    newPassword: 'Nova senha',
+    confirmNewPassword: 'Confirmar nova senha',
+    removePassword: 'Remover senha',
+    removePasswordHint: 'Deixe em branco para remover a protecao por senha',
+    passwordChanged: 'Senha alterada com sucesso',
+    passwordRemoved: 'Protecao por senha removida',
+    passwordAdded: 'Protecao por senha adicionada',
+    dangerZone: 'Zona de perigo',
+    deleteJournal: 'Excluir diario',
+    deleteConfirmSecure: 'Digite sua senha para excluir este diario',
+    typeToDelete: "Digite 'delete {name}' para confirmar",
+    reencrypting: 'Re-criptografando dados...',
+    reencryptProgress: 'Processando {current} de {total}...',
+  },
+  filterBar: {
+    searchPlaceholder: 'Buscar...',
+    from: 'De',
+    to: 'Ate',
+    clearFilters: 'Limpar',
+    hasImage: 'Imagens',
+    hasFile: 'Arquivos',
+    hasLocation: 'Localizacao',
+    tags: 'Tags',
+    filterBy: 'Filtrar por',
+    noTagsAvailable: 'Nenhuma tag neste diario',
   },
 };
 

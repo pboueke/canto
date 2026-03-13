@@ -1,17 +1,6 @@
 import { aesGcmEncrypt, aesGcmDecrypt, generateSalt } from '../encryption/utils';
 import { createPasswordEncryption } from '../encryption/password';
 
-// Mock expo-crypto
-jest.mock('expo-crypto', () => ({
-  getRandomBytes: (length: number) => {
-    const bytes = new Uint8Array(length);
-    for (let i = 0; i < length; i++) {
-      bytes[i] = Math.floor(Math.random() * 256);
-    }
-    return bytes;
-  },
-}));
-
 describe('AES-256-GCM encryption', () => {
   const key = new Uint8Array(32); // 256-bit zero key (test only)
   key.fill(0xab);

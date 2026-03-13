@@ -1,3 +1,6 @@
-Canto is a journaling app for web, android and ios with the goals of: being completely \*ree and open source; allowing for mnagement of multiple journals; using application level encryption for all user data; having automated backups with different storage providers; having images, files, GPS data, tags and comments in your entries; using markdown; optionally use of a password to lock your data and having filters and queries to browse previous entries.
+development flow:
 
-In tag 0.0.0, it consists of a reactive native app built with JS. For the following tags, claude code is expected to follow the .claude/requirements/\*.md files to rebuild canto in a modern stack. Please reference these files when the user ask for implementations and update them if needed if user describes new requirements. Before implementing a new feature, write a plan for it at .claude/plans. After implementing a new feature, write a note in .claude/notes/{date}-{count}.md file with the details of what was done and update the CHANGELOG.md
+- user creates a requirement file in .claude/requirements
+- claude creates a plan for it at .claude/plans
+- user reviews and aaproves plan
+- after execution is complete and user verified, claude adds a note to .claude/node about the implementation and updates the repo CHANGELOG and version

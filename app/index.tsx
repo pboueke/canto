@@ -1,6 +1,6 @@
-import { useState } from 'react';
+import { useCallback, useState } from 'react';
 import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useRouter, useFocusEffect } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '@/hooks/useTheme';
 import { useI18n } from '@/hooks/useI18n';
@@ -12,6 +12,7 @@ import { JournalCard } from '@/components/home/JournalCard';
 import { NewJournalCard } from '@/components/home/NewJournalCard';
 import { NewJournalModal } from '@/components/home/NewJournalModal';
 import { JournalAccessModal } from '@/components/home/JournalAccessModal';
+import { authenticateBiometric } from '@/lib/biometric';
 import type { Journal } from '@/models';
 
 export default function HomeScreen() {
@@ -21,20 +22,38 @@ export default function HomeScreen() {
   const router = useRouter();
   const { journals, loading, refresh } = useJournals();
   const { create } = useCreateJournal();
-  const { deriveAndCache, getKey } = useJournalKeys();
+  const { deriveAndCache, getKey, clearAll } = useJournalKeys();
+
+  useFocusEffect(
+    useCallback(() => {
+      clearAll();
+      refresh();
+    }, [clearAll, refresh]),
+  );
 
   const [showNewModal, setShowNewModal] = useState(false);
   const [accessJournal, setAccessJournal] = useState<Journal | null>(null);
   const [accessError, setAccessError] = useState<string | null>(null);
 
-  async function handleCreate(input: { title: string; icon: string; password?: string }) {
+  async function handleCreate(input: {
+    title: string;
+    icon: string;
+    password?: string;
+    biometric?: boolean;
+  }) {
     const journalId = await create(input, input.password ? deriveAndCache : undefined);
     await refresh();
     setShowNewModal(false);
     router.push(`/journal/${journalId}`);
   }
 
-  function handleJournalPress(journal: Journal) {
+  async function handleJournalPress(journal: Journal) {
+    // Biometric gate (for both secure and non-secure journals)
+    if (journal.biometric) {
+      const success = await authenticateBiometric(t.home.biometricReason);
+      if (!success) return;
+    }
+
     if (journal.secure && !getKey(journal.id)) {
       setAccessJournal(journal);
       setAccessError(null);

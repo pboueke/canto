@@ -21,7 +21,10 @@ export function JournalCard({ journal, onPress }: JournalCardProps) {
           color={theme.colors.text}
         />
         {journal.secure && (
-          <Feather name="lock" size={12} color={theme.colors.textSecondary} style={styles.lock} />
+          <Feather name="key" size={12} color={theme.colors.textSecondary} style={styles.badge} />
+        )}
+        {journal.biometric && (
+          <Feather name="lock" size={12} color={theme.colors.textSecondary} style={styles.badge} />
         )}
       </View>
       <Text
@@ -47,7 +50,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 8,
   },
-  lock: {
+  badge: {
     marginLeft: 4,
   },
   name: {

@@ -231,6 +231,31 @@ describe('createLocalStore', () => {
     expect(result).toBeNull();
   });
 
+  it('deleteJournal removes journal data so getJournal returns null', async () => {
+    const store = createLocalStore(createMockEncryption());
+    await store.saveJournal(makeJournalContent('j1', [makePage('p1')]));
+    // Verify it exists
+    expect(await store.getJournal('j1')).not.toBeNull();
+    await store.deleteJournal('j1');
+    // Index is cleared
+    expect(await store.listJournals()).toHaveLength(0);
+    // Data is cleared
+    expect(await store.getJournal('j1')).toBeNull();
+  });
+
+  it('deleteJournal removes index entry even when called on already-deleted journal', async () => {
+    const store = createLocalStore(createMockEncryption());
+    await store.saveJournal(makeJournalContent('j1'));
+    await store.saveJournal(makeJournalContent('j2'));
+    await store.deleteJournal('j1');
+    // j2 should still be there
+    const journals = await store.listJournals();
+    expect(journals).toHaveLength(1);
+    expect(journals[0].id).toBe('j2');
+    // Deleting again should not throw
+    await expect(store.deleteJournal('j1')).resolves.not.toThrow();
+  });
+
   it('updates existing journal in index on re-save', async () => {
     const store = createLocalStore(createMockEncryption());
     await store.saveJournal(makeJournalContent('j1'));

@@ -3,7 +3,7 @@ import { Linking, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'r
 import { useTheme } from '@/hooks/useTheme';
 import { useI18n } from '@/hooks/useI18n';
 import type { LangCode } from '@/i18n/dictionaries';
-import { APP_VERSION, loadChangelog } from '@/lib/changelog';
+import { loadChangelog, parseVersionFromChangelog } from '@/lib/changelog';
 
 const CANTO_REPO_URL = 'https://github.com/pboueke/canto';
 
@@ -12,12 +12,14 @@ export function InfoBox() {
   const { lang, setLang, t } = useI18n();
   const [showChangelog, setShowChangelog] = useState(false);
   const [changelog, setChangelog] = useState<string | null>(null);
+  const [version, setVersion] = useState('...');
 
   useEffect(() => {
-    if (showChangelog && !changelog) {
-      loadChangelog().then(setChangelog);
-    }
-  }, [showChangelog, changelog]);
+    loadChangelog().then((text) => {
+      setChangelog(text);
+      setVersion(parseVersionFromChangelog(text));
+    });
+  }, []);
 
   const nextLang: LangCode = lang === 'en' ? 'pt' : 'en';
 
@@ -59,7 +61,7 @@ export function InfoBox() {
             { color: theme.colors.textSecondary, fontFamily: theme.fonts.light },
           ]}
         >
-          v{APP_VERSION}
+          v{version}
         </Text>
       </Pressable>
 

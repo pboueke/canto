@@ -43,6 +43,7 @@ export interface PagePreview {
   hasImage: boolean;
   hasAttachment: boolean;
   hasLocation: boolean;
+  hasComments: boolean;
   firstImage?: string;
 }
 
@@ -65,6 +66,7 @@ export interface Journal {
   date: string; // ISO 8601 creation date
   secure: boolean;
   salt?: string; // base64-encoded salt, present when secure === true
+  biometric?: boolean; // require biometric auth to open
 }
 
 export interface JournalContent extends Journal {
@@ -112,6 +114,7 @@ export function pageToPreview(page: Page): PagePreview {
     hasImage: page.images.length > 0,
     hasAttachment: page.files.length > 0,
     hasLocation: !!page.location,
+    hasComments: page.comments.length > 0,
     firstImage: firstNonEncryptedImage?.path,
   };
 }
