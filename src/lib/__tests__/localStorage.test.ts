@@ -12,6 +12,13 @@ jest.mock('expo-file-system', () => {
       const segments = parts.map((p) => (typeof p === 'string' ? p : p.uri));
       this.uri = segments.join('/');
     }
+    get name() {
+      return this.uri.split('/').pop() ?? '';
+    }
+    get parentDirectory() {
+      const parent = this.uri.split('/').slice(0, -1).join('/');
+      return new MockDirectory(parent);
+    }
     get exists() {
       return this.uri in filesystem;
     }
@@ -27,6 +34,10 @@ jest.mock('expo-file-system', () => {
       return Promise.resolve(filesystem[this.uri] ?? '');
     }
     delete() {
+      delete filesystem[this.uri];
+    }
+    move(target: MockFile) {
+      filesystem[target.uri] = filesystem[this.uri];
       delete filesystem[this.uri];
     }
   }
@@ -265,5 +276,169 @@ describe('createLocalStore', () => {
     const journals = await store.listJournals();
     expect(journals).toHaveLength(1);
     expect(journals[0].title).toBe('Updated Title');
+  });
+});
+
+describe('reencryptAll (device key rotation)', () => {
+  it('re-encrypts all data so it is readable with new key', async () => {
+    // Simulate two different device keys via prefixed passthrough encryption
+    const oldEncryption = createMockEncryption();
+    oldEncryption.encrypt = jest.fn((data: string) => Promise.resolve(`old:${data}`));
+    oldEncryption.decrypt = jest.fn((data: string) => Promise.resolve(data.replace(/^old:/, '')));
+
+    const store = createLocalStore(oldEncryption);
+    await store.initialize();
+
+    // Save journal + page with old encryption
+    const page = makePage('p1');
+    const journal = makeJournalContent('j1', [page]);
+    await store.saveJournal(journal);
+
+    // Verify data is readable with old key
+    expect(await store.listJournals()).toHaveLength(1);
+    const loaded = await store.getJournal('j1');
+    expect(loaded).not.toBeNull();
+    expect(loaded!.pages[0].text).toBe('Page p1 content');
+
+    // Simulate key rotation: re-encrypt from old→new key
+    const oldDecrypt = (ct: string) => Promise.resolve(ct.replace(/^old:/, ''));
+    const oldEncrypt = (pt: string) => Promise.resolve(`old:${pt}`);
+    const newEncrypt = (pt: string) => Promise.resolve(`new:${pt}`);
+    await store.reencryptAll(oldDecrypt, oldEncrypt, newEncrypt);
+
+    // Now create a store with "new" encryption to verify data is accessible
+    const newEncryption = createMockEncryption();
+    newEncryption.encrypt = jest.fn((data: string) => Promise.resolve(`new:${data}`));
+    newEncryption.decrypt = jest.fn((data: string) => Promise.resolve(data.replace(/^new:/, '')));
+    const newStore = createLocalStore(newEncryption);
+
+    const journals = await newStore.listJournals();
+    expect(journals).toHaveLength(1);
+    expect(journals[0].id).toBe('j1');
+
+    const result = await newStore.getJournal('j1');
+    expect(result).not.toBeNull();
+    expect(result!.title).toBe('Journal j1');
+    expect(result!.pages).toHaveLength(1);
+    expect(result!.pages[0].text).toBe('Page p1 content');
+  });
+
+  it('re-encrypts data that is no longer readable with old key', async () => {
+    const oldEncryption = createMockEncryption();
+    oldEncryption.encrypt = jest.fn((data: string) => Promise.resolve(`old:${data}`));
+    oldEncryption.decrypt = jest.fn((data: string) => {
+      if (!data.startsWith('old:')) throw new Error('Wrong key');
+      return Promise.resolve(data.replace(/^old:/, ''));
+    });
+
+    const store = createLocalStore(oldEncryption);
+    await store.initialize();
+    await store.saveJournal(makeJournalContent('j1', [makePage('p1')]));
+
+    const oldDecrypt = (ct: string) => Promise.resolve(ct.replace(/^old:/, ''));
+    const oldEncrypt = (pt: string) => Promise.resolve(`old:${pt}`);
+    const newEncrypt = (pt: string) => Promise.resolve(`new:${pt}`);
+    await store.reencryptAll(oldDecrypt, oldEncrypt, newEncrypt);
+
+    // Old encryption can no longer decrypt the data (prefix is now "new:", not "old:")
+    // The store still uses old encryption internally, so reads should fail
+    const result = await store.getJournal('j1');
+    // readEncrypted catches errors and returns null when decryption fails
+    expect(result).toBeNull();
+  });
+
+  it('re-encrypts multiple journals and their pages', async () => {
+    const oldEncryption = createMockEncryption();
+    oldEncryption.encrypt = jest.fn((data: string) => Promise.resolve(`old:${data}`));
+    oldEncryption.decrypt = jest.fn((data: string) => Promise.resolve(data.replace(/^old:/, '')));
+
+    const store = createLocalStore(oldEncryption);
+    await store.initialize();
+    await store.saveJournal(makeJournalContent('j1', [makePage('p1'), makePage('p2')]));
+    await store.saveJournal(makeJournalContent('j2', [makePage('p3')]));
+
+    const oldDecrypt = (ct: string) => Promise.resolve(ct.replace(/^old:/, ''));
+    const oldEncrypt = (pt: string) => Promise.resolve(`old:${pt}`);
+    const newEncrypt = (pt: string) => Promise.resolve(`new:${pt}`);
+    await store.reencryptAll(oldDecrypt, oldEncrypt, newEncrypt);
+
+    // Verify with new encryption
+    const newEncryption = createMockEncryption();
+    newEncryption.encrypt = jest.fn((data: string) => Promise.resolve(`new:${data}`));
+    newEncryption.decrypt = jest.fn((data: string) => Promise.resolve(data.replace(/^new:/, '')));
+    const newStore = createLocalStore(newEncryption);
+
+    const journals = await newStore.listJournals();
+    expect(journals).toHaveLength(2);
+
+    const j1 = await newStore.getJournal('j1');
+    expect(j1).not.toBeNull();
+    expect(j1!.pages).toHaveLength(2);
+
+    const j2 = await newStore.getJournal('j2');
+    expect(j2).not.toBeNull();
+    expect(j2!.pages).toHaveLength(1);
+    expect(j2!.pages[0].text).toBe('Page p3 content');
+  });
+
+  it('works when index and journal data are on different keys (previous failed rotation)', async () => {
+    // Simulate a previous failed rotation that re-encrypted the INDEX
+    // with key B but left journal data on key A.
+    //
+    // Step 1: Create data with key A
+    const encryptionA = createMockEncryption();
+    encryptionA.encrypt = jest.fn((data: string) => Promise.resolve(`keyA:${data}`));
+    encryptionA.decrypt = jest.fn((data: string) => {
+      if (!data.startsWith('keyA:')) throw new Error('Wrong key A');
+      return Promise.resolve(data.replace(/^keyA:/, ''));
+    });
+
+    const store = createLocalStore(encryptionA);
+    await store.initialize();
+    await store.saveJournal(makeJournalContent('j1', [makePage('p1')]));
+
+    // Step 2: Simulate the buggy rotation that only re-encrypted the index.
+    // Manually re-encrypt just the index file from keyA→keyB.
+    const indexUri = '/mock-docs/canto/journals.json';
+    const indexCiphertext = filesystem[indexUri]; // "keyA:..."
+    const indexPlain = indexCiphertext.replace(/^keyA:/, '');
+    filesystem[indexUri] = `keyB:${indexPlain}`;
+    // Journal metadata + pages remain on key A (buggy rotation didn't touch them)
+
+    // Step 3: Now simulate the FIXED rotation with a fallback oldDecrypt.
+    // This mirrors what SecuritySettingsModal does:
+    //   try singleton decrypt (key A) → catch → fallback to SecureStore key (B)
+    const oldDecrypt = async (ct: string) => {
+      try {
+        return await encryptionA.decrypt(ct);
+      } catch {
+        // fallback: try key B (the SecureStore key from the failed rotation)
+        if (!ct.startsWith('keyB:')) throw new Error('Wrong key B');
+        return ct.replace(/^keyB:/, '');
+      }
+    };
+    const oldEncrypt = (_pt: string) => Promise.resolve('unused');
+    const newEncrypt = (pt: string) => Promise.resolve(`keyC:${pt}`);
+
+    await store.reencryptAll(oldDecrypt, oldEncrypt, newEncrypt);
+
+    // Verify everything is now consistently on key C
+    const newEncryption = createMockEncryption();
+    newEncryption.encrypt = jest.fn((data: string) => Promise.resolve(`keyC:${data}`));
+    newEncryption.decrypt = jest.fn((data: string) => {
+      if (!data.startsWith('keyC:')) throw new Error('Wrong key C');
+      return Promise.resolve(data.replace(/^keyC:/, ''));
+    });
+    const newStore = createLocalStore(newEncryption);
+
+    const journals = await newStore.listJournals();
+    expect(journals).toHaveLength(1);
+    expect(journals[0].id).toBe('j1');
+
+    const result = await newStore.getJournal('j1');
+    expect(result).not.toBeNull();
+    expect(result!.title).toBe('Journal j1');
+    expect(result!.pages).toHaveLength(1);
+    expect(result!.pages[0].text).toBe('Page p1 content');
   });
 });

@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.8.3 - Device Key Rotation Fix
+
+- fix: device key rotation now correctly re-encrypts all journal data, not just the index — `reencryptAll` parsed the journal list from `readIndex()` which silently failed with the old cached key, returning an empty list
+- fix: clear cached device key after rotation so subsequent operations use the new key
+- fix: handle inconsistent encryption state from previous failed rotations — `oldDecrypt` tries both the cached key and the SecureStore key, recovering from partial re-encryption
+- test: 4 new tests for key rotation — round-trip with new key, old key rejection, multi-journal rotation, and recovery from split-key state
+- chore: bump version to 0.8.3
+
 ## v0.8.2 - Security Hardening
 
 - feat: user-selectable PBKDF2 iteration count — 6 presets (50k/100k/200k/600k/800k/1M) per journal, default 50k for new journals, backward-compatible 20k for existing
