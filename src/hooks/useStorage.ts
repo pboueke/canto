@@ -205,15 +205,11 @@ export function useCreateJournal() {
         const now = new Date().toISOString();
         const hasPassword = !!input.password;
 
-        let salt: string | undefined;
+        const saltBytes = encryption.generateSalt();
+        const salt = uint8ToBase64(saltBytes);
         let derivedKey: Uint8Array | undefined;
-
-        if (hasPassword && input.password) {
-          const saltBytes = encryption.generateSalt();
-          salt = uint8ToBase64(saltBytes);
-          if (deriveAndCache) {
-            derivedKey = await deriveAndCache(journalId, input.password, salt);
-          }
+        if (deriveAndCache) {
+          derivedKey = await deriveAndCache(journalId, input.password || '', salt);
         }
 
         const journal: JournalContent = {
