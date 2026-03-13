@@ -53,6 +53,8 @@ function createMockLocalStore(journal: JournalContent | null): LocalStore {
     saveAttachment: jest.fn(),
     getAttachment: jest.fn(),
     deleteAttachment: jest.fn(),
+    reencryptJournal: jest.fn(),
+    reencryptAll: jest.fn(),
   };
 }
 

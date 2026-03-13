@@ -68,6 +68,7 @@ export interface Journal {
   secure: boolean;
   salt?: string; // base64-encoded salt, present when secure === true
   biometric?: boolean; // require biometric auth to open
+  kdfIterations?: number; // PBKDF2 iteration count, defaults to 20_000 for legacy
   themeOverride?: string; // theme name override, synced from settings
 }
 

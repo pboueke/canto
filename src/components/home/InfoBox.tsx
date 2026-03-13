@@ -6,6 +6,7 @@ import { langNativeNames } from '@/i18n/dictionaries';
 import { loadChangelog, parseVersionFromChangelog } from '@/lib/changelog';
 import { ThemePickerModal } from '@/components/home/ThemePickerModal';
 import { LanguagePickerModal } from '@/components/home/LanguagePickerModal';
+import { SecuritySettingsModal } from '@/components/home/SecuritySettingsModal';
 
 const CANTO_REPO_URL = 'https://github.com/pboueke/canto';
 
@@ -24,6 +25,7 @@ export function InfoBox() {
   const [showChangelog, setShowChangelog] = useState(false);
   const [showThemePicker, setShowThemePicker] = useState(false);
   const [showLangPicker, setShowLangPicker] = useState(false);
+  const [showSecurity, setShowSecurity] = useState(false);
   const [changelog, setChangelog] = useState<string | null>(null);
   const [version, setVersion] = useState('...');
 
@@ -57,6 +59,12 @@ export function InfoBox() {
         </Text>
       </Pressable>
 
+      <Pressable onPress={() => setShowSecurity(true)} style={styles.row}>
+        <Text style={[styles.label, { color: theme.colors.text, fontFamily: theme.fonts.regular }]}>
+          {t.security.title}
+        </Text>
+      </Pressable>
+
       <Pressable onPress={() => Linking.openURL(CANTO_REPO_URL)} style={styles.row}>
         <Text
           style={[styles.link, { color: theme.colors.primary, fontFamily: theme.fonts.regular }]}
@@ -79,6 +87,8 @@ export function InfoBox() {
       <ThemePickerModal visible={showThemePicker} onClose={() => setShowThemePicker(false)} />
 
       <LanguagePickerModal visible={showLangPicker} onClose={() => setShowLangPicker(false)} />
+
+      <SecuritySettingsModal visible={showSecurity} onClose={() => setShowSecurity(false)} />
 
       <Modal
         visible={showChangelog}

@@ -36,7 +36,7 @@ export default function JournalScreen() {
   // Safety net: auto-derive key for non-secure journals that have salt
   useEffect(() => {
     if (journal && journal.salt && !journal.secure && !getKey(journal.id)) {
-      deriveAndCache(journal.id, '', journal.salt);
+      deriveAndCache(journal.id, '', journal.salt, journal.kdfIterations);
     }
   }, [journal, getKey, deriveAndCache]);
 

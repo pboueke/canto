@@ -68,14 +68,19 @@ async function readEncrypted(
   derivedKey?: Uint8Array,
 ): Promise<string | null> {
   if (!file.exists) return null;
-  const ciphertext = await file.text();
-  // Layer 1: device decryption (always)
-  const deviceDecrypted = await encryption.decrypt(ciphertext);
-  // Layer 2: password decryption (if derived key present)
-  if (derivedKey) {
-    return aesGcmDecrypt(deviceDecrypted, derivedKey);
+  try {
+    const ciphertext = await file.text();
+    // Layer 1: device decryption (always)
+    const deviceDecrypted = await encryption.decrypt(ciphertext);
+    // Layer 2: password decryption (if derived key present)
+    if (derivedKey) {
+      return aesGcmDecrypt(deviceDecrypted, derivedKey);
+    }
+    return deviceDecrypted;
+  } catch (err) {
+    console.warn(`[Canto] Failed to decrypt ${file.uri}:`, err);
+    return null;
   }
-  return deviceDecrypted;
 }
 
 async function writeEncrypted(
@@ -98,6 +103,48 @@ interface JournalIndex {
   journals: Journal[];
 }
 
+function getTmpFile(file: File): File {
+  return new File(file.parentDirectory, file.name + '.tmp');
+}
+
+/** Move source to target, deleting target first if it exists (Android rejects move to existing). */
+function moveFile(source: File, target: File): void {
+  if (target.exists) {
+    target.delete();
+  }
+  source.move(target);
+}
+
+async function atomicWrite(
+  file: File,
+  data: string,
+  encryption: EncryptionService,
+  derivedKey?: Uint8Array,
+): Promise<void> {
+  const tmp = getTmpFile(file);
+  // Write to temp file first
+  const toDeviceEncrypt = derivedKey ? aesGcmEncrypt(data, derivedKey) : data;
+  const ciphertext = await encryption.encrypt(toDeviceEncrypt);
+  if (!tmp.exists) {
+    tmp.create({ intermediates: true });
+  }
+  tmp.write(ciphertext);
+  // Atomic rename: move tmp -> final
+  moveFile(tmp, file);
+}
+
+function recoverTmpFiles(dir: Directory): void {
+  if (!dir.exists) return;
+  const entries = dir.list();
+  for (const entry of entries) {
+    if (entry instanceof File && entry.name.endsWith('.tmp')) {
+      const finalName = entry.name.slice(0, -4);
+      const finalFile = new File(dir, finalName);
+      moveFile(entry, finalFile);
+    }
+  }
+}
+
 export function createLocalStore(encryption: EncryptionService): LocalStore {
   async function readIndex(): Promise<JournalIndex> {
     const file = getJournalsIndexFile();
@@ -114,6 +161,17 @@ export function createLocalStore(encryption: EncryptionService): LocalStore {
   return {
     async initialize(): Promise<void> {
       ensureDir(getBaseDir());
+      // Crash recovery: complete any interrupted re-encryption
+      if (getBaseDir().exists) {
+        const entries = getBaseDir().list();
+        for (const entry of entries) {
+          if (entry instanceof Directory) {
+            recoverTmpFiles(entry);
+            const pagesDir = new Directory(entry, 'pages');
+            recoverTmpFiles(pagesDir);
+          }
+        }
+      }
     },
 
     async listJournals(): Promise<Journal[]> {
@@ -180,6 +238,7 @@ export function createLocalStore(encryption: EncryptionService): LocalStore {
         secure: journal.secure,
         salt: journal.salt,
         biometric: journal.biometric,
+        kdfIterations: journal.kdfIterations,
         themeOverride: journal.settings.themeOverride,
       };
 
@@ -282,6 +341,128 @@ export function createLocalStore(encryption: EncryptionService): LocalStore {
       const file = new File(path);
       if (file.exists) {
         file.delete();
+      }
+    },
+
+    async reencryptJournal(
+      journal: JournalContent,
+      _oldKey: Uint8Array | undefined,
+      newKey: Uint8Array | undefined,
+      onProgress?: (current: number, total: number) => void,
+    ): Promise<void> {
+      const pages = journal.pages.filter((p) => !p.deleted);
+      const total = pages.length + 1; // +1 for metadata
+
+      // Step 1: Write all pages to .tmp files
+      for (let i = 0; i < pages.length; i++) {
+        onProgress?.(i + 1, total);
+        const pageFile = getPageFile(journal.id, pages[i].id);
+        await atomicWrite(pageFile, JSON.stringify(pages[i]), encryption, newKey);
+      }
+
+      // Step 2: Write metadata to .tmp file
+      onProgress?.(total, total);
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      const { pages: _p, ...metadata } = journal;
+      await atomicWrite(getMetadataFile(journal.id), JSON.stringify(metadata), encryption, newKey);
+
+      // Step 3: Update index
+      const index = await readIndex();
+      const entry: Journal = {
+        id: journal.id,
+        title: journal.title,
+        icon: journal.icon,
+        date: journal.date,
+        secure: journal.secure,
+        salt: journal.salt,
+        biometric: journal.biometric,
+        kdfIterations: journal.kdfIterations,
+        themeOverride: journal.settings.themeOverride,
+      };
+      const existing = index.journals.findIndex((j) => j.id === journal.id);
+      if (existing >= 0) {
+        index.journals[existing] = entry;
+      } else {
+        index.journals.push(entry);
+      }
+      await writeIndex(index);
+    },
+
+    async reencryptAll(
+      oldDeviceDecrypt: (ciphertext: string) => Promise<string>,
+      _oldDeviceEncryptUnused: (plaintext: string) => Promise<string>,
+      newDeviceEncrypt: (plaintext: string) => Promise<string>,
+      onProgress?: (current: number, total: number) => void,
+    ): Promise<void> {
+      // Re-encrypt the index
+      const indexFile = getJournalsIndexFile();
+      if (indexFile.exists) {
+        const raw = await indexFile.text();
+        const decrypted = await oldDeviceDecrypt(raw);
+        const reencrypted = await newDeviceEncrypt(decrypted);
+        const tmp = getTmpFile(indexFile);
+        if (!tmp.exists) tmp.create({ intermediates: true });
+        tmp.write(reencrypted);
+        moveFile(tmp, indexFile);
+      }
+
+      const index = await readIndex();
+      const journals = index.journals;
+      let processed = 0;
+      const total = journals.length;
+
+      for (const j of journals) {
+        processed++;
+        onProgress?.(processed, total);
+
+        const journalDir = getJournalDir(j.id);
+        if (!journalDir.exists) continue;
+
+        // Re-encrypt metadata
+        const metaFile = getMetadataFile(j.id);
+        if (metaFile.exists) {
+          const raw = await metaFile.text();
+          const decrypted = await oldDeviceDecrypt(raw);
+          const reencrypted = await newDeviceEncrypt(decrypted);
+          const tmp = getTmpFile(metaFile);
+          if (!tmp.exists) tmp.create({ intermediates: true });
+          tmp.write(reencrypted);
+          moveFile(tmp, metaFile);
+        }
+
+        // Re-encrypt pages
+        const pagesDir = getPagesDir(j.id);
+        if (pagesDir.exists) {
+          const entries = pagesDir.list();
+          for (const entry of entries) {
+            if (entry instanceof File && entry.uri.endsWith('.json')) {
+              const raw = await entry.text();
+              const decrypted = await oldDeviceDecrypt(raw);
+              const reencrypted = await newDeviceEncrypt(decrypted);
+              const tmp = getTmpFile(entry);
+              if (!tmp.exists) tmp.create({ intermediates: true });
+              tmp.write(reencrypted);
+              moveFile(tmp, entry);
+            }
+          }
+        }
+
+        // Re-encrypt attachments
+        const attachDir = getAttachmentsDir(j.id);
+        if (attachDir.exists) {
+          const entries = attachDir.list();
+          for (const entry of entries) {
+            if (entry instanceof File) {
+              const raw = await entry.text();
+              const decrypted = await oldDeviceDecrypt(raw);
+              const reencrypted = await newDeviceEncrypt(decrypted);
+              const tmp = getTmpFile(entry);
+              if (!tmp.exists) tmp.create({ intermediates: true });
+              tmp.write(reencrypted);
+              moveFile(tmp, entry);
+            }
+          }
+        }
       }
     },
   };

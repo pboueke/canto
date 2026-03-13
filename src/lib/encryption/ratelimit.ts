@@ -1,47 +1,79 @@
-const MAX_ATTEMPTS = 5;
-const LOCKOUT_MS = 30_000;
+import AsyncStorage from '@react-native-async-storage/async-storage';
+
+const STORAGE_KEY = 'canto_unlock_rate_limit';
+
+interface RateLimitState {
+  attempts: number;
+  lockedUntil: number;
+}
+
+function getLockoutDuration(attempts: number): number {
+  if (attempts > 15) return 30 * 60_000; // 30 minutes
+  if (attempts > 10) return 5 * 60_000; // 5 minutes
+  if (attempts > 5) return 30_000; // 30 seconds
+  return 0;
+}
 
 export interface UnlockRateLimiter {
   /** Returns true if the attempt is allowed, false if rate-limited. */
-  attempt(): boolean;
+  attempt(): Promise<boolean>;
   /** Reset the limiter (e.g. after successful unlock). */
-  reset(): void;
+  reset(): Promise<void>;
   /** Returns remaining lockout time in ms, or 0 if not locked. */
-  lockoutRemaining(): number;
+  lockoutRemaining(): Promise<number>;
+}
+
+async function loadState(): Promise<RateLimitState> {
+  const raw = await AsyncStorage.getItem(STORAGE_KEY);
+  if (!raw) return { attempts: 0, lockedUntil: 0 };
+  try {
+    return JSON.parse(raw) as RateLimitState;
+  } catch {
+    return { attempts: 0, lockedUntil: 0 };
+  }
+}
+
+async function saveState(state: RateLimitState): Promise<void> {
+  await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(state));
 }
 
 export function createUnlockRateLimiter(): UnlockRateLimiter {
-  let attempts = 0;
-  let lockedUntil = 0;
-
   return {
-    attempt(): boolean {
+    async attempt(): Promise<boolean> {
+      const state = await loadState();
       const now = Date.now();
-      if (now < lockedUntil) {
+
+      if (now < state.lockedUntil) {
         return false;
       }
-      if (lockedUntil > 0 && now >= lockedUntil) {
-        // Lockout expired, reset
-        attempts = 0;
-        lockedUntil = 0;
+
+      // Lockout expired, reset if was locked
+      if (state.lockedUntil > 0 && now >= state.lockedUntil) {
+        state.attempts = 0;
+        state.lockedUntil = 0;
       }
-      attempts++;
-      if (attempts > MAX_ATTEMPTS) {
-        lockedUntil = now + LOCKOUT_MS;
+
+      state.attempts++;
+      const lockout = getLockoutDuration(state.attempts);
+      if (lockout > 0) {
+        state.lockedUntil = now + lockout;
+        await saveState(state);
         return false;
       }
+
+      await saveState(state);
       return true;
     },
 
-    reset(): void {
-      attempts = 0;
-      lockedUntil = 0;
+    async reset(): Promise<void> {
+      await AsyncStorage.removeItem(STORAGE_KEY);
     },
 
-    lockoutRemaining(): number {
+    async lockoutRemaining(): Promise<number> {
+      const state = await loadState();
       const now = Date.now();
-      if (now < lockedUntil) {
-        return lockedUntil - now;
+      if (now < state.lockedUntil) {
+        return state.lockedUntil - now;
       }
       return 0;
     },

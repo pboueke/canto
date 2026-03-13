@@ -70,41 +70,41 @@ describe('evaluatePasswordStrength', () => {
 });
 
 describe('createUnlockRateLimiter', () => {
-  it('allows up to 5 attempts', () => {
+  it('allows up to 5 attempts', async () => {
     const limiter = createUnlockRateLimiter();
     for (let i = 0; i < 5; i++) {
-      expect(limiter.attempt()).toBe(true);
+      expect(await limiter.attempt()).toBe(true);
     }
   });
 
-  it('blocks on 6th attempt', () => {
+  it('blocks on 6th attempt', async () => {
     const limiter = createUnlockRateLimiter();
     for (let i = 0; i < 5; i++) {
-      limiter.attempt();
+      await limiter.attempt();
     }
-    expect(limiter.attempt()).toBe(false);
+    expect(await limiter.attempt()).toBe(false);
   });
 
-  it('reports lockout remaining after lockout', () => {
+  it('reports lockout remaining after lockout', async () => {
     const limiter = createUnlockRateLimiter();
     for (let i = 0; i < 6; i++) {
-      limiter.attempt();
+      await limiter.attempt();
     }
-    expect(limiter.lockoutRemaining()).toBeGreaterThan(0);
+    expect(await limiter.lockoutRemaining()).toBeGreaterThan(0);
   });
 
-  it('reset clears attempts and lockout', () => {
+  it('reset clears attempts and lockout', async () => {
     const limiter = createUnlockRateLimiter();
     for (let i = 0; i < 6; i++) {
-      limiter.attempt();
+      await limiter.attempt();
     }
-    limiter.reset();
-    expect(limiter.attempt()).toBe(true);
-    expect(limiter.lockoutRemaining()).toBe(0);
+    await limiter.reset();
+    expect(await limiter.attempt()).toBe(true);
+    expect(await limiter.lockoutRemaining()).toBe(0);
   });
 
-  it('reports zero lockout when not locked', () => {
+  it('reports zero lockout when not locked', async () => {
     const limiter = createUnlockRateLimiter();
-    expect(limiter.lockoutRemaining()).toBe(0);
+    expect(await limiter.lockoutRemaining()).toBe(0);
   });
 });
