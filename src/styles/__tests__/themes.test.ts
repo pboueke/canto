@@ -1,4 +1,4 @@
-import { lightTheme, darkTheme, themes } from '../src/styles/themes';
+import { lightTheme, darkTheme, themes } from '../themes';
 
 describe('Themes', () => {
   it('light theme has name "light"', () => {

@@ -12,6 +12,7 @@ import {
 import { useTheme } from '@/hooks/useTheme';
 import { useI18n } from '@/hooks/useI18n';
 import { IconPicker } from '@/components/common/IconPicker';
+import { validatePasswordStrength } from '@/lib/encryption/password';
 
 interface NewJournalModalProps {
   visible: boolean;
@@ -30,7 +31,9 @@ export function NewJournalModal({ visible, onClose, onCreate }: NewJournalModalP
   const [busy, setBusy] = useState(false);
 
   const passwordsMatch = password === '' || password === confirmPassword;
-  const canCreate = title.trim().length > 0 && passwordsMatch && !busy;
+  const passwordStrength = password.length > 0 ? validatePasswordStrength(password) : null;
+  const passwordValid = !passwordStrength || passwordStrength.valid;
+  const canCreate = title.trim().length > 0 && passwordsMatch && passwordValid && !busy;
 
   function handleCreate() {
     if (!canCreate) return;
@@ -175,6 +178,11 @@ export function NewJournalModal({ visible, onClose, onCreate }: NewJournalModalP
                     {!passwordsMatch && confirmPassword.length > 0 && (
                       <Text style={[styles.errorText, { color: theme.colors.error }]}>
                         {t.home.passwordMismatch}
+                      </Text>
+                    )}
+                    {!passwordValid && (
+                      <Text style={[styles.errorText, { color: theme.colors.error }]}>
+                        {t.home.passwordTooShort}
                       </Text>
                     )}
                   </>

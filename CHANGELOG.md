@@ -1,5 +1,28 @@
 # Changelog
 
+## v0.6.0 - Cleanup 1
+
+- feat: add `clearKey()` to device encryption for zeroing cached keys on app background
+- feat: add `clearSession()` to encryption service for session cleanup
+- feat: add password strength validation (minimum 8 characters)
+- feat: add unlock rate limiter (5 attempts, 30s lockout)
+- feat: wire password validation into journal creation modal
+- feat: wire rate limiter into journal access/unlock modal
+- test: add device encryption tests (key generation, caching, encrypt/decrypt, clearKey)
+- test: add encryption service tests (device-only, password-layered, generateSalt, clearSession)
+- test: add password validation and rate limiter tests
+- test: add model types tests (pageToPreview, DEFAULT_JOURNAL_SETTINGS)
+- test: add localStorage tests (initialize, journals CRUD, pages CRUD, attachments)
+- test: relocate root tests to colocated `__tests__/` directories
+- test: add 40% statement coverage threshold (81 tests total)
+- chore: add `npm audit --production` script and Makefile target
+- chore: add `npm test` to pre-push hook
+- chore: add `.nvmrc` with Node 20
+- chore: add GPL-3.0 LICENSE file
+- chore: remove unused `expo-crypto` dependency
+- chore: rewrite README with badges, architecture docs and contributing guide
+- chore: bump version to 0.6.0
+
 ## v0.5.0 - Entries
 
 - feat: add full entry (page) creation, editing and preview with edit/preview mode toggle

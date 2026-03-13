@@ -29,6 +29,8 @@ export interface Dictionary {
     passwordOptional: string;
     wrongPassword: string;
     unlockJournal: string;
+    passwordTooShort: string;
+    tooManyAttempts: string;
   };
   journal: {
     title: string;
@@ -99,6 +101,8 @@ const en: Dictionary = {
     passwordOptional: 'Optional — leave blank for no encryption',
     wrongPassword: 'Wrong password',
     unlockJournal: 'Unlock Journal',
+    passwordTooShort: 'Password must be at least 8 characters',
+    tooManyAttempts: 'Too many attempts. Try again later.',
   },
   journal: {
     title: 'Pages',
@@ -169,6 +173,8 @@ const pt: Dictionary = {
     passwordOptional: 'Opcional — deixe em branco para nao criptografar',
     wrongPassword: 'Senha incorreta',
     unlockJournal: 'Desbloquear Diario',
+    passwordTooShort: 'A senha deve ter pelo menos 8 caracteres',
+    tooManyAttempts: 'Muitas tentativas. Tente novamente mais tarde.',
   },
   journal: {
     title: 'Paginas',

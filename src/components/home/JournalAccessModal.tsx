@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import {
   ActivityIndicator,
   Modal,
@@ -10,6 +10,7 @@ import {
 } from 'react-native';
 import { useTheme } from '@/hooks/useTheme';
 import { useI18n } from '@/hooks/useI18n';
+import { createUnlockRateLimiter } from '@/lib/encryption/ratelimit';
 
 interface JournalAccessModalProps {
   visible: boolean;
@@ -30,14 +31,22 @@ export function JournalAccessModal({
   const { t } = useI18n();
   const [password, setPassword] = useState('');
   const [busy, setBusy] = useState(false);
+  const [rateLimited, setRateLimited] = useState(false);
+  const limiterRef = useRef(createUnlockRateLimiter());
 
   function handleUnlock() {
     if (!password || busy) return;
+    if (!limiterRef.current.attempt()) {
+      setRateLimited(true);
+      return;
+    }
+    setRateLimited(false);
     setBusy(true);
     // Defer heavy work so React can paint the spinner first
     setTimeout(async () => {
       try {
         await onUnlock(password);
+        limiterRef.current.reset();
         setPassword('');
       } catch {
         // error handled by parent
@@ -114,6 +123,12 @@ export function JournalAccessModal({
 
               {error && (
                 <Text style={[styles.errorText, { color: theme.colors.error }]}>{error}</Text>
+              )}
+
+              {rateLimited && (
+                <Text style={[styles.errorText, { color: theme.colors.error }]}>
+                  {t.home.tooManyAttempts}
+                </Text>
               )}
 
               <View style={styles.buttons}>

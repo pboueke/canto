@@ -1,4 +1,4 @@
-.PHONY: install patch start android ios web lint lint-fix format typecheck test test-watch test-coverage emulator check clean
+.PHONY: install patch start android ios web lint lint-fix format typecheck test test-watch test-coverage emulator audit check clean
 
 # --- Setup ---
 
@@ -56,6 +56,9 @@ test-watch:
 
 test-coverage:
 	npx jest --coverage
+
+audit:
+	npm audit --production
 
 check: lint typecheck test
 

@@ -42,5 +42,9 @@ export function createEncryptionService(): EncryptionService {
     generateSalt(): Uint8Array {
       return generateSalt(16);
     },
+
+    clearSession(): void {
+      device.clearKey?.();
+    },
   };
 }
