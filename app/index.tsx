@@ -4,7 +4,7 @@ import { useRouter, useFocusEffect } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '@/hooks/useTheme';
 import { useI18n } from '@/hooks/useI18n';
-import { useJournals, useCreateJournal } from '@/hooks/useStorage';
+import { useJournals, useCreateJournal, tryLoadJournal } from '@/hooks/useStorage';
 import { useJournalKeys } from '@/contexts/JournalKeyContext';
 import { Logo } from '@/components/common/Logo';
 import { InfoBox } from '@/components/home/InfoBox';
@@ -22,7 +22,7 @@ export default function HomeScreen() {
   const router = useRouter();
   const { journals, loading, refresh } = useJournals();
   const { create } = useCreateJournal();
-  const { deriveAndCache, getKey, clearAll } = useJournalKeys();
+  const { deriveAndCache, getKey, clearKey, clearAll } = useJournalKeys();
 
   useFocusEffect(
     useCallback(() => {
@@ -40,6 +40,7 @@ export default function HomeScreen() {
     icon: string;
     password?: string;
     biometric?: boolean;
+    themeOverride?: string;
   }) {
     const journalId = await create(input, input.password ? deriveAndCache : undefined);
     await refresh();
@@ -66,11 +67,19 @@ export default function HomeScreen() {
     if (!accessJournal?.salt) return;
     const journalId = accessJournal.id;
     try {
-      await deriveAndCache(journalId, password, accessJournal.salt);
+      const key = await deriveAndCache(journalId, password, accessJournal.salt);
+      // Trial decryption — PBKDF2 always succeeds, so we must verify the derived key
+      const result = await tryLoadJournal(journalId, key);
+      if (!result) {
+        clearKey(journalId);
+        setAccessError(t.home.wrongPassword);
+        return;
+      }
       setAccessJournal(null);
       setAccessError(null);
       router.push(`/journal/${journalId}`);
     } catch {
+      clearKey(accessJournal.id);
       setAccessError(t.home.wrongPassword);
     }
   }

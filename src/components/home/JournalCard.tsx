@@ -1,7 +1,9 @@
+import { useMemo } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { Card } from '@/components/common/Card';
-import { useTheme } from '@/hooks/useTheme';
+import { ThemeContext, useTheme } from '@/hooks/useTheme';
+import { type ThemeName, themes } from '@/styles/themes';
 import type { Journal } from '@/models';
 
 interface JournalCardProps {
@@ -10,22 +12,31 @@ interface JournalCardProps {
 }
 
 export function JournalCard({ journal, onPress }: JournalCardProps) {
-  const { theme } = useTheme();
+  const { theme: globalTheme, setThemeName } = useTheme();
+  const hasBadges = journal.secure || journal.biometric;
 
-  return (
+  const overrideName = journal.themeOverride as ThemeName | undefined;
+  const overrideTheme = overrideName && overrideName in themes ? themes[overrideName] : null;
+  const theme = overrideTheme ?? globalTheme;
+
+  const themeContextValue = useMemo(
+    () => ({ theme, setThemeName, isDark: theme.isDark }),
+    [theme, setThemeName],
+  );
+
+  const card = (
     <Card onPress={onPress} style={styles.card}>
-      <View style={styles.iconRow}>
+      <View style={styles.badgeRow}>
+        {journal.secure && <Feather name="key" size={12} color={theme.colors.textSecondary} />}
+        {journal.biometric && <Feather name="lock" size={12} color={theme.colors.textSecondary} />}
+        {!hasBadges && <View style={styles.badgeSpacer} />}
+      </View>
+      <View style={styles.iconContainer}>
         <Feather
           name={(journal.icon || 'book') as React.ComponentProps<typeof Feather>['name']}
-          size={28}
+          size={42}
           color={theme.colors.text}
         />
-        {journal.secure && (
-          <Feather name="key" size={12} color={theme.colors.textSecondary} style={styles.badge} />
-        )}
-        {journal.biometric && (
-          <Feather name="lock" size={12} color={theme.colors.textSecondary} style={styles.badge} />
-        )}
       </View>
       <Text
         style={[styles.name, { color: theme.colors.text, fontFamily: theme.fonts.bold }]}
@@ -35,26 +46,40 @@ export function JournalCard({ journal, onPress }: JournalCardProps) {
       </Text>
     </Card>
   );
+
+  if (overrideTheme) {
+    return <ThemeContext.Provider value={themeContextValue}>{card}</ThemeContext.Provider>;
+  }
+
+  return card;
 }
 
 const styles = StyleSheet.create({
   card: {
     width: 140,
-    height: 120,
+    height: 130,
     alignItems: 'center',
     justifyContent: 'center',
     margin: 5,
   },
-  iconRow: {
+  badgeRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 8,
+    justifyContent: 'center',
+    gap: 6,
+    minHeight: 14,
   },
-  badge: {
-    marginLeft: 4,
+  badgeSpacer: {
+    height: 12,
+  },
+  iconContainer: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   name: {
     fontSize: 14,
     textAlign: 'center',
+    marginBottom: 4,
   },
 });

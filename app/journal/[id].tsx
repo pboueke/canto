@@ -2,7 +2,7 @@ import { useCallback, useMemo, useState } from 'react';
 import { ActivityIndicator, FlatList, StyleSheet, Text, View } from 'react-native';
 import { useLocalSearchParams, router, useFocusEffect } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useTheme } from '@/hooks/useTheme';
+import { ThemeContext, useTheme } from '@/hooks/useTheme';
 import { useI18n } from '@/hooks/useI18n';
 import { useJournal, useCreatePage } from '@/hooks/useStorage';
 import { useJournalKeys } from '@/contexts/JournalKeyContext';
@@ -13,10 +13,11 @@ import { FilterBar } from '@/components/journal/FilterBar';
 import { JournalSettings } from '@/components/journal/JournalSettings';
 import { FloatingActionButton } from '@/components/common/FloatingActionButton';
 import { pageToPreview } from '@/models';
+import { type ThemeName, themes } from '@/styles/themes';
 
 export default function JournalScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { theme } = useTheme();
+  const { theme: globalTheme, setThemeName } = useTheme();
   const { t } = useI18n();
   const { getKey } = useJournalKeys();
   const insets = useSafeAreaInsets();
@@ -31,6 +32,11 @@ export default function JournalScreen() {
       refresh();
     }, [refresh]),
   );
+
+  const overrideName = journal?.settings.themeOverride as ThemeName | undefined;
+  const overrideTheme = overrideName && overrideName in themes ? themes[overrideName] : null;
+  const theme = overrideTheme ?? globalTheme;
+  const isDark = theme.isDark;
 
   const pages = useMemo(() => {
     if (!journal) return [];
@@ -75,92 +81,106 @@ export default function JournalScreen() {
     clearFilters,
   } = useFilter(pages);
 
+  const themeContextValue = useMemo(
+    () => ({ theme, setThemeName, isDark }),
+    [theme, setThemeName, isDark],
+  );
+
   if (loading) {
     return (
-      <View
-        style={[
-          styles.container,
-          styles.centered,
-          { backgroundColor: theme.colors.background, paddingTop: insets.top },
-        ]}
-      >
-        <ActivityIndicator size="large" color={theme.colors.primary} />
-      </View>
+      <ThemeContext.Provider value={themeContextValue}>
+        <View
+          style={[
+            styles.container,
+            styles.centered,
+            { backgroundColor: theme.colors.background, paddingTop: insets.top },
+          ]}
+        >
+          <ActivityIndicator size="large" color={theme.colors.primary} />
+        </View>
+      </ThemeContext.Provider>
     );
   }
 
   if (!journal) {
     return (
-      <View
-        style={[
-          styles.container,
-          styles.centered,
-          { backgroundColor: theme.colors.background, paddingTop: insets.top },
-        ]}
-      >
-        <Text style={[styles.empty, { color: theme.colors.text }]}>Journal not found</Text>
-      </View>
+      <ThemeContext.Provider value={themeContextValue}>
+        <View
+          style={[
+            styles.container,
+            styles.centered,
+            { backgroundColor: theme.colors.background, paddingTop: insets.top },
+          ]}
+        >
+          <Text style={[styles.empty, { color: theme.colors.text }]}>Journal not found</Text>
+        </View>
+      </ThemeContext.Provider>
     );
   }
 
   if (showSettings) {
     return (
-      <JournalSettings
-        journal={journal}
-        derivedKey={derivedKey}
-        onClose={() => setShowSettings(false)}
-        onJournalChanged={refresh}
-      />
+      <ThemeContext.Provider value={themeContextValue}>
+        <JournalSettings
+          journal={journal}
+          derivedKey={derivedKey}
+          onClose={() => setShowSettings(false)}
+          onJournalChanged={refresh}
+        />
+      </ThemeContext.Provider>
     );
   }
 
   return (
-    <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
-      <JournalHeader journal={journal} onPressSettings={() => setShowSettings(true)} />
+    <ThemeContext.Provider value={themeContextValue}>
+      <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
+        <JournalHeader journal={journal} onPressSettings={() => setShowSettings(true)} />
 
-      {journal.settings.filterBar && (
-        <FilterBar
-          filter={filter}
-          isActive={filterIsActive}
-          availableTags={availableTags}
-          onSetQuery={setQuery}
-          onSetDateStart={setDateStart}
-          onSetDateEnd={setDateEnd}
-          onToggleProperty={toggleProperty}
-          onToggleTag={toggleTag}
-          onClearFilters={clearFilters}
+        {journal.settings.filterBar && (
+          <FilterBar
+            filter={filter}
+            isActive={filterIsActive}
+            availableTags={availableTags}
+            onSetQuery={setQuery}
+            onSetDateStart={setDateStart}
+            onSetDateEnd={setDateEnd}
+            onToggleProperty={toggleProperty}
+            onToggleTag={toggleTag}
+            onClearFilters={clearFilters}
+          />
+        )}
+
+        {filteredPages.length === 0 ? (
+          <View style={styles.emptyContainer}>
+            <Text style={[styles.empty, { color: theme.colors.textSecondary }]}>
+              {filterIsActive ? `${t.journal.filter}: 0` : t.journal.noPages}
+            </Text>
+          </View>
+        ) : (
+          <FlatList
+            data={filteredPages}
+            keyExtractor={(item) => item.id}
+            contentContainerStyle={styles.list}
+            renderItem={({ item }) => (
+              <PageListItem page={item} journalId={journal.id} settings={journal.settings} />
+            )}
+          />
+        )}
+
+        <FloatingActionButton
+          icon="+"
+          onPress={async () => {
+            const pageId = await createPage();
+            if (pageId) {
+              const themeParam = overrideName ? `&themeOverride=${overrideName}` : '';
+              router.push(`/page/${pageId}?journalId=${journal.id}&edit=true${themeParam}`);
+            }
+          }}
+          backgroundColor={theme.colors.popAction.new.background}
+          color={theme.colors.popAction.new.text}
         />
-      )}
-
-      {filteredPages.length === 0 ? (
-        <View style={styles.emptyContainer}>
-          <Text style={[styles.empty, { color: theme.colors.textSecondary }]}>
-            {filterIsActive ? `${t.journal.filter}: 0` : t.journal.noPages}
-          </Text>
-        </View>
-      ) : (
-        <FlatList
-          data={filteredPages}
-          keyExtractor={(item) => item.id}
-          contentContainerStyle={styles.list}
-          renderItem={({ item }) => (
-            <PageListItem page={item} journalId={journal.id} settings={journal.settings} />
-          )}
-        />
-      )}
-
-      <FloatingActionButton
-        icon="+"
-        onPress={async () => {
-          const pageId = await createPage();
-          if (pageId) {
-            router.push(`/page/${pageId}?journalId=${journal.id}&edit=true`);
-          }
-        }}
-        backgroundColor={theme.colors.popAction.new.background}
-        color={theme.colors.popAction.new.text}
-      />
-    </View>
+      </View>
+    </ThemeContext.Provider>
   );
 }
 

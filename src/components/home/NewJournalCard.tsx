@@ -1,5 +1,6 @@
 import { StyleSheet, Text } from 'react-native';
 import { useTheme } from '@/hooks/useTheme';
+import { useI18n } from '@/hooks/useI18n';
 import { Card } from '@/components/common/Card';
 
 interface NewJournalCardProps {
@@ -8,6 +9,7 @@ interface NewJournalCardProps {
 
 export function NewJournalCard({ onPress }: NewJournalCardProps) {
   const { theme } = useTheme();
+  const { t } = useI18n();
 
   return (
     <Card
@@ -30,7 +32,7 @@ export function NewJournalCard({ onPress }: NewJournalCardProps) {
           },
         ]}
       >
-        New Journal
+        {t.home.newJournal}
       </Text>
     </Card>
   );

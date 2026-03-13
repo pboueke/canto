@@ -40,6 +40,14 @@ export function getEncryptionService() {
   return encryptionInstance!;
 }
 
+export async function tryLoadJournal(
+  id: string,
+  derivedKey?: Uint8Array,
+): Promise<JournalContent | null> {
+  const store = await ensureInitialized();
+  return store.getJournal(id, derivedKey);
+}
+
 export function useJournals() {
   const [journals, setJournals] = useState<Journal[]>([]);
   const [loading, setLoading] = useState(true);
@@ -173,6 +181,7 @@ interface CreateJournalInput {
   icon: string;
   password?: string;
   biometric?: boolean;
+  themeOverride?: string;
 }
 
 export function useCreateJournal() {
@@ -216,7 +225,7 @@ export function useCreateJournal() {
           salt,
           biometric: input.biometric || undefined,
           pages: [],
-          settings: { ...DEFAULT_JOURNAL_SETTINGS },
+          settings: { ...DEFAULT_JOURNAL_SETTINGS, themeOverride: input.themeOverride },
           version: 1,
         };
 

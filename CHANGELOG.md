@@ -1,5 +1,22 @@
 # Changelog
 
+## v0.8.0 - Theming, Languages & UI Polish
+
+- feat: add 4 new themes — Monokai, Solarized Light, Nord, Dracula — with full color definitions
+- feat: add theme selection modal with miniature color previews on home screen
+- feat: add per-journal theme override — each journal can use its own theme
+- feat: journal cards on home screen render with their journal-specific theme
+- feat: theme picker available in journal creation modal and journal settings
+- feat: add 6 new languages — Spanish, German, French, Russian, Chinese, Italian (8 total)
+- feat: add language selection modal with native language names on home screen
+- feat: expand icon picker from 28 curated to all 287 Feather icons (scrollable)
+- feat: full-screen journal creation modal matching journal settings layout
+- fix: wrong password no longer navigates to "Journal not found" — trial decryption validates key before navigation
+- fix: "New Journal" button on home screen now uses translated string
+- refactor: replace theme toggle with named theme selection (`setThemeName`)
+- refactor: replace language toggle with language picker modal
+- chore: bump version to 0.8.0
+
 ## v0.7.0 - Journal Management and Password UX & Biometric Auth
 
 - feat: add biometric authentication (fingerprint/face) as optional journal lock via expo-local-authentication

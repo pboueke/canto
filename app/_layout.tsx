@@ -8,7 +8,7 @@ import { StatusBar } from 'expo-status-bar';
 import { ThemeContext } from '@/hooks/useTheme';
 import { I18nContext } from '@/hooks/useI18n';
 import { JournalKeyProvider } from '@/contexts/JournalKeyContext';
-import { type CantoTheme, lightTheme, darkTheme } from '@/styles/themes';
+import { type CantoTheme, type ThemeName, themes, lightTheme } from '@/styles/themes';
 import { type LangCode, dictionaries } from '@/i18n/dictionaries';
 
 SplashScreen.preventAutoHideAsync();
@@ -36,8 +36,12 @@ export default function RootLayout() {
         AsyncStorage.getItem(THEME_KEY),
         AsyncStorage.getItem(LANG_KEY),
       ]);
-      if (savedTheme === 'dark') setTheme(darkTheme);
-      if (savedLang === 'pt') setLangState('pt');
+      if (savedTheme && savedTheme in themes) {
+        setTheme(themes[savedTheme as ThemeName]);
+      }
+      if (savedLang && savedLang in dictionaries) {
+        setLangState(savedLang as LangCode);
+      }
       setPrefsLoaded(true);
     };
     loadPreferences();
@@ -49,12 +53,12 @@ export default function RootLayout() {
     }
   }, [fontsLoaded, prefsLoaded]);
 
-  const toggleTheme = useCallback(() => {
-    setTheme((prev) => {
-      const next = prev.name === 'light' ? darkTheme : lightTheme;
-      AsyncStorage.setItem(THEME_KEY, next.name);
-      return next;
-    });
+  const setThemeName = useCallback((name: ThemeName) => {
+    const next = themes[name];
+    if (next) {
+      setTheme(next);
+      AsyncStorage.setItem(THEME_KEY, name);
+    }
   }, []);
 
   const setLang = useCallback((newLang: LangCode) => {
@@ -64,10 +68,10 @@ export default function RootLayout() {
 
   if (!fontsLoaded || !prefsLoaded) return null;
 
-  const isDark = theme.name === 'dark';
+  const isDark = theme.isDark;
 
   return (
-    <ThemeContext.Provider value={{ theme, toggleTheme, isDark }}>
+    <ThemeContext.Provider value={{ theme, setThemeName, isDark }}>
       <I18nContext.Provider value={{ lang, setLang, t: dictionaries[lang] }}>
         <JournalKeyProvider>
           <StatusBar style={isDark ? 'light' : 'dark'} />

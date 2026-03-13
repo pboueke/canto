@@ -2,15 +2,28 @@ import { useState, useEffect } from 'react';
 import { Linking, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useTheme } from '@/hooks/useTheme';
 import { useI18n } from '@/hooks/useI18n';
-import type { LangCode } from '@/i18n/dictionaries';
+import { langNativeNames } from '@/i18n/dictionaries';
 import { loadChangelog, parseVersionFromChangelog } from '@/lib/changelog';
+import { ThemePickerModal } from '@/components/home/ThemePickerModal';
+import { LanguagePickerModal } from '@/components/home/LanguagePickerModal';
 
 const CANTO_REPO_URL = 'https://github.com/pboueke/canto';
 
+const THEME_DISPLAY_NAMES: Record<string, string> = {
+  light: 'Light',
+  dark: 'Dark',
+  monokai: 'Monokai',
+  solarized: 'Solarized',
+  nord: 'Nord',
+  dracula: 'Dracula',
+};
+
 export function InfoBox() {
-  const { theme, toggleTheme, isDark } = useTheme();
-  const { lang, setLang, t } = useI18n();
+  const { theme } = useTheme();
+  const { lang, t } = useI18n();
   const [showChangelog, setShowChangelog] = useState(false);
+  const [showThemePicker, setShowThemePicker] = useState(false);
+  const [showLangPicker, setShowLangPicker] = useState(false);
   const [changelog, setChangelog] = useState<string | null>(null);
   const [version, setVersion] = useState('...');
 
@@ -20,8 +33,6 @@ export function InfoBox() {
       setVersion(parseVersionFromChangelog(text));
     });
   }, []);
-
-  const nextLang: LangCode = lang === 'en' ? 'pt' : 'en';
 
   return (
     <View
@@ -34,15 +45,15 @@ export function InfoBox() {
         },
       ]}
     >
-      <Pressable onPress={toggleTheme} style={styles.row}>
+      <Pressable onPress={() => setShowThemePicker(true)} style={styles.row}>
         <Text style={[styles.label, { color: theme.colors.text, fontFamily: theme.fonts.regular }]}>
-          {isDark ? t.settings.lightMode : t.settings.darkMode}
+          {t.settings.theme}: {THEME_DISPLAY_NAMES[theme.name] ?? theme.name}
         </Text>
       </Pressable>
 
-      <Pressable onPress={() => setLang(nextLang)} style={styles.row}>
+      <Pressable onPress={() => setShowLangPicker(true)} style={styles.row}>
         <Text style={[styles.label, { color: theme.colors.text, fontFamily: theme.fonts.regular }]}>
-          {t.settings.language}: {nextLang.toUpperCase()}
+          {t.settings.language}: {langNativeNames[lang]}
         </Text>
       </Pressable>
 
@@ -64,6 +75,10 @@ export function InfoBox() {
           v{version}
         </Text>
       </Pressable>
+
+      <ThemePickerModal visible={showThemePicker} onClose={() => setShowThemePicker(false)} />
+
+      <LanguagePickerModal visible={showLangPicker} onClose={() => setShowLangPicker(false)} />
 
       <Modal
         visible={showChangelog}

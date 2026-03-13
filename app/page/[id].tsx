@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { ActivityIndicator, Alert, ScrollView, StyleSheet, View } from 'react-native';
 import { useLocalSearchParams, router } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
@@ -6,8 +6,9 @@ import * as DocumentPicker from 'expo-document-picker';
 import * as Location from 'expo-location';
 import * as Sharing from 'expo-sharing';
 import { Paths, File as ExpoFile } from 'expo-file-system';
-import { useTheme } from '@/hooks/useTheme';
+import { ThemeContext, useTheme } from '@/hooks/useTheme';
 import { useI18n } from '@/hooks/useI18n';
+import { type ThemeName, themes } from '@/styles/themes';
 import {
   usePage,
   useSavePage,
@@ -38,13 +39,23 @@ function generateUUID(): string {
 }
 
 export default function PageScreen() {
-  const { id, journalId, edit } = useLocalSearchParams<{
+  const { id, journalId, edit, themeOverride } = useLocalSearchParams<{
     id: string;
     journalId: string;
     edit?: string;
+    themeOverride?: string;
   }>();
-  const { theme } = useTheme();
+  const { theme: globalTheme, setThemeName } = useTheme();
   const { t } = useI18n();
+
+  const overrideTheme =
+    themeOverride && themeOverride in themes ? themes[themeOverride as ThemeName] : null;
+  const theme = overrideTheme ?? globalTheme;
+  const isDark = theme.isDark;
+  const themeContextValue = useMemo(
+    () => ({ theme, setThemeName, isDark }),
+    [theme, setThemeName, isDark],
+  );
   const { getKey } = useJournalKeys();
 
   const derivedKey = journalId ? getKey(journalId) : null;
@@ -304,16 +315,22 @@ export default function PageScreen() {
 
   if (loading) {
     return (
-      <View
-        style={[styles.container, styles.centered, { backgroundColor: theme.colors.background }]}
-      >
-        <ActivityIndicator size="large" color={theme.colors.primary} />
-      </View>
+      <ThemeContext.Provider value={themeContextValue}>
+        <View
+          style={[styles.container, styles.centered, { backgroundColor: theme.colors.background }]}
+        >
+          <ActivityIndicator size="large" color={theme.colors.primary} />
+        </View>
+      </ThemeContext.Provider>
     );
   }
 
   if (!draft) {
-    return <View style={[styles.container, { backgroundColor: theme.colors.background }]} />;
+    return (
+      <ThemeContext.Provider value={themeContextValue}>
+        <View style={[styles.container, { backgroundColor: theme.colors.background }]} />
+      </ThemeContext.Provider>
+    );
   }
 
   const dateObj = new Date(draft.date);
@@ -328,130 +345,132 @@ export default function PageScreen() {
   ];
 
   return (
-    <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
-      <PageHeader date={dateStr} time={timeStr} />
+    <ThemeContext.Provider value={themeContextValue}>
+      <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
+        <PageHeader date={dateStr} time={timeStr} />
 
-      <ScrollView contentContainerStyle={styles.content}>
-        <TagEditor
-          tags={draft.tags}
-          allJournalTags={journalTags}
-          editable={isEditing}
-          onChange={(tags) => updateDraft({ tags })}
-        />
+        <ScrollView contentContainerStyle={styles.content}>
+          <TagEditor
+            tags={draft.tags}
+            allJournalTags={journalTags}
+            editable={isEditing}
+            onChange={(tags) => updateDraft({ tags })}
+          />
 
-        <ImageCarousel
-          images={plainImages}
-          editable={isEditing}
-          onRemove={handleRemoveImage}
-          onMoveLeft={(imgId) => handleMoveImage(imgId, 'left', false)}
-          onMoveRight={(imgId) => handleMoveImage(imgId, 'right', false)}
-          loadImage={loadImage}
-        />
-
-        {encryptedImages.length > 0 && (
           <ImageCarousel
-            images={encryptedImages}
-            encrypted
+            images={plainImages}
             editable={isEditing}
             onRemove={handleRemoveImage}
-            onMoveLeft={(imgId) => handleMoveImage(imgId, 'left', true)}
-            onMoveRight={(imgId) => handleMoveImage(imgId, 'right', true)}
-            loadImage={loadEncryptedImage}
+            onMoveLeft={(imgId) => handleMoveImage(imgId, 'left', false)}
+            onMoveRight={(imgId) => handleMoveImage(imgId, 'right', false)}
+            loadImage={loadImage}
           />
-        )}
 
-        {draft.location && (
-          <LocationTag
-            location={draft.location}
+          {encryptedImages.length > 0 && (
+            <ImageCarousel
+              images={encryptedImages}
+              encrypted
+              editable={isEditing}
+              onRemove={handleRemoveImage}
+              onMoveLeft={(imgId) => handleMoveImage(imgId, 'left', true)}
+              onMoveRight={(imgId) => handleMoveImage(imgId, 'right', true)}
+              loadImage={loadEncryptedImage}
+            />
+          )}
+
+          {draft.location && (
+            <LocationTag
+              location={draft.location}
+              editable={isEditing}
+              onRemove={() => updateDraft({ location: undefined })}
+            />
+          )}
+
+          <FileRow
+            files={allFiles}
             editable={isEditing}
-            onRemove={() => updateDraft({ location: undefined })}
+            onRemove={handleRemoveFile}
+            onOpen={handleOpenFile}
+          />
+
+          <PageContent
+            content={draft.text}
+            isEditing={isEditing}
+            onChangeText={(text) => updateDraft({ text })}
+          />
+
+          <CommentList
+            comments={draft.comments}
+            editable={isEditing}
+            onAdd={() => {
+              setEditingComment(null);
+              setCommentModalVisible(true);
+            }}
+            onEdit={(comment) => {
+              setEditingComment(comment);
+              setCommentModalVisible(true);
+            }}
+            onDelete={handleDeleteComment}
+          />
+        </ScrollView>
+
+        <FloatingActionButton
+          featherIcon={isEditing ? 'check' : 'edit-2'}
+          onPress={isEditing ? handleSave : handleToggleEdit}
+          backgroundColor={
+            isEditing
+              ? theme.colors.popAction.save.background
+              : theme.colors.popAction.edit.background
+          }
+          color={isEditing ? theme.colors.popAction.save.text : theme.colors.popAction.edit.text}
+        />
+
+        {isEditing && (
+          <FloatingActionButton
+            icon="+"
+            onPress={() => setAddPopupVisible(true)}
+            backgroundColor={theme.colors.popAction.new.background}
+            color={theme.colors.popAction.new.text}
+            bottom={90}
           />
         )}
 
-        <FileRow
-          files={allFiles}
-          editable={isEditing}
-          onRemove={handleRemoveFile}
-          onOpen={handleOpenFile}
-        />
+        {isEditing && (
+          <FloatingActionButton
+            featherIcon="trash-2"
+            onPress={handleDelete}
+            backgroundColor={theme.colors.popAction.delete.background}
+            color={theme.colors.popAction.delete.text}
+            position="left"
+          />
+        )}
 
-        <PageContent
-          content={draft.text}
-          isEditing={isEditing}
-          onChangeText={(text) => updateDraft({ text })}
-        />
+        {isEditing && (
+          <AddAttachmentPopup
+            visible={addPopupVisible}
+            onClose={() => setAddPopupVisible(false)}
+            onAddImage={() => handleAddImage(false)}
+            onAddEncryptedImage={() => handleAddImage(true)}
+            onAddFile={() => handleAddFile(false)}
+            onAddEncryptedFile={() => handleAddFile(true)}
+            onAddLocation={handleAddLocation}
+            onAddComment={() => {
+              setEditingComment(null);
+              setCommentModalVisible(true);
+            }}
+            hasLocation={!!draft.location}
+          />
+        )}
 
-        <CommentList
-          comments={draft.comments}
-          editable={isEditing}
-          onAdd={() => {
-            setEditingComment(null);
-            setCommentModalVisible(true);
-          }}
-          onEdit={(comment) => {
-            setEditingComment(comment);
-            setCommentModalVisible(true);
-          }}
+        <CommentModal
+          visible={commentModalVisible}
+          comment={editingComment}
+          onSave={handleSaveComment}
           onDelete={handleDeleteComment}
+          onClose={() => setCommentModalVisible(false)}
         />
-      </ScrollView>
-
-      <FloatingActionButton
-        featherIcon={isEditing ? 'check' : 'edit-2'}
-        onPress={isEditing ? handleSave : handleToggleEdit}
-        backgroundColor={
-          isEditing
-            ? theme.colors.popAction.save.background
-            : theme.colors.popAction.edit.background
-        }
-        color={isEditing ? theme.colors.popAction.save.text : theme.colors.popAction.edit.text}
-      />
-
-      {isEditing && (
-        <FloatingActionButton
-          icon="+"
-          onPress={() => setAddPopupVisible(true)}
-          backgroundColor={theme.colors.popAction.new.background}
-          color={theme.colors.popAction.new.text}
-          bottom={90}
-        />
-      )}
-
-      {isEditing && (
-        <FloatingActionButton
-          featherIcon="trash-2"
-          onPress={handleDelete}
-          backgroundColor={theme.colors.popAction.delete.background}
-          color={theme.colors.popAction.delete.text}
-          position="left"
-        />
-      )}
-
-      {isEditing && (
-        <AddAttachmentPopup
-          visible={addPopupVisible}
-          onClose={() => setAddPopupVisible(false)}
-          onAddImage={() => handleAddImage(false)}
-          onAddEncryptedImage={() => handleAddImage(true)}
-          onAddFile={() => handleAddFile(false)}
-          onAddEncryptedFile={() => handleAddFile(true)}
-          onAddLocation={handleAddLocation}
-          onAddComment={() => {
-            setEditingComment(null);
-            setCommentModalVisible(true);
-          }}
-          hasLocation={!!draft.location}
-        />
-      )}
-
-      <CommentModal
-        visible={commentModalVisible}
-        comment={editingComment}
-        onSave={handleSaveComment}
-        onDelete={handleDeleteComment}
-        onClose={() => setCommentModalVisible(false)}
-      />
-    </View>
+      </View>
+    </ThemeContext.Provider>
   );
 }
 
