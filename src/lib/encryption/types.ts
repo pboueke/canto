@@ -11,6 +11,7 @@
 export interface EncryptionProvider {
   encrypt(plaintext: string): Promise<string>;
   decrypt(ciphertext: string): Promise<string>;
+  clearKey?: () => void;
 }
 
 export interface PasswordEncryptionProvider {
@@ -29,4 +30,6 @@ export interface EncryptionService {
   decryptWithPassword(ciphertext: string, password: string, salt: Uint8Array): Promise<string>;
   /** Generate a cryptographically random salt */
   generateSalt(): Uint8Array;
+  /** Clear cached keys from memory */
+  clearSession(): void;
 }

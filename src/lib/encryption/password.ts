@@ -18,6 +18,18 @@ async function deriveKey(password: string, salt: Uint8Array): Promise<Uint8Array
   });
 }
 
+const MIN_PASSWORD_LENGTH = 8;
+
+export function validatePasswordStrength(password: string): {
+  valid: boolean;
+  reason?: string;
+} {
+  if (password.length < MIN_PASSWORD_LENGTH) {
+    return { valid: false, reason: `Password must be at least ${MIN_PASSWORD_LENGTH} characters` };
+  }
+  return { valid: true };
+}
+
 export function createPasswordEncryption(): PasswordEncryptionProvider {
   return {
     async encrypt(plaintext: string, password: string, salt: Uint8Array): Promise<string> {

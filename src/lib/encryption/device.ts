@@ -43,5 +43,12 @@ export function createDeviceEncryption(): EncryptionProvider {
       const key = await getKey();
       return aesGcmDecrypt(ciphertext, key);
     },
+
+    clearKey(): void {
+      if (cachedKey) {
+        cachedKey.fill(0);
+        cachedKey = null;
+      }
+    },
   };
 }

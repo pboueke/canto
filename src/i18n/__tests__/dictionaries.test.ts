@@ -1,4 +1,4 @@
-import { dictionaries } from '../src/i18n/dictionaries';
+import { dictionaries } from '../dictionaries';
 
 describe('Dictionaries', () => {
   it('has English and Portuguese translations', () => {
