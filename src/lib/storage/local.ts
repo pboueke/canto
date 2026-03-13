@@ -180,6 +180,7 @@ export function createLocalStore(encryption: EncryptionService): LocalStore {
         secure: journal.secure,
         salt: journal.salt,
         biometric: journal.biometric,
+        themeOverride: journal.settings.themeOverride,
       };
 
       const existing = index.journals.findIndex((j) => j.id === journal.id);

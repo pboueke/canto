@@ -19,9 +19,11 @@ import { useI18n } from '@/hooks/useI18n';
 import { useDeleteJournal, useSaveJournal, getEncryptionService } from '@/hooks/useStorage';
 import { useJournalKeys } from '@/contexts/JournalKeyContext';
 import { IconPicker } from '@/components/common/IconPicker';
+import { ThemePickerModal } from '@/components/home/ThemePickerModal';
 import { ConfirmDeleteModal } from './ConfirmDeleteModal';
 import { ChangePasswordModal } from './ChangePasswordModal';
 import { isBiometricAvailable } from '@/lib/biometric';
+import { type ThemeName, themes } from '@/styles/themes';
 import type { JournalContent, JournalSettings as JournalSettingsType } from '@/models';
 
 interface JournalSettingsProps {
@@ -58,6 +60,7 @@ export function JournalSettings({
   const [passwordError, setPasswordError] = useState('');
   const [saving, setSaving] = useState(false);
   const [biometricSupported, setBiometricSupported] = useState(false);
+  const [showThemePicker, setShowThemePicker] = useState(false);
 
   useEffect(() => {
     isBiometricAvailable().then(setBiometricSupported);
@@ -345,6 +348,28 @@ export function JournalSettings({
               <Feather name="chevron-right" size={16} color={theme.colors.textSecondary} />
             </View>
           </Pressable>
+
+          {/* Theme override */}
+          <Pressable style={styles.settingRow} onPress={() => setShowThemePicker(true)}>
+            <Text
+              style={[
+                styles.settingLabel,
+                { color: theme.colors.text, fontFamily: theme.fonts.regular },
+              ]}
+            >
+              {t.journalSettings.themeOverride}
+            </Text>
+            <Text
+              style={[
+                styles.sortValue,
+                { color: theme.colors.primary, fontFamily: theme.fonts.bold },
+              ]}
+            >
+              {settings.themeOverride && settings.themeOverride in themes
+                ? settings.themeOverride.charAt(0).toUpperCase() + settings.themeOverride.slice(1)
+                : t.journalSettings.useGlobalTheme}
+            </Text>
+          </Pressable>
         </View>
 
         {/* Change icon */}
@@ -586,6 +611,20 @@ export function JournalSettings({
         }}
         progress={passwordProgress}
         error={passwordError}
+      />
+
+      <ThemePickerModal
+        visible={showThemePicker}
+        onClose={() => setShowThemePicker(false)}
+        showGlobalOption
+        selectedTheme={
+          settings.themeOverride && settings.themeOverride in themes
+            ? (settings.themeOverride as ThemeName)
+            : undefined
+        }
+        onSelect={(name) => {
+          updateSetting('themeOverride', name ?? undefined);
+        }}
       />
     </View>
   );

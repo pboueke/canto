@@ -49,7 +49,12 @@ export function PageListItem({ page, journalId, settings }: PageListItemProps) {
 
   return (
     <Card
-      onPress={() => router.push(`/page/${page.id}?journalId=${journalId}`)}
+      onPress={() => {
+        const themeParam = settings?.themeOverride
+          ? `&themeOverride=${settings.themeOverride}`
+          : '';
+        router.push(`/page/${page.id}?journalId=${journalId}${themeParam}`);
+      }}
       style={styles.card}
     >
       <View style={styles.row}>

@@ -57,6 +57,7 @@ export interface JournalSettings {
   showMarkdownPlaceholder: boolean;
   autoLocation: boolean;
   remoteSync: boolean;
+  themeOverride?: string;
 }
 
 export interface Journal {
@@ -67,6 +68,7 @@ export interface Journal {
   secure: boolean;
   salt?: string; // base64-encoded salt, present when secure === true
   biometric?: boolean; // require biometric auth to open
+  themeOverride?: string; // theme name override, synced from settings
 }
 
 export interface JournalContent extends Journal {

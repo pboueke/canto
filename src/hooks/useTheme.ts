@@ -1,15 +1,15 @@
 import { createContext, useContext } from 'react';
-import { type CantoTheme, lightTheme } from '@/styles/themes';
+import { type CantoTheme, type ThemeName, lightTheme } from '@/styles/themes';
 
 export interface ThemeContextValue {
   theme: CantoTheme;
-  toggleTheme: () => void;
+  setThemeName: (name: ThemeName) => void;
   isDark: boolean;
 }
 
 export const ThemeContext = createContext<ThemeContextValue>({
   theme: lightTheme,
-  toggleTheme: () => {},
+  setThemeName: () => {},
   isDark: false,
 });
 
