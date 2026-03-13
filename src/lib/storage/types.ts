@@ -39,4 +39,20 @@ export interface LocalStore {
 
   /** Delete an attachment file from storage. */
   deleteAttachment(path: string): Promise<void>;
+
+  /** Re-encrypt all journal data atomically with a new key. */
+  reencryptJournal(
+    journal: JournalContent,
+    oldKey: Uint8Array | undefined,
+    newKey: Uint8Array | undefined,
+    onProgress?: (current: number, total: number) => void,
+  ): Promise<void>;
+
+  /** Re-encrypt all data with a new device key (for device key rotation). */
+  reencryptAll(
+    oldDeviceEncrypt: (plaintext: string) => Promise<string>,
+    oldDeviceDecrypt: (ciphertext: string) => Promise<string>,
+    newDeviceEncrypt: (plaintext: string) => Promise<string>,
+    onProgress?: (current: number, total: number) => void,
+  ): Promise<void>;
 }

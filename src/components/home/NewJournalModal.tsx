@@ -16,8 +16,10 @@ import { useTheme } from '@/hooks/useTheme';
 import { useI18n } from '@/hooks/useI18n';
 import { IconPicker } from '@/components/common/IconPicker';
 import { PasswordStrengthMeter } from '@/components/common/PasswordStrengthMeter';
+import { KdfIterationPicker } from '@/components/common/KdfIterationPicker';
 import { ThemePickerModal } from '@/components/home/ThemePickerModal';
 import { isBiometricAvailable } from '@/lib/biometric';
+import { DEFAULT_KDF_ITERATIONS } from '@/lib/encryption/password';
 import { type ThemeName, themes } from '@/styles/themes';
 
 interface NewJournalModalProps {
@@ -29,6 +31,7 @@ interface NewJournalModalProps {
     password?: string;
     biometric?: boolean;
     themeOverride?: string;
+    kdfIterations?: number;
   }) => Promise<void>;
 }
 
@@ -52,9 +55,12 @@ export function NewJournalModal({ visible, onClose, onCreate }: NewJournalModalP
   const [confirmPassword, setConfirmPassword] = useState('');
   const [biometric, setBiometric] = useState(false);
   const [biometricSupported, setBiometricSupported] = useState(false);
+  const [kdfIterations, setKdfIterations] = useState(DEFAULT_KDF_ITERATIONS);
   const [themeOverride, setThemeOverride] = useState<string | undefined>(undefined);
   const [showThemePicker, setShowThemePicker] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [showPasswordExplain, setShowPasswordExplain] = useState(false);
 
   useEffect(() => {
     isBiometricAvailable().then(setBiometricSupported);
@@ -63,25 +69,28 @@ export function NewJournalModal({ visible, onClose, onCreate }: NewJournalModalP
   const passwordsMatch = password === '' || password === confirmPassword;
   const canCreate = title.trim().length > 0 && passwordsMatch && !busy;
 
-  function handleCreate() {
+  async function handleCreate() {
     if (!canCreate) return;
     setBusy(true);
-    setTimeout(async () => {
-      try {
-        await onCreate({
-          title: title.trim(),
-          icon,
-          password: password || undefined,
-          biometric: biometric || undefined,
-          themeOverride,
-        });
-        resetForm();
-      } catch {
-        // error handled by parent
-      } finally {
-        setBusy(false);
-      }
-    }, 50);
+    setError(null);
+    // Let React render the spinner before starting async work
+    await new Promise((r) => setTimeout(r, 100));
+    try {
+      await onCreate({
+        title: title.trim(),
+        icon,
+        password: password || undefined,
+        biometric: biometric || undefined,
+        themeOverride,
+        kdfIterations: password ? kdfIterations : undefined,
+      });
+      resetForm();
+    } catch (err) {
+      console.error('[Canto] Journal creation failed:', err);
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setBusy(false);
+    }
   }
 
   function handleClose() {
@@ -96,7 +105,9 @@ export function NewJournalModal({ visible, onClose, onCreate }: NewJournalModalP
     setPassword('');
     setConfirmPassword('');
     setBiometric(false);
+    setKdfIterations(DEFAULT_KDF_ITERATIONS);
     setThemeOverride(undefined);
+    setError(null);
   }
 
   return (
@@ -205,14 +216,23 @@ export function NewJournalModal({ visible, onClose, onCreate }: NewJournalModalP
               </Pressable>
 
               {/* Password */}
-              <Text
-                style={[
-                  styles.sectionLabel,
-                  { color: theme.colors.textSecondary, fontFamily: theme.fonts.bold },
-                ]}
-              >
-                {t.home.passwordOptional}
-              </Text>
+              <View style={styles.passwordLabelRow}>
+                <Text
+                  style={[
+                    styles.sectionLabel,
+                    { color: theme.colors.textSecondary, fontFamily: theme.fonts.bold, margin: 0 },
+                  ]}
+                >
+                  {t.home.passwordOptional}
+                </Text>
+                <Pressable
+                  style={[styles.helpButton, { backgroundColor: theme.colors.primary }]}
+                  onPress={() => setShowPasswordExplain(true)}
+                  hitSlop={8}
+                >
+                  <Feather name="help-circle" size={14} color={theme.colors.foreground} />
+                </Pressable>
+              </View>
               <TextInput
                 style={[
                   styles.input,
@@ -261,6 +281,10 @@ export function NewJournalModal({ visible, onClose, onCreate }: NewJournalModalP
               )}
 
               {password.length > 0 && (
+                <KdfIterationPicker value={kdfIterations} onChange={setKdfIterations} />
+              )}
+
+              {password.length > 0 && (
                 <View style={styles.warningRow}>
                   <Feather name="alert-triangle" size={14} color={theme.colors.error} />
                   <Text
@@ -290,6 +314,20 @@ export function NewJournalModal({ visible, onClose, onCreate }: NewJournalModalP
                     onValueChange={setBiometric}
                     trackColor={{ false: theme.colors.border, true: theme.colors.primary }}
                   />
+                </View>
+              )}
+
+              {error && (
+                <View style={[styles.errorBox, { borderColor: theme.colors.error }]}>
+                  <Feather name="alert-circle" size={14} color={theme.colors.error} />
+                  <Text
+                    style={[
+                      styles.errorBoxText,
+                      { color: theme.colors.text, fontFamily: theme.fonts.regular },
+                    ]}
+                  >
+                    {error}
+                  </Text>
                 </View>
               )}
 
@@ -342,6 +380,54 @@ export function NewJournalModal({ visible, onClose, onCreate }: NewJournalModalP
           </>
         )}
       </View>
+
+      <Modal
+        visible={showPasswordExplain}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowPasswordExplain(false)}
+      >
+        <View style={styles.explainOverlay}>
+          <View
+            style={[
+              styles.explainContent,
+              { backgroundColor: theme.colors.background, borderColor: theme.colors.border },
+            ]}
+          >
+            <Text
+              style={[
+                styles.explainTitle,
+                { color: theme.colors.text, fontFamily: theme.fonts.bold },
+              ]}
+            >
+              {t.home.passwordExplainTitle}
+            </Text>
+            <ScrollView style={styles.explainScroll}>
+              <Text
+                style={[
+                  styles.explainBody,
+                  { color: theme.colors.textSecondary, fontFamily: theme.fonts.regular },
+                ]}
+              >
+                {t.home.passwordExplainBody}
+              </Text>
+            </ScrollView>
+            <Pressable
+              style={[styles.explainCloseBtn, { backgroundColor: theme.colors.highlight }]}
+              onPress={() => setShowPasswordExplain(false)}
+            >
+              <Text
+                style={[
+                  styles.explainCloseBtnText,
+                  { color: theme.colors.text, fontFamily: theme.fonts.regular },
+                ]}
+              >
+                {t.common.close}
+              </Text>
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
 
       <ThemePickerModal
         visible={showThemePicker}
@@ -453,6 +539,19 @@ const styles = StyleSheet.create({
     fontSize: 14,
     flex: 1,
   },
+  errorBox: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 8,
+    borderRadius: 8,
+    borderWidth: 1,
+    padding: 12,
+    marginTop: 8,
+  },
+  errorBoxText: {
+    fontSize: 13,
+    flex: 1,
+  },
   footer: {
     flexDirection: 'row',
     gap: 10,
@@ -468,5 +567,53 @@ const styles = StyleSheet.create({
   },
   buttonText: {
     fontSize: 15,
+  },
+  passwordLabelRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 8,
+    marginTop: 12,
+    marginLeft: 4,
+  },
+  helpButton: {
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  explainOverlay: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0,0,0,0.4)',
+    padding: 30,
+  },
+  explainContent: {
+    width: '100%',
+    borderRadius: 16,
+    padding: 24,
+    borderWidth: 1,
+    maxHeight: '70%',
+  },
+  explainTitle: {
+    fontSize: 18,
+    marginBottom: 16,
+  },
+  explainScroll: {
+    marginBottom: 16,
+  },
+  explainBody: {
+    fontSize: 14,
+    lineHeight: 22,
+  },
+  explainCloseBtn: {
+    paddingVertical: 10,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  explainCloseBtnText: {
+    fontSize: 14,
   },
 });

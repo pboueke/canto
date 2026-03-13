@@ -1,7 +1,6 @@
 import { useState, useCallback, useEffect } from 'react';
 import {
   ActivityIndicator,
-  Alert,
   Modal,
   Pressable,
   ScrollView,
@@ -16,7 +15,13 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { useTheme } from '@/hooks/useTheme';
 import { useI18n } from '@/hooks/useI18n';
-import { useDeleteJournal, useSaveJournal, getEncryptionService } from '@/hooks/useStorage';
+import {
+  useDeleteJournal,
+  useSaveJournal,
+  getEncryptionService,
+  getLocalStore,
+  tryLoadJournal,
+} from '@/hooks/useStorage';
 import { useJournalKeys } from '@/contexts/JournalKeyContext';
 import { IconPicker } from '@/components/common/IconPicker';
 import { ThemePickerModal } from '@/components/home/ThemePickerModal';
@@ -47,7 +52,7 @@ export function JournalSettings({
   const insets = useSafeAreaInsets();
   const { deleteJournal } = useDeleteJournal();
   const { saveJournal } = useSaveJournal();
-  const { deriveAndCache, clearKey } = useJournalKeys();
+  const { deriveAndCache, setKey, clearKey } = useJournalKeys();
 
   const [settings, setSettings] = useState<JournalSettingsType>({ ...journal.settings });
   const [showDeleteModal, setShowDeleteModal] = useState(false);
@@ -126,7 +131,7 @@ export function JournalSettings({
       setDeleteError('');
       if (journal.secure && password && journal.salt) {
         try {
-          await deriveAndCache(journal.id, password, journal.salt);
+          await deriveAndCache(journal.id, password, journal.salt, journal.kdfIterations);
         } catch {
           setDeleteError(t.home.wrongPassword);
           return;
@@ -145,19 +150,32 @@ export function JournalSettings({
   );
 
   const handleChangePassword = useCallback(
-    async (currentPwd: string | undefined, newPwd: string | undefined) => {
+    async (currentPwd: string | undefined, newPwd: string | undefined, kdfIterations?: number) => {
       setPasswordError('');
       setPasswordProgress(t.journalSettings.reencrypting);
 
       const encryption = getEncryptionService();
+      const store = await getLocalStore();
       let newKey: Uint8Array | undefined;
       let newSalt: string | undefined;
 
-      // Step 1: Verify current password if secure
+      // Step 1: Verify current password via trial decryption
+      // (PBKDF2 always succeeds regardless of password — must actually try to decrypt)
       if (journal.secure && currentPwd && journal.salt) {
-        try {
-          await deriveAndCache(journal.id, currentPwd, journal.salt);
-        } catch {
+        const trialKey = await deriveAndCache(
+          journal.id,
+          currentPwd,
+          journal.salt,
+          journal.kdfIterations,
+        );
+        const trialResult = await tryLoadJournal(journal.id, trialKey);
+        if (!trialResult) {
+          // Wrong password — restore the correct cached key so journal remains accessible
+          if (derivedKey) {
+            setKey(journal.id, derivedKey);
+          } else {
+            clearKey(journal.id);
+          }
           throw new Error(t.home.wrongPassword);
         }
       }
@@ -167,35 +185,33 @@ export function JournalSettings({
         const saltBytes = encryption.generateSalt();
         const binary = Array.from(saltBytes, (b) => String.fromCharCode(b)).join('');
         newSalt = btoa(binary);
-        newKey = await deriveAndCache(journal.id, newPwd, newSalt);
+        newKey = await deriveAndCache(journal.id, newPwd, newSalt, kdfIterations);
       }
 
-      // Step 3: Re-read journal with old key to get all pages decrypted
-      // (journal prop already has decrypted pages, so we use it directly)
-      const pages = journal.pages.filter((p) => !p.deleted);
-      const total = pages.length;
-
-      // Step 4: Build updated journal
+      // Step 3: Build updated journal
       const updatedJournal: JournalContent = {
         ...journal,
         secure: !!newPwd,
         salt: newSalt,
+        kdfIterations: newPwd ? kdfIterations : undefined,
         settings: { ...journal.settings },
       };
 
-      // Step 5: Save journal metadata + all pages with new key
-      // saveJournal already saves metadata and all pages
-      for (let i = 0; i < total; i++) {
-        setPasswordProgress(
-          t.journalSettings.reencryptProgress
-            .replace('{current}', String(i + 1))
-            .replace('{total}', String(total)),
-        );
-      }
+      // Step 4: Atomic re-encryption with progress
+      await store.reencryptJournal(
+        updatedJournal,
+        derivedKey ?? undefined,
+        newKey,
+        (current, total) => {
+          setPasswordProgress(
+            t.journalSettings.reencryptProgress
+              .replace('{current}', String(current))
+              .replace('{total}', String(total)),
+          );
+        },
+      );
 
-      await saveJournal(updatedJournal, newKey);
-
-      // Step 6: Update key cache
+      // Step 5: Update key cache
       if (!newPwd) {
         clearKey(journal.id);
       }
@@ -204,7 +220,7 @@ export function JournalSettings({
       onJournalChanged();
       setShowPasswordModal(false);
     },
-    [journal, deriveAndCache, clearKey, saveJournal, onJournalChanged, t],
+    [journal, derivedKey, deriveAndCache, setKey, clearKey, onJournalChanged, t],
   );
 
   const renderToggle = (
@@ -603,6 +619,7 @@ export function JournalSettings({
       <ChangePasswordModal
         visible={showPasswordModal}
         isSecure={journal.secure}
+        currentKdfIterations={journal.kdfIterations}
         onSubmit={handleChangePassword}
         onCancel={() => {
           setShowPasswordModal(false);

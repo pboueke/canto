@@ -1,5 +1,5 @@
 import { useCallback, useState } from 'react';
-import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Modal, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '@/hooks/useTheme';
@@ -34,6 +34,7 @@ export default function HomeScreen() {
   const [showNewModal, setShowNewModal] = useState(false);
   const [accessJournal, setAccessJournal] = useState<Journal | null>(null);
   const [accessError, setAccessError] = useState<string | null>(null);
+  const [unlocking, setUnlocking] = useState(false);
 
   async function handleCreate(input: {
     title: string;
@@ -41,6 +42,7 @@ export default function HomeScreen() {
     password?: string;
     biometric?: boolean;
     themeOverride?: string;
+    kdfIterations?: number;
   }) {
     const journalId = await create(input, deriveAndCache);
     await refresh();
@@ -49,20 +51,26 @@ export default function HomeScreen() {
   }
 
   async function handleJournalPress(journal: Journal) {
-    // Biometric gate (for both secure and non-secure journals)
-    if (journal.biometric) {
+    // Biometric gate: always require biometric auth first when enabled
+    if (journal.biometric && !getKey(journal.id)) {
       const success = await authenticateBiometric(t.home.biometricReason);
       if (!success) return;
     }
 
     if (journal.secure && !getKey(journal.id)) {
-      // User-set password — show password modal
+      // Password-protected — always require password
       setAccessJournal(journal);
       setAccessError(null);
     } else if (!journal.secure && journal.salt && !getKey(journal.id)) {
       // No password but has salt — auto-derive from empty string
-      await deriveAndCache(journal.id, '', journal.salt);
-      router.push(`/journal/${journal.id}`);
+      setUnlocking(true);
+      await new Promise((r) => setTimeout(r, 100));
+      try {
+        await deriveAndCache(journal.id, '', journal.salt, journal.kdfIterations);
+        router.push(`/journal/${journal.id}`);
+      } finally {
+        setUnlocking(false);
+      }
     } else {
       router.push(`/journal/${journal.id}`);
     }
@@ -72,7 +80,12 @@ export default function HomeScreen() {
     if (!accessJournal?.salt) return;
     const journalId = accessJournal.id;
     try {
-      const key = await deriveAndCache(journalId, password, accessJournal.salt);
+      const key = await deriveAndCache(
+        journalId,
+        password,
+        accessJournal.salt,
+        accessJournal.kdfIterations,
+      );
       // Trial decryption — PBKDF2 always succeeds, so we must verify the derived key
       const result = await tryLoadJournal(journalId, key);
       if (!result) {
@@ -138,6 +151,27 @@ export default function HomeScreen() {
         </ScrollView>
       )}
 
+      <Modal visible={unlocking} transparent animationType="fade">
+        <View style={styles.unlockingOverlay}>
+          <View
+            style={[
+              styles.unlockingBox,
+              { backgroundColor: theme.colors.background, borderColor: theme.colors.border },
+            ]}
+          >
+            <ActivityIndicator size="large" color={theme.colors.primary} />
+            <Text
+              style={[
+                styles.unlockingText,
+                { color: theme.colors.textSecondary, fontFamily: theme.fonts.regular },
+              ]}
+            >
+              {t.common.loading}
+            </Text>
+          </View>
+        </View>
+      </Modal>
+
       <NewJournalModal
         visible={showNewModal}
         onClose={() => setShowNewModal(false)}
@@ -194,5 +228,22 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     justifyContent: 'center',
+  },
+  unlockingOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.4)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 40,
+  },
+  unlockingBox: {
+    borderRadius: 16,
+    borderWidth: 1,
+    padding: 30,
+    alignItems: 'center',
+    gap: 14,
+  },
+  unlockingText: {
+    fontSize: 14,
   },
 });

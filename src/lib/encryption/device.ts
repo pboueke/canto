@@ -23,6 +23,14 @@ async function getOrCreateDeviceKey(): Promise<Uint8Array> {
   return key;
 }
 
+export async function rotateKey(): Promise<{ oldKey: Uint8Array; newKey: Uint8Array }> {
+  const existingHex = await SecureStore.getItemAsync(DEVICE_KEY_ALIAS);
+  const oldKey = existingHex ? hexToBytes(existingHex) : getRandomBytes(32);
+  const newKey = getRandomBytes(32);
+  await SecureStore.setItemAsync(DEVICE_KEY_ALIAS, bytesToHex(newKey));
+  return { oldKey, newKey };
+}
+
 export function createDeviceEncryption(): EncryptionProvider {
   let cachedKey: Uint8Array | null = null;
 

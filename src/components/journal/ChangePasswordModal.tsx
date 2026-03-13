@@ -12,11 +12,18 @@ import { Feather } from '@expo/vector-icons';
 import { useTheme } from '@/hooks/useTheme';
 import { useI18n } from '@/hooks/useI18n';
 import { PasswordStrengthMeter } from '@/components/common/PasswordStrengthMeter';
+import { KdfIterationPicker } from '@/components/common/KdfIterationPicker';
+import { DEFAULT_KDF_ITERATIONS } from '@/lib/encryption/password';
 
 interface ChangePasswordModalProps {
   visible: boolean;
   isSecure: boolean;
-  onSubmit: (currentPassword: string | undefined, newPassword: string | undefined) => Promise<void>;
+  currentKdfIterations?: number;
+  onSubmit: (
+    currentPassword: string | undefined,
+    newPassword: string | undefined,
+    kdfIterations?: number,
+  ) => Promise<void>;
   onCancel: () => void;
   progress?: string;
   error?: string;
@@ -25,6 +32,7 @@ interface ChangePasswordModalProps {
 export function ChangePasswordModal({
   visible,
   isSecure,
+  currentKdfIterations,
   onSubmit,
   onCancel,
   progress,
@@ -35,6 +43,9 @@ export function ChangePasswordModal({
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [kdfIterations, setKdfIterations] = useState(
+    currentKdfIterations ?? DEFAULT_KDF_ITERATIONS,
+  );
   const [localError, setLocalError] = useState('');
   const [busy, setBusy] = useState(false);
 
@@ -47,7 +58,11 @@ export function ChangePasswordModal({
     setBusy(true);
     setTimeout(async () => {
       try {
-        await onSubmit(isSecure ? currentPassword : undefined, newPassword || undefined);
+        await onSubmit(
+          isSecure ? currentPassword : undefined,
+          newPassword || undefined,
+          newPassword ? kdfIterations : undefined,
+        );
         setCurrentPassword('');
         setNewPassword('');
         setConfirmPassword('');
@@ -63,6 +78,7 @@ export function ChangePasswordModal({
     setCurrentPassword('');
     setNewPassword('');
     setConfirmPassword('');
+    setKdfIterations(currentKdfIterations ?? DEFAULT_KDF_ITERATIONS);
     setLocalError('');
     onCancel();
   };
@@ -162,6 +178,10 @@ export function ChangePasswordModal({
               >
                 {t.journalSettings.removePasswordHint}
               </Text>
+
+              {newPassword.length > 0 && (
+                <KdfIterationPicker value={kdfIterations} onChange={setKdfIterations} />
+              )}
 
               {newPassword.length > 0 && (
                 <View style={styles.warningRow}>

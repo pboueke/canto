@@ -40,6 +40,10 @@ export function getEncryptionService() {
   return encryptionInstance!;
 }
 
+export async function getLocalStore(): Promise<LocalStore> {
+  return ensureInitialized();
+}
+
 export async function tryLoadJournal(
   id: string,
   derivedKey?: Uint8Array,
@@ -182,6 +186,7 @@ interface CreateJournalInput {
   password?: string;
   biometric?: boolean;
   themeOverride?: string;
+  kdfIterations?: number;
 }
 
 export function useCreateJournal() {
@@ -195,6 +200,7 @@ export function useCreateJournal() {
         journalId: string,
         password: string,
         saltBase64: string,
+        iterations?: number,
       ) => Promise<Uint8Array>,
     ): Promise<string> => {
       try {
@@ -209,7 +215,12 @@ export function useCreateJournal() {
         const salt = uint8ToBase64(saltBytes);
         let derivedKey: Uint8Array | undefined;
         if (deriveAndCache) {
-          derivedKey = await deriveAndCache(journalId, input.password || '', salt);
+          derivedKey = await deriveAndCache(
+            journalId,
+            input.password || '',
+            salt,
+            input.kdfIterations,
+          );
         }
 
         const journal: JournalContent = {
@@ -220,6 +231,7 @@ export function useCreateJournal() {
           secure: hasPassword,
           salt,
           biometric: input.biometric || undefined,
+          kdfIterations: input.kdfIterations,
           pages: [],
           settings: { ...DEFAULT_JOURNAL_SETTINGS, themeOverride: input.themeOverride },
           version: 1,

@@ -37,6 +37,8 @@ export interface Dictionary {
     biometricLock: string;
     biometricReason: string;
     biometricUnavailable: string;
+    passwordExplainTitle: string;
+    passwordExplainBody: string;
   };
   journal: {
     title: string;
@@ -137,6 +139,33 @@ export interface Dictionary {
     filterBy: string;
     noTagsAvailable: string;
   };
+  security: {
+    title: string;
+    keyStrength: string;
+    kdfHint: string;
+    kdfExplainTitle: string;
+    kdfExplainBody: string;
+    kdf: {
+      fast: string;
+      improved: string;
+      moderate: string;
+      strong: string;
+      great: string;
+      extreme: string;
+    };
+    autoLock: string;
+    autoLockOff: string;
+    autoLock1m: string;
+    autoLock5m: string;
+    autoLock15m: string;
+    rotateDeviceKey: string;
+    rotateExplain: string;
+    rotateWarning: string;
+    rotateConfirm: string;
+    rotating: string;
+    rotateSuccess: string;
+    doNotClose: string;
+  };
 }
 
 const en: Dictionary = {
@@ -167,7 +196,7 @@ const en: Dictionary = {
     password: 'Password',
     confirmPassword: 'Confirm password',
     passwordMismatch: 'Passwords do not match',
-    passwordOptional: 'Optional — leave blank for no encryption',
+    passwordOptional: 'Optional',
     wrongPassword: 'Wrong password',
     unlockJournal: 'Unlock Journal',
     passwordTooShort: 'Password must be at least 8 characters',
@@ -177,6 +206,9 @@ const en: Dictionary = {
     biometricLock: 'Biometric unlock',
     biometricReason: 'Authenticate to unlock journal',
     biometricUnavailable: 'Biometric authentication is not available on this device',
+    passwordExplainTitle: 'How does Canto protect your data?',
+    passwordExplainBody:
+      "All your journals are always encrypted on this device using a unique device key stored in secure hardware.\n\nAdding a password provides an extra layer of encryption on top of the device key. This means that even if someone gains access to your device files, they cannot read your journal without the password.\n\nIf you choose not to set a password, your data is still encrypted with the device key — it just won't require a password to open.",
   },
   journal: {
     title: 'Pages',
@@ -277,6 +309,36 @@ const en: Dictionary = {
     filterBy: 'Filter by',
     noTagsAvailable: 'No tags in this journal',
   },
+  security: {
+    title: 'Security',
+    keyStrength: 'Key strength',
+    kdfHint: 'Higher iterations are slower to unlock but harder to crack',
+    kdfExplainTitle: 'What is key strength?',
+    kdfExplainBody:
+      'When you set a password, your journal is encrypted using a key derived from it. Key strength controls how many iterations of the PBKDF2 algorithm are used to derive this key.\n\nMore iterations make the key significantly harder to crack by brute force, but also make unlocking your journal slower — especially on older devices.\n\nAvailable levels:\n• Fast — 50,000 iterations\n• Improved — 100,000 iterations\n• Moderate — 200,000 iterations\n• Strong — 600,000 iterations\n• Great — 800,000 iterations\n• Extreme — 1,000,000 iterations\n\nFor most users, "Fast" is sufficient. Choose a higher setting if you prioritize security over unlock speed.',
+    kdf: {
+      fast: 'Fast',
+      improved: 'Improved',
+      moderate: 'Moderate',
+      strong: 'Strong',
+      great: 'Great',
+      extreme: 'Extreme',
+    },
+    autoLock: 'Auto-lock',
+    autoLockOff: 'Off',
+    autoLock1m: '1 minute',
+    autoLock5m: '5 minutes',
+    autoLock15m: '15 minutes',
+    rotateDeviceKey: 'Rotate device key',
+    rotateExplain:
+      'Your data is encrypted with a unique key stored securely on this device. Rotating the key generates a new one and re-encrypts all journals, pages and attachments. This is recommended if you suspect your device was compromised. The process may take a few seconds to several minutes depending on how much data you have.',
+    rotateWarning:
+      'All journals, pages and attachments will be re-encrypted with a new key. This may take a few minutes for large journals. Do not close the app until the process completes — interruption could leave data in a mixed state.',
+    rotateConfirm: 'Rotate key',
+    rotating: 'Rotating device key...',
+    rotateSuccess: 'Device key rotated successfully',
+    doNotClose: 'Do not close the app',
+  },
 };
 
 const pt: Dictionary = {
@@ -307,7 +369,7 @@ const pt: Dictionary = {
     password: 'Senha',
     confirmPassword: 'Confirmar senha',
     passwordMismatch: 'As senhas nao coincidem',
-    passwordOptional: 'Opcional — deixe em branco para nao criptografar',
+    passwordOptional: 'Opcional',
     wrongPassword: 'Senha incorreta',
     unlockJournal: 'Desbloquear Diario',
     passwordTooShort: 'A senha deve ter pelo menos 8 caracteres',
@@ -317,6 +379,9 @@ const pt: Dictionary = {
     biometricLock: 'Desbloqueio biometrico',
     biometricReason: 'Autentique-se para desbloquear o diario',
     biometricUnavailable: 'Autenticacao biometrica nao esta disponivel neste dispositivo',
+    passwordExplainTitle: 'Como o Canto protege seus dados?',
+    passwordExplainBody:
+      'Todos os seus diarios sao sempre criptografados neste dispositivo usando uma chave unica armazenada em hardware seguro.\n\nAdicionar uma senha fornece uma camada extra de criptografia sobre a chave do dispositivo. Isso significa que, mesmo que alguem acesse os arquivos do seu dispositivo, nao podera ler seu diario sem a senha.\n\nSe voce optar por nao definir uma senha, seus dados ainda estarao criptografados com a chave do dispositivo — apenas nao exigirao uma senha para abrir.',
   },
   journal: {
     title: 'Paginas',
@@ -417,6 +482,36 @@ const pt: Dictionary = {
     filterBy: 'Filtrar por',
     noTagsAvailable: 'Nenhuma tag neste diario',
   },
+  security: {
+    title: 'Seguranca',
+    keyStrength: 'Forca da chave',
+    kdfHint: 'Mais iteracoes tornam o desbloqueio mais lento, mas mais seguro',
+    kdfExplainTitle: 'O que e forca da chave?',
+    kdfExplainBody:
+      'Quando voce define uma senha, seu diario e criptografado usando uma chave derivada dela. A forca da chave controla quantas iteracoes do algoritmo PBKDF2 sao usadas para derivar essa chave.\n\nMais iteracoes tornam a chave significativamente mais dificil de quebrar por forca bruta, mas tambem tornam o desbloqueio mais lento — especialmente em dispositivos mais antigos.\n\nNiveis disponiveis:\n• Rapido — 50.000 iteracoes\n• Aprimorado — 100.000 iteracoes\n• Moderado — 200.000 iteracoes\n• Forte — 600.000 iteracoes\n• Otimo — 800.000 iteracoes\n• Extremo — 1.000.000 iteracoes\n\nPara a maioria dos usuarios, "Rapido" e suficiente. Escolha um nivel mais alto se voce prioriza seguranca sobre velocidade.',
+    kdf: {
+      fast: 'Rapido',
+      improved: 'Aprimorado',
+      moderate: 'Moderado',
+      strong: 'Forte',
+      great: 'Otimo',
+      extreme: 'Extremo',
+    },
+    autoLock: 'Bloqueio automatico',
+    autoLockOff: 'Desligado',
+    autoLock1m: '1 minuto',
+    autoLock5m: '5 minutos',
+    autoLock15m: '15 minutos',
+    rotateDeviceKey: 'Rotacionar chave do dispositivo',
+    rotateExplain:
+      'Seus dados sao criptografados com uma chave unica armazenada com seguranca neste dispositivo. Rotacionar a chave gera uma nova e re-criptografa todos os diarios, paginas e anexos. Recomendado se voce suspeitar que seu dispositivo foi comprometido. O processo pode levar de alguns segundos a varios minutos dependendo da quantidade de dados.',
+    rotateWarning:
+      'Todos os diarios, paginas e anexos serao re-criptografados com uma nova chave. Pode levar alguns minutos para diarios grandes. Nao feche o app ate o processo terminar — interrupcao pode deixar dados em estado misto.',
+    rotateConfirm: 'Rotacionar chave',
+    rotating: 'Rotacionando chave do dispositivo...',
+    rotateSuccess: 'Chave do dispositivo rotacionada com sucesso',
+    doNotClose: 'Nao feche o aplicativo',
+  },
 };
 
 const es: Dictionary = {
@@ -447,7 +542,7 @@ const es: Dictionary = {
     password: 'Contrasena',
     confirmPassword: 'Confirmar contrasena',
     passwordMismatch: 'Las contrasenas no coinciden',
-    passwordOptional: 'Opcional — dejar en blanco para no cifrar',
+    passwordOptional: 'Opcional',
     wrongPassword: 'Contrasena incorrecta',
     unlockJournal: 'Desbloquear Diario',
     passwordTooShort: 'La contrasena debe tener al menos 8 caracteres',
@@ -457,6 +552,9 @@ const es: Dictionary = {
     biometricLock: 'Desbloqueo biometrico',
     biometricReason: 'Autenticarse para desbloquear el diario',
     biometricUnavailable: 'La autenticacion biometrica no esta disponible en este dispositivo',
+    passwordExplainTitle: 'Como protege Canto tus datos?',
+    passwordExplainBody:
+      'Todos tus diarios estan siempre cifrados en este dispositivo usando una clave unica almacenada en hardware seguro.\n\nAnadir una contrasena proporciona una capa extra de cifrado sobre la clave del dispositivo. Esto significa que, incluso si alguien accede a los archivos de tu dispositivo, no podra leer tu diario sin la contrasena.\n\nSi decides no establecer una contrasena, tus datos siguen cifrados con la clave del dispositivo — simplemente no requeriran una contrasena para abrirlos.',
   },
   journal: {
     title: 'Paginas',
@@ -557,6 +655,36 @@ const es: Dictionary = {
     filterBy: 'Filtrar por',
     noTagsAvailable: 'No hay etiquetas en este diario',
   },
+  security: {
+    title: 'Seguridad',
+    keyStrength: 'Fuerza de la clave',
+    kdfHint: 'Mas iteraciones hacen el desbloqueo mas lento, pero mas seguro',
+    kdfExplainTitle: 'Que es la fuerza de la clave?',
+    kdfExplainBody:
+      'Cuando estableces una contrasena, tu diario se cifra usando una clave derivada de ella. La fuerza de la clave controla cuantas iteraciones del algoritmo PBKDF2 se usan para derivar esta clave.\n\nMas iteraciones hacen que la clave sea significativamente mas dificil de descifrar por fuerza bruta, pero tambien hacen que el desbloqueo sea mas lento.\n\nNiveles disponibles:\n• Rapido — 50.000 iteraciones\n• Mejorado — 100.000 iteraciones\n• Moderado — 200.000 iteraciones\n• Fuerte — 600.000 iteraciones\n• Excelente — 800.000 iteraciones\n• Extremo — 1.000.000 iteraciones\n\nPara la mayoria, "Rapido" es suficiente. Elige un nivel mas alto si priorizas la seguridad.',
+    kdf: {
+      fast: 'Rapido',
+      improved: 'Mejorado',
+      moderate: 'Moderado',
+      strong: 'Fuerte',
+      great: 'Excelente',
+      extreme: 'Extremo',
+    },
+    autoLock: 'Bloqueo automatico',
+    autoLockOff: 'Desactivado',
+    autoLock1m: '1 minuto',
+    autoLock5m: '5 minutos',
+    autoLock15m: '15 minutos',
+    rotateDeviceKey: 'Rotar clave del dispositivo',
+    rotateExplain:
+      'Sus datos estan cifrados con una clave unica almacenada de forma segura en este dispositivo. Rotar la clave genera una nueva y re-cifra todos los diarios, paginas y archivos adjuntos. Se recomienda si sospecha que su dispositivo fue comprometido. El proceso puede tardar desde unos segundos hasta varios minutos segun la cantidad de datos.',
+    rotateWarning:
+      'Todos los diarios, paginas y archivos adjuntos seran re-cifrados con una nueva clave. Puede tardar varios minutos para diarios grandes. No cierre la app hasta que el proceso termine — la interrupcion podria dejar datos en un estado mixto.',
+    rotateConfirm: 'Rotar clave',
+    rotating: 'Rotando clave del dispositivo...',
+    rotateSuccess: 'Clave del dispositivo rotada exitosamente',
+    doNotClose: 'No cierre la aplicacion',
+  },
 };
 
 const de: Dictionary = {
@@ -587,7 +715,7 @@ const de: Dictionary = {
     password: 'Passwort',
     confirmPassword: 'Passwort bestatigen',
     passwordMismatch: 'Passworter stimmen nicht uberein',
-    passwordOptional: 'Optional — leer lassen fur keine Verschlusselung',
+    passwordOptional: 'Optional',
     wrongPassword: 'Falsches Passwort',
     unlockJournal: 'Tagebuch entsperren',
     passwordTooShort: 'Passwort muss mindestens 8 Zeichen lang sein',
@@ -597,6 +725,9 @@ const de: Dictionary = {
     biometricLock: 'Biometrische Entsperrung',
     biometricReason: 'Authentifizieren um Tagebuch zu entsperren',
     biometricUnavailable: 'Biometrische Authentifizierung ist auf diesem Gerat nicht verfugbar',
+    passwordExplainTitle: 'Wie schutzt Canto Ihre Daten?',
+    passwordExplainBody:
+      'Alle Ihre Tagebucher sind immer auf diesem Gerat mit einem einzigartigen Gerateschlussel verschlusselt, der in sicherer Hardware gespeichert ist.\n\nDas Hinzufugen eines Passworts bietet eine zusatzliche Verschlusselungsebene uber dem Gerateschlussel. Das bedeutet, dass selbst wenn jemand Zugriff auf Ihre Geratedateien erhalt, er Ihr Tagebuch ohne das Passwort nicht lesen kann.\n\nWenn Sie kein Passwort festlegen, sind Ihre Daten trotzdem mit dem Gerateschlussel verschlusselt — es wird nur kein Passwort zum Offnen benotigt.',
   },
   journal: {
     title: 'Seiten',
@@ -697,6 +828,36 @@ const de: Dictionary = {
     filterBy: 'Filtern nach',
     noTagsAvailable: 'Keine Tags in diesem Tagebuch',
   },
+  security: {
+    title: 'Sicherheit',
+    keyStrength: 'Schlusselstarke',
+    kdfHint: 'Mehr Iterationen verlangsamen das Entsperren, erhohen aber die Sicherheit',
+    kdfExplainTitle: 'Was ist Schlusselstarke?',
+    kdfExplainBody:
+      'Wenn Sie ein Passwort festlegen, wird Ihr Tagebuch mit einem daraus abgeleiteten Schlussel verschlusselt. Die Schlusselstarke bestimmt, wie viele Iterationen des PBKDF2-Algorithmus zur Ableitung dieses Schlussels verwendet werden.\n\nMehr Iterationen machen den Schlussel erheblich schwerer zu knacken, verlangsamen aber auch das Entsperren — besonders auf alteren Geraten.\n\nVerfugbare Stufen:\n• Schnell — 50.000 Iterationen\n• Verbessert — 100.000 Iterationen\n• Moderat — 200.000 Iterationen\n• Stark — 600.000 Iterationen\n• Sehr stark — 800.000 Iterationen\n• Extrem — 1.000.000 Iterationen\n\nFur die meisten Nutzer reicht "Schnell" aus. Wahlen Sie eine hohere Stufe, wenn Sicherheit Vorrang vor Entsperrgeschwindigkeit hat.',
+    kdf: {
+      fast: 'Schnell',
+      improved: 'Verbessert',
+      moderate: 'Moderat',
+      strong: 'Stark',
+      great: 'Sehr stark',
+      extreme: 'Extrem',
+    },
+    autoLock: 'Automatische Sperre',
+    autoLockOff: 'Aus',
+    autoLock1m: '1 Minute',
+    autoLock5m: '5 Minuten',
+    autoLock15m: '15 Minuten',
+    rotateDeviceKey: 'Gerateschlussel rotieren',
+    rotateExplain:
+      'Ihre Daten werden mit einem einzigartigen Schlussel verschlusselt, der sicher auf diesem Gerat gespeichert ist. Das Rotieren des Schlussels erzeugt einen neuen und verschlusselt alle Tagebucher, Seiten und Anhange neu. Empfohlen, wenn Sie vermuten, dass Ihr Gerat kompromittiert wurde. Der Vorgang kann je nach Datenmenge einige Sekunden bis mehrere Minuten dauern.',
+    rotateWarning:
+      'Alle Tagebucher, Seiten und Anhange werden mit einem neuen Schlussel neu verschlusselt. Dies kann bei grossen Tagebuchern einige Minuten dauern. Schliessen Sie die App nicht, bis der Vorgang abgeschlossen ist — eine Unterbrechung konnte Daten in einem gemischten Zustand hinterlassen.',
+    rotateConfirm: 'Schlussel rotieren',
+    rotating: 'Gerateschlussel wird rotiert...',
+    rotateSuccess: 'Gerateschlussel erfolgreich rotiert',
+    doNotClose: 'App nicht schliessen',
+  },
 };
 
 const fr: Dictionary = {
@@ -727,7 +888,7 @@ const fr: Dictionary = {
     password: 'Mot de passe',
     confirmPassword: 'Confirmer le mot de passe',
     passwordMismatch: 'Les mots de passe ne correspondent pas',
-    passwordOptional: 'Optionnel — laisser vide pour ne pas chiffrer',
+    passwordOptional: 'Optionnel',
     wrongPassword: 'Mot de passe incorrect',
     unlockJournal: 'Deverrouiller le Journal',
     passwordTooShort: 'Le mot de passe doit contenir au moins 8 caracteres',
@@ -737,6 +898,9 @@ const fr: Dictionary = {
     biometricLock: 'Deverrouillage biometrique',
     biometricReason: 'Authentifiez-vous pour deverrouiller le journal',
     biometricUnavailable: "L'authentification biometrique n'est pas disponible sur cet appareil",
+    passwordExplainTitle: 'Comment Canto protege-t-il vos donnees ?',
+    passwordExplainBody:
+      "Tous vos journaux sont toujours chiffres sur cet appareil avec une cle unique stockee dans le materiel securise.\n\nAjouter un mot de passe fournit une couche de chiffrement supplementaire par-dessus la cle de l'appareil. Cela signifie que meme si quelqu'un accede aux fichiers de votre appareil, il ne pourra pas lire votre journal sans le mot de passe.\n\nSi vous choisissez de ne pas definir de mot de passe, vos donnees sont toujours chiffrees avec la cle de l'appareil — aucun mot de passe ne sera requis pour l'ouvrir.",
   },
   journal: {
     title: 'Pages',
@@ -837,6 +1001,36 @@ const fr: Dictionary = {
     filterBy: 'Filtrer par',
     noTagsAvailable: 'Aucun tag dans ce journal',
   },
+  security: {
+    title: 'Securite',
+    keyStrength: 'Force de la cle',
+    kdfHint: "Plus d'iterations ralentit le deverrouillage mais renforce la securite",
+    kdfExplainTitle: "Qu'est-ce que la force de la cle ?",
+    kdfExplainBody:
+      "Lorsque vous definissez un mot de passe, votre journal est chiffre a l'aide d'une cle derivee de celui-ci. La force de la cle controle le nombre d'iterations de l'algorithme PBKDF2 utilisees pour deriver cette cle.\n\nPlus d'iterations rendent la cle beaucoup plus difficile a craquer par force brute, mais ralentissent aussi le deverrouillage — surtout sur les appareils plus anciens.\n\nNiveaux disponibles :\n• Rapide — 50 000 iterations\n• Ameliore — 100 000 iterations\n• Modere — 200 000 iterations\n• Fort — 600 000 iterations\n• Excellent — 800 000 iterations\n• Extreme — 1 000 000 iterations\n\nPour la plupart des utilisateurs, \"Rapide\" est suffisant. Choisissez un niveau superieur si vous privilegiez la securite.",
+    kdf: {
+      fast: 'Rapide',
+      improved: 'Ameliore',
+      moderate: 'Modere',
+      strong: 'Fort',
+      great: 'Excellent',
+      extreme: 'Extreme',
+    },
+    autoLock: 'Verrouillage automatique',
+    autoLockOff: 'Desactive',
+    autoLock1m: '1 minute',
+    autoLock5m: '5 minutes',
+    autoLock15m: '15 minutes',
+    rotateDeviceKey: "Rotation de la cle de l'appareil",
+    rotateExplain:
+      'Vos donnees sont chiffrees avec une cle unique stockee de maniere securisee sur cet appareil. La rotation de la cle en genere une nouvelle et re-chiffre tous les journaux, pages et pieces jointes. Recommande si vous soupconnez que votre appareil a ete compromis. Le processus peut prendre de quelques secondes a plusieurs minutes selon la quantite de donnees.',
+    rotateWarning:
+      "Tous les journaux, pages et pieces jointes seront re-chiffres avec une nouvelle cle. Cela peut prendre plusieurs minutes pour les gros journaux. Ne fermez pas l'application avant la fin du processus — une interruption pourrait laisser les donnees dans un etat mixte.",
+    rotateConfirm: 'Effectuer la rotation',
+    rotating: "Rotation de la cle de l'appareil...",
+    rotateSuccess: "Cle de l'appareil mise a jour avec succes",
+    doNotClose: "Ne fermez pas l'application",
+  },
 };
 
 const ru: Dictionary = {
@@ -867,7 +1061,7 @@ const ru: Dictionary = {
     password: 'Пароль',
     confirmPassword: 'Подтвердите пароль',
     passwordMismatch: 'Пароли не совпадают',
-    passwordOptional: 'Необязательно — оставьте пустым без шифрования',
+    passwordOptional: 'Необязательно',
     wrongPassword: 'Неверный пароль',
     unlockJournal: 'Разблокировать дневник',
     passwordTooShort: 'Пароль должен содержать не менее 8 символов',
@@ -877,6 +1071,9 @@ const ru: Dictionary = {
     biometricLock: 'Биометрическая разблокировка',
     biometricReason: 'Аутентифицируйтесь для разблокировки дневника',
     biometricUnavailable: 'Биометрическая аутентификация недоступна на этом устройстве',
+    passwordExplainTitle: 'Как Canto защищает ваши данные?',
+    passwordExplainBody:
+      'Все ваши дневники всегда зашифрованы на этом устройстве уникальным ключом устройства, хранящимся в защищенном аппаратном модуле.\n\nДобавление пароля обеспечивает дополнительный уровень шифрования поверх ключа устройства. Это означает, что даже если кто-то получит доступ к файлам вашего устройства, он не сможет прочитать ваш дневник без пароля.\n\nЕсли вы решите не устанавливать пароль, ваши данные все равно зашифрованы ключом устройства — просто для открытия не потребуется пароль.',
   },
   journal: {
     title: 'Страницы',
@@ -977,6 +1174,36 @@ const ru: Dictionary = {
     filterBy: 'Фильтровать по',
     noTagsAvailable: 'Нет тегов в этом дневнике',
   },
+  security: {
+    title: 'Безопасность',
+    keyStrength: 'Надежность ключа',
+    kdfHint: 'Больше итераций замедляет разблокировку, но повышает безопасность',
+    kdfExplainTitle: 'Что такое надежность ключа?',
+    kdfExplainBody:
+      'Когда вы устанавливаете пароль, ваш дневник шифруется ключом, полученным из него. Надежность ключа определяет, сколько итераций алгоритма PBKDF2 используется для получения этого ключа.\n\nБольше итераций значительно затрудняет взлом перебором, но также замедляет разблокировку — особенно на старых устройствах.\n\nДоступные уровни:\n• Быстрый — 50 000 итераций\n• Улучшенный — 100 000 итераций\n• Умеренный — 200 000 итераций\n• Сильный — 600 000 итераций\n• Отличный — 800 000 итераций\n• Экстрем — 1 000 000 итераций\n\nДля большинства пользователей «Быстрый» достаточно. Выберите уровень выше, если безопасность важнее скорости разблокировки.',
+    kdf: {
+      fast: 'Быстрый',
+      improved: 'Улучшенный',
+      moderate: 'Умеренный',
+      strong: 'Сильный',
+      great: 'Отличный',
+      extreme: 'Экстрем',
+    },
+    autoLock: 'Автоблокировка',
+    autoLockOff: 'Выкл',
+    autoLock1m: '1 минута',
+    autoLock5m: '5 минут',
+    autoLock15m: '15 минут',
+    rotateDeviceKey: 'Сменить ключ устройства',
+    rotateExplain:
+      'Ваши данные зашифрованы уникальным ключом, надежно хранящимся на этом устройстве. Смена ключа создает новый и повторно шифрует все дневники, страницы и вложения. Рекомендуется, если вы подозреваете, что ваше устройство было скомпрометировано. Процесс может занять от нескольких секунд до нескольких минут в зависимости от объема данных.',
+    rotateWarning:
+      'Все дневники, страницы и вложения будут повторно зашифрованы новым ключом. Для больших дневников это может занять несколько минут. Не закрывайте приложение до завершения процесса — прерывание может оставить данные в смешанном состоянии.',
+    rotateConfirm: 'Сменить ключ',
+    rotating: 'Смена ключа устройства...',
+    rotateSuccess: 'Ключ устройства успешно сменен',
+    doNotClose: 'Не закрывайте приложение',
+  },
 };
 
 const zh: Dictionary = {
@@ -1007,7 +1234,7 @@ const zh: Dictionary = {
     password: '密码',
     confirmPassword: '确认密码',
     passwordMismatch: '密码不匹配',
-    passwordOptional: '可选 - 留空则不加密',
+    passwordOptional: '可选',
     wrongPassword: '密码错误',
     unlockJournal: '解锁日记本',
     passwordTooShort: '密码至少需要8个字符',
@@ -1016,6 +1243,9 @@ const zh: Dictionary = {
     biometricLock: '生物识别解锁',
     biometricReason: '验证身份以解锁日记本',
     biometricUnavailable: '此设备不支持生物识别认证',
+    passwordExplainTitle: 'Canto 如何保护您的数据？',
+    passwordExplainBody:
+      '您的所有日记始终在此设备上使用存储在安全硬件中的唯一设备密钥进行加密。\n\n添加密码会在设备密钥之上提供额外的加密层。这意味着即使有人访问了您的设备文件，没有密码也无法读取您的日记。\n\n如果您选择不设置密码，您的数据仍然使用设备密钥加密——只是打开时不需要密码。',
   },
   journal: {
     title: '页面',
@@ -1116,6 +1346,36 @@ const zh: Dictionary = {
     filterBy: '筛选条件',
     noTagsAvailable: '此日记本没有标签',
   },
+  security: {
+    title: '安全',
+    keyStrength: '密钥强度',
+    kdfHint: '更多迭代会减慢解锁速度，但更难破解',
+    kdfExplainTitle: '什么是密钥强度？',
+    kdfExplainBody:
+      '当您设置密码时，您的日记会使用从密码派生的密钥进行加密。密钥强度控制使用 PBKDF2 算法的迭代次数来派生此密钥。\n\n更多的迭代使密钥更难被暴力破解，但也会使解锁变慢——尤其是在较旧的设备上。\n\n可用级别：\n• 快速 — 50,000 次迭代\n• 改进 — 100,000 次迭代\n• 中等 — 200,000 次迭代\n• 强 — 600,000 次迭代\n• 很强 — 800,000 次迭代\n• 极限 — 1,000,000 次迭代\n\n对于大多数用户，"快速"已经足够。如果您优先考虑安全性，请选择更高级别。',
+    kdf: {
+      fast: '快速',
+      improved: '改进',
+      moderate: '中等',
+      strong: '强',
+      great: '很强',
+      extreme: '极限',
+    },
+    autoLock: '自动锁定',
+    autoLockOff: '关闭',
+    autoLock1m: '1分钟',
+    autoLock5m: '5分钟',
+    autoLock15m: '15分钟',
+    rotateDeviceKey: '轮换设备密钥',
+    rotateExplain:
+      '您的数据使用安全存储在此设备上的唯一密钥进行加密。轮换密钥会生成新密钥并重新加密所有日记、页面和附件。如果您怀疑设备已被入侵，建议执行此操作。根据数据量，此过程可能需要几秒到几分钟。',
+    rotateWarning:
+      '所有日记、页面和附件将使用新密钥重新加密。大型日记可能需要几分钟。请勿在处理完成前关闭应用——中断可能导致数据处于混合状态。',
+    rotateConfirm: '轮换密钥',
+    rotating: '正在轮换设备密钥...',
+    rotateSuccess: '设备密钥轮换成功',
+    doNotClose: '请勿关闭应用',
+  },
 };
 
 const it: Dictionary = {
@@ -1146,7 +1406,7 @@ const it: Dictionary = {
     password: 'Password',
     confirmPassword: 'Conferma password',
     passwordMismatch: 'Le password non corrispondono',
-    passwordOptional: 'Opzionale — lascia vuoto per non cifrare',
+    passwordOptional: 'Opzionale',
     wrongPassword: 'Password errata',
     unlockJournal: 'Sblocca Diario',
     passwordTooShort: 'La password deve avere almeno 8 caratteri',
@@ -1156,6 +1416,9 @@ const it: Dictionary = {
     biometricLock: 'Sblocco biometrico',
     biometricReason: 'Autenticati per sbloccare il diario',
     biometricUnavailable: "L'autenticazione biometrica non e disponibile su questo dispositivo",
+    passwordExplainTitle: 'Come protegge Canto i tuoi dati?',
+    passwordExplainBody:
+      "Tutti i tuoi diari sono sempre cifrati su questo dispositivo con una chiave unica memorizzata nell'hardware sicuro.\n\nAggiungere una password fornisce un ulteriore livello di cifratura sopra la chiave del dispositivo. Questo significa che anche se qualcuno accede ai file del tuo dispositivo, non potra leggere il tuo diario senza la password.\n\nSe scegli di non impostare una password, i tuoi dati sono comunque cifrati con la chiave del dispositivo — semplicemente non sara richiesta una password per aprirlo.",
   },
   journal: {
     title: 'Pagine',
@@ -1255,6 +1518,36 @@ const it: Dictionary = {
     tags: 'Tag',
     filterBy: 'Filtra per',
     noTagsAvailable: 'Nessun tag in questo diario',
+  },
+  security: {
+    title: 'Sicurezza',
+    keyStrength: 'Forza della chiave',
+    kdfHint: 'Piu iterazioni rallentano lo sblocco ma aumentano la sicurezza',
+    kdfExplainTitle: "Cos'e la forza della chiave?",
+    kdfExplainBody:
+      'Quando imposti una password, il tuo diario viene cifrato con una chiave derivata da essa. La forza della chiave controlla quante iterazioni dell\'algoritmo PBKDF2 vengono utilizzate per derivare questa chiave.\n\nPiu iterazioni rendono la chiave molto piu difficile da violare con attacchi di forza bruta, ma rallentano anche lo sblocco — specialmente su dispositivi piu vecchi.\n\nLivelli disponibili:\n• Veloce — 50.000 iterazioni\n• Migliorato — 100.000 iterazioni\n• Moderato — 200.000 iterazioni\n• Forte — 600.000 iterazioni\n• Ottimo — 800.000 iterazioni\n• Estremo — 1.000.000 iterazioni\n\nPer la maggior parte degli utenti, "Veloce" e sufficiente. Scegli un livello piu alto se la sicurezza e prioritaria.',
+    kdf: {
+      fast: 'Veloce',
+      improved: 'Migliorato',
+      moderate: 'Moderato',
+      strong: 'Forte',
+      great: 'Ottimo',
+      extreme: 'Estremo',
+    },
+    autoLock: 'Blocco automatico',
+    autoLockOff: 'Disattivato',
+    autoLock1m: '1 minuto',
+    autoLock5m: '5 minuti',
+    autoLock15m: '15 minuti',
+    rotateDeviceKey: 'Ruota chiave del dispositivo',
+    rotateExplain:
+      'I tuoi dati sono cifrati con una chiave unica memorizzata in modo sicuro su questo dispositivo. Ruotare la chiave ne genera una nuova e ri-cifra tutti i diari, le pagine e gli allegati. Consigliato se sospetti che il tuo dispositivo sia stato compromesso. Il processo puo richiedere da pochi secondi a diversi minuti a seconda della quantita di dati.',
+    rotateWarning:
+      "Tutti i diari, le pagine e gli allegati verranno ri-cifrati con una nuova chiave. Per diari di grandi dimensioni potrebbe richiedere diversi minuti. Non chiudere l'app fino al completamento — l'interruzione potrebbe lasciare i dati in uno stato misto.",
+    rotateConfirm: 'Ruota chiave',
+    rotating: 'Rotazione della chiave del dispositivo...',
+    rotateSuccess: 'Chiave del dispositivo ruotata con successo',
+    doNotClose: "Non chiudere l'applicazione",
   },
 };
 

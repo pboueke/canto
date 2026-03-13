@@ -34,9 +34,10 @@ export function JournalAccessModal({
   const [rateLimited, setRateLimited] = useState(false);
   const limiterRef = useRef(createUnlockRateLimiter());
 
-  function handleUnlock() {
+  async function handleUnlock() {
     if (!password || busy) return;
-    if (!limiterRef.current.attempt()) {
+    const allowed = await limiterRef.current.attempt();
+    if (!allowed) {
       setRateLimited(true);
       return;
     }
@@ -46,7 +47,7 @@ export function JournalAccessModal({
     setTimeout(async () => {
       try {
         await onUnlock(password);
-        limiterRef.current.reset();
+        await limiterRef.current.reset();
         setPassword('');
       } catch {
         // error handled by parent

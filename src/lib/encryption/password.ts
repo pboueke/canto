@@ -3,17 +3,19 @@ import { sha256 } from '@noble/hashes/sha2.js';
 import type { PasswordEncryptionProvider } from './types';
 import { aesGcmEncrypt, aesGcmDecrypt } from './utils';
 
-/** OWASP 2023 minimum for PBKDF2-SHA256 */
-const PBKDF2_ITERATIONS = 20_000;
 const KEY_LENGTH = 32; // 256 bits
 
 /**
  * Derive a 256-bit encryption key from a password and salt using PBKDF2-SHA256.
  */
-async function deriveKey(password: string, salt: Uint8Array): Promise<Uint8Array> {
+async function deriveKey(
+  password: string,
+  salt: Uint8Array,
+  iterations: number,
+): Promise<Uint8Array> {
   const encoder = new TextEncoder();
   return pbkdf2Async(sha256, encoder.encode(password), salt, {
-    c: PBKDF2_ITERATIONS,
+    c: iterations,
     dkLen: KEY_LENGTH,
   });
 }
@@ -104,17 +106,35 @@ export function evaluatePasswordStrength(password: string): PasswordStrengthResu
   return { strength, reasons };
 }
 
+/** Default PBKDF2 iterations for legacy journals created before user-selectable KDF. */
+export const LEGACY_KDF_ITERATIONS = 20_000;
+
+/** Available KDF iteration presets. */
+export const KDF_PRESETS = [
+  { label: 'fast', value: 50_000 },
+  { label: 'improved', value: 100_000 },
+  { label: 'moderate', value: 200_000 },
+  { label: 'strong', value: 600_000 },
+  { label: 'great', value: 800_000 },
+  { label: 'extreme', value: 1_000_000 },
+] as const;
+
+export const DEFAULT_KDF_ITERATIONS = 50_000;
+
 export function createPasswordEncryption(): PasswordEncryptionProvider {
   return {
     async encrypt(plaintext: string, password: string, salt: Uint8Array): Promise<string> {
-      const key = await deriveKey(password, salt);
+      const key = await deriveKey(password, salt, LEGACY_KDF_ITERATIONS);
       const result = aesGcmEncrypt(plaintext, key);
-      key.fill(0); // zero key material
+      // NOTE: JS GC may copy Uint8Array contents before fill(0) runs — keys
+      // cannot be reliably zeroed in JavaScript. This is an inherent platform
+      // limitation; see OWASP client-side key handling guidance.
+      key.fill(0);
       return result;
     },
 
     async decrypt(ciphertext: string, password: string, salt: Uint8Array): Promise<string> {
-      const key = await deriveKey(password, salt);
+      const key = await deriveKey(password, salt, LEGACY_KDF_ITERATIONS);
       try {
         const result = aesGcmDecrypt(ciphertext, key);
         return result;
@@ -124,3 +144,5 @@ export function createPasswordEncryption(): PasswordEncryptionProvider {
     },
   };
 }
+
+export { deriveKey };

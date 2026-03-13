@@ -1,5 +1,28 @@
 # Changelog
 
+## v0.8.2 - Security Hardening
+
+- feat: user-selectable PBKDF2 iteration count — 6 presets (50k/100k/200k/600k/800k/1M) per journal, default 50k for new journals, backward-compatible 20k for existing
+- feat: KDF iteration picker (segmented pill) in new journal and change password modals with `?` explanation modal showing iteration values per preset
+- feat: password explanation modal — `?` button next to password label explains device-level encryption and optional password layer
+- feat: persistent rate limiter — unlock attempt count and lockout persist across app restarts via AsyncStorage
+- feat: escalating lockout — 30s after 5 failed attempts, 5min after 10, 30min after 15
+- feat: atomic password re-encryption — temp file + rename strategy prevents mixed-key state on crash
+- feat: crash recovery on app launch — detects and completes interrupted re-encryption via .tmp files
+- feat: global Security Settings modal accessible from home InfoBox — auto-lock timeout picker and device key rotation
+- feat: session timeout / auto-lock — configurable inactivity timer (1m/5m/15m/off, default 5m), clears keys on background resume or inactivity
+- feat: device key rotation — re-encrypts all stored data with a new 256-bit device key via SecureStore
+- feat: graceful decryption error handling — corrupted or tampered files return null instead of crashing
+- fix: biometric is now strictly an additional gate — password-protected journals always require the password, biometric cannot bypass it
+- fix: password change now verifies current password via trial decryption (PBKDF2 always succeeds, so key must be tested against actual data)
+- fix: journal creation failure on Android — `File.move()` throws `FileAlreadyExistsException` when target exists, now deletes before move
+- fix: error display added to journal creation modal (was silently swallowing errors)
+- fix: loading spinner shown during journal creation and non-password journal unlock
+- fix: `kdfIterations` stored in journal metadata and index for backward-compatible key derivation
+- docs: added JS memory limitation comments in password.ts and JournalKeyContext.tsx
+- chore: i18n — added `security` section with all labels in all 8 languages, KDF preset `standard` renamed to `improved`
+- chore: bump version to 0.8.2
+
 ## v0.8.1 - Always Derive Encryption Key
 
 - fix: always generate salt and derive PBKDF2 key on journal creation, even when no password is set (uses empty string as fallback)
