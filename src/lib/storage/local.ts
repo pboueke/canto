@@ -74,7 +74,15 @@ async function readEncrypted(
     const deviceDecrypted = await encryption.decrypt(ciphertext);
     // Layer 2: password decryption (if derived key present)
     if (derivedKey) {
-      return aesGcmDecrypt(deviceDecrypted, derivedKey);
+      try {
+        return aesGcmDecrypt(deviceDecrypted, derivedKey);
+      } catch {
+        // Data is not password-encrypted — return device-decrypted content.
+        // This happens for metadata/pages in journals with encrypted attachments
+        // but no active password (auto-derive provides a key, but only
+        // attachments are password-encrypted, not metadata).
+        return deviceDecrypted;
+      }
     }
     return deviceDecrypted;
   } catch (err) {

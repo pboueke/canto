@@ -176,6 +176,11 @@ export default function HomeScreen() {
         visible={showNewModal}
         onClose={() => setShowNewModal(false)}
         onCreate={handleCreate}
+        existingTitles={journals.map((j) => j.title)}
+        onImportComplete={async (journalId) => {
+          await refresh();
+          router.push(`/journal/${journalId}`);
+        }}
       />
 
       <JournalAccessModal

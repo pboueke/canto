@@ -8,10 +8,10 @@ import type { Journal } from '@/models';
 interface JournalHeaderProps {
   journal: Journal;
   onPressSettings?: () => void;
-  onPressData?: () => void;
+  onPressExport?: () => void;
 }
 
-export function JournalHeader({ journal, onPressSettings, onPressData }: JournalHeaderProps) {
+export function JournalHeader({ journal, onPressSettings, onPressExport }: JournalHeaderProps) {
   const { theme } = useTheme();
   const insets = useSafeAreaInsets();
 
@@ -40,8 +40,8 @@ export function JournalHeader({ journal, onPressSettings, onPressData }: Journal
         {journal.title}
       </Text>
       <View style={styles.actions}>
-        <Pressable onPress={onPressData} style={styles.actionButton}>
-          <Feather name="save" size={20} color={theme.colors.text} />
+        <Pressable onPress={onPressExport} style={styles.actionButton}>
+          <Feather name="archive" size={20} color={theme.colors.text} />
         </Pressable>
         <Pressable onPress={onPressSettings} style={styles.actionButton}>
           <Feather name="settings" size={20} color={theme.colors.text} />

@@ -11,6 +11,8 @@ import { JournalHeader } from '@/components/journal/JournalHeader';
 import { PageListItem } from '@/components/journal/PageListItem';
 import { FilterBar } from '@/components/journal/FilterBar';
 import { JournalSettings } from '@/components/journal/JournalSettings';
+import { ExportMenu } from '@/components/journal/ExportMenu';
+import { ExportJournalModal } from '@/components/journal/ExportJournalModal';
 import { FloatingActionButton } from '@/components/common/FloatingActionButton';
 import { pageToPreview } from '@/models';
 import { type ThemeName, themes } from '@/styles/themes';
@@ -26,6 +28,8 @@ export default function JournalScreen() {
   const { journal, loading, refresh } = useJournal(id, derivedKey);
   const { create: createPage } = useCreatePage(id, derivedKey);
   const [showSettings, setShowSettings] = useState(false);
+  const [showExportMenu, setShowExportMenu] = useState(false);
+  const [showExportModal, setShowExportModal] = useState(false);
 
   useFocusEffect(
     useCallback(() => {
@@ -141,7 +145,11 @@ export default function JournalScreen() {
   return (
     <ThemeContext.Provider value={themeContextValue}>
       <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
-        <JournalHeader journal={journal} onPressSettings={() => setShowSettings(true)} />
+        <JournalHeader
+          journal={journal}
+          onPressSettings={() => setShowSettings(true)}
+          onPressExport={() => setShowExportMenu(true)}
+        />
 
         {journal.settings.filterBar && (
           <FilterBar
@@ -185,6 +193,19 @@ export default function JournalScreen() {
           }}
           backgroundColor={theme.colors.popAction.new.background}
           color={theme.colors.popAction.new.text}
+        />
+
+        <ExportMenu
+          visible={showExportMenu}
+          onClose={() => setShowExportMenu(false)}
+          onExport={() => setShowExportModal(true)}
+        />
+
+        <ExportJournalModal
+          visible={showExportModal}
+          journal={journal}
+          derivedKey={derivedKey}
+          onClose={() => setShowExportModal(false)}
         />
       </View>
     </ThemeContext.Provider>
