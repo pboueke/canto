@@ -42,7 +42,7 @@ export default function HomeScreen() {
     biometric?: boolean;
     themeOverride?: string;
   }) {
-    const journalId = await create(input, input.password ? deriveAndCache : undefined);
+    const journalId = await create(input, deriveAndCache);
     await refresh();
     setShowNewModal(false);
     router.push(`/journal/${journalId}`);
@@ -56,8 +56,13 @@ export default function HomeScreen() {
     }
 
     if (journal.secure && !getKey(journal.id)) {
+      // User-set password — show password modal
       setAccessJournal(journal);
       setAccessError(null);
+    } else if (!journal.secure && journal.salt && !getKey(journal.id)) {
+      // No password but has salt — auto-derive from empty string
+      await deriveAndCache(journal.id, '', journal.salt);
+      router.push(`/journal/${journal.id}`);
     } else {
       router.push(`/journal/${journal.id}`);
     }

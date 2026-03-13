@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, FlatList, StyleSheet, Text, View } from 'react-native';
 import { useLocalSearchParams, router, useFocusEffect } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -19,7 +19,7 @@ export default function JournalScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { theme: globalTheme, setThemeName } = useTheme();
   const { t } = useI18n();
-  const { getKey } = useJournalKeys();
+  const { getKey, deriveAndCache } = useJournalKeys();
   const insets = useSafeAreaInsets();
 
   const derivedKey = id ? getKey(id) : null;
@@ -32,6 +32,13 @@ export default function JournalScreen() {
       refresh();
     }, [refresh]),
   );
+
+  // Safety net: auto-derive key for non-secure journals that have salt
+  useEffect(() => {
+    if (journal && journal.salt && !journal.secure && !getKey(journal.id)) {
+      deriveAndCache(journal.id, '', journal.salt);
+    }
+  }, [journal, getKey, deriveAndCache]);
 
   const overrideName = journal?.settings.themeOverride as ThemeName | undefined;
   const overrideTheme = overrideName && overrideName in themes ? themes[overrideName] : null;

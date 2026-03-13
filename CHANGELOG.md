@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.8.1 - Always Derive Encryption Key
+
+- fix: always generate salt and derive PBKDF2 key on journal creation, even when no password is set (uses empty string as fallback)
+- fix: auto-derive empty-string key for non-secure journals on access, ensuring two-layer encryption for all new journals
+- fix: safety-net key derivation on journal screen for deep link navigation
+- fix: NewJournalCard height now matches JournalCard (130px)
+- chore: bump version to 0.8.1
+
 ## v0.8.0 - Theming, Languages & UI Polish
 
 - feat: add 4 new themes — Monokai, Solarized Light, Nord, Dracula — with full color definitions

@@ -41,7 +41,7 @@ export function NewJournalCard({ onPress }: NewJournalCardProps) {
 const styles = StyleSheet.create({
   card: {
     width: 140,
-    height: 120,
+    height: 130,
     alignItems: 'center',
     justifyContent: 'center',
     margin: 5,
