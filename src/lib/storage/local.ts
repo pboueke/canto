@@ -340,7 +340,16 @@ export function createLocalStore(encryption: EncryptionService): LocalStore {
       const deviceDecrypted = await encryption.decrypt(ciphertext);
       // Layer 2: password decryption (if derivedKey provided)
       if (derivedKey) {
-        return aesGcmDecrypt(deviceDecrypted, derivedKey);
+        try {
+          return aesGcmDecrypt(deviceDecrypted, derivedKey);
+        } catch {
+          // Data is not password-encrypted — return device-decrypted content.
+          // This can happen when the attachment was saved while the derived key
+          // was unavailable (e.g. auto-lock cleared it, or auto-derive hadn't
+          // completed yet), so only device encryption was applied despite the
+          // attachment's encrypted flag being true.
+          return deviceDecrypted;
+        }
       }
       return deviceDecrypted;
     },

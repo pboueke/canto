@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.9.1 - Encrypted Backup Fix
+
+- fix: encrypted export/import now stores ciphertext as raw binary in ZIP — JSZip's string compression on Hermes corrupted base64 text entries
+- fix: replaced `atob`/`btoa` with pure-JS base64 implementation for Hermes compatibility
+- fix: `getAttachment` now gracefully falls back when password decryption fails (matches existing `readEncrypted` pattern)
+- refactor: consolidated three duplicate `base64ToUint8` copies into single export from `encryption/utils.ts`
+- test: updated encrypted backup tests to use binary format
+
 ## v0.9.0 - Backup & Import
 
 - feat: export journals as `.canto.zip` files via system share sheet, with optional password encryption

@@ -1,5 +1,10 @@
 import JSZip from 'jszip';
-import { aesGcmEncrypt, aesGcmDecrypt } from '../encryption/utils';
+import {
+  aesGcmEncrypt,
+  aesGcmDecrypt,
+  aesGcmEncryptBytes,
+  aesGcmDecryptBytes,
+} from '../encryption/utils';
 import { hasNameConflict, resolveNameConflict } from '../backup/conflicts';
 import type { ExportManifest } from '../backup/export';
 import type { JournalContent, Page, Attachment } from '@/models';
@@ -197,10 +202,10 @@ function makeAttachment(id: string, overrides: Partial<Attachment> = {}): Attach
  */
 async function buildZip(opts: {
   manifest: ExportManifest;
-  journalJson: string;
-  settingsJson?: string;
-  pages?: { id: string; json: string }[];
-  attachments?: { filename: string; data: string }[];
+  journalJson: string | Uint8Array;
+  settingsJson?: string | Uint8Array;
+  pages?: { id: string; json: string | Uint8Array }[];
+  attachments?: { filename: string; data: string | Uint8Array }[];
 }): Promise<string> {
   const zip = new JSZip();
   zip.file('manifest.json', JSON.stringify(opts.manifest));
@@ -409,19 +414,19 @@ describe('exportJournal', () => {
     expect(manifest.salt).toBe('dGVzdHNhbHQ=');
     expect(manifest.kdfIterations).toBe(50000);
 
-    // Journal.json should be encrypted (not valid JSON directly)
-    const journalRaw = await zip.file('journal.json')!.async('string');
-    expect(() => JSON.parse(journalRaw)).toThrow();
+    // Journal.json should be encrypted binary (not valid JSON directly)
+    const journalRaw = await zip.file('journal.json')!.async('uint8array');
+    expect(() => JSON.parse(new TextDecoder().decode(journalRaw))).toThrow();
 
     // But should be decryptable with the key
-    const decrypted = aesGcmDecrypt(journalRaw, key);
+    const decrypted = aesGcmDecryptBytes(journalRaw, key);
     const journalData = JSON.parse(decrypted);
     expect(journalData.title).toBe('Secure Journal');
 
-    // Page should also be encrypted
-    const pageRaw = await zip.file(/^pages\//)[0].async('string');
-    expect(() => JSON.parse(pageRaw)).toThrow();
-    const pageDecrypted = JSON.parse(aesGcmDecrypt(pageRaw, key));
+    // Page should also be encrypted binary
+    const pageRaw = await zip.file(/^pages\//)[0].async('uint8array');
+    expect(() => JSON.parse(new TextDecoder().decode(pageRaw))).toThrow();
+    const pageDecrypted = JSON.parse(aesGcmDecryptBytes(pageRaw, key));
     expect(pageDecrypted.text).toBe('Page p1 content');
   });
 
@@ -837,9 +842,9 @@ describe('importJournal', () => {
         kdfIterations: 50000,
         journalTitle: 'Secret Journal',
       },
-      journalJson: aesGcmEncrypt(JSON.stringify(journal), key),
-      settingsJson: aesGcmEncrypt(JSON.stringify(journal.settings), key),
-      pages: [{ id: 'p1', json: aesGcmEncrypt(JSON.stringify(page), key) }],
+      journalJson: aesGcmEncryptBytes(JSON.stringify(journal), key),
+      settingsJson: aesGcmEncryptBytes(JSON.stringify(journal.settings), key),
+      pages: [{ id: 'p1', json: aesGcmEncryptBytes(JSON.stringify(page), key) }],
     });
 
     const result = await importJournal(uri, 'Secret Journal', key);
@@ -867,7 +872,7 @@ describe('importJournal', () => {
         kdfIterations: 50000,
         journalTitle: 'Secret',
       },
-      journalJson: aesGcmEncrypt(JSON.stringify(journal), correctKey),
+      journalJson: aesGcmEncryptBytes(JSON.stringify(journal), correctKey),
     });
 
     await expect(importJournal(uri, 'Secret', wrongKey)).rejects.toThrow();
@@ -907,7 +912,7 @@ describe('importJournal', () => {
         kdfIterations: 50000,
         journalTitle: 'Was Secure',
       },
-      journalJson: aesGcmEncrypt(JSON.stringify(journal), key),
+      journalJson: aesGcmEncryptBytes(JSON.stringify(journal), key),
     });
 
     const result = await importJournal(uri, 'Was Secure', key);
