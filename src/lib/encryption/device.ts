@@ -1,13 +1,24 @@
 import * as SecureStore from 'expo-secure-store';
-import { bytesToHex, hexToBytes } from '@noble/ciphers/utils.js';
+import type { EncryptionProvider } from './types';
+import { aesGcmEncrypt, aesGcmDecrypt } from './utils';
 
 function getRandomBytes(length: number): Uint8Array {
   const bytes = new Uint8Array(length);
   crypto.getRandomValues(bytes);
   return bytes;
 }
-import type { EncryptionProvider } from './types';
-import { aesGcmEncrypt, aesGcmDecrypt } from './utils';
+
+function bytesToHex(bytes: Uint8Array): string {
+  return Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
+}
+
+function hexToBytes(hex: string): Uint8Array {
+  const bytes = new Uint8Array(hex.length / 2);
+  for (let i = 0; i < hex.length; i += 2) {
+    bytes[i / 2] = parseInt(hex.substring(i, i + 2), 16);
+  }
+  return bytes;
+}
 
 const DEVICE_KEY_ALIAS = 'canto_device_encryption_key';
 
@@ -44,12 +55,12 @@ export function createDeviceEncryption(): EncryptionProvider {
   return {
     async encrypt(plaintext: string): Promise<string> {
       const key = await getKey();
-      return aesGcmEncrypt(plaintext, key);
+      return await aesGcmEncrypt(plaintext, key);
     },
 
     async decrypt(ciphertext: string): Promise<string> {
       const key = await getKey();
-      return aesGcmDecrypt(ciphertext, key);
+      return await aesGcmDecrypt(ciphertext, key);
     },
 
     clearKey(): void {

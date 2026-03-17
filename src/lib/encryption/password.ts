@@ -125,7 +125,7 @@ export function createPasswordEncryption(): PasswordEncryptionProvider {
   return {
     async encrypt(plaintext: string, password: string, salt: Uint8Array): Promise<string> {
       const key = await deriveKey(password, salt, LEGACY_KDF_ITERATIONS);
-      const result = aesGcmEncrypt(plaintext, key);
+      const result = await aesGcmEncrypt(plaintext, key);
       // NOTE: JS GC may copy Uint8Array contents before fill(0) runs — keys
       // cannot be reliably zeroed in JavaScript. This is an inherent platform
       // limitation; see OWASP client-side key handling guidance.
@@ -136,7 +136,7 @@ export function createPasswordEncryption(): PasswordEncryptionProvider {
     async decrypt(ciphertext: string, password: string, salt: Uint8Array): Promise<string> {
       const key = await deriveKey(password, salt, LEGACY_KDF_ITERATIONS);
       try {
-        const result = aesGcmDecrypt(ciphertext, key);
+        const result = await aesGcmDecrypt(ciphertext, key);
         return result;
       } finally {
         key.fill(0); // zero key material

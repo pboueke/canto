@@ -74,6 +74,161 @@ jest.mock('expo-secure-store', () => ({
 };
 
 // ---------------------------------------------------------------------------
+// Mock: expo-crypto (AES-GCM via @noble/ciphers for Jest/Node)
+// ---------------------------------------------------------------------------
+jest.mock('expo-crypto', () => {
+  const { gcm } = require('@noble/ciphers/aes.js');
+
+  const mockNonceLength = 12;
+  const mockTagLength = 16;
+
+  class AESEncryptionKey {
+    mockKeyBytes: Uint8Array;
+    constructor(mockBytes: Uint8Array) {
+      this.mockKeyBytes = mockBytes;
+    }
+    static import(input: Uint8Array | string): Promise<AESEncryptionKey> {
+      const mockRaw = typeof input === 'string' ? Buffer.from(input, 'hex') : input;
+      return Promise.resolve(new AESEncryptionKey(new Uint8Array(mockRaw)));
+    }
+    static generate(mockSize: number = 256): Promise<AESEncryptionKey> {
+      const mockRaw = new Uint8Array(mockSize / 8);
+      crypto.getRandomValues(mockRaw);
+      return Promise.resolve(new AESEncryptionKey(mockRaw));
+    }
+    bytes(): Promise<Uint8Array> {
+      return Promise.resolve(this.mockKeyBytes);
+    }
+    encoded(mockEncoding: 'hex' | 'base64'): Promise<string> {
+      if (mockEncoding === 'hex') {
+        return Promise.resolve(
+          Array.from(this.mockKeyBytes, (mockByte: number) =>
+            mockByte.toString(16).padStart(2, '0'),
+          ).join(''),
+        );
+      }
+      return Promise.resolve(Buffer.from(this.mockKeyBytes).toString('base64'));
+    }
+    get size() {
+      return this.mockKeyBytes.length * 8;
+    }
+  }
+
+  class AESSealedData {
+    mockCombined: Uint8Array;
+    mockIvLen: number;
+    mockTagLen: number;
+
+    constructor(mockData: Uint8Array, mockIvLength = mockNonceLength, mockTLen = mockTagLength) {
+      this.mockCombined = mockData;
+      this.mockIvLen = mockIvLength;
+      this.mockTagLen = mockTLen;
+    }
+
+    static fromCombined(
+      mockInput: Uint8Array | string,
+      mockConfig?: { ivLength?: number; tagLength?: number },
+    ): AESSealedData {
+      const mockRaw = typeof mockInput === 'string' ? Buffer.from(mockInput, 'base64') : mockInput;
+      return new AESSealedData(
+        new Uint8Array(mockRaw),
+        mockConfig?.ivLength ?? mockNonceLength,
+        mockConfig?.tagLength ?? mockTagLength,
+      );
+    }
+
+    static fromParts(
+      mockIv: Uint8Array,
+      mockCiphertext: Uint8Array,
+      mockTagOrLength?: Uint8Array | number,
+    ): AESSealedData {
+      if (mockTagOrLength instanceof Uint8Array) {
+        const mockResult = new Uint8Array(
+          mockIv.length + mockCiphertext.length + mockTagOrLength.length,
+        );
+        mockResult.set(mockIv, 0);
+        mockResult.set(mockCiphertext, mockIv.length);
+        mockResult.set(mockTagOrLength, mockIv.length + mockCiphertext.length);
+        return new AESSealedData(mockResult, mockIv.length, mockTagOrLength.length);
+      }
+      const mockResult = new Uint8Array(mockIv.length + mockCiphertext.length);
+      mockResult.set(mockIv, 0);
+      mockResult.set(mockCiphertext, mockIv.length);
+      return new AESSealedData(mockResult, mockIv.length, mockTagOrLength ?? mockTagLength);
+    }
+
+    combined(): Uint8Array {
+      return this.mockCombined;
+    }
+
+    iv(): Uint8Array {
+      return this.mockCombined.slice(0, this.mockIvLen);
+    }
+
+    tag(): Uint8Array {
+      return this.mockCombined.slice(this.mockCombined.length - this.mockTagLen);
+    }
+
+    get combinedSize() {
+      return this.mockCombined.length;
+    }
+    get ivSize() {
+      return this.mockIvLen;
+    }
+    get tagSize() {
+      return this.mockTagLen;
+    }
+  }
+
+  async function aesEncryptAsync(
+    mockPlaintext: Uint8Array | string,
+    mockKey: AESEncryptionKey,
+  ): Promise<AESSealedData> {
+    const mockData =
+      typeof mockPlaintext === 'string'
+        ? new Uint8Array(Buffer.from(mockPlaintext, 'base64'))
+        : mockPlaintext;
+    const mockNonce = new Uint8Array(mockNonceLength);
+    crypto.getRandomValues(mockNonce);
+    const mockCipher = gcm(mockKey.mockKeyBytes, mockNonce);
+    const mockCtWithTag = mockCipher.encrypt(mockData);
+    const mockResult = new Uint8Array(mockNonceLength + mockCtWithTag.length);
+    mockResult.set(mockNonce, 0);
+    mockResult.set(mockCtWithTag, mockNonceLength);
+    return new AESSealedData(mockResult);
+  }
+
+  async function aesDecryptAsync(
+    mockSealedData: AESSealedData,
+    mockKey: AESEncryptionKey,
+    mockOptions?: { output?: 'bytes' | 'base64' },
+  ): Promise<Uint8Array | string> {
+    const mockIv = mockSealedData.iv();
+    const mockCtWithTag = mockSealedData.mockCombined.slice(mockSealedData.mockIvLen);
+    const mockCipher = gcm(mockKey.mockKeyBytes, mockIv);
+    const mockPlain = mockCipher.decrypt(mockCtWithTag);
+    if (mockOptions?.output === 'base64') {
+      return Buffer.from(mockPlain).toString('base64');
+    }
+    return new Uint8Array(mockPlain);
+  }
+
+  return {
+    AESEncryptionKey,
+    AESSealedData,
+    aesEncryptAsync,
+    aesDecryptAsync,
+    getRandomBytes: (mockLen: number) => {
+      const mockArr = new Uint8Array(mockLen);
+      crypto.getRandomValues(mockArr);
+      return mockArr;
+    },
+    getRandomValues: (mockArr: Uint8Array) => crypto.getRandomValues(mockArr),
+    randomUUID: () => crypto.randomUUID(),
+  };
+});
+
+// ---------------------------------------------------------------------------
 // Mock: expo-local-authentication
 // ---------------------------------------------------------------------------
 let mockBiometricHardware = true;

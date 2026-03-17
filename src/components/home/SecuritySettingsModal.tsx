@@ -72,14 +72,12 @@ export function SecuritySettingsModal({ visible, onClose }: SecuritySettingsModa
               try {
                 return await encryption.decrypt(ciphertext);
               } catch {
-                return aesGcmDecrypt(ciphertext, secureStoreKey);
+                return await aesGcmDecrypt(ciphertext, secureStoreKey);
               }
             };
 
-            const oldEncrypt = (plaintext: string) =>
-              Promise.resolve(aesGcmEncrypt(plaintext, newKey));
-            const newEncrypt = (plaintext: string) =>
-              Promise.resolve(aesGcmEncrypt(plaintext, newKey));
+            const oldEncrypt = (plaintext: string) => aesGcmEncrypt(plaintext, newKey);
+            const newEncrypt = (plaintext: string) => aesGcmEncrypt(plaintext, newKey);
 
             await store.reencryptAll(oldDecrypt, oldEncrypt, newEncrypt);
             // Clear the singleton's cached device key so it picks up the new one

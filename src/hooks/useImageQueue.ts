@@ -2,7 +2,7 @@ import { useState, useCallback, useRef, useEffect } from 'react';
 import { InteractionManager } from 'react-native';
 import type { Attachment } from '@/models';
 
-const MAX_CONCURRENT = 2;
+const MAX_CONCURRENT = 1;
 
 interface QueueEntry {
   attachment: Attachment;
@@ -117,13 +117,16 @@ export function useImageQueue(loadImage: (path: string) => Promise<string | null
         if (!mountedRef.current || entry.cancelled) return;
         if (data) {
           loadedRef.current.add(entry.attachment.id);
+          // Batch both updates together so React commits one render, not two
           setLoadedImages((prev) => ({ ...prev, [entry.attachment.id]: data }));
+          setLoadingImages((prev) => ({ ...prev, [entry.attachment.id]: false }));
         }
       })
+      .catch(() => {})
       .finally(() => {
         activeCountRef.current--;
         loadingRef.current.delete(entry.attachment.id);
-        if (mountedRef.current) {
+        if (mountedRef.current && !loadedRef.current.has(entry.attachment.id)) {
           setLoadingImages((prev) => ({ ...prev, [entry.attachment.id]: false }));
         }
         // Yield the JS thread before processing the next image so touch
