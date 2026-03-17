@@ -44,6 +44,13 @@ export default function JournalScreen() {
     }
   }, [journal, getKey, deriveAndCache]);
 
+  // Redirect to home if journal not found
+  useEffect(() => {
+    if (!loading && !journal) {
+      router.replace('/');
+    }
+  }, [loading, journal]);
+
   const overrideName = journal?.settings.themeOverride as ThemeName | undefined;
   const overrideTheme = overrideName && overrideName in themes ? themes[overrideName] : null;
   const theme = overrideTheme ?? globalTheme;
@@ -123,7 +130,7 @@ export default function JournalScreen() {
             { backgroundColor: theme.colors.background, paddingTop: insets.top },
           ]}
         >
-          <Text style={[styles.empty, { color: theme.colors.text }]}>Journal not found</Text>
+          <ActivityIndicator size="large" color={theme.colors.primary} />
         </View>
       </ThemeContext.Provider>
     );

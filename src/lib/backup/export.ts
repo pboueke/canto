@@ -111,9 +111,13 @@ export async function exportJournal(
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const { pages: _pages, ...metadata } = journal;
   const metadataJson = JSON.stringify(metadata, null, 2);
+  // Encrypted entries use compression: 'STORE' to avoid Hermes/JSZip deflate
+  // corruption on high-entropy data. Encrypted bytes don't compress anyway.
+  const encOpts: JSZip.JSZipFileOptions = { compression: 'STORE' };
   zip.file(
     'journal.json',
     encrypted && derivedKey ? aesGcmEncryptBytes(metadataJson, derivedKey) : metadataJson,
+    encrypted && derivedKey ? encOpts : undefined,
   );
 
   // --- Settings ---
@@ -121,6 +125,7 @@ export async function exportJournal(
   zip.file(
     'settings.json',
     encrypted && derivedKey ? aesGcmEncryptBytes(settingsJson, derivedKey) : settingsJson,
+    encrypted && derivedKey ? encOpts : undefined,
   );
 
   // --- Build path map for attachment rewriting ---
@@ -135,7 +140,7 @@ export async function exportJournal(
     const page = rewrittenPages[i];
     const pageJson = JSON.stringify(page, null, 2);
     const content = encrypted && derivedKey ? aesGcmEncryptBytes(pageJson, derivedKey) : pageJson;
-    zip.file(`pages/${page.id}.json`, content);
+    zip.file(`pages/${page.id}.json`, content, encrypted && derivedKey ? encOpts : undefined);
 
     current++;
     onProgress?.({ current, total, phase: 'pages' });
@@ -150,7 +155,8 @@ export async function exportJournal(
     if (data) {
       if (encrypted && derivedKey) {
         // Encrypted export: store as raw encrypted bytes (Uint8Array)
-        zip.file(`attachments/${entry.zipFilename}`, aesGcmEncryptBytes(data, derivedKey));
+        // Use STORE to bypass deflate — encrypted data is incompressible
+        zip.file(`attachments/${entry.zipFilename}`, aesGcmEncryptBytes(data, derivedKey), encOpts);
       } else {
         // Unencrypted export: decode base64 → raw binary so files are directly usable
         zip.file(`attachments/${entry.zipFilename}`, data, { base64: true });

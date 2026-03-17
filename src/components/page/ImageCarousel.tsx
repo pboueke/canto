@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect } from 'react';
 import {
   ActivityIndicator,
   Dimensions,
@@ -13,6 +13,7 @@ import ImageViewing from 'react-native-image-viewing';
 import { Feather } from '@expo/vector-icons';
 import { useTheme } from '@/hooks/useTheme';
 import { useI18n } from '@/hooks/useI18n';
+import { useImageQueue } from '@/hooks/useImageQueue';
 import type { Attachment } from '@/models';
 
 const SCREEN_WIDTH = Dimensions.get('window').width;
@@ -42,28 +43,13 @@ export function ImageCarousel({
   const { t } = useI18n();
   const [currentIndex, setCurrentIndex] = useState(0);
   const [viewerVisible, setViewerVisible] = useState(false);
-  const [loadedImages, setLoadedImages] = useState<Record<string, string>>({});
-  const [loadingImages, setLoadingImages] = useState<Record<string, boolean>>({});
+  const { loadedImages, loadingImages, enqueue, cancelAll } = useImageQueue(loadImage);
 
   const activeImages = images.filter((img) => !img.deleted);
 
-  const loadImageData = useCallback(
-    async (attachment: Attachment) => {
-      if (loadedImages[attachment.id] || loadingImages[attachment.id]) return;
-      setLoadingImages((prev) => ({ ...prev, [attachment.id]: true }));
-      const data = await loadImage(attachment.path);
-      if (data) {
-        setLoadedImages((prev) => ({ ...prev, [attachment.id]: data }));
-      }
-      setLoadingImages((prev) => ({ ...prev, [attachment.id]: false }));
-    },
-    [loadImage, loadedImages, loadingImages],
-  );
-
   useEffect(() => {
-    for (const img of activeImages) {
-      loadImageData(img);
-    }
+    enqueue(activeImages);
+    return () => cancelAll();
   }, [activeImages.length]);
 
   if (activeImages.length === 0) return null;
