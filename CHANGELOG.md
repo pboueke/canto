@@ -1,5 +1,22 @@
 # Changelog
 
+## v0.9.3 - Image Loading UX & Journal Redirect
+
+- fix: image loading no longer blocks UI — queue-based loader with concurrency limit and `setTimeout(0)` yields between decryption operations
+- fix: shared thumbnail queue serialises all journal list thumbnails so they don't all decrypt at once
+- fix: `ImageCarousel` cancels pending image loads on unmount, unblocking back-navigation
+- fix: journal "not found" page now redirects to homepage via `router.replace('/')`
+- perf: `InteractionManager.runAfterInteractions` defers image loading until navigation animations complete
+
+## v0.9.2 - Backup Reliability & Test Coverage
+
+- fix: disable ZIP compression for encrypted entries (`compression: 'STORE'`) — deflate/inflate on Hermes corrupted high-entropy ciphertext, causing `aes/gcm: invalid ghash tag` on import
+- fix: import attachment ID regex relaxed from `[a-f0-9-]+` to `[^.]+` — non-hex IDs were silently dropped
+- fix: auto-derive with empty password no longer marks imported journal as `secure: true` — prevents phantom password prompt for journals imported without a key
+- fix: shared attachments across pages now get per-page copies on import — previously stored under one page's directory, risking orphaned references on page deletion
+- fix: added step-level error logging in `importJournal` — identifies which specific file (journal metadata, settings, page, attachment) failed to decrypt
+- test: 33 new end-to-end backup tests in `backup-e2e.test.ts` covering all conditional flows, attachment types, data equivalence, edge cases, and password-derived key round-trips
+
 ## v0.9.1 - Encrypted Backup Fix
 
 - fix: encrypted export/import now stores ciphertext as raw binary in ZIP — JSZip's string compression on Hermes corrupted base64 text entries

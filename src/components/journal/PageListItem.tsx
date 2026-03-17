@@ -6,6 +6,7 @@ import { Card } from '@/components/common/Card';
 import { Tag } from '@/components/common/Tag';
 import { useTheme } from '@/hooks/useTheme';
 import { useAttachment } from '@/hooks/useStorage';
+import { enqueueThumbnail } from '@/hooks/useImageQueue';
 import { useJournalKeys } from '@/contexts/JournalKeyContext';
 import type { PagePreview, JournalSettings } from '@/models';
 
@@ -30,15 +31,14 @@ export function PageListItem({ page, journalId, settings }: PageListItemProps) {
 
   useEffect(() => {
     if (!page.firstImage || !showThumbnail) return;
-    let cancelled = false;
-    getAttachment(page.firstImage, false).then((data) => {
-      if (!cancelled && data) {
-        setThumbnailUri(`data:image/jpeg;base64,${data}`);
-      }
-    });
-    return () => {
-      cancelled = true;
-    };
+    const cancel = enqueueThumbnail(
+      page.id,
+      () => getAttachment(page.firstImage!, false),
+      (data) => {
+        if (data) setThumbnailUri(`data:image/jpeg;base64,${data}`);
+      },
+    );
+    return cancel;
   }, [page.firstImage, showThumbnail]);
 
   const dateObj = new Date(page.date);

@@ -103,9 +103,14 @@ export async function importJournal(
 
   // Read a ZIP entry, decrypting if this is an encrypted backup.
   // Encrypted entries are stored as raw binary (Uint8Array); plaintext as UTF-8 strings.
-  async function readEntry(entry: JSZip.JSZipObject): Promise<string> {
+  async function readEntry(entry: JSZip.JSZipObject, label: string): Promise<string> {
     if (isEncrypted && derivedKey) {
-      return aesGcmDecryptBytes(await entry.async('uint8array'), derivedKey);
+      try {
+        return aesGcmDecryptBytes(await entry.async('uint8array'), derivedKey);
+      } catch (err) {
+        console.error(`[Canto] Failed to decrypt ${label} (${entry.name}):`, err);
+        throw err;
+      }
     }
     return entry.async('string');
   }
@@ -113,19 +118,27 @@ export async function importJournal(
   // --- Read journal metadata ---
   const journalFile = zip.file('journal.json');
   if (!journalFile) throw new Error('Invalid backup: missing journal.json');
-  const journalData = JSON.parse(await readEntry(journalFile)) as JournalContent;
+  const journalData = JSON.parse(
+    await readEntry(journalFile, 'journal metadata'),
+  ) as JournalContent;
 
   // --- Read settings ---
   let settings: JournalSettings = { ...DEFAULT_JOURNAL_SETTINGS };
   const settingsFile = zip.file('settings.json');
   if (settingsFile) {
-    settings = JSON.parse(await readEntry(settingsFile));
+    settings = JSON.parse(await readEntry(settingsFile, 'settings'));
   }
+
+  // Track whether the key was explicitly provided vs auto-derived.
+  // Auto-derived keys (empty password) should NOT mark the journal as secure.
+  const hasUserProvidedKey = !!providedKey;
 
   // --- Generate new IDs ---
   const newJournalId = generateUUID();
   const pageIdMap = new Map<string, string>(); // oldId -> newId
-  const attachmentPathMap = new Map<string, string>(); // old zip filename -> new disk path
+  // Per-page attachment path map: "pageId:zipFilename" -> new disk path
+  // This ensures shared attachments get their own copy under each page's directory.
+  const pageAttachmentPaths = new Map<string, string>();
 
   // --- Read pages ---
   const pageFiles = zip.file(/^pages\/.*\.json$/);
@@ -135,7 +148,7 @@ export async function importJournal(
   let current = 0;
 
   for (const pf of pageFiles) {
-    const pageData = JSON.parse(await readEntry(pf)) as Page;
+    const pageData = JSON.parse(await readEntry(pf, `page ${pf.name}`)) as Page;
     const newPageId = generateUUID();
     pageIdMap.set(pageData.id, newPageId);
 
@@ -156,58 +169,61 @@ export async function importJournal(
     // unencrypted backups store raw binary (read as base64 for the store).
     let data: string;
     if (isEncrypted && derivedKey) {
-      data = aesGcmDecryptBytes(await af.async('uint8array'), derivedKey);
+      try {
+        data = aesGcmDecryptBytes(await af.async('uint8array'), derivedKey);
+      } catch (err) {
+        console.error(`[Canto] Failed to decrypt attachment ${zipFilename}:`, err);
+        throw err;
+      }
     } else {
       data = await af.async('base64');
     }
 
     // Parse the zip filename to reconstruct attachment info
     // Format: {type}-{id}.{ext}
-    const match = zipFilename.match(/^(image|file)-([a-f0-9-]+)\.(.+)$/);
+    const match = zipFilename.match(/^(image|file)-([^.]+)\.(.+)$/);
     if (!match) continue;
 
     const [, type, oldAttId, ext] = match;
-    const newAttId = generateUUID();
 
-    // Find which page references this attachment and get the new page ID
-    let ownerNewPageId: string | undefined;
-    let originalName: string | undefined;
-    let wasEncrypted = false;
+    // Find ALL pages that reference this attachment (not just the first).
+    // Shared attachments need a separate copy under each page's directory so
+    // deleting one page doesn't orphan the other's attachment.
+    const owners: { pageId: string; name: string; encrypted: boolean }[] = [];
     for (const page of pages) {
       const allAtts = [...page.images, ...page.files];
       const found = allAtts.find((a) => a.id === oldAttId);
       if (found) {
-        ownerNewPageId = page.id;
-        originalName = found.name;
-        wasEncrypted = found.encrypted;
-        break;
+        owners.push({ pageId: page.id, name: found.name, encrypted: found.encrypted });
       }
     }
 
-    if (!ownerNewPageId) continue;
+    if (owners.length === 0) continue;
 
-    // Preserve password encryption if the original was encrypted and we have the key
-    const reEncrypt = wasEncrypted && !!derivedKey;
+    // Save a copy for each owning page
+    for (const owner of owners) {
+      const reEncrypt = owner.encrypted && !!derivedKey;
+      const newAttId = generateUUID();
 
-    // Save through the store (which handles device encryption)
-    const attachment: Attachment = {
-      id: newAttId,
-      path: '', // Will be set by saveAttachment
-      name: originalName ?? `imported-${newAttId}.${ext}`,
-      type: type as 'image' | 'file',
-      encrypted: reEncrypt,
-      deleted: false,
-    };
+      const attachment: Attachment = {
+        id: newAttId,
+        path: '', // Will be set by saveAttachment
+        name: owner.name ?? `imported-${newAttId}.${ext}`,
+        type: type as 'image' | 'file',
+        encrypted: reEncrypt,
+        deleted: false,
+      };
 
-    const savedPath = await store.saveAttachment(
-      newJournalId,
-      ownerNewPageId,
-      attachment,
-      data,
-      reEncrypt ? derivedKey : undefined,
-    );
+      const savedPath = await store.saveAttachment(
+        newJournalId,
+        owner.pageId,
+        attachment,
+        data,
+        reEncrypt ? derivedKey : undefined,
+      );
 
-    attachmentPathMap.set(zipFilename, savedPath);
+      pageAttachmentPaths.set(`${owner.pageId}:${zipFilename}`, savedPath);
+    }
 
     current++;
     onProgress?.({ current, total: totalItems, phase: 'attachments' });
@@ -217,7 +233,7 @@ export async function importJournal(
   const finalPages = pages.map((page) => ({
     ...page,
     images: page.images.map((att) => {
-      const newPath = attachmentPathMap.get(att.path);
+      const newPath = pageAttachmentPaths.get(`${page.id}:${att.path}`);
       return {
         ...att,
         path: newPath ?? att.path,
@@ -226,7 +242,7 @@ export async function importJournal(
       };
     }),
     files: page.files.map((att) => {
-      const newPath = attachmentPathMap.get(att.path);
+      const newPath = pageAttachmentPaths.get(`${page.id}:${att.path}`);
       return {
         ...att,
         path: newPath ?? att.path,
@@ -236,8 +252,10 @@ export async function importJournal(
   }));
 
   // --- Build and save the new journal ---
-  // Preserve password protection when the user provided the key
-  const preservePassword = !!derivedKey && (journalData.secure || isEncrypted);
+  // Preserve password protection only when the user explicitly provided a key.
+  // Auto-derived keys (empty password) should NOT mark the journal as secure —
+  // otherwise the user would be prompted for a password they never set.
+  const preservePassword = hasUserProvidedKey && (journalData.secure || isEncrypted);
   // Preserve salt/kdfIterations when there are encrypted attachments (needed for auto-derive)
   const hasEncryptedAttachments = finalPages.some((p) =>
     [...p.images, ...p.files].some((a) => a.encrypted),
