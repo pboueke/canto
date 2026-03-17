@@ -1,5 +1,19 @@
 # Changelog
 
+## v0.9.4 - Native Crypto & Non-blocking Image Pipeline
+
+- feat: replace `@noble/ciphers` (pure JS) with `expo-crypto` native AES-GCM — decryption runs on native thread via JSI, no longer blocks the JS thread
+- feat: upgrade Expo SDK 54 → 55 (React 19.2, React Native 0.83)
+- perf: decrypted images written to temp files (`file://` URIs) instead of held as multi-megabyte `data:` URI strings in React state — eliminates heavy string diffing during reconciliation
+- perf: strategic `setTimeout(0)` yields within `aesGcmDecrypt`/`aesGcmEncrypt` before heavy synchronous operations (`base64ToUint8`, `textDecoder.decode`) — breaks ~200ms blocking into ~50ms chunks
+- perf: `MAX_CONCURRENT` reduced from 2 to 1 — single image pipeline prevents doubled blocking windows
+- perf: batched `setLoadedImages` + `setLoadingImages` state updates to reduce re-renders per image from 3 to 2
+- perf: thumbnails in journal list also use file URIs instead of data URIs
+- refactor: `@noble/ciphers` moved to devDependency (Jest mock only)
+- refactor: `bytesToHex`/`hexToBytes` moved from `@noble/ciphers/utils.js` to local helpers in `device.ts`
+- chore: added `expo-crypto` Jest mock in `jest.setup.ts` delegating to `@noble/ciphers` for test coverage
+- chore: bump version to 0.9.4
+
 ## v0.9.3 - Image Loading UX & Journal Redirect
 
 - fix: image loading no longer blocks UI — queue-based loader with concurrency limit and `setTimeout(0)` yields between decryption operations

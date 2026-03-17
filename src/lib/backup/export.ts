@@ -114,19 +114,15 @@ export async function exportJournal(
   // Encrypted entries use compression: 'STORE' to avoid Hermes/JSZip deflate
   // corruption on high-entropy data. Encrypted bytes don't compress anyway.
   const encOpts: JSZip.JSZipFileOptions = { compression: 'STORE' };
-  zip.file(
-    'journal.json',
-    encrypted && derivedKey ? aesGcmEncryptBytes(metadataJson, derivedKey) : metadataJson,
-    encrypted && derivedKey ? encOpts : undefined,
-  );
+  const journalContent =
+    encrypted && derivedKey ? await aesGcmEncryptBytes(metadataJson, derivedKey) : metadataJson;
+  zip.file('journal.json', journalContent, encrypted && derivedKey ? encOpts : undefined);
 
   // --- Settings ---
   const settingsJson = JSON.stringify(journal.settings, null, 2);
-  zip.file(
-    'settings.json',
-    encrypted && derivedKey ? aesGcmEncryptBytes(settingsJson, derivedKey) : settingsJson,
-    encrypted && derivedKey ? encOpts : undefined,
-  );
+  const settingsContent =
+    encrypted && derivedKey ? await aesGcmEncryptBytes(settingsJson, derivedKey) : settingsJson;
+  zip.file('settings.json', settingsContent, encrypted && derivedKey ? encOpts : undefined);
 
   // --- Build path map for attachment rewriting ---
   const pathMap = new Map<string, string>();
@@ -139,7 +135,8 @@ export async function exportJournal(
   for (let i = 0; i < rewrittenPages.length; i++) {
     const page = rewrittenPages[i];
     const pageJson = JSON.stringify(page, null, 2);
-    const content = encrypted && derivedKey ? aesGcmEncryptBytes(pageJson, derivedKey) : pageJson;
+    const content =
+      encrypted && derivedKey ? await aesGcmEncryptBytes(pageJson, derivedKey) : pageJson;
     zip.file(`pages/${page.id}.json`, content, encrypted && derivedKey ? encOpts : undefined);
 
     current++;
@@ -156,7 +153,8 @@ export async function exportJournal(
       if (encrypted && derivedKey) {
         // Encrypted export: store as raw encrypted bytes (Uint8Array)
         // Use STORE to bypass deflate — encrypted data is incompressible
-        zip.file(`attachments/${entry.zipFilename}`, aesGcmEncryptBytes(data, derivedKey), encOpts);
+        const encData = await aesGcmEncryptBytes(data, derivedKey);
+        zip.file(`attachments/${entry.zipFilename}`, encData, encOpts);
       } else {
         // Unencrypted export: decode base64 → raw binary so files are directly usable
         zip.file(`attachments/${entry.zipFilename}`, data, { base64: true });

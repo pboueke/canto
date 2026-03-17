@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Image, StyleSheet, Text, View } from 'react-native';
 import { useRouter } from 'expo-router';
+import { Paths, File as ExpoFile } from 'expo-file-system';
 import { Feather } from '@expo/vector-icons';
 import { Card } from '@/components/common/Card';
 import { Tag } from '@/components/common/Tag';
@@ -33,9 +34,16 @@ export function PageListItem({ page, journalId, settings }: PageListItemProps) {
     if (!page.firstImage || !showThumbnail) return;
     const cancel = enqueueThumbnail(
       page.id,
-      () => getAttachment(page.firstImage!, false),
-      (data) => {
-        if (data) setThumbnailUri(`data:image/jpeg;base64,${data}`);
+      async () => {
+        const data = await getAttachment(page.firstImage!, false);
+        if (!data) return null;
+        const tmpFile = new ExpoFile(Paths.cache, `thumb-${page.id}.jpg`);
+        if (!tmpFile.exists) tmpFile.create({ intermediates: true });
+        tmpFile.write(data, { encoding: 'base64' });
+        return tmpFile.uri;
+      },
+      (uri) => {
+        if (uri) setThumbnailUri(uri);
       },
     );
     return cancel;

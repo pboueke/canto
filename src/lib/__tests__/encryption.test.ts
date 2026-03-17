@@ -5,42 +5,42 @@ describe('AES-256-GCM encryption', () => {
   const key = new Uint8Array(32); // 256-bit zero key (test only)
   key.fill(0xab);
 
-  it('encrypts and decrypts a string', () => {
+  it('encrypts and decrypts a string', async () => {
     const plaintext = 'Hello, Canto!';
-    const ciphertext = aesGcmEncrypt(plaintext, key);
+    const ciphertext = await aesGcmEncrypt(plaintext, key);
 
     expect(ciphertext).not.toBe(plaintext);
     expect(typeof ciphertext).toBe('string');
 
-    const decrypted = aesGcmDecrypt(ciphertext, key);
+    const decrypted = await aesGcmDecrypt(ciphertext, key);
     expect(decrypted).toBe(plaintext);
   });
 
-  it('produces different ciphertexts for the same plaintext (unique nonce)', () => {
+  it('produces different ciphertexts for the same plaintext (unique nonce)', async () => {
     const plaintext = 'Same input, different output';
-    const c1 = aesGcmEncrypt(plaintext, key);
-    const c2 = aesGcmEncrypt(plaintext, key);
+    const c1 = await aesGcmEncrypt(plaintext, key);
+    const c2 = await aesGcmEncrypt(plaintext, key);
 
     expect(c1).not.toBe(c2);
 
     // Both decrypt to the same value
-    expect(aesGcmDecrypt(c1, key)).toBe(plaintext);
-    expect(aesGcmDecrypt(c2, key)).toBe(plaintext);
+    expect(await aesGcmDecrypt(c1, key)).toBe(plaintext);
+    expect(await aesGcmDecrypt(c2, key)).toBe(plaintext);
   });
 
-  it('fails to decrypt with wrong key', () => {
+  it('fails to decrypt with wrong key', async () => {
     const plaintext = 'Secret data';
-    const ciphertext = aesGcmEncrypt(plaintext, key);
+    const ciphertext = await aesGcmEncrypt(plaintext, key);
 
     const wrongKey = new Uint8Array(32);
     wrongKey.fill(0xcd);
 
-    expect(() => aesGcmDecrypt(ciphertext, wrongKey)).toThrow();
+    await expect(aesGcmDecrypt(ciphertext, wrongKey)).rejects.toThrow();
   });
 
-  it('fails on tampered ciphertext', () => {
+  it('fails on tampered ciphertext', async () => {
     const plaintext = 'Integrity check';
-    const ciphertext = aesGcmEncrypt(plaintext, key);
+    const ciphertext = await aesGcmEncrypt(plaintext, key);
 
     // Tamper with a character in the middle
     const tampered =
@@ -48,30 +48,30 @@ describe('AES-256-GCM encryption', () => {
       String.fromCharCode(ciphertext.charCodeAt(20) ^ 1) +
       ciphertext.substring(21);
 
-    expect(() => aesGcmDecrypt(tampered, key)).toThrow();
+    await expect(aesGcmDecrypt(tampered, key)).rejects.toThrow();
   });
 
-  it('rejects truncated ciphertext', () => {
-    expect(() => aesGcmDecrypt('AAAA', key)).toThrow('too short');
+  it('rejects truncated ciphertext', async () => {
+    await expect(aesGcmDecrypt('AAAA', key)).rejects.toThrow('too short');
   });
 
-  it('handles empty string', () => {
-    const ciphertext = aesGcmEncrypt('', key);
-    const decrypted = aesGcmDecrypt(ciphertext, key);
+  it('handles empty string', async () => {
+    const ciphertext = await aesGcmEncrypt('', key);
+    const decrypted = await aesGcmDecrypt(ciphertext, key);
     expect(decrypted).toBe('');
   });
 
-  it('handles unicode text', () => {
+  it('handles unicode text', async () => {
     const plaintext = 'Olá mundo! 🌍 日本語テスト';
-    const ciphertext = aesGcmEncrypt(plaintext, key);
-    const decrypted = aesGcmDecrypt(ciphertext, key);
+    const ciphertext = await aesGcmEncrypt(plaintext, key);
+    const decrypted = await aesGcmDecrypt(ciphertext, key);
     expect(decrypted).toBe(plaintext);
   });
 
-  it('handles large text', () => {
+  it('handles large text', async () => {
     const plaintext = 'x'.repeat(100_000);
-    const ciphertext = aesGcmEncrypt(plaintext, key);
-    const decrypted = aesGcmDecrypt(ciphertext, key);
+    const ciphertext = await aesGcmEncrypt(plaintext, key);
+    const decrypted = await aesGcmDecrypt(ciphertext, key);
     expect(decrypted).toBe(plaintext);
   });
 });

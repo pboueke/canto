@@ -419,14 +419,14 @@ describe('exportJournal', () => {
     expect(() => JSON.parse(new TextDecoder().decode(journalRaw))).toThrow();
 
     // But should be decryptable with the key
-    const decrypted = aesGcmDecryptBytes(journalRaw, key);
+    const decrypted = await aesGcmDecryptBytes(journalRaw, key);
     const journalData = JSON.parse(decrypted);
     expect(journalData.title).toBe('Secure Journal');
 
     // Page should also be encrypted binary
     const pageRaw = await zip.file(/^pages\//)[0].async('uint8array');
     expect(() => JSON.parse(new TextDecoder().decode(pageRaw))).toThrow();
-    const pageDecrypted = JSON.parse(aesGcmDecryptBytes(pageRaw, key));
+    const pageDecrypted = JSON.parse(await aesGcmDecryptBytes(pageRaw, key));
     expect(pageDecrypted.text).toBe('Page p1 content');
   });
 
@@ -842,9 +842,9 @@ describe('importJournal', () => {
         kdfIterations: 50000,
         journalTitle: 'Secret Journal',
       },
-      journalJson: aesGcmEncryptBytes(JSON.stringify(journal), key),
-      settingsJson: aesGcmEncryptBytes(JSON.stringify(journal.settings), key),
-      pages: [{ id: 'p1', json: aesGcmEncryptBytes(JSON.stringify(page), key) }],
+      journalJson: await aesGcmEncryptBytes(JSON.stringify(journal), key),
+      settingsJson: await aesGcmEncryptBytes(JSON.stringify(journal.settings), key),
+      pages: [{ id: 'p1', json: await aesGcmEncryptBytes(JSON.stringify(page), key) }],
     });
 
     const result = await importJournal(uri, 'Secret Journal', key);
@@ -872,7 +872,7 @@ describe('importJournal', () => {
         kdfIterations: 50000,
         journalTitle: 'Secret',
       },
-      journalJson: aesGcmEncryptBytes(JSON.stringify(journal), correctKey),
+      journalJson: await aesGcmEncryptBytes(JSON.stringify(journal), correctKey),
     });
 
     await expect(importJournal(uri, 'Secret', wrongKey)).rejects.toThrow();
@@ -912,7 +912,7 @@ describe('importJournal', () => {
         kdfIterations: 50000,
         journalTitle: 'Was Secure',
       },
-      journalJson: aesGcmEncryptBytes(JSON.stringify(journal), key),
+      journalJson: await aesGcmEncryptBytes(JSON.stringify(journal), key),
     });
 
     const result = await importJournal(uri, 'Was Secure', key);

@@ -1,4 +1,4 @@
-import { gcm } from '@noble/ciphers/aes.js';
+import { aesEncryptAsync, aesDecryptAsync, AESEncryptionKey, AESSealedData } from 'expo-crypto';
 
 function getRandomBytes(length: number): Uint8Array {
   const bytes = new Uint8Array(length);
@@ -7,48 +7,45 @@ function getRandomBytes(length: number): Uint8Array {
 }
 
 const NONCE_LENGTH = 12;
+const TAG_LENGTH = 16;
 
 const textEncoder = new TextEncoder();
 const textDecoder = new TextDecoder();
+
+/** Yield the JS thread so touch events and animations can be processed. */
+const yieldThread = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 0));
 
 /**
  * Encrypt plaintext with AES-256-GCM.
  * Returns base64([12-byte nonce][ciphertext][16-byte GCM tag]).
  * A unique nonce is generated via CSPRNG for every call.
  */
-export function aesGcmEncrypt(plaintext: string, key: Uint8Array): string {
-  const nonce = getRandomBytes(NONCE_LENGTH);
-  const plaintextBytes = textEncoder.encode(plaintext);
-
-  const cipher = gcm(key, nonce);
-  const ciphertextWithTag = cipher.encrypt(plaintextBytes);
-
-  // Prepend nonce: [nonce][ciphertext+tag]
-  const result = new Uint8Array(NONCE_LENGTH + ciphertextWithTag.length);
-  result.set(nonce, 0);
-  result.set(ciphertextWithTag, NONCE_LENGTH);
-
-  return uint8ToBase64(result);
+export async function aesGcmEncrypt(plaintext: string, key: Uint8Array): Promise<string> {
+  const aesKey = await AESEncryptionKey.import(key);
+  const sealed = await aesEncryptAsync(textEncoder.encode(plaintext), aesKey);
+  const combined = await sealed.combined();
+  await yieldThread();
+  return uint8ToBase64(combined);
 }
 
 /**
  * Decrypt base64([12-byte nonce][ciphertext][16-byte GCM tag]) with AES-256-GCM.
  * Throws if authentication fails (tampered data).
  */
-export function aesGcmDecrypt(ciphertext: string, key: Uint8Array): string {
+export async function aesGcmDecrypt(ciphertext: string, key: Uint8Array): Promise<string> {
+  await yieldThread();
   const data = base64ToUint8(ciphertext);
 
-  if (data.length < NONCE_LENGTH + 16) {
+  if (data.length < NONCE_LENGTH + TAG_LENGTH) {
     throw new Error('Invalid ciphertext: too short');
   }
 
-  const nonce = data.slice(0, NONCE_LENGTH);
-  const ciphertextWithTag = data.slice(NONCE_LENGTH);
+  const sealed = AESSealedData.fromCombined(data);
+  const aesKey = await AESEncryptionKey.import(key);
+  const result = await aesDecryptAsync(sealed, aesKey);
 
-  const cipher = gcm(key, nonce);
-  const plaintext = cipher.decrypt(ciphertextWithTag);
-
-  return textDecoder.decode(plaintext);
+  await yieldThread();
+  return textDecoder.decode(result);
 }
 
 /**
@@ -57,36 +54,26 @@ export function aesGcmDecrypt(ciphertext: string, key: Uint8Array): string {
  * Use this for binary storage (e.g. ZIP files) to avoid base64/string
  * round-trips that can be corrupted by JSZip compression on Hermes.
  */
-export function aesGcmEncryptBytes(plaintext: string, key: Uint8Array): Uint8Array {
-  const nonce = getRandomBytes(NONCE_LENGTH);
-  const plaintextBytes = textEncoder.encode(plaintext);
-
-  const cipher = gcm(key, nonce);
-  const ciphertextWithTag = cipher.encrypt(plaintextBytes);
-
-  const result = new Uint8Array(NONCE_LENGTH + ciphertextWithTag.length);
-  result.set(nonce, 0);
-  result.set(ciphertextWithTag, NONCE_LENGTH);
-
-  return result;
+export async function aesGcmEncryptBytes(plaintext: string, key: Uint8Array): Promise<Uint8Array> {
+  const aesKey = await AESEncryptionKey.import(key);
+  const sealed = await aesEncryptAsync(textEncoder.encode(plaintext), aesKey);
+  return await sealed.combined();
 }
 
 /**
  * Decrypt raw bytes ([12-byte nonce][ciphertext][16-byte GCM tag]) with AES-256-GCM.
  * Counterpart to aesGcmEncryptBytes — operates on Uint8Array directly.
  */
-export function aesGcmDecryptBytes(data: Uint8Array, key: Uint8Array): string {
-  if (data.length < NONCE_LENGTH + 16) {
+export async function aesGcmDecryptBytes(data: Uint8Array, key: Uint8Array): Promise<string> {
+  if (data.length < NONCE_LENGTH + TAG_LENGTH) {
     throw new Error('Invalid ciphertext: too short');
   }
 
-  const nonce = data.slice(0, NONCE_LENGTH);
-  const ciphertextWithTag = data.slice(NONCE_LENGTH);
+  const sealed = AESSealedData.fromCombined(data);
+  const aesKey = await AESEncryptionKey.import(key);
+  const result = await aesDecryptAsync(sealed, aesKey);
 
-  const cipher = gcm(key, nonce);
-  const plaintext = cipher.decrypt(ciphertextWithTag);
-
-  return textDecoder.decode(plaintext);
+  return textDecoder.decode(result);
 }
 
 /**

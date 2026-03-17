@@ -106,7 +106,7 @@ export async function importJournal(
   async function readEntry(entry: JSZip.JSZipObject, label: string): Promise<string> {
     if (isEncrypted && derivedKey) {
       try {
-        return aesGcmDecryptBytes(await entry.async('uint8array'), derivedKey);
+        return await aesGcmDecryptBytes(await entry.async('uint8array'), derivedKey);
       } catch (err) {
         console.error(`[Canto] Failed to decrypt ${label} (${entry.name}):`, err);
         throw err;
@@ -170,7 +170,7 @@ export async function importJournal(
     let data: string;
     if (isEncrypted && derivedKey) {
       try {
-        data = aesGcmDecryptBytes(await af.async('uint8array'), derivedKey);
+        data = await aesGcmDecryptBytes(await af.async('uint8array'), derivedKey);
       } catch (err) {
         console.error(`[Canto] Failed to decrypt attachment ${zipFilename}:`, err);
         throw err;

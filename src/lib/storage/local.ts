@@ -75,7 +75,7 @@ async function readEncrypted(
     // Layer 2: password decryption (if derived key present)
     if (derivedKey) {
       try {
-        return aesGcmDecrypt(deviceDecrypted, derivedKey);
+        return await aesGcmDecrypt(deviceDecrypted, derivedKey);
       } catch {
         // Data is not password-encrypted — return device-decrypted content.
         // This happens for metadata/pages in journals with encrypted attachments
@@ -98,7 +98,7 @@ async function writeEncrypted(
   derivedKey?: Uint8Array,
 ): Promise<void> {
   // Layer 1: password encryption (if derived key present)
-  const toDeviceEncrypt = derivedKey ? aesGcmEncrypt(data, derivedKey) : data;
+  const toDeviceEncrypt = derivedKey ? await aesGcmEncrypt(data, derivedKey) : data;
   // Layer 2: device encryption (always)
   const ciphertext = await encryption.encrypt(toDeviceEncrypt);
   if (!file.exists) {
@@ -131,7 +131,7 @@ async function atomicWrite(
 ): Promise<void> {
   const tmp = getTmpFile(file);
   // Write to temp file first
-  const toDeviceEncrypt = derivedKey ? aesGcmEncrypt(data, derivedKey) : data;
+  const toDeviceEncrypt = derivedKey ? await aesGcmEncrypt(data, derivedKey) : data;
   const ciphertext = await encryption.encrypt(toDeviceEncrypt);
   if (!tmp.exists) {
     tmp.create({ intermediates: true });
@@ -320,7 +320,7 @@ export function createLocalStore(encryption: EncryptionService): LocalStore {
 
       // Layer 1: password encryption (if encrypted attachment + derivedKey)
       const toDeviceEncrypt =
-        attachment.encrypted && derivedKey ? aesGcmEncrypt(data, derivedKey) : data;
+        attachment.encrypted && derivedKey ? await aesGcmEncrypt(data, derivedKey) : data;
       // Layer 2: device encryption (always)
       const ciphertext = await encryption.encrypt(toDeviceEncrypt);
       if (!file.exists) {
@@ -341,7 +341,7 @@ export function createLocalStore(encryption: EncryptionService): LocalStore {
       // Layer 2: password decryption (if derivedKey provided)
       if (derivedKey) {
         try {
-          return aesGcmDecrypt(deviceDecrypted, derivedKey);
+          return await aesGcmDecrypt(deviceDecrypted, derivedKey);
         } catch {
           // Data is not password-encrypted — return device-decrypted content.
           // This can happen when the attachment was saved while the derived key

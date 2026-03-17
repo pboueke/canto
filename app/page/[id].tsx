@@ -299,7 +299,15 @@ export default function PageScreen() {
     async (path: string): Promise<string | null> => {
       const data = await getAttachment(path, false);
       if (!data) return null;
-      return `data:image/jpeg;base64,${data}`;
+      // Yield before synchronous base64 decode + disk write
+      await new Promise((r) => setTimeout(r, 0));
+      const tmpFile = new ExpoFile(
+        Paths.cache,
+        `img-${Date.now()}-${Math.random().toString(36).slice(2)}.jpg`,
+      );
+      if (!tmpFile.exists) tmpFile.create({ intermediates: true });
+      tmpFile.write(data, { encoding: 'base64' });
+      return tmpFile.uri;
     },
     [getAttachment],
   );
@@ -308,7 +316,15 @@ export default function PageScreen() {
     async (path: string): Promise<string | null> => {
       const data = await getAttachment(path, true);
       if (!data) return null;
-      return `data:image/jpeg;base64,${data}`;
+      // Yield before synchronous base64 decode + disk write
+      await new Promise((r) => setTimeout(r, 0));
+      const tmpFile = new ExpoFile(
+        Paths.cache,
+        `eimg-${Date.now()}-${Math.random().toString(36).slice(2)}.jpg`,
+      );
+      if (!tmpFile.exists) tmpFile.create({ intermediates: true });
+      tmpFile.write(data, { encoding: 'base64' });
+      return tmpFile.uri;
     },
     [getAttachment],
   );

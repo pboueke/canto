@@ -987,7 +987,7 @@ describe('error and boundary conditions', () => {
         journalTitle: 'Secret',
       }),
     );
-    zip.file('journal.json', aesGcmEncryptBytes(JSON.stringify(journal), key));
+    zip.file('journal.json', await aesGcmEncryptBytes(JSON.stringify(journal), key));
     const base64 = await zip.generateAsync({ type: 'base64' });
     const uri = '/mock-cache/encrypted-no-key.zip';
     filesystem[uri] = base64;
@@ -1016,7 +1016,7 @@ describe('error and boundary conditions', () => {
         journalTitle: 'Secret',
       }),
     );
-    zip.file('journal.json', aesGcmEncryptBytes(JSON.stringify(journal), correctKey));
+    zip.file('journal.json', await aesGcmEncryptBytes(JSON.stringify(journal), correctKey));
     const base64 = await zip.generateAsync({ type: 'base64' });
     const uri = '/mock-cache/wrong-key.zip';
     filesystem[uri] = base64;
