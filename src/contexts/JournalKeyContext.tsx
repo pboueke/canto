@@ -4,18 +4,10 @@ import { AppState } from 'react-native';
 import { pbkdf2Async } from '@noble/hashes/pbkdf2.js';
 import { sha256 } from '@noble/hashes/sha2.js';
 import { LEGACY_KDF_ITERATIONS } from '@/lib/encryption/password';
+import { base64ToUint8 } from '@/lib/encryption/utils';
 import { getAutoLockTimeout } from '@/components/home/SecuritySettingsModal';
 
 const KEY_LENGTH = 32;
-
-function base64ToUint8(base64: string): Uint8Array {
-  const binary = atob(base64);
-  const bytes = new Uint8Array(binary.length);
-  for (let i = 0; i < binary.length; i++) {
-    bytes[i] = binary.charCodeAt(i);
-  }
-  return bytes;
-}
 
 interface JournalKeyContextValue {
   deriveAndCache(

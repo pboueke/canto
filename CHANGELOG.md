@@ -1,5 +1,19 @@
 # Changelog
 
+## v0.10.0 - Best Practices & README Overhaul
+
+- feat: ESLint rules strengthened — added `consistent-type-imports` and `no-console` rules
+- feat: test coverage raised from 40% to 80% threshold (actual: 95%+)
+- feat: 52 new tests for `useStorage`, `useImageQueue`, and `changelog` modules (317 total)
+- feat: README overhauled — expanded security model section, corrected i18n (8 languages), themes (6), and crypto provider details
+- feat: test count badge in README, auto-synced by pre-commit hook
+- feat: `test:ci` script for CI-oriented test runs with coverage
+- refactor: consolidated duplicate `generateUUID()` into `encryption/utils.ts` (was in `useStorage.ts` and `import.ts`)
+- refactor: consolidated duplicate `base64ToUint8()` / `uint8ToBase64()` — `JournalKeyContext` and `useStorage` now import from `encryption/utils.ts`
+- refactor: all type imports use `import type` syntax (enforced by ESLint)
+- chore: removed unused imports in `backup.test.ts`
+- chore: bump version to 0.10.0
+
 ## v0.9.4 - Native Crypto & Non-blocking Image Pipeline
 
 - feat: replace `@noble/ciphers` (pure JS) with `expo-crypto` native AES-GCM — decryption runs on native thread via JSI, no longer blocks the JS thread

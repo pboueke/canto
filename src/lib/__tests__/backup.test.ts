@@ -1,10 +1,5 @@
 import JSZip from 'jszip';
-import {
-  aesGcmEncrypt,
-  aesGcmDecrypt,
-  aesGcmEncryptBytes,
-  aesGcmDecryptBytes,
-} from '../encryption/utils';
+import { aesGcmEncryptBytes, aesGcmDecryptBytes } from '../encryption/utils';
 import { hasNameConflict, resolveNameConflict } from '../backup/conflicts';
 import type { ExportManifest } from '../backup/export';
 import type { JournalContent, Page, Attachment } from '@/models';

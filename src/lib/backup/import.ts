@@ -3,18 +3,9 @@ import { File } from 'expo-file-system';
 import type { JournalContent, JournalSettings, Page, Attachment } from '@/models';
 import { DEFAULT_JOURNAL_SETTINGS } from '@/models';
 import { getLocalStore } from '@/hooks/useStorage';
-import { aesGcmDecryptBytes, base64ToUint8 } from '@/lib/encryption/utils';
+import { aesGcmDecryptBytes, base64ToUint8, generateUUID } from '@/lib/encryption/utils';
 import { deriveKey, LEGACY_KDF_ITERATIONS } from '@/lib/encryption/password';
 import type { ExportManifest } from './export';
-
-function generateUUID(): string {
-  const bytes = new Uint8Array(16);
-  crypto.getRandomValues(bytes);
-  bytes[6] = (bytes[6] & 0x0f) | 0x40;
-  bytes[8] = (bytes[8] & 0x3f) | 0x80;
-  const hex = Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
-  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
-}
 
 export interface ImportResult {
   journalId: string;

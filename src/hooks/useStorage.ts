@@ -1,18 +1,10 @@
 import { useState, useEffect, useCallback } from 'react';
-import type { Journal, JournalContent, Page } from '@/models';
+import type { Journal, JournalContent, Page, Attachment } from '@/models';
 import { DEFAULT_JOURNAL_SETTINGS } from '@/models';
 import { createEncryptionService } from '@/lib/encryption';
 import { createLocalStore } from '@/lib/storage';
 import type { LocalStore } from '@/lib/storage';
-
-function generateUUID(): string {
-  const bytes = new Uint8Array(16);
-  crypto.getRandomValues(bytes);
-  bytes[6] = (bytes[6] & 0x0f) | 0x40; // version 4
-  bytes[8] = (bytes[8] & 0x3f) | 0x80; // variant 1
-  const hex = Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
-  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
-}
+import { generateUUID, uint8ToBase64 } from '@/lib/encryption/utils';
 
 let storeInstance: LocalStore | null = null;
 let encryptionInstance: ReturnType<typeof createEncryptionService> | null = null;
@@ -170,14 +162,6 @@ export function useSavePage(journalId: string | undefined, derivedKey?: Uint8Arr
   );
 
   return { save, saving, error };
-}
-
-function uint8ToBase64(bytes: Uint8Array): string {
-  let binary = '';
-  for (let i = 0; i < bytes.length; i++) {
-    binary += String.fromCharCode(bytes[i]);
-  }
-  return btoa(binary);
 }
 
 interface CreateJournalInput {
@@ -412,7 +396,7 @@ export function useAttachment(derivedKey?: Uint8Array | null) {
     async (
       journalId: string,
       pageId: string,
-      attachment: import('@/models').Attachment,
+      attachment: Attachment,
       data: string,
     ): Promise<string> => {
       const store = await ensureInitialized();
