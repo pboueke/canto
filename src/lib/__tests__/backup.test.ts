@@ -158,6 +158,7 @@ function makeJournal(id: string, overrides: Partial<JournalContent> = {}): Journ
       showMarkdownPlaceholder: true,
       autoLocation: false,
       remoteSync: false,
+      autoSync: false,
     },
     version: 1,
     ...overrides,
@@ -778,6 +779,7 @@ describe('importJournal', () => {
       showMarkdownPlaceholder: false,
       autoLocation: true,
       remoteSync: false,
+      autoSync: false,
     };
 
     const uri = await buildZip({
@@ -1076,6 +1078,7 @@ describe('export → import round-trip', () => {
         showMarkdownPlaceholder: false,
         autoLocation: true,
         remoteSync: false,
+        autoSync: false,
       },
     });
     await mockStore.saveJournal(journal);

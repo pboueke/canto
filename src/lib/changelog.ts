@@ -1,4 +1,5 @@
 import { Asset } from 'expo-asset';
+import { File } from 'expo-file-system/next';
 
 const changelogModule = require('../../CHANGELOG.md');
 
@@ -10,8 +11,8 @@ export async function loadChangelog(): Promise<string> {
   if (!asset.localUri) {
     throw new Error('Failed to load changelog asset');
   }
-  const response = await fetch(asset.localUri);
-  cachedChangelog = await response.text();
+  const file = new File(asset.localUri);
+  cachedChangelog = file.text();
   return cachedChangelog;
 }
 

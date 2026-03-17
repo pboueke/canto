@@ -33,6 +33,11 @@ yarn-error.*
 # local env files
 .env*.local
 
+# Google OAuth credentials
+google-credentials.ts
+*googleusercontent.com.json
+*googleusercontent.com.plist
+
 # test coverage
 coverage/
 

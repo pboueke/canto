@@ -7,6 +7,7 @@ import { loadChangelog, parseVersionFromChangelog } from '@/lib/changelog';
 import { ThemePickerModal } from '@/components/home/ThemePickerModal';
 import { LanguagePickerModal } from '@/components/home/LanguagePickerModal';
 import { SecuritySettingsModal } from '@/components/home/SecuritySettingsModal';
+import { AccountButton } from '@/components/home/AccountButton';
 
 const CANTO_REPO_URL = 'https://github.com/pboueke/canto';
 
@@ -30,10 +31,15 @@ export function InfoBox() {
   const [version, setVersion] = useState('...');
 
   useEffect(() => {
-    loadChangelog().then((text) => {
-      setChangelog(text);
-      setVersion(parseVersionFromChangelog(text));
-    });
+    loadChangelog()
+      .then((text) => {
+        setChangelog(text);
+        setVersion(parseVersionFromChangelog(text));
+      })
+      .catch((err) => {
+        console.error('Failed to load changelog:', err);
+        setChangelog('Failed to load changelog');
+      });
   }, []);
 
   return (
@@ -72,6 +78,8 @@ export function InfoBox() {
           About Canto
         </Text>
       </Pressable>
+
+      <AccountButton />
 
       <Pressable onPress={() => setShowChangelog(true)} style={styles.row}>
         <Text

@@ -13,7 +13,10 @@ import { FilterBar } from '@/components/journal/FilterBar';
 import { JournalSettings } from '@/components/journal/JournalSettings';
 import { ExportMenu } from '@/components/journal/ExportMenu';
 import { ExportJournalModal } from '@/components/journal/ExportJournalModal';
+import { SyncModal } from '@/components/journal/SyncModal';
 import { FloatingActionButton } from '@/components/common/FloatingActionButton';
+import { useGoogleAuth } from '@/contexts/GoogleAuthContext';
+import { useSyncManager } from '@/contexts/SyncManagerContext';
 import { pageToPreview } from '@/models';
 import { type ThemeName, themes } from '@/styles/themes';
 
@@ -27,14 +30,29 @@ export default function JournalScreen() {
   const derivedKey = id ? getKey(id) : null;
   const { journal, loading, refresh } = useJournal(id, derivedKey);
   const { create: createPage } = useCreatePage(id, derivedKey);
+  const { isSignedIn } = useGoogleAuth();
+  const { syncJournal, getSyncState } = useSyncManager();
   const [showSettings, setShowSettings] = useState(false);
   const [showExportMenu, setShowExportMenu] = useState(false);
   const [showExportModal, setShowExportModal] = useState(false);
+  const [showSyncModal, setShowSyncModal] = useState(false);
 
   useFocusEffect(
     useCallback(() => {
       refresh();
-    }, [refresh]),
+      // Auto-sync on focus if configured
+      if (journal?.settings.autoSync && journal.settings.remoteSync && isSignedIn) {
+        syncJournal(journal.id, derivedKey ?? undefined);
+      }
+    }, [
+      refresh,
+      journal?.settings.autoSync,
+      journal?.settings.remoteSync,
+      isSignedIn,
+      journal?.id,
+      derivedKey,
+      syncJournal,
+    ]),
   );
 
   // Safety net: auto-derive key for non-secure journals that have salt
@@ -156,6 +174,8 @@ export default function JournalScreen() {
           journal={journal}
           onPressSettings={() => setShowSettings(true)}
           onPressExport={() => setShowExportMenu(true)}
+          onPressSync={() => setShowSyncModal(true)}
+          isSyncing={getSyncState(journal.id).status === 'syncing'}
         />
 
         {journal.settings.filterBar && (
@@ -213,6 +233,14 @@ export default function JournalScreen() {
           journal={journal}
           derivedKey={derivedKey}
           onClose={() => setShowExportModal(false)}
+        />
+
+        <SyncModal
+          visible={showSyncModal}
+          journal={journal}
+          derivedKey={derivedKey}
+          onClose={() => setShowSyncModal(false)}
+          onJournalChanged={refresh}
         />
       </View>
     </ThemeContext.Provider>

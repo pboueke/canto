@@ -57,6 +57,8 @@ export interface JournalSettings {
   showMarkdownPlaceholder: boolean;
   autoLocation: boolean;
   remoteSync: boolean;
+  syncProvider?: 'gdrive';
+  autoSync: boolean;
   themeOverride?: string;
 }
 
@@ -101,6 +103,7 @@ export const DEFAULT_JOURNAL_SETTINGS: JournalSettings = {
   showMarkdownPlaceholder: true,
   autoLocation: false,
   remoteSync: false,
+  autoSync: false,
 };
 
 export function pageToPreview(page: Page): PagePreview {

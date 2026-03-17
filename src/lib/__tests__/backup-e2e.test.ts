@@ -160,6 +160,7 @@ function makeJournal(id: string, overrides: Partial<JournalContent> = {}): Journ
       showMarkdownPlaceholder: true,
       autoLocation: false,
       remoteSync: false,
+      autoSync: false,
     },
     version: 1,
     ...overrides,
@@ -699,6 +700,7 @@ describe('data equivalence validation', () => {
       showMarkdownPlaceholder: false,
       autoLocation: true,
       remoteSync: true,
+      autoSync: false,
       themeOverride: 'dark-blue',
     };
     const journal = makeJournal('j1', { title: 'Settings RT', settings, pages: [] });

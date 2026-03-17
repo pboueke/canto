@@ -185,6 +185,27 @@ export interface Dictionary {
     importing: string;
     or: string;
   };
+  sync: {
+    sync: string;
+    syncNow: string;
+    syncing: string;
+    syncComplete: string;
+    syncError: string;
+    enableGDriveSync: string;
+    disableSync: string;
+    autoSync: string;
+    lastSynced: string;
+    neverSynced: string;
+    notConfigured: string;
+    signInToGoogle: string;
+    signedInAs: string;
+    signOut: string;
+    importFromCloud: string;
+    noCloudJournals: string;
+    journalAlreadyLocal: string;
+    connectAccount: string;
+    account: string;
+  };
 }
 
 const en: Dictionary = {
@@ -376,6 +397,27 @@ const en: Dictionary = {
     invalidFile: 'Invalid backup file',
     importing: 'Importing...',
     or: 'OR',
+  },
+  sync: {
+    sync: 'Sync',
+    syncNow: 'Sync now',
+    syncing: 'Syncing...',
+    syncComplete: 'Sync complete',
+    syncError: 'Sync failed',
+    enableGDriveSync: 'Enable Google Drive sync',
+    disableSync: 'Disable sync',
+    autoSync: 'Auto-sync',
+    lastSynced: 'Last synced',
+    neverSynced: 'Never synced',
+    notConfigured: 'Not configured',
+    signInToGoogle: 'Sign in to Google',
+    signedInAs: 'Signed in as',
+    signOut: 'Sign out',
+    importFromCloud: 'Import from Google Drive',
+    noCloudJournals: 'No journals found on Google Drive',
+    journalAlreadyLocal: 'Already on this device',
+    connectAccount: 'Connect account',
+    account: 'Account',
   },
 };
 
@@ -569,6 +611,27 @@ const pt: Dictionary = {
     importing: 'Importando...',
     or: 'OU',
   },
+  sync: {
+    sync: 'Sincronizar',
+    syncNow: 'Sincronizar agora',
+    syncing: 'Sincronizando...',
+    syncComplete: 'Sincronizacao concluida',
+    syncError: 'Falha na sincronizacao',
+    enableGDriveSync: 'Ativar sincronizacao com Google Drive',
+    disableSync: 'Desativar sincronizacao',
+    autoSync: 'Sincronizacao automatica',
+    lastSynced: 'Ultima sincronizacao',
+    neverSynced: 'Nunca sincronizado',
+    notConfigured: 'Nao configurado',
+    signInToGoogle: 'Entrar com Google',
+    signedInAs: 'Conectado como',
+    signOut: 'Sair',
+    importFromCloud: 'Importar do Google Drive',
+    noCloudJournals: 'Nenhum diario encontrado no Google Drive',
+    journalAlreadyLocal: 'Ja esta neste dispositivo',
+    connectAccount: 'Conectar conta',
+    account: 'Conta',
+  },
 };
 
 const es: Dictionary = {
@@ -760,6 +823,27 @@ const es: Dictionary = {
     invalidFile: 'Archivo de respaldo invalido',
     importing: 'Importando...',
     or: 'O',
+  },
+  sync: {
+    sync: 'Sincronizar',
+    syncNow: 'Sincronizar ahora',
+    syncing: 'Sincronizando...',
+    syncComplete: 'Sincronizacion completa',
+    syncError: 'Error de sincronizacion',
+    enableGDriveSync: 'Activar sincronizacion con Google Drive',
+    disableSync: 'Desactivar sincronizacion',
+    autoSync: 'Sincronizacion automatica',
+    lastSynced: 'Ultima sincronizacion',
+    neverSynced: 'Nunca sincronizado',
+    notConfigured: 'No configurado',
+    signInToGoogle: 'Iniciar sesion con Google',
+    signedInAs: 'Conectado como',
+    signOut: 'Cerrar sesion',
+    importFromCloud: 'Importar desde Google Drive',
+    noCloudJournals: 'No se encontraron diarios en Google Drive',
+    journalAlreadyLocal: 'Ya esta en este dispositivo',
+    connectAccount: 'Conectar cuenta',
+    account: 'Cuenta',
   },
 };
 
@@ -953,6 +1037,27 @@ const de: Dictionary = {
     importing: 'Importiere...',
     or: 'ODER',
   },
+  sync: {
+    sync: 'Synchronisieren',
+    syncNow: 'Jetzt synchronisieren',
+    syncing: 'Synchronisiere...',
+    syncComplete: 'Synchronisierung abgeschlossen',
+    syncError: 'Synchronisierung fehlgeschlagen',
+    enableGDriveSync: 'Google Drive-Synchronisierung aktivieren',
+    disableSync: 'Synchronisierung deaktivieren',
+    autoSync: 'Automatische Synchronisierung',
+    lastSynced: 'Zuletzt synchronisiert',
+    neverSynced: 'Nie synchronisiert',
+    notConfigured: 'Nicht konfiguriert',
+    signInToGoogle: 'Mit Google anmelden',
+    signedInAs: 'Angemeldet als',
+    signOut: 'Abmelden',
+    importFromCloud: 'Von Google Drive importieren',
+    noCloudJournals: 'Keine Tagebucher auf Google Drive gefunden',
+    journalAlreadyLocal: 'Bereits auf diesem Gerat',
+    connectAccount: 'Konto verbinden',
+    account: 'Konto',
+  },
 };
 
 const fr: Dictionary = {
@@ -1144,6 +1249,27 @@ const fr: Dictionary = {
     invalidFile: 'Fichier de sauvegarde invalide',
     importing: 'Importation...',
     or: 'OU',
+  },
+  sync: {
+    sync: 'Synchroniser',
+    syncNow: 'Synchroniser maintenant',
+    syncing: 'Synchronisation...',
+    syncComplete: 'Synchronisation terminee',
+    syncError: 'Echec de la synchronisation',
+    enableGDriveSync: 'Activer la synchronisation Google Drive',
+    disableSync: 'Desactiver la synchronisation',
+    autoSync: 'Synchronisation automatique',
+    lastSynced: 'Derniere synchronisation',
+    neverSynced: 'Jamais synchronise',
+    notConfigured: 'Non configure',
+    signInToGoogle: 'Se connecter a Google',
+    signedInAs: 'Connecte en tant que',
+    signOut: 'Se deconnecter',
+    importFromCloud: 'Importer depuis Google Drive',
+    noCloudJournals: 'Aucun journal trouve sur Google Drive',
+    journalAlreadyLocal: 'Deja sur cet appareil',
+    connectAccount: 'Connecter un compte',
+    account: 'Compte',
   },
 };
 
@@ -1337,6 +1463,27 @@ const ru: Dictionary = {
     importing: 'Импорт...',
     or: 'ИЛИ',
   },
+  sync: {
+    sync: 'Синхронизация',
+    syncNow: 'Синхронизировать сейчас',
+    syncing: 'Синхронизация...',
+    syncComplete: 'Синхронизация завершена',
+    syncError: 'Ошибка синхронизации',
+    enableGDriveSync: 'Включить синхронизацию с Google Drive',
+    disableSync: 'Отключить синхронизацию',
+    autoSync: 'Автоматическая синхронизация',
+    lastSynced: 'Последняя синхронизация',
+    neverSynced: 'Никогда не синхронизировалось',
+    notConfigured: 'Не настроено',
+    signInToGoogle: 'Войти через Google',
+    signedInAs: 'Вы вошли как',
+    signOut: 'Выйти',
+    importFromCloud: 'Импортировать из Google Drive',
+    noCloudJournals: 'Журналы на Google Drive не найдены',
+    journalAlreadyLocal: 'Уже на этом устройстве',
+    connectAccount: 'Подключить аккаунт',
+    account: 'Аккаунт',
+  },
 };
 
 const zh: Dictionary = {
@@ -1527,6 +1674,27 @@ const zh: Dictionary = {
     invalidFile: '无效的备份文件',
     importing: '正在导入...',
     or: '或',
+  },
+  sync: {
+    sync: '同步',
+    syncNow: '立即同步',
+    syncing: '同步中...',
+    syncComplete: '同步完成',
+    syncError: '同步失败',
+    enableGDriveSync: '启用Google Drive同步',
+    disableSync: '禁用同步',
+    autoSync: '自动同步',
+    lastSynced: '上次同步',
+    neverSynced: '从未同步',
+    notConfigured: '未配置',
+    signInToGoogle: '登录Google',
+    signedInAs: '已登录为',
+    signOut: '退出登录',
+    importFromCloud: '从Google Drive导入',
+    noCloudJournals: 'Google Drive上未找到日记',
+    journalAlreadyLocal: '已在此设备上',
+    connectAccount: '连接账户',
+    account: '账户',
   },
 };
 
@@ -1719,6 +1887,27 @@ const it: Dictionary = {
     invalidFile: 'File di backup non valido',
     importing: 'Importazione...',
     or: 'O',
+  },
+  sync: {
+    sync: 'Sincronizza',
+    syncNow: 'Sincronizza ora',
+    syncing: 'Sincronizzazione...',
+    syncComplete: 'Sincronizzazione completata',
+    syncError: 'Sincronizzazione fallita',
+    enableGDriveSync: 'Attiva sincronizzazione Google Drive',
+    disableSync: 'Disattiva sincronizzazione',
+    autoSync: 'Sincronizzazione automatica',
+    lastSynced: 'Ultima sincronizzazione',
+    neverSynced: 'Mai sincronizzato',
+    notConfigured: 'Non configurato',
+    signInToGoogle: 'Accedi con Google',
+    signedInAs: 'Connesso come',
+    signOut: 'Esci',
+    importFromCloud: 'Importa da Google Drive',
+    noCloudJournals: 'Nessun diario trovato su Google Drive',
+    journalAlreadyLocal: 'Gia su questo dispositivo',
+    connectAccount: 'Connetti account',
+    account: 'Account',
   },
 };
 

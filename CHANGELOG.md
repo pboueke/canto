@@ -1,5 +1,23 @@
 # Changelog
 
+## v0.11.0 - Google Drive Sync
+
+- feat: per-journal Google Drive sync via the existing `RemoteStore` interface
+- feat: Google OAuth authentication with `expo-auth-session` (proxy-free, native deep-link redirect)
+- feat: `GoogleAuthContext` with silent token refresh via `expo-secure-store`
+- feat: `SyncManager` with debounced auto-sync, per-journal sync state, and concurrent sync prevention
+- feat: `GDriveRemoteStore` — full `RemoteStore` implementation using Google Drive REST API v3
+- feat: Drive file structure: `appDataFolder/canto-journals.json` registry + `Canto/<journalId>/` folders
+- feat: `AccountButton` in home page footer (avatar when signed in, connect button when not)
+- feat: `SyncModal` in journal view — enable/disable sync, sync now, auto-sync toggle
+- feat: cloud icon in `JournalHeader` with syncing indicator
+- feat: auto-sync toggle in `JournalSettings`
+- feat: "Import from Google Drive" option in `NewJournalModal` for cross-device journal discovery
+- feat: sync-related i18n strings added to all 8 languages
+- feat: 23 new tests for Google Drive API helper and `GDriveRemoteStore` (340 total)
+- model: added `syncProvider?: 'gdrive'` and `autoSync: boolean` to `JournalSettings`
+- deps: `expo-auth-session`, `expo-web-browser`
+
 ## v0.10.0 - Best Practices & README Overhaul
 
 - feat: ESLint rules strengthened — added `consistent-type-imports` and `no-console` rules
