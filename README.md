@@ -4,7 +4,7 @@ A private, encrypted journaling app for Android, iOS, and Web.
 
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
 ![Version](https://img.shields.io/badge/version-0.11.0-green)
-![Tests](https://img.shields.io/badge/tests-336%20passed-brightgreen)
+![Tests](https://img.shields.io/badge/tests-340%20passed-brightgreen)
 ![Platforms](https://img.shields.io/badge/platforms-Android%20%7C%20iOS%20%7C%20Web-lightgrey)
 
 ## Features
@@ -57,7 +57,7 @@ npm run web        # Web browser
 ```bash
 npm run lint          # ESLint
 npm run typecheck     # TypeScript strict
-npm test              # Jest (336 tests)
+npm test              # Jest (340 tests)
 npm run test:coverage # Coverage report (80% threshold)
 npm run audit         # npm audit (production deps)
 make check            # lint + typecheck + test

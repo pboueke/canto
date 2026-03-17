@@ -6,6 +6,7 @@ const config = {
     '^@/(.*)$': '<rootDir>/src/$1',
     '^@noble/ciphers/(.*)\\.js$': '<rootDir>/node_modules/@noble/ciphers/$1.js',
     '^@noble/hashes/(.*)\\.js$': '<rootDir>/node_modules/@noble/hashes/$1.js',
+    '^expo-file-system/next$': '<rootDir>/src/__mocks__/expo-file-system-next.ts',
   },
   transformIgnorePatterns: [
     'node_modules/(?!((jest-)?react-native|@react-native(-community)?)|expo(nent)?|@expo(nent)?/.*|@expo-google-fonts/.*|react-navigation|@react-navigation/.*|@sentry/react-native|native-base|react-native-svg|@noble/ciphers|@noble/hashes|expo-crypto)',
