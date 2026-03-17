@@ -3,7 +3,7 @@ import { Paths, File, Directory } from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
 import type { JournalContent, Page } from '@/models';
 import { getLocalStore } from '@/hooks/useStorage';
-import { aesGcmEncrypt } from '@/lib/encryption/utils';
+import { aesGcmEncryptBytes } from '@/lib/encryption/utils';
 
 export interface ExportManifest {
   version: 1;
@@ -113,14 +113,14 @@ export async function exportJournal(
   const metadataJson = JSON.stringify(metadata, null, 2);
   zip.file(
     'journal.json',
-    encrypted && derivedKey ? aesGcmEncrypt(metadataJson, derivedKey) : metadataJson,
+    encrypted && derivedKey ? aesGcmEncryptBytes(metadataJson, derivedKey) : metadataJson,
   );
 
   // --- Settings ---
   const settingsJson = JSON.stringify(journal.settings, null, 2);
   zip.file(
     'settings.json',
-    encrypted && derivedKey ? aesGcmEncrypt(settingsJson, derivedKey) : settingsJson,
+    encrypted && derivedKey ? aesGcmEncryptBytes(settingsJson, derivedKey) : settingsJson,
   );
 
   // --- Build path map for attachment rewriting ---
@@ -134,7 +134,7 @@ export async function exportJournal(
   for (let i = 0; i < rewrittenPages.length; i++) {
     const page = rewrittenPages[i];
     const pageJson = JSON.stringify(page, null, 2);
-    const content = encrypted && derivedKey ? aesGcmEncrypt(pageJson, derivedKey) : pageJson;
+    const content = encrypted && derivedKey ? aesGcmEncryptBytes(pageJson, derivedKey) : pageJson;
     zip.file(`pages/${page.id}.json`, content);
 
     current++;
@@ -149,8 +149,8 @@ export async function exportJournal(
     );
     if (data) {
       if (encrypted && derivedKey) {
-        // Encrypted export: store as ciphertext string
-        zip.file(`attachments/${entry.zipFilename}`, aesGcmEncrypt(data, derivedKey));
+        // Encrypted export: store as raw encrypted bytes (Uint8Array)
+        zip.file(`attachments/${entry.zipFilename}`, aesGcmEncryptBytes(data, derivedKey));
       } else {
         // Unencrypted export: decode base64 → raw binary so files are directly usable
         zip.file(`attachments/${entry.zipFilename}`, data, { base64: true });

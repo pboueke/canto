@@ -3,18 +3,9 @@ import { File } from 'expo-file-system';
 import type { JournalContent, JournalSettings, Page, Attachment } from '@/models';
 import { DEFAULT_JOURNAL_SETTINGS } from '@/models';
 import { getLocalStore } from '@/hooks/useStorage';
-import { aesGcmDecrypt } from '@/lib/encryption/utils';
+import { aesGcmDecryptBytes, base64ToUint8 } from '@/lib/encryption/utils';
 import { deriveKey, LEGACY_KDF_ITERATIONS } from '@/lib/encryption/password';
 import type { ExportManifest } from './export';
-
-function base64ToUint8(base64: string): Uint8Array {
-  const binary = atob(base64);
-  const bytes = new Uint8Array(binary.length);
-  for (let i = 0; i < binary.length; i++) {
-    bytes[i] = binary.charCodeAt(i);
-  }
-  return bytes;
-}
 
 function generateUUID(): string {
   const bytes = new Uint8Array(16);
@@ -110,25 +101,25 @@ export async function importJournal(
     derivedKey = await deriveKey('', saltBytes, iterations);
   }
 
-  function decryptContent(content: string): string {
+  // Read a ZIP entry, decrypting if this is an encrypted backup.
+  // Encrypted entries are stored as raw binary (Uint8Array); plaintext as UTF-8 strings.
+  async function readEntry(entry: JSZip.JSZipObject): Promise<string> {
     if (isEncrypted && derivedKey) {
-      return aesGcmDecrypt(content, derivedKey);
+      return aesGcmDecryptBytes(await entry.async('uint8array'), derivedKey);
     }
-    return content;
+    return entry.async('string');
   }
 
   // --- Read journal metadata ---
   const journalFile = zip.file('journal.json');
   if (!journalFile) throw new Error('Invalid backup: missing journal.json');
-  const journalData = JSON.parse(
-    decryptContent(await journalFile.async('string')),
-  ) as JournalContent;
+  const journalData = JSON.parse(await readEntry(journalFile)) as JournalContent;
 
   // --- Read settings ---
   let settings: JournalSettings = { ...DEFAULT_JOURNAL_SETTINGS };
   const settingsFile = zip.file('settings.json');
   if (settingsFile) {
-    settings = JSON.parse(decryptContent(await settingsFile.async('string')));
+    settings = JSON.parse(await readEntry(settingsFile));
   }
 
   // --- Generate new IDs ---
@@ -144,7 +135,7 @@ export async function importJournal(
   let current = 0;
 
   for (const pf of pageFiles) {
-    const pageData = JSON.parse(decryptContent(await pf.async('string'))) as Page;
+    const pageData = JSON.parse(await readEntry(pf)) as Page;
     const newPageId = generateUUID();
     pageIdMap.set(pageData.id, newPageId);
 
@@ -161,11 +152,11 @@ export async function importJournal(
   const attachmentFiles = zip.file(/^attachments\//);
   for (const af of attachmentFiles) {
     const zipFilename = af.name.replace('attachments/', '');
-    // Encrypted backups store attachments as ciphertext strings;
+    // Encrypted backups store attachments as raw encrypted bytes;
     // unencrypted backups store raw binary (read as base64 for the store).
     let data: string;
     if (isEncrypted && derivedKey) {
-      data = aesGcmDecrypt(await af.async('string'), derivedKey);
+      data = aesGcmDecryptBytes(await af.async('uint8array'), derivedKey);
     } else {
       data = await af.async('base64');
     }

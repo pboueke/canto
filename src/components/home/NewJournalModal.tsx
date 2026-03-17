@@ -22,17 +22,9 @@ import { ThemePickerModal } from '@/components/home/ThemePickerModal';
 import { isBiometricAvailable } from '@/lib/biometric';
 import { DEFAULT_KDF_ITERATIONS, LEGACY_KDF_ITERATIONS } from '@/lib/encryption/password';
 import { deriveKey } from '@/lib/encryption/password';
+import { base64ToUint8 } from '@/lib/encryption/utils';
 import { type ThemeName, themes } from '@/styles/themes';
 import { inspectBackup, importJournal, hasNameConflict, resolveNameConflict } from '@/lib/backup';
-
-function base64ToUint8(base64: string): Uint8Array {
-  const binary = atob(base64);
-  const bytes = new Uint8Array(binary.length);
-  for (let i = 0; i < binary.length; i++) {
-    bytes[i] = binary.charCodeAt(i);
-  }
-  return bytes;
-}
 
 interface NewJournalModalProps {
   visible: boolean;
