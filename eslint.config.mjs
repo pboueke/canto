@@ -31,6 +31,11 @@ export default [
       ...tseslint.configs.recommended.rules,
       '@typescript-eslint/no-unused-vars': ['warn', { argsIgnorePattern: '^_' }],
       '@typescript-eslint/no-require-imports': 'off',
+      '@typescript-eslint/consistent-type-imports': [
+        'warn',
+        { prefer: 'type-imports', fixStyle: 'inline-type-imports' },
+      ],
+      'no-console': ['warn', { allow: ['warn', 'error'] }],
     },
   },
   prettier,

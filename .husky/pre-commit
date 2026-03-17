@@ -19,4 +19,16 @@ if [ -n "$VERSION" ]; then
   fi
 fi
 
+# Sync test count badge in README.md
+TEST_OUTPUT=$(npx jest --no-coverage 2>&1 | tail -5)
+TESTS_PASSED=$(echo "$TEST_OUTPUT" | grep -oP 'Tests:\s+\K[0-9]+(?= passed)')
+if [ -n "$TESTS_PASSED" ]; then
+  CURRENT=$(grep -oP 'tests-\K[0-9]+' README.md | head -1)
+  if [ "$TESTS_PASSED" != "$CURRENT" ]; then
+    sed -i "s/tests-[0-9]*%20passed/tests-${TESTS_PASSED}%20passed/" README.md
+    sed -i "s/Jest ([0-9]* tests)/Jest (${TESTS_PASSED} tests)/" README.md
+    git add README.md
+  fi
+fi
+
 npx lint-staged

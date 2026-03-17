@@ -83,6 +83,17 @@ export function generateSalt(length: number = 16): Uint8Array {
   return getRandomBytes(length);
 }
 
+/**
+ * Generate a cryptographically random UUID v4 (RFC 4122).
+ */
+export function generateUUID(): string {
+  const bytes = getRandomBytes(16);
+  bytes[6] = (bytes[6] & 0x0f) | 0x40; // version 4
+  bytes[8] = (bytes[8] & 0x3f) | 0x80; // variant 1
+  const hex = Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+}
+
 const B64 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
 const B64_LOOKUP = new Uint8Array(128);
 B64_LOOKUP.fill(255);

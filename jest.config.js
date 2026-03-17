@@ -19,7 +19,7 @@ const config = {
   ],
   coverageThreshold: {
     global: {
-      statements: 40,
+      statements: 80,
     },
   },
 };
