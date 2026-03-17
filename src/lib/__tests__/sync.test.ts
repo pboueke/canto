@@ -32,6 +32,7 @@ const makeJournal = (pages: Page[]): JournalContent => ({
     showMarkdownPlaceholder: true,
     autoLocation: false,
     remoteSync: true,
+    autoSync: false,
   },
   version: 1,
 });

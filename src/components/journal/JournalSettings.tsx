@@ -455,6 +455,52 @@ export function JournalSettings({
           </View>
         )}
 
+        {/* Sync settings */}
+        {journal.settings.remoteSync && (
+          <>
+            <Text
+              style={[
+                styles.sectionTitle,
+                { color: theme.colors.textSecondary, fontFamily: theme.fonts.bold },
+              ]}
+            >
+              {t.sync.sync}
+            </Text>
+            <View
+              style={[
+                styles.card,
+                { backgroundColor: theme.colors.surface, borderColor: theme.colors.border },
+              ]}
+            >
+              <View style={styles.settingRow}>
+                <Text
+                  style={[
+                    styles.statLabel,
+                    { color: theme.colors.textSecondary, fontFamily: theme.fonts.regular },
+                  ]}
+                >
+                  {journal.settings.syncProvider === 'gdrive' ? 'Google Drive' : '-'}
+                </Text>
+              </View>
+              <View style={styles.settingRow}>
+                <Text
+                  style={[
+                    styles.settingLabel,
+                    { color: theme.colors.text, fontFamily: theme.fonts.regular },
+                  ]}
+                >
+                  {t.sync.autoSync}
+                </Text>
+                <Switch
+                  value={settings.autoSync}
+                  onValueChange={(val) => updateSetting('autoSync', val)}
+                  trackColor={{ false: theme.colors.border, true: theme.colors.primary }}
+                />
+              </View>
+            </View>
+          </>
+        )}
+
         {/* Danger zone */}
         <Text
           style={[styles.sectionTitle, { color: theme.colors.error, fontFamily: theme.fonts.bold }]}

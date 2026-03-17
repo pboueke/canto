@@ -25,6 +25,9 @@ import { deriveKey } from '@/lib/encryption/password';
 import { base64ToUint8 } from '@/lib/encryption/utils';
 import { type ThemeName, themes } from '@/styles/themes';
 import { inspectBackup, importJournal, hasNameConflict, resolveNameConflict } from '@/lib/backup';
+import { useGoogleAuth } from '@/contexts/GoogleAuthContext';
+import { useSyncManager } from '@/contexts/SyncManagerContext';
+import type { RemoteJournalMeta } from '@/lib/sync';
 
 interface NewJournalModalProps {
   visible: boolean;
@@ -60,6 +63,8 @@ export function NewJournalModal({
   const { theme } = useTheme();
   const { t } = useI18n();
   const insets = useSafeAreaInsets();
+  const { isSignedIn, accessToken } = useGoogleAuth();
+  const { manager } = useSyncManager();
 
   const [title, setTitle] = useState('');
   const [icon, setIcon] = useState('book');
@@ -85,6 +90,11 @@ export function NewJournalModal({
   const [importPasswordOptional, setImportPasswordOptional] = useState(false);
   const [importRenameNeeded, setImportRenameNeeded] = useState(false);
   const [importNewTitle, setImportNewTitle] = useState('');
+  // Cloud import state
+  const [showCloudImport, setShowCloudImport] = useState(false);
+  const [cloudJournals, setCloudJournals] = useState<RemoteJournalMeta[]>([]);
+  const [cloudLoading, setCloudLoading] = useState(false);
+  const [cloudError, setCloudError] = useState<string | null>(null);
 
   useEffect(() => {
     isBiometricAvailable().then(setBiometricSupported);
@@ -134,6 +144,54 @@ export function NewJournalModal({
     setError(null);
     setImportError(null);
     resetImportState();
+  }
+
+  async function handleCloudImport() {
+    if (!manager || !accessToken) return;
+    setCloudError(null);
+    setCloudLoading(true);
+    try {
+      await manager.connectIfNeeded(accessToken);
+      const store = manager.getRemoteStore();
+      const remoteJournals = await store.listRemoteJournals();
+      // Filter out journals already local
+      const localIds = new Set(existingTitles);
+      const available = remoteJournals.filter((rj) => !localIds.has(rj.title));
+      setCloudJournals(available);
+      setShowCloudImport(true);
+    } catch (err) {
+      setCloudError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setCloudLoading(false);
+    }
+  }
+
+  async function handleCloudJournalSelect(remote: RemoteJournalMeta) {
+    if (!manager || !accessToken) return;
+    setShowCloudImport(false);
+    setImporting(true);
+    try {
+      await manager.connectIfNeeded(accessToken);
+      const store = manager.getRemoteStore();
+      const journal = await store.downloadJournalMeta(remote.id);
+      if (!journal) throw new Error('Journal not found on remote');
+
+      // Save locally
+      const { getLocalStore } = await import('@/hooks/useStorage');
+      const localStore = await getLocalStore();
+      await localStore.saveJournal(journal);
+      for (const page of journal.pages) {
+        await localStore.savePage(journal.id, page);
+      }
+
+      resetForm();
+      onClose();
+      onImportComplete?.(journal.id);
+    } catch (err) {
+      setImportError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setImporting(false);
+    }
   }
 
   function resetImportState() {
@@ -536,6 +594,45 @@ export function NewJournalModal({
                 </Text>
               </Pressable>
 
+              {isSignedIn && (
+                <Pressable
+                  onPress={handleCloudImport}
+                  disabled={cloudLoading}
+                  style={[
+                    styles.importButton,
+                    {
+                      borderColor: theme.colors.border,
+                      backgroundColor: theme.colors.surface,
+                      opacity: cloudLoading ? 0.5 : 1,
+                    },
+                  ]}
+                >
+                  <Feather name="cloud" size={18} color={theme.colors.primary} />
+                  <Text
+                    style={[
+                      styles.importText,
+                      { color: theme.colors.primary, fontFamily: theme.fonts.regular },
+                    ]}
+                  >
+                    {t.sync.importFromCloud}
+                  </Text>
+                </Pressable>
+              )}
+
+              {cloudError && (
+                <View style={[styles.errorBox, { borderColor: theme.colors.error }]}>
+                  <Feather name="alert-circle" size={14} color={theme.colors.error} />
+                  <Text
+                    style={[
+                      styles.errorBoxText,
+                      { color: theme.colors.text, fontFamily: theme.fonts.regular },
+                    ]}
+                  >
+                    {cloudError}
+                  </Text>
+                </View>
+              )}
+
               {importError && (
                 <View style={[styles.errorBox, { borderColor: theme.colors.error }]}>
                   <Feather name="alert-circle" size={14} color={theme.colors.error} />
@@ -877,6 +974,78 @@ export function NewJournalModal({
           setThemeOverride(name ?? undefined);
         }}
       />
+
+      {/* Cloud import picker */}
+      <Modal
+        visible={showCloudImport}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowCloudImport(false)}
+      >
+        <View style={styles.explainOverlay}>
+          <View
+            style={[
+              styles.explainContent,
+              { backgroundColor: theme.colors.background, borderColor: theme.colors.border },
+            ]}
+          >
+            <Text
+              style={[
+                styles.explainTitle,
+                { color: theme.colors.text, fontFamily: theme.fonts.bold },
+              ]}
+            >
+              {t.sync.importFromCloud}
+            </Text>
+            {cloudJournals.length === 0 ? (
+              <Text
+                style={[
+                  styles.explainBody,
+                  { color: theme.colors.textSecondary, fontFamily: theme.fonts.regular },
+                ]}
+              >
+                {t.sync.noCloudJournals}
+              </Text>
+            ) : (
+              <ScrollView style={styles.explainScroll}>
+                {cloudJournals.map((rj) => (
+                  <Pressable
+                    key={rj.id}
+                    onPress={() => handleCloudJournalSelect(rj)}
+                    style={[
+                      styles.importButton,
+                      { borderColor: theme.colors.border, backgroundColor: theme.colors.surface },
+                    ]}
+                  >
+                    <Feather name="book" size={16} color={theme.colors.text} />
+                    <Text
+                      style={[
+                        styles.importText,
+                        { color: theme.colors.text, fontFamily: theme.fonts.regular },
+                      ]}
+                    >
+                      {rj.title}
+                    </Text>
+                  </Pressable>
+                ))}
+              </ScrollView>
+            )}
+            <Pressable
+              style={[styles.explainCloseBtn, { backgroundColor: theme.colors.highlight }]}
+              onPress={() => setShowCloudImport(false)}
+            >
+              <Text
+                style={[
+                  styles.explainCloseBtnText,
+                  { color: theme.colors.text, fontFamily: theme.fonts.regular },
+                ]}
+              >
+                {t.common.close}
+              </Text>
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
     </Modal>
   );
 }

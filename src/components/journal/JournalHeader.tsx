@@ -9,9 +9,17 @@ interface JournalHeaderProps {
   journal: Journal;
   onPressSettings?: () => void;
   onPressExport?: () => void;
+  onPressSync?: () => void;
+  isSyncing?: boolean;
 }
 
-export function JournalHeader({ journal, onPressSettings, onPressExport }: JournalHeaderProps) {
+export function JournalHeader({
+  journal,
+  onPressSettings,
+  onPressExport,
+  onPressSync,
+  isSyncing,
+}: JournalHeaderProps) {
   const { theme } = useTheme();
   const insets = useSafeAreaInsets();
 
@@ -40,6 +48,13 @@ export function JournalHeader({ journal, onPressSettings, onPressExport }: Journ
         {journal.title}
       </Text>
       <View style={styles.actions}>
+        <Pressable onPress={onPressSync} style={styles.actionButton}>
+          <Feather
+            name="cloud"
+            size={20}
+            color={isSyncing ? theme.colors.primary : theme.colors.text}
+          />
+        </Pressable>
         <Pressable onPress={onPressExport} style={styles.actionButton}>
           <Feather name="archive" size={20} color={theme.colors.text} />
         </Pressable>

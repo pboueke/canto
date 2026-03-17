@@ -135,6 +135,7 @@ function makeJournalContent(id: string, pages: Page[] = []): JournalContent {
       showMarkdownPlaceholder: true,
       autoLocation: false,
       remoteSync: false,
+      autoSync: false,
     },
     version: 1,
   };
