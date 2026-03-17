@@ -50,7 +50,7 @@ export function useGoogleAuth() {
 }
 
 const hasValidCredentials =
-  GOOGLE_CREDENTIALS.webClientId && !GOOGLE_CREDENTIALS.webClientId.startsWith('REPLACE_ME');
+  !!GOOGLE_CREDENTIALS.webClientId && !GOOGLE_CREDENTIALS.webClientId.startsWith('REPLACE_ME');
 
 export function GoogleAuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<GoogleUser | null>(null);
