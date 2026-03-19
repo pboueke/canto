@@ -38,31 +38,42 @@ async function saveState(state: RateLimitState): Promise<void> {
 }
 
 export function createUnlockRateLimiter(): UnlockRateLimiter {
+  // Mutex to serialize concurrent attempt() calls
+  let pending: Promise<unknown> = Promise.resolve();
+
+  function serialize<T>(fn: () => Promise<T>): Promise<T> {
+    const next = pending.then(fn, fn);
+    pending = next;
+    return next;
+  }
+
   return {
-    async attempt(): Promise<boolean> {
-      const state = await loadState();
-      const now = Date.now();
+    attempt(): Promise<boolean> {
+      return serialize(async () => {
+        const state = await loadState();
+        const now = Date.now();
 
-      if (now < state.lockedUntil) {
-        return false;
-      }
+        if (now < state.lockedUntil) {
+          return false;
+        }
 
-      // Lockout expired, reset if was locked
-      if (state.lockedUntil > 0 && now >= state.lockedUntil) {
-        state.attempts = 0;
-        state.lockedUntil = 0;
-      }
+        // Lockout expired, reset
+        if (state.lockedUntil > 0) {
+          state.attempts = 0;
+          state.lockedUntil = 0;
+        }
 
-      state.attempts++;
-      const lockout = getLockoutDuration(state.attempts);
-      if (lockout > 0) {
-        state.lockedUntil = now + lockout;
+        state.attempts++;
+        const lockout = getLockoutDuration(state.attempts);
+        if (lockout > 0) {
+          state.lockedUntil = now + lockout;
+          await saveState(state);
+          return false;
+        }
+
         await saveState(state);
-        return false;
-      }
-
-      await saveState(state);
-      return true;
+        return true;
+      });
     },
 
     async reset(): Promise<void> {

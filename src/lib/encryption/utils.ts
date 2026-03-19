@@ -21,6 +21,7 @@ const yieldThread = (): Promise<void> => new Promise((resolve) => setTimeout(res
  * A unique nonce is generated via CSPRNG for every call.
  */
 export async function aesGcmEncrypt(plaintext: string, key: Uint8Array): Promise<string> {
+  if (key.length !== 32) throw new Error(`Invalid AES key: expected 32 bytes, got ${key.length}`);
   const aesKey = await AESEncryptionKey.import(key);
   const sealed = await aesEncryptAsync(textEncoder.encode(plaintext), aesKey);
   const combined = await sealed.combined();
@@ -33,6 +34,7 @@ export async function aesGcmEncrypt(plaintext: string, key: Uint8Array): Promise
  * Throws if authentication fails (tampered data).
  */
 export async function aesGcmDecrypt(ciphertext: string, key: Uint8Array): Promise<string> {
+  if (key.length !== 32) throw new Error(`Invalid AES key: expected 32 bytes, got ${key.length}`);
   await yieldThread();
   const data = base64ToUint8(ciphertext);
 
@@ -55,9 +57,12 @@ export async function aesGcmDecrypt(ciphertext: string, key: Uint8Array): Promis
  * round-trips that can be corrupted by JSZip compression on Hermes.
  */
 export async function aesGcmEncryptBytes(plaintext: string, key: Uint8Array): Promise<Uint8Array> {
+  if (key.length !== 32) throw new Error(`Invalid AES key: expected 32 bytes, got ${key.length}`);
   const aesKey = await AESEncryptionKey.import(key);
   const sealed = await aesEncryptAsync(textEncoder.encode(plaintext), aesKey);
-  return await sealed.combined();
+  const combined = await sealed.combined();
+  await yieldThread();
+  return combined;
 }
 
 /**
@@ -65,14 +70,17 @@ export async function aesGcmEncryptBytes(plaintext: string, key: Uint8Array): Pr
  * Counterpart to aesGcmEncryptBytes — operates on Uint8Array directly.
  */
 export async function aesGcmDecryptBytes(data: Uint8Array, key: Uint8Array): Promise<string> {
+  if (key.length !== 32) throw new Error(`Invalid AES key: expected 32 bytes, got ${key.length}`);
   if (data.length < NONCE_LENGTH + TAG_LENGTH) {
     throw new Error('Invalid ciphertext: too short');
   }
 
+  await yieldThread();
   const sealed = AESSealedData.fromCombined(data);
   const aesKey = await AESEncryptionKey.import(key);
   const result = await aesDecryptAsync(sealed, aesKey);
 
+  await yieldThread();
   return textDecoder.decode(result);
 }
 
@@ -130,8 +138,15 @@ export function base64ToUint8(base64: string): Uint8Array {
   for (let i = 0; i < str.length; i += 4) {
     const a = B64_LOOKUP[str.charCodeAt(i)];
     const b = B64_LOOKUP[str.charCodeAt(i + 1)];
-    const c = B64_LOOKUP[str.charCodeAt(i + 2)];
-    const d = B64_LOOKUP[str.charCodeAt(i + 3)];
+    // Padding chars ('=') map to 255 in lookup — treat as 0 for decoding
+    const cChar = str.charCodeAt(i + 2);
+    const dChar = str.charCodeAt(i + 3);
+    const c = cChar === 61 /* '=' */ ? 0 : B64_LOOKUP[cChar];
+    const d = dChar === 61 /* '=' */ ? 0 : B64_LOOKUP[dChar];
+    // Detect invalid base64 characters (lookup returns 255 for unknown)
+    if ((a | b | c | d) & 0x80) {
+      throw new Error('Invalid base64 character in input');
+    }
     out[j++] = (a << 2) | (b >> 4);
     if (j < outLen) out[j++] = ((b & 15) << 4) | (c >> 2);
     if (j < outLen) out[j++] = ((c & 3) << 6) | d;

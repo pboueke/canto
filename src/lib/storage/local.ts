@@ -260,16 +260,16 @@ export function createLocalStore(encryption: EncryptionService): LocalStore {
     },
 
     async deleteJournal(id: string): Promise<void> {
-      // Always update the index first so the journal disappears from the list
-      // even if the directory cleanup fails
-      const index = await readIndex();
-      index.journals = index.journals.filter((j) => j.id !== id);
-      await writeIndex(index);
-
+      // Delete directory first — if this fails, the journal stays in the index
+      // (visible but recoverable). Reverse order would orphan data.
       const dir = getJournalDir(id);
       if (dir.exists) {
         dir.delete();
       }
+
+      const index = await readIndex();
+      index.journals = index.journals.filter((j) => j.id !== id);
+      await writeIndex(index);
     },
 
     async getPage(
@@ -363,27 +363,56 @@ export function createLocalStore(encryption: EncryptionService): LocalStore {
 
     async reencryptJournal(
       journal: JournalContent,
-      _oldKey: Uint8Array | undefined,
+      oldKey: Uint8Array | undefined,
       newKey: Uint8Array | undefined,
       onProgress?: (current: number, total: number) => void,
     ): Promise<void> {
       const pages = journal.pages.filter((p) => !p.deleted);
-      const total = pages.length + 1; // +1 for metadata
 
-      // Step 1: Write all pages to .tmp files
-      for (let i = 0; i < pages.length; i++) {
-        onProgress?.(i + 1, total);
-        const pageFile = getPageFile(journal.id, pages[i].id);
-        await atomicWrite(pageFile, JSON.stringify(pages[i]), encryption, newKey);
+      // Count attachments for accurate progress
+      const attachDir = getAttachmentsDir(journal.id);
+      const attachFiles = attachDir.exists
+        ? (attachDir.list() as File[]).filter((e) => e instanceof File)
+        : [];
+      const total = pages.length + attachFiles.length + 1; // pages + attachments + metadata
+
+      // Step 1: Re-encrypt pages
+      let progress = 0;
+      for (const page of pages) {
+        onProgress?.(++progress, total);
+        const pageFile = getPageFile(journal.id, page.id);
+        await atomicWrite(pageFile, JSON.stringify(page), encryption, newKey);
       }
 
-      // Step 2: Write metadata to .tmp file
-      onProgress?.(total, total);
+      // Step 2: Re-encrypt attachments
+      for (const entry of attachFiles) {
+        onProgress?.(++progress, total);
+        const raw = await entry.text();
+        // Decrypt: device layer then old password layer
+        let plaintext = await encryption.decrypt(raw);
+        if (oldKey) {
+          try {
+            plaintext = await aesGcmDecrypt(plaintext, oldKey);
+          } catch {
+            // Not password-encrypted, use device-decrypted content
+          }
+        }
+        // Re-encrypt: new password layer then device layer
+        const toDeviceEncrypt = newKey ? await aesGcmEncrypt(plaintext, newKey) : plaintext;
+        const ciphertext = await encryption.encrypt(toDeviceEncrypt);
+        const tmp = getTmpFile(entry);
+        if (!tmp.exists) tmp.create({ intermediates: true });
+        tmp.write(ciphertext);
+        moveFile(tmp, entry);
+      }
+
+      // Step 3: Write metadata
+      onProgress?.(++progress, total);
       // eslint-disable-next-line @typescript-eslint/no-unused-vars
       const { pages: _p, ...metadata } = journal;
       await atomicWrite(getMetadataFile(journal.id), JSON.stringify(metadata), encryption, newKey);
 
-      // Step 3: Update index
+      // Step 4: Update index
       const index = await readIndex();
       const entry: Journal = {
         id: journal.id,

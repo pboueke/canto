@@ -311,6 +311,97 @@ describe('SyncManager', () => {
     });
   });
 
+  describe('error recovery', () => {
+    it('returns to idle after error — can retry sync', async () => {
+      const journal = makeJournal([]);
+      const local = createMockLocalStore(journal);
+      const manager = new SyncManager(local, createMockRemoteStore());
+
+      // First sync fails
+      (local.getJournal as jest.Mock).mockRejectedValueOnce(new Error('network'));
+      await manager.syncJournal('j1', 'token');
+      expect(manager.getState('j1').status).toBe('error');
+
+      // Retry succeeds (getJournal back to normal)
+      (local.getJournal as jest.Mock).mockResolvedValueOnce(journal);
+      const result = await manager.syncJournal('j1', 'token');
+      expect(result).not.toBeNull();
+      expect(manager.getState('j1').status).toBe('idle');
+    });
+
+    it('preserves lastSynced from before the error', async () => {
+      const journal = makeJournal([]);
+      const local = createMockLocalStore(journal);
+      const manager = new SyncManager(local, createMockRemoteStore());
+
+      // First sync succeeds
+      await manager.syncJournal('j1', 'token');
+      const lastSynced = manager.getState('j1').lastSynced;
+      expect(lastSynced).toBeGreaterThan(0);
+
+      // Second sync fails
+      (local.getJournal as jest.Mock).mockRejectedValueOnce(new Error('fail'));
+      await manager.syncJournal('j1', 'token');
+
+      const errorState = manager.getState('j1');
+      expect(errorState.status).toBe('error');
+      expect(errorState.lastSynced).toBe(lastSynced);
+    });
+
+    it('error message is captured in state', async () => {
+      const local = createMockLocalStore(null);
+      (local.getJournal as jest.Mock).mockRejectedValueOnce(new Error('Drive API error (401)'));
+      const manager = new SyncManager(local, createMockRemoteStore());
+
+      await manager.syncJournal('j1', 'token');
+
+      expect(manager.getState('j1').error).toBe('Drive API error (401)');
+    });
+
+    it('non-Error throws are captured as strings', async () => {
+      const local = createMockLocalStore(null);
+      (local.getJournal as jest.Mock).mockRejectedValueOnce('string error');
+      const manager = new SyncManager(local, createMockRemoteStore());
+
+      await manager.syncJournal('j1', 'token');
+
+      expect(manager.getState('j1').error).toBe('string error');
+    });
+  });
+
+  describe('multiple listeners', () => {
+    it('notifies all listeners on state change', async () => {
+      const journal = makeJournal([]);
+      const local = createMockLocalStore(journal);
+      const manager = new SyncManager(local, createMockRemoteStore());
+      const listener1 = jest.fn();
+      const listener2 = jest.fn();
+
+      manager.subscribe(listener1);
+      manager.subscribe(listener2);
+      await manager.syncJournal('j1', 'token');
+
+      expect(listener1).toHaveBeenCalled();
+      expect(listener2).toHaveBeenCalled();
+    });
+
+    it('unsubscribing one listener does not affect others', async () => {
+      const journal = makeJournal([]);
+      const local = createMockLocalStore(journal);
+      const manager = new SyncManager(local, createMockRemoteStore());
+      const listener1 = jest.fn();
+      const listener2 = jest.fn();
+
+      const unsub1 = manager.subscribe(listener1);
+      manager.subscribe(listener2);
+      unsub1();
+      await manager.syncJournal('j1', 'token');
+
+      expect(listener1).not.toHaveBeenCalled();
+      expect(listener2).toHaveBeenCalled();
+    });
+  });
+
   describe('debounced sync', () => {
     beforeEach(() => jest.useFakeTimers());
     afterEach(() => jest.useRealTimers());
@@ -335,6 +426,30 @@ describe('SyncManager', () => {
 
       // getJournal should be called once (from the single sync that fires)
       expect(local.getJournal).toHaveBeenCalledTimes(1);
+    });
+
+    it('debounced sync errors are captured in state (not unhandled)', async () => {
+      const local = createMockLocalStore(null);
+      (local.getJournal as jest.Mock).mockRejectedValue(new Error('debounce fail'));
+      const remote = createMockRemoteStore();
+      const manager = new SyncManager(local, remote);
+
+      manager.scheduleSyncDebounced('j1', 'token', undefined, 100);
+
+      // Advance past the debounce delay
+      jest.advanceTimersByTime(100);
+
+      // The debounced callback fires syncJournal which is async.
+      // We need to flush microtasks until the async chain completes.
+      // Use real timers temporarily to await the async work.
+      jest.useRealTimers();
+      // Wait for the async sync to complete
+      await new Promise((r) => setTimeout(r, 50));
+
+      expect(manager.getState('j1').status).toBe('error');
+      expect(manager.getState('j1').error).toBe('debounce fail');
+
+      jest.useFakeTimers();
     });
   });
 });

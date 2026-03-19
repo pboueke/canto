@@ -122,6 +122,36 @@ describe('Rate limiter — escalating lockout', () => {
     expect(await limiter.attempt()).toBe(true);
   });
 
+  it('concurrent attempts are serialized (no race condition)', async () => {
+    const limiter = createUnlockRateLimiter();
+    // Fire 5 attempts concurrently — all should be serialized
+    const results = await Promise.all([
+      limiter.attempt(),
+      limiter.attempt(),
+      limiter.attempt(),
+      limiter.attempt(),
+      limiter.attempt(),
+    ]);
+
+    // All 5 should be allowed (attempts 1-5)
+    expect(results).toEqual([true, true, true, true, true]);
+
+    // The 6th should be blocked
+    expect(await limiter.attempt()).toBe(false);
+  });
+
+  it('rapid concurrent attempts do not bypass lockout', async () => {
+    const limiter = createUnlockRateLimiter();
+    // Use up 5 attempts
+    for (let i = 0; i < 5; i++) await limiter.attempt();
+
+    // Fire 3 more concurrently — all should be locked
+    const results = await Promise.all([limiter.attempt(), limiter.attempt(), limiter.attempt()]);
+
+    // First one triggers lockout, remaining should also be locked
+    expect(results.every((r) => r === false)).toBe(true);
+  });
+
   it('lockoutRemaining returns correct ms', async () => {
     const now = 1000000;
     jest.spyOn(Date, 'now').mockReturnValue(now);

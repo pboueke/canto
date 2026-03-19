@@ -1,5 +1,23 @@
 # Changelog
 
+## v0.12.1 - Security & Reliability Hardening
+
+- fix: race condition in parallel sync worker — shared index could cause skipped items
+- fix: `syncAll()` now threads per-journal derived keys to encrypted journals
+- fix: GDrive store cache clearing was inverted — stale file IDs persisted across token changes
+- fix: attachment re-encryption on password change — previously only pages were re-encrypted
+- fix: `deleteJournal` now deletes directory before index update to prevent orphaned data
+- fix: rate limiter race condition — concurrent unlock attempts could bypass backoff
+- fix: debounced sync no longer drops errors silently
+- fix: base64 decoder now rejects invalid characters instead of producing corrupt output
+- security: escape journal IDs and filenames in Google Drive API queries to prevent injection
+- security: API error messages no longer leak response bodies or sensitive data
+- security: AES functions validate key is exactly 32 bytes before import
+- perf: GDrive page downloads use `Promise.allSettled` — one bad page no longer fails entire journal
+- perf: thread yield added to byte-level AES functions to prevent UI blocking
+- fix: concurrent `getOrCreateFolder` calls no longer create duplicate folders in GDrive
+- refactor: `createPasswordEncryption()` accepts configurable iteration count
+
 ## v0.12.0 - UI Cleanup & Performance
 
 - feat: encrypted thumbnail generation — pages now store a small base64 thumbnail at save time, eliminating slow full-image decryption in page list previews

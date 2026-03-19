@@ -112,7 +112,9 @@ export class SyncManager {
 
     const timer = setTimeout(() => {
       this.debounceTimers.delete(journalId);
-      this.syncJournal(journalId, accessToken, derivedKey);
+      this.syncJournal(journalId, accessToken, derivedKey).catch(() => {
+        // Error already captured in state via syncJournal's catch block
+      });
     }, delayMs);
     this.debounceTimers.set(journalId, timer);
   }

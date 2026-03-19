@@ -2,13 +2,16 @@ import type { JournalContent, Page } from '@/models';
 import type { RemoteStore, RemoteJournalMeta } from '../types';
 import * as api from './api';
 
+/** Escape a string for use in a Google Drive API query (ODATA-style). */
+function escapeQuery(value: string): string {
+  return value.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+}
+
 function safeJsonParse<T>(content: string, label: string): T {
   try {
     return JSON.parse(content) as T;
   } catch {
-    throw new Error(
-      `[GDrive] Invalid JSON in ${label} (first 200 chars): ${content.slice(0, 200)}`,
-    );
+    throw new Error(`[GDrive] Invalid JSON in ${label}`);
   }
 }
 
@@ -29,6 +32,8 @@ export class GDriveRemoteStore implements RemoteStore {
 
   /** In-memory cache: file name path → Drive file ID */
   private fileIdCache = new Map<string, string>();
+  /** In-flight folder creation promises to prevent duplicate creation. */
+  private folderInflight = new Map<string, Promise<string>>();
 
   isRemotePath(path: string): boolean {
     return path.startsWith('gdrive://');
@@ -39,10 +44,10 @@ export class GDriveRemoteStore implements RemoteStore {
   }
 
   async connect(credentials: { accessToken: string }): Promise<void> {
-    const tokenChanged = this.accessToken !== credentials.accessToken;
+    const isFirstConnect = this.accessToken === null;
     this.accessToken = credentials.accessToken;
-    // Only clear cache when connecting for the first time (not on token refresh)
-    if (!tokenChanged && this.fileIdCache.size === 0) {
+    // Clear cache on first connection (stale entries from previous session)
+    if (isFirstConnect) {
       this.fileIdCache.clear();
     }
   }
@@ -50,6 +55,7 @@ export class GDriveRemoteStore implements RemoteStore {
   async disconnect(): Promise<void> {
     this.accessToken = null;
     this.fileIdCache.clear();
+    this.folderInflight.clear();
   }
 
   isConnected(): boolean {
@@ -67,7 +73,11 @@ export class GDriveRemoteStore implements RemoteStore {
     const cached = this.fileIdCache.get(REGISTRY_FILE);
     if (cached) return cached;
 
-    const files = await api.listFiles(this.token(), `name = '${REGISTRY_FILE}'`, 'appDataFolder');
+    const files = await api.listFiles(
+      this.token(),
+      `name = '${escapeQuery(REGISTRY_FILE)}'`,
+      'appDataFolder',
+    );
     if (files.length > 0) {
       this.fileIdCache.set(REGISTRY_FILE, files[0].id);
       return files[0].id;
@@ -105,10 +115,28 @@ export class GDriveRemoteStore implements RemoteStore {
     const cached = this.fileIdCache.get(cacheKey);
     if (cached) return cached;
 
-    const parentQuery = parentId ? ` and '${parentId}' in parents` : '';
+    // Deduplicate concurrent calls for the same folder
+    const inflight = this.folderInflight.get(cacheKey);
+    if (inflight) return inflight;
+
+    const promise = this.resolveOrCreateFolder(name, cacheKey, parentId);
+    this.folderInflight.set(cacheKey, promise);
+    try {
+      return await promise;
+    } finally {
+      this.folderInflight.delete(cacheKey);
+    }
+  }
+
+  private async resolveOrCreateFolder(
+    name: string,
+    cacheKey: string,
+    parentId?: string,
+  ): Promise<string> {
+    const parentQuery = parentId ? ` and '${escapeQuery(parentId)}' in parents` : '';
     const files = await api.listFiles(
       this.token(),
-      `name = '${name}' and mimeType = 'application/vnd.google-apps.folder' and trashed = false${parentQuery}`,
+      `name = '${escapeQuery(name)}' and mimeType = 'application/vnd.google-apps.folder' and trashed = false${parentQuery}`,
     );
     if (files.length > 0) {
       this.fileIdCache.set(cacheKey, files[0].id);
@@ -156,7 +184,7 @@ export class GDriveRemoteStore implements RemoteStore {
 
     const files = await api.listFiles(
       this.token(),
-      `name = '${name}' and '${parentId}' in parents and trashed = false`,
+      `name = '${escapeQuery(name)}' and '${escapeQuery(parentId)}' in parents and trashed = false`,
     );
     if (files.length > 0) {
       this.fileIdCache.set(cacheKey, files[0].id);
@@ -233,16 +261,25 @@ export class GDriveRemoteStore implements RemoteStore {
     const pagesFolderId = await this.getPagesFolderId(journalId);
     const pageFiles = await api.listFiles(
       this.token(),
-      `'${pagesFolderId}' in parents and trashed = false`,
+      `'${escapeQuery(pagesFolderId)}' in parents and trashed = false`,
     );
 
     const token = this.token();
-    const pages = await Promise.all(
+    const results = await Promise.allSettled(
       pageFiles.map(async (pf) => {
         const pageContent = await api.getFileContent(token, pf.id);
         return safeJsonParse<Page>(pageContent, `page:${pf.name}`);
       }),
     );
+
+    const pages: Page[] = [];
+    for (const r of results) {
+      if (r.status === 'fulfilled') {
+        pages.push(r.value);
+      } else {
+        console.warn('[GDrive] Failed to download page:', r.reason);
+      }
+    }
 
     return { ...meta, pages } as JournalContent;
   }
@@ -306,17 +343,19 @@ export class GDriveRemoteStore implements RemoteStore {
     const folderId = this.fileIdCache.get(cacheKey);
     if (folderId) {
       await api.deleteFile(this.token(), folderId);
-      // Clear all cached entries for this journal
-      for (const key of this.fileIdCache.keys()) {
-        if (key.includes(journalId)) {
+      // Clear all cached entries for this journal (exact folder match)
+      const folderId2 = folderId; // capture for closure
+      for (const [key, value] of this.fileIdCache.entries()) {
+        if (value === folderId2 || key.includes(`${folderId2}/`)) {
           this.fileIdCache.delete(key);
         }
       }
+      this.fileIdCache.delete(cacheKey);
     } else {
       // Not cached — look it up
       const files = await api.listFiles(
         this.token(),
-        `name = '${journalId}' and mimeType = 'application/vnd.google-apps.folder' and '${rootId}' in parents and trashed = false`,
+        `name = '${escapeQuery(journalId)}' and mimeType = 'application/vnd.google-apps.folder' and '${escapeQuery(rootId)}' in parents and trashed = false`,
       );
       if (files.length > 0) {
         await api.deleteFile(this.token(), files[0].id);
