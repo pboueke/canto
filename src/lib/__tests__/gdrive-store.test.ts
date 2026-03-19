@@ -372,4 +372,98 @@ describe('GDriveRemoteStore', () => {
       expect(mockedApi.listFiles).toHaveBeenCalledTimes(5);
     });
   });
+
+  describe('safeJsonParse error diagnostics', () => {
+    beforeEach(async () => {
+      await store.connect({ accessToken: TOKEN });
+    });
+
+    it('throws descriptive error when registry contains invalid JSON', async () => {
+      mockedApi.listFiles.mockResolvedValueOnce([
+        {
+          id: 'reg-id',
+          name: 'canto-journals.json',
+          mimeType: 'application/json',
+          modifiedTime: '',
+        },
+      ]);
+      mockedApi.getFileContent.mockResolvedValueOnce('login required');
+
+      await expect(store.listRemoteJournals()).rejects.toThrow('[GDrive] Invalid JSON in registry');
+    });
+
+    it('includes first 200 chars of invalid content in error', async () => {
+      mockedApi.listFiles.mockResolvedValueOnce([
+        {
+          id: 'reg-id',
+          name: 'canto-journals.json',
+          mimeType: 'application/json',
+          modifiedTime: '',
+        },
+      ]);
+      mockedApi.getFileContent.mockResolvedValueOnce('not json at all');
+
+      await expect(store.listRemoteJournals()).rejects.toThrow('not json at all');
+    });
+
+    it('throws descriptive error when page content is invalid JSON', async () => {
+      const rootFolder = {
+        id: 'root-id',
+        name: 'Canto',
+        mimeType: 'application/vnd.google-apps.folder',
+        modifiedTime: '',
+      };
+      const journalFolder = {
+        id: 'j-id',
+        name: 'journal-1',
+        mimeType: 'application/vnd.google-apps.folder',
+        modifiedTime: '',
+      };
+      const pagesFolder = {
+        id: 'p-id',
+        name: 'pages',
+        mimeType: 'application/vnd.google-apps.folder',
+        modifiedTime: '',
+      };
+      const pageFile = {
+        id: 'pf-id',
+        name: 'p1.json',
+        mimeType: 'application/json',
+        modifiedTime: '',
+      };
+
+      mockedApi.listFiles
+        .mockResolvedValueOnce([rootFolder])
+        .mockResolvedValueOnce([journalFolder])
+        .mockResolvedValueOnce([pagesFolder])
+        .mockResolvedValueOnce([pageFile]);
+
+      mockedApi.getFileContent.mockResolvedValueOnce('corrupted data');
+
+      await expect(store.downloadPage('journal-1', 'p1')).rejects.toThrow(
+        '[GDrive] Invalid JSON in page:p1',
+      );
+    });
+  });
+
+  describe('token update without cache clear', () => {
+    it('preserves file ID cache when token is refreshed', async () => {
+      await store.connect({ accessToken: 'token-1' });
+
+      // First listRemoteJournals — populates cache with registry file lookup
+      mockedApi.listFiles.mockResolvedValueOnce([]); // registry lookup — no file
+      await store.listRemoteJournals();
+      const callCountAfterFirst = mockedApi.listFiles.mock.calls.length;
+
+      // Reconnect with new token
+      await store.connect({ accessToken: 'token-2' });
+
+      // Second listRemoteJournals — registry file ID was null (not cached), so looks up again
+      mockedApi.listFiles.mockResolvedValueOnce([]); // registry lookup again
+      await store.listRemoteJournals();
+
+      const callsAfterSecond = mockedApi.listFiles.mock.calls.length - callCountAfterFirst;
+      expect(callsAfterSecond).toBe(1); // Only registry lookup
+    });
+  });
 });

@@ -19,11 +19,17 @@ function authHeaders(accessToken: string): HeadersInit {
 }
 
 async function handleResponse<T>(response: Response): Promise<T> {
+  const text = await response.text();
   if (!response.ok) {
-    const text = await response.text().catch(() => '');
-    throw new Error(`Drive API ${response.status}: ${text}`);
+    throw new Error(`Drive API ${response.status}: ${text.slice(0, 500)}`);
   }
-  return response.json() as Promise<T>;
+  try {
+    return JSON.parse(text) as T;
+  } catch {
+    throw new Error(
+      `Drive API: invalid JSON response (${response.status} ${response.url}): ${text.slice(0, 200)}`,
+    );
+  }
 }
 
 export async function listFiles(

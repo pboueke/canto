@@ -1,20 +1,12 @@
 import { createContext, useCallback, useContext, useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
 
-const Google = require('expo-auth-session/build/providers/Google');
-import * as WebBrowser from 'expo-web-browser';
-import * as SecureStore from 'expo-secure-store';
+import {
+  GoogleSignin,
+  isSuccessResponse,
+  statusCodes,
+} from '@react-native-google-signin/google-signin';
 import { GOOGLE_CREDENTIALS } from '../../google-credentials';
-
-try {
-  WebBrowser.maybeCompleteAuthSession();
-} catch {
-  // Safe to ignore — only relevant when returning from auth redirect
-}
-
-const REFRESH_TOKEN_KEY = 'canto.google.refreshToken';
-const TOKEN_ENDPOINT = 'https://oauth2.googleapis.com/token';
-const USER_INFO_URL = 'https://www.googleapis.com/userinfo/v2/me';
 
 const SCOPES = [
   'https://www.googleapis.com/auth/drive.appdata',
@@ -30,6 +22,8 @@ export interface GoogleUser {
 interface GoogleAuthState {
   user: GoogleUser | null;
   accessToken: string | null;
+  /** Always returns a fresh token (Google Play Services handles refresh). Use this for API calls. */
+  getAccessToken: () => Promise<string | null>;
   isSignedIn: boolean;
   isLoading: boolean;
   signIn: () => Promise<void>;
@@ -39,6 +33,7 @@ interface GoogleAuthState {
 const GoogleAuthCtx = createContext<GoogleAuthState>({
   user: null,
   accessToken: null,
+  getAccessToken: async () => null,
   isSignedIn: false,
   isLoading: true,
   signIn: async () => {},
@@ -52,111 +47,98 @@ export function useGoogleAuth() {
 const hasValidCredentials =
   !!GOOGLE_CREDENTIALS.webClientId && !GOOGLE_CREDENTIALS.webClientId.startsWith('REPLACE_ME');
 
+if (hasValidCredentials) {
+  GoogleSignin.configure({
+    webClientId: GOOGLE_CREDENTIALS.webClientId,
+    scopes: SCOPES,
+  });
+}
+
 export function GoogleAuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<GoogleUser | null>(null);
   const [accessToken, setAccessToken] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(hasValidCredentials);
 
-  const [request, response, promptAsync] = Google.useAuthRequest(
-    hasValidCredentials
-      ? {
-          webClientId: GOOGLE_CREDENTIALS.webClientId,
-          androidClientId: GOOGLE_CREDENTIALS.androidClientId,
-          iosClientId: GOOGLE_CREDENTIALS.iosClientId,
-          scopes: SCOPES,
-          extraParams: { access_type: 'offline' },
-        }
-      : { clientId: 'disabled' },
+  const getAccessToken = useCallback(async (): Promise<string | null> => {
+    try {
+      const { accessToken: token } = await GoogleSignin.getTokens();
+      setAccessToken(token);
+      return token;
+    } catch {
+      return null;
+    }
+  }, []);
+
+  const setUserFromSignIn = useCallback(
+    (data: { user: { email: string; name: string | null; photo: string | null } }) => {
+      setUser({
+        email: data.user.email,
+        name: data.user.name ?? data.user.email,
+        photo: data.user.photo ?? undefined,
+      });
+    },
+    [],
   );
 
-  const fetchUserInfo = useCallback(async (token: string): Promise<GoogleUser | null> => {
-    try {
-      const res = await fetch(USER_INFO_URL, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (!res.ok) return null;
-      const data = await res.json();
-      return { email: data.email, name: data.name, photo: data.picture };
-    } catch {
-      return null;
-    }
-  }, []);
-
-  const refreshAccessToken = useCallback(async (refreshToken: string): Promise<string | null> => {
-    try {
-      const res = await fetch(TOKEN_ENDPOINT, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: new URLSearchParams({
-          client_id: GOOGLE_CREDENTIALS.webClientId,
-          grant_type: 'refresh_token',
-          refresh_token: refreshToken,
-        }).toString(),
-      });
-      if (!res.ok) return null;
-      const data = await res.json();
-      return data.access_token ?? null;
-    } catch {
-      return null;
-    }
-  }, []);
-
-  // Try silent refresh on mount
+  // Try silent sign-in on mount (restores previous session)
   useEffect(() => {
     if (!hasValidCredentials) return;
     (async () => {
       try {
-        const stored = await SecureStore.getItemAsync(REFRESH_TOKEN_KEY);
-        if (stored) {
-          const token = await refreshAccessToken(stored);
-          if (token) {
-            setAccessToken(token);
-            const userInfo = await fetchUserInfo(token);
-            if (userInfo) setUser(userInfo);
-          } else {
-            // Refresh token expired
-            await SecureStore.deleteItemAsync(REFRESH_TOKEN_KEY);
-          }
+        const response = await GoogleSignin.signInSilently();
+        if (isSuccessResponse(response)) {
+          setUserFromSignIn(response.data);
+          await getAccessToken();
+        }
+      } catch (error: unknown) {
+        // No previous session — user needs to sign in manually
+        if (
+          typeof error === 'object' &&
+          error !== null &&
+          'code' in error &&
+          (error as { code: string }).code === statusCodes.SIGN_IN_REQUIRED
+        ) {
+          // Expected — no-op
+        } else {
+          console.warn('[Canto] Silent sign-in error:', error);
         }
       } finally {
         setIsLoading(false);
       }
     })();
-  }, [refreshAccessToken, fetchUserInfo]);
-
-  // Handle auth response — the Google provider auto-exchanges the code
-  useEffect(() => {
-    if (response?.type !== 'success') return;
-    const authentication = response.authentication;
-
-    if (authentication?.accessToken) {
-      setAccessToken(authentication.accessToken);
-      fetchUserInfo(authentication.accessToken).then((userInfo) => {
-        if (userInfo) setUser(userInfo);
-      });
-      // Store refresh token if available
-      if (authentication.refreshToken) {
-        SecureStore.setItemAsync(REFRESH_TOKEN_KEY, authentication.refreshToken);
-      }
-    } else {
-      // Fallback: manual code exchange if auto-exchange didn't provide authentication
-      const code = response.params?.code;
-      if (!code) return;
-      console.warn(
-        '[Canto] Auto code exchange did not return authentication, falling back to manual exchange',
-      );
-    }
-  }, [response, fetchUserInfo]);
+  }, [getAccessToken, setUserFromSignIn]);
 
   const signIn = useCallback(async () => {
-    if (!request || !hasValidCredentials) return;
-    await promptAsync();
-  }, [request, promptAsync]);
+    if (!hasValidCredentials) return;
+    try {
+      await GoogleSignin.hasPlayServices();
+      const response = await GoogleSignin.signIn();
+      if (isSuccessResponse(response)) {
+        setUserFromSignIn(response.data);
+        await getAccessToken();
+      }
+    } catch (error: unknown) {
+      if (
+        typeof error === 'object' &&
+        error !== null &&
+        'code' in error &&
+        (error as { code: string }).code === statusCodes.SIGN_IN_CANCELLED
+      ) {
+        // User cancelled — no-op
+      } else {
+        console.error('[Canto] Sign-in error:', error);
+      }
+    }
+  }, [getAccessToken, setUserFromSignIn]);
 
   const signOut = useCallback(async () => {
+    try {
+      await GoogleSignin.signOut();
+    } catch {
+      // Best-effort
+    }
     setUser(null);
     setAccessToken(null);
-    await SecureStore.deleteItemAsync(REFRESH_TOKEN_KEY);
   }, []);
 
   return (
@@ -164,6 +146,7 @@ export function GoogleAuthProvider({ children }: { children: ReactNode }) {
       value={{
         user,
         accessToken,
+        getAccessToken,
         isSignedIn: !!accessToken,
         isLoading,
         signIn,

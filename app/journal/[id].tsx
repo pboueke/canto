@@ -16,7 +16,7 @@ import { ExportJournalModal } from '@/components/journal/ExportJournalModal';
 import { SyncModal } from '@/components/journal/SyncModal';
 import { FloatingActionButton } from '@/components/common/FloatingActionButton';
 import { useGoogleAuth } from '@/contexts/GoogleAuthContext';
-import { useSyncManager } from '@/contexts/SyncManagerContext';
+import { useSyncManager, useSyncState } from '@/contexts/SyncManagerContext';
 import { pageToPreview } from '@/models';
 import { type ThemeName, themes } from '@/styles/themes';
 
@@ -31,7 +31,8 @@ export default function JournalScreen() {
   const { journal, loading, refresh } = useJournal(id, derivedKey);
   const { create: createPage } = useCreatePage(id, derivedKey);
   const { isSignedIn } = useGoogleAuth();
-  const { syncJournal, getSyncState } = useSyncManager();
+  const { syncJournal } = useSyncManager();
+  const syncState = useSyncState(id ?? '');
   const [showSettings, setShowSettings] = useState(false);
   const [showExportMenu, setShowExportMenu] = useState(false);
   const [showExportModal, setShowExportModal] = useState(false);
@@ -175,7 +176,12 @@ export default function JournalScreen() {
           onPressSettings={() => setShowSettings(true)}
           onPressExport={() => setShowExportMenu(true)}
           onPressSync={() => setShowSyncModal(true)}
-          isSyncing={getSyncState(journal.id).status === 'syncing'}
+          syncStatus={syncState.status}
+          isSyncEnabled={journal.settings.syncProvider === 'gdrive'}
+          hasUnsyncedChanges={
+            syncState.lastSynced == null ||
+            journal.pages.some((p) => p.modified > syncState.lastSynced!)
+          }
         />
 
         {journal.settings.filterBar && (

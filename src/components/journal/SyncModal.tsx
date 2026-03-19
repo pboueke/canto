@@ -1,10 +1,10 @@
-import { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, Modal, Pressable, StyleSheet, Switch, Text, View } from 'react-native';
+import { useCallback, useState } from 'react';
+import { Modal, Pressable, StyleSheet, Switch, Text, View } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useTheme } from '@/hooks/useTheme';
 import { useI18n } from '@/hooks/useI18n';
 import { useGoogleAuth } from '@/contexts/GoogleAuthContext';
-import { useSyncManager } from '@/contexts/SyncManagerContext';
+import { useSyncManager, useSyncState } from '@/contexts/SyncManagerContext';
 import { useSaveJournal } from '@/hooks/useStorage';
 import type { JournalContent, JournalSettings } from '@/models';
 
@@ -16,6 +16,37 @@ interface SyncModalProps {
   onJournalChanged: () => void;
 }
 
+function ProgressBar({ current, total }: { current: number; total: number }) {
+  const { theme } = useTheme();
+  const fraction = total > 0 ? current / total : 0;
+
+  return (
+    <View style={[progressStyles.track, { backgroundColor: theme.colors.border }]}>
+      <View
+        style={[
+          progressStyles.fill,
+          {
+            backgroundColor: theme.colors.primary,
+            width: `${Math.round(fraction * 100)}%`,
+          },
+        ]}
+      />
+    </View>
+  );
+}
+
+const progressStyles = StyleSheet.create({
+  track: {
+    height: 6,
+    borderRadius: 3,
+    overflow: 'hidden',
+  },
+  fill: {
+    height: '100%',
+    borderRadius: 3,
+  },
+});
+
 export function SyncModal({
   visible,
   journal,
@@ -26,18 +57,11 @@ export function SyncModal({
   const { theme } = useTheme();
   const { t } = useI18n();
   const { isSignedIn, signIn } = useGoogleAuth();
-  const { syncJournal, getSyncState } = useSyncManager();
+  const { syncJournal } = useSyncManager();
+  const syncState = useSyncState(journal.id);
   const { saveJournal } = useSaveJournal();
 
-  const [syncState, setSyncState] = useState(getSyncState(journal.id));
   const [feedback, setFeedback] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (visible) {
-      setSyncState(getSyncState(journal.id));
-      setFeedback(null);
-    }
-  }, [visible, journal.id, getSyncState]);
 
   const isSyncEnabled = journal.settings.syncProvider === 'gdrive';
 
@@ -59,17 +83,10 @@ export function SyncModal({
       remoteSync: true,
       autoSync: true,
     });
-    // Trigger initial sync
     setFeedback(t.sync.syncing);
     const result = await syncJournal(journal.id, derivedKey ?? undefined);
-    if (result) {
-      setFeedback(t.sync.syncComplete);
-      setSyncState(getSyncState(journal.id));
-    } else {
-      setFeedback(t.sync.syncError);
-      setSyncState(getSyncState(journal.id));
-    }
-  }, [updateSettings, syncJournal, journal.id, derivedKey, getSyncState, t]);
+    setFeedback(result ? t.sync.syncComplete : t.sync.syncError);
+  }, [updateSettings, syncJournal, journal.id, derivedKey, t]);
 
   const handleDisableSync = useCallback(async () => {
     await updateSettings({
@@ -83,13 +100,8 @@ export function SyncModal({
   const handleSyncNow = useCallback(async () => {
     setFeedback(t.sync.syncing);
     const result = await syncJournal(journal.id, derivedKey ?? undefined);
-    if (result) {
-      setFeedback(t.sync.syncComplete);
-    } else {
-      setFeedback(t.sync.syncError);
-    }
-    setSyncState(getSyncState(journal.id));
-  }, [syncJournal, journal.id, derivedKey, getSyncState, t]);
+    setFeedback(result ? t.sync.syncComplete : t.sync.syncError);
+  }, [syncJournal, journal.id, derivedKey, t]);
 
   const handleAutoSyncToggle = useCallback(
     (val: boolean) => updateSettings({ autoSync: val }),
@@ -99,6 +111,8 @@ export function SyncModal({
   const lastSyncedText = syncState.lastSynced
     ? new Date(syncState.lastSynced).toLocaleString()
     : t.sync.neverSynced;
+
+  const isSyncing = syncState.status === 'syncing';
 
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
@@ -163,6 +177,24 @@ export function SyncModal({
                 </Pressable>
               ) : (
                 <>
+                  {/* Progress bar during sync */}
+                  {isSyncing && syncState.progress && (
+                    <View style={styles.progressSection}>
+                      <ProgressBar
+                        current={syncState.progress.current}
+                        total={syncState.progress.total}
+                      />
+                      <Text
+                        style={[
+                          styles.progressText,
+                          { color: theme.colors.textSecondary, fontFamily: theme.fonts.regular },
+                        ]}
+                      >
+                        {syncState.progress.current}/{syncState.progress.total}
+                      </Text>
+                    </View>
+                  )}
+
                   {/* Auto-sync toggle */}
                   <View style={styles.settingRow}>
                     <Text
@@ -195,27 +227,23 @@ export function SyncModal({
                   {/* Sync now */}
                   <Pressable
                     onPress={handleSyncNow}
-                    disabled={syncState.status === 'syncing'}
+                    disabled={isSyncing}
                     style={[
                       styles.actionBtn,
                       {
                         backgroundColor: theme.colors.primary,
-                        opacity: syncState.status === 'syncing' ? 0.5 : 1,
+                        opacity: isSyncing ? 0.5 : 1,
                       },
                     ]}
                   >
-                    {syncState.status === 'syncing' ? (
-                      <ActivityIndicator size="small" color={theme.colors.foreground} />
-                    ) : (
-                      <Feather name="refresh-cw" size={16} color={theme.colors.foreground} />
-                    )}
+                    <Feather name="refresh-cw" size={16} color={theme.colors.foreground} />
                     <Text
                       style={[
                         styles.actionBtnText,
                         { color: theme.colors.foreground, fontFamily: theme.fonts.bold },
                       ]}
                     >
-                      {t.sync.syncNow}
+                      {isSyncing ? t.sync.syncing : t.sync.syncNow}
                     </Text>
                   </Pressable>
 
@@ -236,7 +264,7 @@ export function SyncModal({
           )}
 
           {/* Feedback */}
-          {feedback && (
+          {feedback && !isSyncing && (
             <Text
               style={[
                 styles.feedback,
@@ -311,6 +339,13 @@ const styles = StyleSheet.create({
   },
   settingLabel: {
     fontSize: 14,
+  },
+  progressSection: {
+    gap: 4,
+  },
+  progressText: {
+    fontSize: 11,
+    textAlign: 'right',
   },
   actionBtn: {
     flexDirection: 'row',

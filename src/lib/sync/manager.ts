@@ -8,10 +8,16 @@ const LAST_SYNC_PREFIX = 'canto:lastSync:';
 
 export type SyncStatus = 'idle' | 'syncing' | 'error';
 
+export interface SyncProgress {
+  current: number;
+  total: number;
+}
+
 export interface SyncState {
   status: SyncStatus;
   lastSynced: number | null; // unix ms
   error?: string;
+  progress?: SyncProgress;
 }
 
 export class SyncManager {
@@ -43,10 +49,8 @@ export class SyncManager {
     this.notify();
   }
 
-  async connectIfNeeded(accessToken: string): Promise<void> {
-    if (!this.store.isConnected()) {
-      await this.store.connect({ accessToken });
-    }
+  async connectWithToken(accessToken: string): Promise<void> {
+    await this.store.connect({ accessToken });
   }
 
   async disconnect(): Promise<void> {
@@ -56,7 +60,7 @@ export class SyncManager {
   async syncJournal(
     journalId: string,
     accessToken: string,
-    _derivedKey?: Uint8Array,
+    derivedKey?: Uint8Array,
   ): Promise<SyncResult | null> {
     if (this.locks.has(journalId)) return null;
     this.locks.add(journalId);
@@ -68,9 +72,15 @@ export class SyncManager {
     this.setState(journalId, { status: 'syncing', lastSynced });
 
     try {
-      await this.connectIfNeeded(accessToken);
+      await this.connectWithToken(accessToken);
       const engine = new SyncEngine(this.local, this.store);
-      const result = await engine.sync(journalId);
+      const result = await engine.sync(journalId, derivedKey, (current, total) => {
+        this.setState(journalId, {
+          status: 'syncing',
+          lastSynced,
+          progress: { current, total },
+        });
+      });
 
       const now = Date.now();
       await AsyncStorage.setItem(LAST_SYNC_PREFIX + journalId, String(now));
@@ -80,6 +90,7 @@ export class SyncManager {
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       console.error(`[Canto] Sync failed for ${journalId}:`, message);
+      console.error(`[Canto] Full error:`, err);
       this.setState(journalId, {
         status: 'error',
         lastSynced: lastSynced ?? null,
