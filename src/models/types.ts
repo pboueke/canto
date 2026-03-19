@@ -45,6 +45,7 @@ export interface PagePreview {
   hasLocation: boolean;
   hasComments: boolean;
   firstImage?: string;
+  thumbnail?: string;
 }
 
 import type { SyncProvider } from '@/lib/sync/types';
@@ -124,5 +125,6 @@ export function pageToPreview(page: Page): PagePreview {
     hasLocation: !!page.location,
     hasComments: page.comments.length > 0,
     firstImage: firstNonEncryptedImage?.path,
+    thumbnail: page.thumbnail,
   };
 }

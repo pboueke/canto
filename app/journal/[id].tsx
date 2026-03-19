@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, FlatList, StyleSheet, Text, View } from 'react-native';
+import { usePagination } from '@/hooks/usePagination';
 import { useLocalSearchParams, router, useFocusEffect } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ThemeContext, useTheme } from '@/hooks/useTheme';
@@ -118,28 +119,14 @@ export default function JournalScreen() {
     clearFilters,
   } = useFilter(pages);
 
+  const { visiblePages, loadMore, hasMore } = usePagination(filteredPages, 15);
+
   const themeContextValue = useMemo(
     () => ({ theme, setThemeName, isDark }),
     [theme, setThemeName, isDark],
   );
 
-  if (loading) {
-    return (
-      <ThemeContext.Provider value={themeContextValue}>
-        <View
-          style={[
-            styles.container,
-            styles.centered,
-            { backgroundColor: theme.colors.background, paddingTop: insets.top },
-          ]}
-        >
-          <ActivityIndicator size="large" color={theme.colors.primary} />
-        </View>
-      </ThemeContext.Provider>
-    );
-  }
-
-  if (!journal) {
+  if (loading && !journal) {
     return (
       <ThemeContext.Provider value={themeContextValue}>
         <View
@@ -206,9 +193,20 @@ export default function JournalScreen() {
           </View>
         ) : (
           <FlatList
-            data={filteredPages}
+            data={visiblePages}
             keyExtractor={(item) => item.id}
             contentContainerStyle={styles.list}
+            onEndReached={loadMore}
+            onEndReachedThreshold={0.5}
+            ListFooterComponent={
+              hasMore ? (
+                <ActivityIndicator
+                  size="small"
+                  color={theme.colors.primary}
+                  style={styles.loadingMore}
+                />
+              ) : null
+            }
             renderItem={({ item }) => (
               <PageListItem page={item} journalId={journal.id} settings={journal.settings} />
             )}
@@ -273,5 +271,8 @@ const styles = StyleSheet.create({
   empty: {
     fontSize: 16,
     textAlign: 'center',
+  },
+  loadingMore: {
+    paddingVertical: 20,
   },
 });

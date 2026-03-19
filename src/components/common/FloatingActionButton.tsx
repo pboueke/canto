@@ -1,4 +1,5 @@
 import { Pressable, StyleSheet, Text } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
 
 interface FloatingActionButtonProps {
@@ -22,6 +23,7 @@ export function FloatingActionButton({
   size = 50,
   bottom = 30,
 }: FloatingActionButtonProps) {
+  const insets = useSafeAreaInsets();
   return (
     <Pressable
       onPress={onPress}
@@ -32,7 +34,7 @@ export function FloatingActionButton({
           width: size,
           height: size,
           borderRadius: size / 2,
-          bottom,
+          bottom: bottom + insets.bottom,
           [position === 'right' ? 'right' : 'left']: 20,
         },
       ]}

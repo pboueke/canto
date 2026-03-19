@@ -1,5 +1,30 @@
 # Changelog
 
+## v0.12.0 - UI Cleanup & Performance
+
+- feat: encrypted thumbnail generation — pages now store a small base64 thumbnail at save time, eliminating slow full-image decryption in page list previews
+- feat: editable page date/time — tapping date or time in edit mode opens the native DateTimePicker
+- feat: discard-on-leave dialog — navigating away or pressing back with unsaved changes now prompts to discard, preventing silent data loss
+- fix: FAB overlapping Android navigation bar — now accounts for `useSafeAreaInsets().bottom`
+- feat: scroll pagination on journal screen — loads 15 pages initially, loads more on scroll (client-side slice of `filteredPages`)
+- feat: hidden developer menu — tap logo 7 times, then open changelog to access bulk journal/page duplication, generation, and wipe-all-data tools
+- feat: app icon generation script (`scripts/generate-icons.js`) — generates all required icon assets from the Canto logo using `sharp`
+- feat: cloud import progress bar — GDrive journal import now shows a progress bar with page counter
+- perf: parallel sync — attachment uploads/downloads now run with bounded concurrency (4 workers); GDrive page metadata downloads parallelized via `Promise.all`
+- perf: parallel cloud import — per-page attachment downloads run concurrently
+- fix: hooks order violation in PageScreen — moved `handleDateChange`/`handleBack` before early returns to comply with Rules of Hooks
+- fix: journal screen loading flash during sync — full-screen spinner now only shows on initial load, not on background refresh
+- fix: dev menu unable to load pages — auto-derives encryption key for non-secure journals before reading
+- fix: dev menu blank journal icon — uses Feather icon name `'book'` instead of emoji
+- refactor: `BackButton` accepts optional `onBack` prop for custom back navigation handling
+- refactor: `PageHeader` accepts `isEditing`, `onDateChange`, `onBack`, and `dateValue` props
+- refactor: `InfoBox` accepts `devUnlocked` prop to conditionally show Dev Menu access
+- refactor: `PagePreview` type now includes `thumbnail` field; `pageToPreview()` carries it through
+- test: `usePagination` hook — 5 tests covering initial slice, loadMore, hasMore, reset, and data change detection
+- test: `generateThumbnail` — mock-based test verifying resize parameters and base64 output
+- test: `FloatingActionButton` — tests verifying safe area inset is added to bottom offset
+- test: `pageToPreview` — 2 new tests for thumbnail field propagation
+
 ## v0.11.3 - Provider-Agnostic Sync Architecture
 
 - refactor: `RemoteStore` interface now includes `provider`, `isRemotePath()`, and `buildRemotePath()` — sync engine no longer hardcodes `gdrive://` paths

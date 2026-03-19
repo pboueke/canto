@@ -2,6 +2,24 @@ import type { Page, Attachment } from '@/models';
 import type { LocalStore } from '@/lib/storage/types';
 import type { RemoteStore, SyncResult } from './types';
 
+const CONCURRENCY = 4;
+
+/** Run async tasks with bounded concurrency. */
+async function parallel<T>(
+  items: T[],
+  fn: (item: T) => Promise<void>,
+  concurrency = CONCURRENCY,
+): Promise<void> {
+  let i = 0;
+  async function worker() {
+    while (i < items.length) {
+      const idx = i++;
+      await fn(items[idx]);
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(concurrency, items.length) }, () => worker()));
+}
+
 /** Collect all non-deleted attachments from a page. */
 function pageAttachments(page: Page): Attachment[] {
   return [...(page.images ?? []), ...(page.files ?? [])].filter((a) => !a.deleted && a.path);
@@ -20,19 +38,20 @@ export class SyncEngine {
 
   /** Upload all attachments for a page that are stored locally. */
   private async uploadPageAttachments(journalId: string, page: Page): Promise<void> {
-    for (const att of pageAttachments(page)) {
-      if (this.remote.isRemotePath(att.path)) continue; // already remote
+    const atts = pageAttachments(page).filter((a) => !this.remote.isRemotePath(a.path));
+    await parallel(atts, async (att) => {
       // Read without derivedKey: strips device encryption, preserves password layer
       const data = await this.local.getAttachment(att.path);
       if (data) {
         await this.remote.uploadAttachment(journalId, att.path, data);
       }
-    }
+    });
   }
 
   /** Download all attachments for a page from remote and update paths to local. */
   private async downloadPageAttachments(journalId: string, page: Page): Promise<void> {
-    for (const att of pageAttachments(page)) {
+    const atts = pageAttachments(page);
+    await parallel(atts, async (att) => {
       const filename = filenameFromPath(att.path);
       const remotePath = this.remote.buildRemotePath(journalId, filename);
       const data = await this.remote.downloadAttachment(remotePath);
@@ -41,7 +60,7 @@ export class SyncEngine {
         const localPath = await this.local.saveAttachment(journalId, page.id, att, data);
         att.path = localPath;
       }
-    }
+    });
   }
 
   /**
