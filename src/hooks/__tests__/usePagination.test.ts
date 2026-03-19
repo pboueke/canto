@@ -41,9 +41,10 @@ describe('usePagination', () => {
 
   it('resets when items array reference changes', () => {
     let items = makeItems(50);
-    const { result, rerender } = renderHook(({ data }) => usePagination(data, 15), {
-      initialProps: { data: items },
-    });
+    const { result, rerender } = renderHook(
+      ({ data }: { data: number[] }) => usePagination(data, 15),
+      { initialProps: { data: items } },
+    );
 
     act(() => result.current.loadMore());
     expect(result.current.visiblePages).toHaveLength(30);

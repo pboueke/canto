@@ -142,6 +142,22 @@ export default function JournalScreen() {
     );
   }
 
+  if (!journal) {
+    return (
+      <ThemeContext.Provider value={themeContextValue}>
+        <View
+          style={[
+            styles.container,
+            styles.centered,
+            { backgroundColor: theme.colors.background, paddingTop: insets.top },
+          ]}
+        >
+          <ActivityIndicator size="large" color={theme.colors.primary} />
+        </View>
+      </ThemeContext.Provider>
+    );
+  }
+
   if (showSettings) {
     return (
       <ThemeContext.Provider value={themeContextValue}>
