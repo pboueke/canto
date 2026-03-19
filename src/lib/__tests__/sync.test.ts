@@ -80,6 +80,7 @@ function createMockRemoteStore(journal: JournalContent | null): RemoteStore {
     uploadAttachment: jest.fn(),
     downloadAttachment: jest.fn(),
     deleteAttachment: jest.fn(),
+    deleteJournal: jest.fn(),
   };
 }
 
