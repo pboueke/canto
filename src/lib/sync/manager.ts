@@ -1,8 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { SyncEngine } from './engine';
-import { GDriveRemoteStore } from './gdrive';
 import type { LocalStore } from '@/lib/storage/types';
-import type { SyncResult } from './types';
+import type { RemoteStore, SyncResult } from './types';
 
 const LAST_SYNC_PREFIX = 'canto:lastSync:';
 
@@ -21,15 +20,15 @@ export interface SyncState {
 }
 
 export class SyncManager {
-  private store: GDriveRemoteStore;
   private states = new Map<string, SyncState>();
   private locks = new Set<string>();
   private debounceTimers = new Map<string, ReturnType<typeof setTimeout>>();
   private listeners = new Set<() => void>();
 
-  constructor(private local: LocalStore) {
-    this.store = new GDriveRemoteStore();
-  }
+  constructor(
+    private local: LocalStore,
+    private store: RemoteStore,
+  ) {}
 
   subscribe(listener: () => void): () => void {
     this.listeners.add(listener);
@@ -123,7 +122,7 @@ export class SyncManager {
     return stored ? parseInt(stored, 10) : null;
   }
 
-  getRemoteStore(): GDriveRemoteStore {
+  getRemoteStore(): RemoteStore {
     return this.store;
   }
 }

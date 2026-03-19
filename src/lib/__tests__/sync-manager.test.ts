@@ -1,5 +1,6 @@
 import { SyncManager, type SyncState } from '../sync/manager';
 import type { LocalStore } from '../storage/types';
+import type { RemoteStore } from '../sync/types';
 import type { Page, JournalContent } from '@/models';
 
 // Mock AsyncStorage
@@ -12,12 +13,16 @@ jest.mock('@react-native-async-storage/async-storage', () => ({
   }),
 }));
 
-// Mock the GDriveRemoteStore
-jest.mock('../sync/gdrive', () => ({
-  GDriveRemoteStore: jest.fn().mockImplementation(() => ({
+function createMockRemoteStore(): RemoteStore {
+  return {
+    provider: 'gdrive',
     connect: jest.fn(),
     disconnect: jest.fn(),
     isConnected: jest.fn().mockReturnValue(true),
+    isRemotePath: jest.fn((path: string) => path.startsWith('gdrive://')),
+    buildRemotePath: jest.fn(
+      (journalId: string, filename: string) => `gdrive://${journalId}/attachments/${filename}`,
+    ),
     listRemoteJournals: jest.fn().mockResolvedValue([]),
     uploadJournalMeta: jest.fn(),
     downloadJournalMeta: jest.fn().mockResolvedValue(null),
@@ -27,8 +32,9 @@ jest.mock('../sync/gdrive', () => ({
     uploadAttachment: jest.fn(),
     downloadAttachment: jest.fn(),
     deleteAttachment: jest.fn(),
-  })),
-}));
+    deleteJournal: jest.fn(),
+  };
+}
 
 const makePage = (id: string, modified: number, deleted = false): Page => ({
   id,
@@ -90,7 +96,7 @@ describe('SyncManager', () => {
   describe('state management', () => {
     it('returns idle state by default', () => {
       const local = createMockLocalStore(null);
-      const manager = new SyncManager(local);
+      const manager = new SyncManager(local, createMockRemoteStore());
 
       const state = manager.getState('j1');
       expect(state).toEqual({ status: 'idle', lastSynced: null });
@@ -99,7 +105,7 @@ describe('SyncManager', () => {
     it('notifies listeners when state changes', async () => {
       const journal = makeJournal([]);
       const local = createMockLocalStore(journal);
-      const manager = new SyncManager(local);
+      const manager = new SyncManager(local, createMockRemoteStore());
       const listener = jest.fn();
 
       manager.subscribe(listener);
@@ -113,7 +119,7 @@ describe('SyncManager', () => {
     it('unsubscribe stops notifications', async () => {
       const journal = makeJournal([]);
       const local = createMockLocalStore(journal);
-      const manager = new SyncManager(local);
+      const manager = new SyncManager(local, createMockRemoteStore());
       const listener = jest.fn();
 
       const unsub = manager.subscribe(listener);
@@ -126,7 +132,7 @@ describe('SyncManager', () => {
     it('transitions through syncing → idle on success', async () => {
       const journal = makeJournal([]);
       const local = createMockLocalStore(journal);
-      const manager = new SyncManager(local);
+      const manager = new SyncManager(local, createMockRemoteStore());
       const states: SyncState[] = [];
 
       manager.subscribe(() => states.push({ ...manager.getState('j1') }));
@@ -141,7 +147,7 @@ describe('SyncManager', () => {
       const local = createMockLocalStore(null);
       // getJournal returns null → engine returns empty result, but let's make connect throw
       (local.getJournal as jest.Mock).mockRejectedValueOnce(new Error('read failure'));
-      const manager = new SyncManager(local);
+      const manager = new SyncManager(local, createMockRemoteStore());
       const states: SyncState[] = [];
 
       manager.subscribe(() => states.push({ ...manager.getState('j1') }));
@@ -158,7 +164,7 @@ describe('SyncManager', () => {
       const pages = [makePage('p1', 1000), makePage('p2', 2000), makePage('p3', 3000)];
       const journal = makeJournal(pages);
       const local = createMockLocalStore(journal);
-      const manager = new SyncManager(local);
+      const manager = new SyncManager(local, createMockRemoteStore());
       const progressUpdates: Array<{ current: number; total: number }> = [];
 
       manager.subscribe(() => {
@@ -180,7 +186,7 @@ describe('SyncManager', () => {
     it('progress is cleared after sync completes', async () => {
       const journal = makeJournal([makePage('p1', 1000)]);
       const local = createMockLocalStore(journal);
-      const manager = new SyncManager(local);
+      const manager = new SyncManager(local, createMockRemoteStore());
 
       await manager.syncJournal('j1', 'token');
 
@@ -194,7 +200,7 @@ describe('SyncManager', () => {
     it('prevents concurrent syncs for the same journal', async () => {
       const journal = makeJournal([makePage('p1', 1000)]);
       const local = createMockLocalStore(journal);
-      const manager = new SyncManager(local);
+      const manager = new SyncManager(local, createMockRemoteStore());
 
       // Start two syncs at the same time
       const [result1, result2] = await Promise.all([
@@ -217,7 +223,7 @@ describe('SyncManager', () => {
         if (id === 'j2') return Promise.resolve(j2);
         return Promise.resolve(null);
       });
-      const manager = new SyncManager(local);
+      const manager = new SyncManager(local, createMockRemoteStore());
 
       const [r1, r2] = await Promise.all([
         manager.syncJournal('j1', 'token'),
@@ -233,7 +239,7 @@ describe('SyncManager', () => {
     it('stores lastSynced in AsyncStorage', async () => {
       const journal = makeJournal([]);
       const local = createMockLocalStore(journal);
-      const manager = new SyncManager(local);
+      const manager = new SyncManager(local, createMockRemoteStore());
 
       await manager.syncJournal('j1', 'token');
 
@@ -245,7 +251,7 @@ describe('SyncManager', () => {
     it('loads lastSynced from AsyncStorage', async () => {
       asyncStore['canto:lastSync:j1'] = '1700000000000';
       const local = createMockLocalStore(null);
-      const manager = new SyncManager(local);
+      const manager = new SyncManager(local, createMockRemoteStore());
 
       const lastSynced = await manager.loadLastSynced('j1');
       expect(lastSynced).toBe(1700000000000);
@@ -253,7 +259,7 @@ describe('SyncManager', () => {
 
     it('returns null for never-synced journals', async () => {
       const local = createMockLocalStore(null);
-      const manager = new SyncManager(local);
+      const manager = new SyncManager(local, createMockRemoteStore());
 
       const lastSynced = await manager.loadLastSynced('j1');
       expect(lastSynced).toBeNull();
@@ -264,7 +270,7 @@ describe('SyncManager', () => {
     it('passes derivedKey to local.getJournal', async () => {
       const journal = makeJournal([]);
       const local = createMockLocalStore(journal);
-      const manager = new SyncManager(local);
+      const manager = new SyncManager(local, createMockRemoteStore());
       const key = new Uint8Array(32);
 
       await manager.syncJournal('j1', 'token', key);
@@ -276,15 +282,13 @@ describe('SyncManager', () => {
       const remotePage = makePage('p1', 1000);
       const journal = makeJournal([]);
       const local = createMockLocalStore(journal);
-      const manager = new SyncManager(local);
+      const remote = createMockRemoteStore();
+      const manager = new SyncManager(local, remote);
       const key = new Uint8Array(32);
 
       // Make the remote store return a page to download
-      const remoteStore = manager.getRemoteStore();
-      (remoteStore.downloadJournalMeta as jest.Mock).mockResolvedValueOnce(
-        makeJournal([remotePage]),
-      );
-      (remoteStore.downloadPage as jest.Mock).mockResolvedValueOnce(remotePage);
+      (remote.downloadJournalMeta as jest.Mock).mockResolvedValueOnce(makeJournal([remotePage]));
+      (remote.downloadPage as jest.Mock).mockResolvedValueOnce(remotePage);
 
       await manager.syncJournal('j1', 'token', key);
 
@@ -296,14 +300,14 @@ describe('SyncManager', () => {
     it('connects with token before each sync', async () => {
       const journal = makeJournal([]);
       const local = createMockLocalStore(journal);
-      const manager = new SyncManager(local);
-      const store = manager.getRemoteStore();
+      const remote = createMockRemoteStore();
+      const manager = new SyncManager(local, remote);
 
       await manager.syncJournal('j1', 'token-1');
-      expect(store.connect).toHaveBeenCalledWith({ accessToken: 'token-1' });
+      expect(remote.connect).toHaveBeenCalledWith({ accessToken: 'token-1' });
 
       await manager.syncJournal('j1', 'token-2');
-      expect(store.connect).toHaveBeenCalledWith({ accessToken: 'token-2' });
+      expect(remote.connect).toHaveBeenCalledWith({ accessToken: 'token-2' });
     });
   });
 
@@ -314,7 +318,7 @@ describe('SyncManager', () => {
     it('debounces sync calls', async () => {
       const journal = makeJournal([]);
       const local = createMockLocalStore(journal);
-      const manager = new SyncManager(local);
+      const manager = new SyncManager(local, createMockRemoteStore());
 
       // Schedule three syncs rapidly
       manager.scheduleSyncDebounced('j1', 'token', undefined, 1000);

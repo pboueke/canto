@@ -47,6 +47,8 @@ export interface PagePreview {
   firstImage?: string;
 }
 
+import type { SyncProvider } from '@/lib/sync/types';
+
 export interface JournalSettings {
   use24h: boolean;
   previewTags: boolean;
@@ -57,7 +59,7 @@ export interface JournalSettings {
   showMarkdownPlaceholder: boolean;
   autoLocation: boolean;
   remoteSync: boolean;
-  syncProvider?: 'gdrive';
+  syncProvider?: SyncProvider;
   autoSync: boolean;
   themeOverride?: string;
 }

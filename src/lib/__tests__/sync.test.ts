@@ -61,9 +61,14 @@ function createMockLocalStore(journal: JournalContent | null): LocalStore {
 
 function createMockRemoteStore(journal: JournalContent | null): RemoteStore {
   return {
+    provider: 'gdrive',
     connect: jest.fn(),
     disconnect: jest.fn(),
     isConnected: jest.fn().mockReturnValue(true),
+    isRemotePath: jest.fn((path: string) => path.startsWith('gdrive://')),
+    buildRemotePath: jest.fn(
+      (journalId: string, filename: string) => `gdrive://${journalId}/attachments/${filename}`,
+    ),
     listRemoteJournals: jest
       .fn()
       .mockResolvedValue(

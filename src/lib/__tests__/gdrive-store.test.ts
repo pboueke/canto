@@ -50,6 +50,24 @@ describe('GDriveRemoteStore', () => {
     jest.clearAllMocks();
   });
 
+  describe('provider identity', () => {
+    it('has provider set to gdrive', () => {
+      expect(store.provider).toBe('gdrive');
+    });
+
+    it('isRemotePath returns true for gdrive:// paths', () => {
+      expect(store.isRemotePath('gdrive://j1/attachments/img.png')).toBe(true);
+    });
+
+    it('isRemotePath returns false for local paths', () => {
+      expect(store.isRemotePath('/data/user/0/com.canto/files/img.png')).toBe(false);
+    });
+
+    it('buildRemotePath constructs gdrive:// path', () => {
+      expect(store.buildRemotePath('j1', 'photo.jpg')).toBe('gdrive://j1/attachments/photo.jpg');
+    });
+  });
+
   describe('connect/disconnect', () => {
     it('connects with access token', async () => {
       await store.connect({ accessToken: TOKEN });

@@ -23,10 +23,20 @@ interface RegistryEntry {
 }
 
 export class GDriveRemoteStore implements RemoteStore {
+  readonly provider = 'gdrive' as const;
+
   private accessToken: string | null = null;
 
   /** In-memory cache: file name path → Drive file ID */
   private fileIdCache = new Map<string, string>();
+
+  isRemotePath(path: string): boolean {
+    return path.startsWith('gdrive://');
+  }
+
+  buildRemotePath(journalId: string, filename: string): string {
+    return `gdrive://${journalId}/attachments/${filename}`;
+  }
 
   async connect(credentials: { accessToken: string }): Promise<void> {
     const tokenChanged = this.accessToken !== credentials.accessToken;

@@ -1,5 +1,7 @@
 import type { JournalContent, Page } from '@/models';
 
+export type SyncProvider = 'gdrive'; // extend as providers are added
+
 export interface RemoteJournalMeta {
   id: string;
   title: string;
@@ -8,6 +10,9 @@ export interface RemoteJournalMeta {
 }
 
 export interface RemoteStore {
+  /** The provider identifier for this store. */
+  readonly provider: SyncProvider;
+
   /** Establish connection to the remote provider. */
   connect(credentials: unknown): Promise<void>;
 
@@ -16,6 +21,12 @@ export interface RemoteStore {
 
   /** Check if currently connected. */
   isConnected(): boolean;
+
+  /** Check if a path is a remote path belonging to this provider. */
+  isRemotePath(path: string): boolean;
+
+  /** Build a remote attachment path for a journal and filename. */
+  buildRemotePath(journalId: string, filename: string): string;
 
   /** List all journals available on the remote. */
   listRemoteJournals(): Promise<RemoteJournalMeta[]>;
