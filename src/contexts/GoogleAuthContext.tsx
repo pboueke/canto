@@ -86,7 +86,7 @@ export function GoogleAuthProvider({ children }: { children: ReactNode }) {
     (async () => {
       try {
         const response = await GoogleSignin.signInSilently();
-        if (isSuccessResponse(response)) {
+        if (response.type === 'success') {
           setUserFromSignIn(response.data);
           await getAccessToken();
         }
