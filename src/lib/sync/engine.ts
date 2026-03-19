@@ -21,7 +21,7 @@ export class SyncEngine {
   /** Upload all attachments for a page that are stored locally. */
   private async uploadPageAttachments(journalId: string, page: Page): Promise<void> {
     for (const att of pageAttachments(page)) {
-      if (att.path.startsWith('gdrive://')) continue; // already remote
+      if (this.remote.isRemotePath(att.path)) continue; // already remote
       // Read without derivedKey: strips device encryption, preserves password layer
       const data = await this.local.getAttachment(att.path);
       if (data) {
@@ -34,7 +34,7 @@ export class SyncEngine {
   private async downloadPageAttachments(journalId: string, page: Page): Promise<void> {
     for (const att of pageAttachments(page)) {
       const filename = filenameFromPath(att.path);
-      const remotePath = `gdrive://${journalId}/attachments/${filename}`;
+      const remotePath = this.remote.buildRemotePath(journalId, filename);
       const data = await this.remote.downloadAttachment(remotePath);
       if (data) {
         // Save without derivedKey: applies device encryption only, password layer preserved in data

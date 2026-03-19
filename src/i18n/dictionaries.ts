@@ -209,6 +209,9 @@ export interface Dictionary {
     deleteRemoteJournal: string;
     deleteRemoteConfirm: string;
     deleteRemoteSuccess: string;
+    selectProvider: string;
+    googleDrive: string;
+    loggedInWith: string;
   };
 }
 
@@ -427,6 +430,9 @@ const en: Dictionary = {
     deleteRemoteConfirm:
       'This will permanently delete this journal from Google Drive. Local copies will not be affected. This action cannot be undone.',
     deleteRemoteSuccess: 'Journal deleted from cloud',
+    selectProvider: 'Select sync provider',
+    googleDrive: 'Google Drive',
+    loggedInWith: 'Logged in with {provider}',
   },
 };
 
@@ -645,6 +651,9 @@ const pt: Dictionary = {
     deleteRemoteConfirm:
       'Isso excluira permanentemente este diario do Google Drive. Copias locais nao serao afetadas. Esta acao nao pode ser desfeita.',
     deleteRemoteSuccess: 'Diario excluido da nuvem',
+    selectProvider: 'Selecionar provedor de sincronização',
+    googleDrive: 'Google Drive',
+    loggedInWith: 'Conectado com {provider}',
   },
 };
 
@@ -863,6 +872,9 @@ const es: Dictionary = {
     deleteRemoteConfirm:
       'Esto eliminara permanentemente este diario de Google Drive. Las copias locales no se veran afectadas. Esta accion no se puede deshacer.',
     deleteRemoteSuccess: 'Diario eliminado de la nube',
+    selectProvider: 'Seleccionar proveedor de sincronización',
+    googleDrive: 'Google Drive',
+    loggedInWith: 'Conectado con {provider}',
   },
 };
 
@@ -1081,6 +1093,9 @@ const de: Dictionary = {
     deleteRemoteConfirm:
       'Dies wird dieses Tagebuch dauerhaft aus Google Drive loschen. Lokale Kopien werden nicht betroffen. Diese Aktion kann nicht ruckgangig gemacht werden.',
     deleteRemoteSuccess: 'Tagebuch aus der Cloud geloscht',
+    selectProvider: 'Sync-Anbieter auswählen',
+    googleDrive: 'Google Drive',
+    loggedInWith: 'Angemeldet mit {provider}',
   },
 };
 
@@ -1299,6 +1314,9 @@ const fr: Dictionary = {
     deleteRemoteConfirm:
       'Cela supprimera definitivement ce journal de Google Drive. Les copies locales ne seront pas affectees. Cette action est irreversible.',
     deleteRemoteSuccess: 'Journal supprime du cloud',
+    selectProvider: 'Choisir le fournisseur de synchronisation',
+    googleDrive: 'Google Drive',
+    loggedInWith: 'Connecté avec {provider}',
   },
 };
 
@@ -1517,6 +1535,9 @@ const ru: Dictionary = {
     deleteRemoteConfirm:
       'Это навсегда удалит этот дневник из Google Drive. Локальные копии не будут затронуты. Это действие нельзя отменить.',
     deleteRemoteSuccess: 'Дневник удален из облака',
+    selectProvider: 'Выберите провайдер синхронизации',
+    googleDrive: 'Google Drive',
+    loggedInWith: 'Вход через {provider}',
   },
 };
 
@@ -1734,6 +1755,9 @@ const zh: Dictionary = {
     deleteRemoteConfirm:
       '这将永久删除Google Drive上的此日记。本地副本不会受到影响。此操作无法撤消。',
     deleteRemoteSuccess: '日记已从云端删除',
+    selectProvider: '选择同步提供商',
+    googleDrive: 'Google Drive',
+    loggedInWith: '已通过 {provider} 登录',
   },
 };
 
@@ -1952,6 +1976,9 @@ const it: Dictionary = {
     deleteRemoteConfirm:
       'Questo eliminera permanentemente questo diario da Google Drive. Le copie locali non saranno interessate. Questa azione non puo essere annullata.',
     deleteRemoteSuccess: 'Diario eliminato dal cloud',
+    selectProvider: 'Seleziona provider di sincronizzazione',
+    googleDrive: 'Google Drive',
+    loggedInWith: 'Connesso con {provider}',
   },
 };
 

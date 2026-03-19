@@ -15,15 +15,22 @@ import { useI18n } from '@/hooks/useI18n';
 import { useJournals, getLocalStore } from '@/hooks/useStorage';
 import { useGoogleAuth } from '@/contexts/GoogleAuthContext';
 import { useSyncManager } from '@/contexts/SyncManagerContext';
+import { SyncProviderModal } from '@/components/home/SyncProviderModal';
 import type { RemoteJournalMeta } from '@/lib/sync';
+import type { SyncProvider } from '@/lib/sync/types';
+
+const PROVIDER_LABELS: Record<SyncProvider, string> = {
+  gdrive: 'Google',
+};
 
 export function AccountButton() {
   const { theme } = useTheme();
   const { t } = useI18n();
   const { user, isSignedIn, isLoading, accessToken, signIn, signOut } = useGoogleAuth();
-  const { manager } = useSyncManager();
+  const { manager, provider } = useSyncManager();
   const { journals: localJournals } = useJournals();
   const [showPopover, setShowPopover] = useState(false);
+  const [showProviderModal, setShowProviderModal] = useState(false);
 
   // Manage journals modal state
   const [showManage, setShowManage] = useState(false);
@@ -37,22 +44,40 @@ export function AccountButton() {
 
   if (isLoading) return null;
 
+  function handleConnectPress() {
+    setShowProviderModal(true);
+  }
+
+  async function handleProviderSelect(_selectedProvider: SyncProvider) {
+    setShowProviderModal(false);
+    // Currently only gdrive is supported — trigger Google sign-in
+    await signIn();
+  }
+
   if (!isSignedIn) {
     return (
-      <Pressable onPress={signIn} style={styles.row}>
-        <Feather name="cloud" size={14} color={theme.colors.primary} />
-        <Text
-          style={[
-            styles.connectText,
-            { color: theme.colors.primary, fontFamily: theme.fonts.regular },
-          ]}
-        >
-          {t.sync.connectAccount}
-        </Text>
-      </Pressable>
+      <>
+        <Pressable onPress={handleConnectPress} style={styles.footerRow}>
+          <Feather name="cloud" size={14} color={theme.colors.primary} />
+          <Text
+            style={[
+              styles.connectText,
+              { color: theme.colors.primary, fontFamily: theme.fonts.regular },
+            ]}
+          >
+            {t.sync.connectAccount}
+          </Text>
+        </Pressable>
+        <SyncProviderModal
+          visible={showProviderModal}
+          onClose={() => setShowProviderModal(false)}
+          onSelect={handleProviderSelect}
+        />
+      </>
     );
   }
 
+  const providerLabel = provider ? PROVIDER_LABELS[provider] : '';
   const initials = user?.name
     ? user.name
         .split(' ')
@@ -113,7 +138,8 @@ export function AccountButton() {
 
   return (
     <>
-      <Pressable onPress={() => setShowPopover(true)} style={styles.avatarButton}>
+      {/* Footer button: avatar + "Logged in with {provider}" */}
+      <Pressable onPress={() => setShowPopover(true)} style={styles.footerRow}>
         {user?.photo ? (
           <Image source={{ uri: user.photo }} style={styles.avatar} />
         ) : (
@@ -128,6 +154,15 @@ export function AccountButton() {
             </Text>
           </View>
         )}
+        <Text
+          style={[
+            styles.loggedInText,
+            { color: theme.colors.textSecondary, fontFamily: theme.fonts.regular },
+          ]}
+          numberOfLines={1}
+        >
+          {t.sync.loggedInWith.replace('{provider}', providerLabel)}
+        </Text>
       </Pressable>
 
       {/* Account popover */}
@@ -418,32 +453,34 @@ export function AccountButton() {
 }
 
 const styles = StyleSheet.create({
-  row: {
+  footerRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-    paddingVertical: 4,
+    gap: 8,
+    paddingVertical: 6,
+    paddingHorizontal: 12,
   },
   connectText: {
     fontSize: 14,
   },
-  avatarButton: {
-    padding: 2,
+  loggedInText: {
+    fontSize: 13,
+    flexShrink: 1,
   },
   avatar: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
   },
   initialsCircle: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
   },
   initialsText: {
-    fontSize: 12,
+    fontSize: 10,
   },
   overlay: {
     flex: 1,

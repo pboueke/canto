@@ -10,14 +10,16 @@ import {
 import type { ReactNode } from 'react';
 import { useGoogleAuth } from './GoogleAuthContext';
 import { SyncManager, type SyncState } from '@/lib/sync/manager';
+import { GDriveRemoteStore } from '@/lib/sync/gdrive';
 import { getLocalStore } from '@/hooks/useStorage';
-import type { SyncResult } from '@/lib/sync';
+import type { SyncProvider, SyncResult } from '@/lib/sync';
 
 interface SyncManagerCtxValue {
   syncJournal: (journalId: string, derivedKey?: Uint8Array) => Promise<SyncResult | null>;
   scheduleSyncDebounced: (journalId: string, derivedKey?: Uint8Array) => void;
   getSyncState: (journalId: string) => SyncState;
   manager: SyncManager | null;
+  provider: SyncProvider | null;
 }
 
 const DEFAULT_STATE: SyncState = { status: 'idle', lastSynced: null };
@@ -27,6 +29,7 @@ const SyncManagerCtx = createContext<SyncManagerCtxValue>({
   scheduleSyncDebounced: () => {},
   getSyncState: () => DEFAULT_STATE,
   manager: null,
+  provider: null,
 });
 
 export function useSyncManager() {
@@ -67,13 +70,13 @@ export function useSyncState(journalId: string): SyncState {
 }
 
 export function SyncManagerProvider({ children }: { children: ReactNode }) {
-  const { accessToken, getAccessToken } = useGoogleAuth();
+  const { accessToken, getAccessToken, isSignedIn } = useGoogleAuth();
   const managerRef = useRef<SyncManager | null>(null);
 
   useEffect(() => {
     (async () => {
       const store = await getLocalStore();
-      managerRef.current = new SyncManager(store);
+      managerRef.current = new SyncManager(store, new GDriveRemoteStore());
     })();
     return () => {
       managerRef.current?.disconnect();
@@ -112,14 +115,17 @@ export function SyncManagerProvider({ children }: { children: ReactNode }) {
     return managerRef.current?.getState(journalId) ?? DEFAULT_STATE;
   }, []);
 
+  const currentProvider: SyncProvider | null = isSignedIn ? 'gdrive' : null;
+
   const value = useMemo(
     () => ({
       syncJournal,
       scheduleSyncDebounced,
       getSyncState,
       manager: managerRef.current,
+      provider: currentProvider,
     }),
-    [syncJournal, scheduleSyncDebounced, getSyncState],
+    [syncJournal, scheduleSyncDebounced, getSyncState, currentProvider],
   );
 
   return <SyncManagerCtx.Provider value={value}>{children}</SyncManagerCtx.Provider>;

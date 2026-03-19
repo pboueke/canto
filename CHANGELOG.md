@@ -1,5 +1,19 @@
 # Changelog
 
+## v0.11.3 - Provider-Agnostic Sync Architecture
+
+- refactor: `RemoteStore` interface now includes `provider`, `isRemotePath()`, and `buildRemotePath()` — sync engine no longer hardcodes `gdrive://` paths
+- refactor: `SyncManager` accepts a `RemoteStore` instance via constructor instead of hardcoding `GDriveRemoteStore`
+- refactor: `SyncManagerContext` is now the composition root for provider selection, creates `GDriveRemoteStore` and exposes `provider` in context
+- refactor: `JournalSettings.syncProvider` uses shared `SyncProvider` type from sync module
+- feat: `SyncProviderModal` — provider selection modal shown before auth (currently Google Drive only, extensible)
+- feat: `AccountButton` moved from `InfoBox` (settings) to home page footer with "Logged in with {provider}" label
+- feat: 3 new i18n keys across all 8 languages (`selectProvider`, `googleDrive`, `loggedInWith`)
+- test: `sync-interface.test.ts` — 10 tests verifying `SyncEngine` works with any `RemoteStore` (uses custom `mockprovider://` prefix)
+- test: `gdrive-sync-e2e.test.ts` — 9 end-to-end tests with in-memory GDrive simulation (upload, download, conflicts, deletions, attachments, encryption, full cycle)
+- test: `gdrive-store.test.ts` — 4 new tests for `provider`, `isRemotePath`, `buildRemotePath`
+- test: updated `sync-manager.test.ts` to pass `RemoteStore` via constructor (removed `GDriveRemoteStore` mock)
+
 ## v0.11.2 - Attachment Sync, Cloud Import UX & Journal Management
 
 - feat: sync engine now uploads and downloads attachment files alongside pages (previously only page JSON was synced, images were lost on cross-device import)

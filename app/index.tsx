@@ -12,6 +12,7 @@ import { JournalCard } from '@/components/home/JournalCard';
 import { NewJournalCard } from '@/components/home/NewJournalCard';
 import { NewJournalModal } from '@/components/home/NewJournalModal';
 import { JournalAccessModal } from '@/components/home/JournalAccessModal';
+import { AccountButton } from '@/components/home/AccountButton';
 import { authenticateBiometric } from '@/lib/biometric';
 import type { Journal } from '@/models';
 
@@ -190,6 +191,16 @@ export default function HomeScreen() {
         onUnlock={handleUnlock}
         error={accessError}
       />
+
+      {/* Footer: account status */}
+      <View
+        style={[
+          styles.footer,
+          { borderTopColor: theme.colors.border, paddingBottom: insets.bottom + 8 },
+        ]}
+      >
+        <AccountButton />
+      </View>
     </View>
   );
 }
@@ -250,5 +261,10 @@ const styles = StyleSheet.create({
   },
   unlockingText: {
     fontSize: 14,
+  },
+  footer: {
+    borderTopWidth: 1,
+    paddingTop: 8,
+    alignItems: 'center',
   },
 });
