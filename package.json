@@ -1,6 +1,6 @@
 {
   "name": "canto",
-  "version": "0.11.0",
+  "version": "0.11.1",
   "main": "expo-router/entry",
   "scripts": {
     "start": "expo start",
@@ -24,8 +24,8 @@
     "@noble/hashes": "^2.0.1",
     "@react-native-async-storage/async-storage": "2.2.0",
     "@react-native-community/datetimepicker": "8.6.0",
+    "@react-native-google-signin/google-signin": "^16.1.2",
     "expo": "^55.0.0",
-    "expo-auth-session": "~55.0.8",
     "expo-clipboard": "~55.0.9",
     "expo-constants": "~55.0.8",
     "expo-crypto": "~55.0.10",
@@ -43,7 +43,6 @@
     "expo-splash-screen": "~55.0.11",
     "expo-status-bar": "~55.0.4",
     "expo-system-ui": "~55.0.10",
-    "expo-web-browser": "~55.0.10",
     "jest-expo": "~55.0.10",
     "jszip": "^3.10.1",
     "react": "19.2.0",

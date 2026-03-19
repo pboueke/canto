@@ -1,4 +1,12 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useRef } from 'react';
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useSyncExternalStore,
+} from 'react';
 import type { ReactNode } from 'react';
 import { useGoogleAuth } from './GoogleAuthContext';
 import { SyncManager, type SyncState } from '@/lib/sync/manager';
@@ -12,10 +20,12 @@ interface SyncManagerCtxValue {
   manager: SyncManager | null;
 }
 
+const DEFAULT_STATE: SyncState = { status: 'idle', lastSynced: null };
+
 const SyncManagerCtx = createContext<SyncManagerCtxValue>({
   syncJournal: async () => null,
   scheduleSyncDebounced: () => {},
-  getSyncState: () => ({ status: 'idle', lastSynced: null }),
+  getSyncState: () => DEFAULT_STATE,
   manager: null,
 });
 
@@ -23,8 +33,41 @@ export function useSyncManager() {
   return useContext(SyncManagerCtx);
 }
 
+/** Reactive hook — re-renders when sync state changes for a given journal */
+export function useSyncState(journalId: string): SyncState {
+  const { manager } = useContext(SyncManagerCtx);
+  const lastRef = useRef<SyncState>(DEFAULT_STATE);
+
+  const subscribe = useCallback(
+    (onStoreChange: () => void) => {
+      return manager?.subscribe(onStoreChange) ?? (() => {});
+    },
+    [manager],
+  );
+
+  const getSnapshot = useCallback(() => {
+    const next = manager?.getState(journalId);
+    if (!next) return lastRef.current === DEFAULT_STATE ? DEFAULT_STATE : lastRef.current;
+    // Return same reference if state hasn't changed
+    const prev = lastRef.current;
+    if (
+      prev.status === next.status &&
+      prev.lastSynced === next.lastSynced &&
+      prev.error === next.error &&
+      prev.progress?.current === next.progress?.current &&
+      prev.progress?.total === next.progress?.total
+    ) {
+      return prev;
+    }
+    lastRef.current = next;
+    return next;
+  }, [manager, journalId]);
+
+  return useSyncExternalStore(subscribe, getSnapshot);
+}
+
 export function SyncManagerProvider({ children }: { children: ReactNode }) {
-  const { accessToken } = useGoogleAuth();
+  const { accessToken, getAccessToken } = useGoogleAuth();
   const managerRef = useRef<SyncManager | null>(null);
 
   useEffect(() => {
@@ -46,25 +89,36 @@ export function SyncManagerProvider({ children }: { children: ReactNode }) {
   const syncJournal = useCallback(
     async (journalId: string, derivedKey?: Uint8Array) => {
       if (!accessToken || !managerRef.current) return null;
-      return managerRef.current.syncJournal(journalId, accessToken, derivedKey);
+      const token = await getAccessToken();
+      if (!token) return null;
+      return managerRef.current.syncJournal(journalId, token, derivedKey);
     },
-    [accessToken],
+    [accessToken, getAccessToken],
   );
 
   const scheduleSyncDebounced = useCallback(
     (journalId: string, derivedKey?: Uint8Array) => {
       if (!accessToken || !managerRef.current) return;
-      managerRef.current.scheduleSyncDebounced(journalId, accessToken, derivedKey);
+      getAccessToken().then((token) => {
+        if (token && managerRef.current) {
+          managerRef.current.scheduleSyncDebounced(journalId, token, derivedKey);
+        }
+      });
     },
-    [accessToken],
+    [accessToken, getAccessToken],
   );
 
   const getSyncState = useCallback((journalId: string): SyncState => {
-    return managerRef.current?.getState(journalId) ?? { status: 'idle', lastSynced: null };
+    return managerRef.current?.getState(journalId) ?? DEFAULT_STATE;
   }, []);
 
   const value = useMemo(
-    () => ({ syncJournal, scheduleSyncDebounced, getSyncState, manager: managerRef.current }),
+    () => ({
+      syncJournal,
+      scheduleSyncDebounced,
+      getSyncState,
+      manager: managerRef.current,
+    }),
     [syncJournal, scheduleSyncDebounced, getSyncState],
   );
 

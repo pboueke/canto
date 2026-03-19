@@ -12,7 +12,11 @@ export class SyncEngine {
    * Strategy: last-write-wins based on `modified` timestamps.
    * Deleted pages are synced as deletions (soft-delete propagation).
    */
-  async sync(journalId: string): Promise<SyncResult> {
+  async sync(
+    journalId: string,
+    derivedKey?: Uint8Array,
+    onProgress?: (current: number, total: number) => void,
+  ): Promise<SyncResult> {
     const result: SyncResult = {
       uploaded: [],
       downloaded: [],
@@ -20,7 +24,7 @@ export class SyncEngine {
       conflicts: [],
     };
 
-    const localJournal = await this.local.getJournal(journalId);
+    const localJournal = await this.local.getJournal(journalId, derivedKey);
     if (!localJournal) return result;
 
     // Upload journal metadata
@@ -34,8 +38,11 @@ export class SyncEngine {
 
     // Determine sync actions for each page
     const allPageIds = new Set([...localPages.keys(), ...remotePages.keys()]);
+    const total = allPageIds.size;
+    let current = 0;
 
     for (const pageId of allPageIds) {
+      onProgress?.(++current, total);
       const localPage = localPages.get(pageId);
       const remotePage = remotePages.get(pageId);
 
@@ -49,7 +56,7 @@ export class SyncEngine {
         if (remotePage.deleted) continue; // don't download deleted pages
         const downloaded = await this.remote.downloadPage(journalId, pageId);
         if (downloaded) {
-          await this.local.savePage(journalId, downloaded);
+          await this.local.savePage(journalId, downloaded, derivedKey);
           result.downloaded.push(pageId);
         }
       } else if (localPage && remotePage) {
@@ -63,7 +70,7 @@ export class SyncEngine {
           result.deleted.push(pageId);
         } else if (remotePage.deleted) {
           // Remotely deleted, local still exists: propagate deletion
-          await this.local.deletePage(journalId, pageId);
+          await this.local.deletePage(journalId, pageId, derivedKey);
           result.deleted.push(pageId);
         } else if (localPage.modified === remotePage.modified) {
           // In sync, nothing to do
@@ -75,7 +82,7 @@ export class SyncEngine {
           // Remote is newer: download
           const downloaded = await this.remote.downloadPage(journalId, pageId);
           if (downloaded) {
-            await this.local.savePage(journalId, downloaded);
+            await this.local.savePage(journalId, downloaded, derivedKey);
             result.downloaded.push(pageId);
           }
         }

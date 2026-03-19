@@ -2,6 +2,16 @@ import type { JournalContent, Page } from '@/models';
 import type { RemoteStore, RemoteJournalMeta } from '../types';
 import * as api from './api';
 
+function safeJsonParse<T>(content: string, label: string): T {
+  try {
+    return JSON.parse(content) as T;
+  } catch {
+    throw new Error(
+      `[GDrive] Invalid JSON in ${label} (first 200 chars): ${content.slice(0, 200)}`,
+    );
+  }
+}
+
 const REGISTRY_FILE = 'canto-journals.json';
 const ROOT_FOLDER = 'Canto';
 
@@ -19,8 +29,12 @@ export class GDriveRemoteStore implements RemoteStore {
   private fileIdCache = new Map<string, string>();
 
   async connect(credentials: { accessToken: string }): Promise<void> {
+    const tokenChanged = this.accessToken !== credentials.accessToken;
     this.accessToken = credentials.accessToken;
-    this.fileIdCache.clear();
+    // Only clear cache when connecting for the first time (not on token refresh)
+    if (!tokenChanged && this.fileIdCache.size === 0) {
+      this.fileIdCache.clear();
+    }
   }
 
   async disconnect(): Promise<void> {
@@ -55,7 +69,7 @@ export class GDriveRemoteStore implements RemoteStore {
     const fileId = await this.getRegistryFileId();
     if (!fileId) return [];
     const content = await api.getFileContent(this.token(), fileId);
-    return JSON.parse(content) as RegistryEntry[];
+    return safeJsonParse<RegistryEntry[]>(content, 'registry');
   }
 
   private async writeRegistry(entries: RegistryEntry[]): Promise<void> {
@@ -203,7 +217,7 @@ export class GDriveRemoteStore implements RemoteStore {
     if (!metaFileId) return null;
 
     const content = await api.getFileContent(this.token(), metaFileId);
-    const meta = JSON.parse(content) as Omit<JournalContent, 'pages'>;
+    const meta = safeJsonParse<Omit<JournalContent, 'pages'>>(content, 'journal-meta');
 
     // List pages from pages folder
     const pagesFolderId = await this.getPagesFolderId(journalId);
@@ -215,7 +229,7 @@ export class GDriveRemoteStore implements RemoteStore {
     const pages: Page[] = [];
     for (const pf of pageFiles) {
       const pageContent = await api.getFileContent(this.token(), pf.id);
-      pages.push(JSON.parse(pageContent) as Page);
+      pages.push(safeJsonParse<Page>(pageContent, `page:${pf.name}`));
     }
 
     return { ...meta, pages } as JournalContent;
@@ -231,7 +245,7 @@ export class GDriveRemoteStore implements RemoteStore {
     const fileId = await this.findFile(`${pageId}.json`, pagesFolderId);
     if (!fileId) return null;
     const content = await api.getFileContent(this.token(), fileId);
-    return JSON.parse(content) as Page;
+    return safeJsonParse<Page>(content, `page:${pageId}`);
   }
 
   async deletePage(journalId: string, pageId: string): Promise<void> {

@@ -1,10 +1,25 @@
 # Changelog
 
+## v0.11.1 - Auth Migration, Sync Fixes & Sync UI
+
+- feat: migrated Google OAuth from `expo-auth-session` to `@react-native-google-signin/google-signin` (native Google Play Services, no redirect URIs needed)
+- feat: `getAccessToken()` in `GoogleAuthContext` — always returns a fresh token via Google Play Services
+- feat: sync status badge on cloud icon — green dot when synced, orange when unsynced/error
+- feat: badge vibrates during active sync via `Animated` shake animation
+- feat: progress bar in `SyncModal` showing per-page sync progress (current/total)
+- feat: reactive `useSyncState()` hook via `useSyncExternalStore` — components re-render on sync state changes
+- feat: progress callback in `SyncEngine.sync()` reports per-page progress
+- feat: 31 new tests — `SyncManager` (16), `SyncEngine` progress/derivedKey (9), GDrive API diagnostics (3), GDrive store diagnostics (4) — 371 total
+- fix: sync engine now passes `derivedKey` to all local store operations (was causing JSON parse errors on encrypted journals)
+- fix: `SyncManager` always refreshes access token before each sync (prevents stale token errors)
+- fix: diagnostic error messages for Drive API and store JSON parse failures (`safeJsonParse`)
+- deps: added `@react-native-google-signin/google-signin`, removed `expo-auth-session`, `expo-web-browser`
+
 ## v0.11.0 - Google Drive Sync
 
 - feat: per-journal Google Drive sync via the existing `RemoteStore` interface
-- feat: Google OAuth authentication with `expo-auth-session` (proxy-free, native deep-link redirect)
-- feat: `GoogleAuthContext` with silent token refresh via `expo-secure-store`
+- feat: Google OAuth via `@react-native-google-signin/google-signin` (native Google Play Services)
+- feat: `GoogleAuthContext` with `getAccessToken()` for fresh tokens and `signInSilently()` session restore
 - feat: `SyncManager` with debounced auto-sync, per-journal sync state, and concurrent sync prevention
 - feat: `GDriveRemoteStore` — full `RemoteStore` implementation using Google Drive REST API v3
 - feat: Drive file structure: `appDataFolder/canto-journals.json` registry + `Canto/<journalId>/` folders
@@ -15,8 +30,11 @@
 - feat: "Import from Google Drive" option in `NewJournalModal` for cross-device journal discovery
 - feat: sync-related i18n strings added to all 8 languages
 - feat: 23 new tests for Google Drive API helper and `GDriveRemoteStore` (340 total)
+- fix: sync engine now passes `derivedKey` to all local store operations (was causing JSON parse errors on encrypted journals)
+- fix: `SyncManager` always refreshes access token before each sync (prevents stale token errors)
+- fix: added diagnostic error messages for Drive API JSON parse failures
 - model: added `syncProvider?: 'gdrive'` and `autoSync: boolean` to `JournalSettings`
-- deps: `expo-auth-session`, `expo-web-browser`
+- deps: `@react-native-google-signin/google-signin` (replaced `expo-auth-session`, `expo-web-browser`)
 
 ## v0.10.0 - Best Practices & README Overhaul
 

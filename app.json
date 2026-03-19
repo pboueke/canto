@@ -2,7 +2,7 @@
   "expo": {
     "name": "Canto",
     "slug": "canto",
-    "version": "0.11.0",
+    "version": "0.11.1",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",
@@ -35,8 +35,8 @@
       "expo-localization",
       "@react-native-community/datetimepicker",
       "expo-sharing",
-      "expo-web-browser",
-      "expo-secure-store"
+      "expo-secure-store",
+      "@react-native-google-signin/google-signin"
     ]
   }
 }

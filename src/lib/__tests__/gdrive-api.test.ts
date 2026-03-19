@@ -170,4 +170,38 @@ describe('Google Drive API helper', () => {
       await expect(deleteFile(TOKEN, 'f1')).rejects.toThrow('Drive API 500');
     });
   });
+
+  describe('error diagnostics', () => {
+    it('includes response body in error for non-OK responses', async () => {
+      mockFetchError(403, 'insufficient permissions for this file');
+      await expect(listFiles(TOKEN, "name = 'test'")).rejects.toThrow('insufficient permissions');
+    });
+
+    it('throws diagnostic error when response is OK but not valid JSON', async () => {
+      (global.fetch as jest.Mock).mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        url: 'https://www.googleapis.com/drive/v3/files',
+        text: () => Promise.resolve('<!DOCTYPE html><html>login required</html>'),
+      });
+
+      await expect(listFiles(TOKEN, "name = 'test'")).rejects.toThrow('invalid JSON response');
+    });
+
+    it('includes first 200 chars of invalid response in error', async () => {
+      const htmlResponse = '<html>' + 'x'.repeat(300) + '</html>';
+      (global.fetch as jest.Mock).mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        url: 'https://example.com',
+        text: () => Promise.resolve(htmlResponse),
+      });
+
+      await expect(listFiles(TOKEN, "name = 'test'")).rejects.toThrow(
+        expect.objectContaining({
+          message: expect.stringContaining('<html>'),
+        }),
+      );
+    });
+  });
 });
