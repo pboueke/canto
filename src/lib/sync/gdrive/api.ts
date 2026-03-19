@@ -18,17 +18,31 @@ function authHeaders(accessToken: string): HeadersInit {
   return { Authorization: `Bearer ${accessToken}` };
 }
 
+/** Retry a fetch once on transient (5xx / network) errors. */
+async function fetchWithRetry(input: string, init?: RequestInit): Promise<Response> {
+  try {
+    const res = await fetch(input, init);
+    if (res.status >= 500) {
+      await new Promise((r) => setTimeout(r, 1000));
+      return fetch(input, init);
+    }
+    return res;
+  } catch {
+    // Network error — retry once
+    await new Promise((r) => setTimeout(r, 1000));
+    return fetch(input, init);
+  }
+}
+
 async function handleResponse<T>(response: Response): Promise<T> {
   const text = await response.text();
   if (!response.ok) {
-    throw new Error(`Drive API ${response.status}: ${text.slice(0, 500)}`);
+    throw new Error(`Drive API error (${response.status})`);
   }
   try {
     return JSON.parse(text) as T;
   } catch {
-    throw new Error(
-      `Drive API: invalid JSON response (${response.status} ${response.url}): ${text.slice(0, 200)}`,
-    );
+    throw new Error(`Drive API: invalid JSON response (${response.status})`);
   }
 }
 
@@ -43,7 +57,7 @@ export async function listFiles(
     fields: 'files(id,name,mimeType,modifiedTime)',
     pageSize: '1000',
   });
-  const res = await fetch(`${DRIVE_API}/files?${params}`, {
+  const res = await fetchWithRetry(`${DRIVE_API}/files?${params}`, {
     headers: authHeaders(accessToken),
   });
   const data = await handleResponse<{ files: DriveFile[] }>(res);
@@ -52,19 +66,18 @@ export async function listFiles(
 
 export async function getFile(accessToken: string, fileId: string): Promise<DriveFile> {
   const params = new URLSearchParams({ fields: 'id,name,mimeType,modifiedTime' });
-  const res = await fetch(`${DRIVE_API}/files/${fileId}?${params}`, {
+  const res = await fetchWithRetry(`${DRIVE_API}/files/${fileId}?${params}`, {
     headers: authHeaders(accessToken),
   });
   return handleResponse<DriveFile>(res);
 }
 
 export async function getFileContent(accessToken: string, fileId: string): Promise<string> {
-  const res = await fetch(`${DRIVE_API}/files/${fileId}?alt=media`, {
+  const res = await fetchWithRetry(`${DRIVE_API}/files/${fileId}?alt=media`, {
     headers: authHeaders(accessToken),
   });
   if (!res.ok) {
-    const text = await res.text().catch(() => '');
-    throw new Error(`Drive API ${res.status}: ${text}`);
+    throw new Error(`Drive API error (${res.status})`);
   }
   return res.text();
 }
@@ -91,7 +104,7 @@ export async function createFile(
     `--${boundary}--`,
   ].join('\r\n');
 
-  const res = await fetch(`${UPLOAD_API}/files?uploadType=multipart`, {
+  const res = await fetchWithRetry(`${UPLOAD_API}/files?uploadType=multipart`, {
     method: 'POST',
     headers: {
       ...authHeaders(accessToken),
@@ -121,7 +134,7 @@ export async function updateFile(
     `--${boundary}--`,
   ].join('\r\n');
 
-  const res = await fetch(`${UPLOAD_API}/files/${fileId}?uploadType=multipart`, {
+  const res = await fetchWithRetry(`${UPLOAD_API}/files/${fileId}?uploadType=multipart`, {
     method: 'PATCH',
     headers: {
       ...authHeaders(accessToken),
@@ -133,12 +146,11 @@ export async function updateFile(
 }
 
 export async function deleteFile(accessToken: string, fileId: string): Promise<void> {
-  const res = await fetch(`${DRIVE_API}/files/${fileId}`, {
+  const res = await fetchWithRetry(`${DRIVE_API}/files/${fileId}`, {
     method: 'DELETE',
     headers: authHeaders(accessToken),
   });
   if (!res.ok && res.status !== 404) {
-    const text = await res.text().catch(() => '');
-    throw new Error(`Drive API ${res.status}: ${text}`);
+    throw new Error(`Drive API error (${res.status})`);
   }
 }

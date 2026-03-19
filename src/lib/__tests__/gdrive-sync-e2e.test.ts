@@ -433,6 +433,64 @@ describe('GDrive sync E2E', () => {
     expect(local.getJournal).toHaveBeenCalledWith('j1', derivedKey);
   });
 
+  it('handles missing local attachment gracefully', async () => {
+    const att = makeAttachment('img1', '/local/files/img1.png');
+    const page = makePage('p1', 1000, false, [att]);
+    const journal = makeJournal([page]);
+    const local = createMockLocalStore(journal);
+    (local.getAttachment as jest.Mock).mockResolvedValue(null); // attachment missing
+
+    const consoleSpy = jest.spyOn(console, 'warn').mockImplementation();
+    const engine = new SyncEngine(local, store);
+    const result = await engine.sync('j1');
+
+    expect(result.uploaded).toContain('p1');
+    expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('Missing local attachment'));
+    consoleSpy.mockRestore();
+  });
+
+  it('multiple pages with attachments sync correctly', async () => {
+    const att1 = makeAttachment('img1', '/local/files/img1.png');
+    const att2 = makeAttachment('img2', '/local/files/img2.png');
+    const p1 = makePage('p1', 1000, false, [att1]);
+    const p2 = makePage('p2', 2000, false, [att2]);
+    const journal = makeJournal([p1, p2]);
+    const local = createMockLocalStore(journal);
+
+    const engine = new SyncEngine(local, store);
+    const result = await engine.sync('j1');
+
+    expect(result.uploaded).toHaveLength(2);
+    // Both attachments should be uploaded
+    expect(local.getAttachment).toHaveBeenCalledTimes(2);
+  });
+
+  it('sync with one corrupted remote page still downloads others', async () => {
+    // Set up remote with two pages, one with corrupt JSON
+    const rootId = drive.putFolder('Canto');
+    const jFolderId = drive.putFolder('j1', rootId);
+    const pagesFolderId = drive.putFolder('pages', jFolderId);
+    drive.putFile('meta.json', jFolderId, JSON.stringify(makeJournal([])));
+    drive.putFile('p1.json', pagesFolderId, JSON.stringify(makePage('p1', 1000)));
+    drive.putFile('p2.json', pagesFolderId, 'this is not valid json!!!');
+    drive.putFile(
+      'canto-journals.json',
+      'appData',
+      JSON.stringify([{ id: 'j1', title: 'My Journal', encrypted: false }]),
+    );
+
+    const journal = makeJournal([]);
+    const local = createMockLocalStore(journal);
+
+    const consoleSpy = jest.spyOn(console, 'warn').mockImplementation();
+    const engine = new SyncEngine(local, store);
+    const result = await engine.sync('j1');
+
+    // p1 should download successfully despite p2 being corrupt
+    expect(result.downloaded).toContain('p1');
+    consoleSpy.mockRestore();
+  });
+
   it('full cycle: sync, modify remotely, re-sync downloads changes', async () => {
     // First sync: upload local page
     const p1 = makePage('p1', 1000);

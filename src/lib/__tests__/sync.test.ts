@@ -254,6 +254,171 @@ describe('SyncEngine', () => {
     });
   });
 
+  describe('syncAll with getKey', () => {
+    it('passes per-journal derived keys via getKey callback', async () => {
+      const page = makePage('p1', 1000);
+      const journal = makeJournal([page]);
+      const local = createMockLocalStore(journal);
+      const remote = createMockRemoteStore(makeJournal([]));
+      const key = new Uint8Array(32).fill(7);
+
+      const engine = new SyncEngine(local, remote);
+      await engine.syncAll((id) => (id === 'journal-1' ? key : undefined));
+
+      expect(local.getJournal).toHaveBeenCalledWith('journal-1', key);
+    });
+
+    it('passes undefined when getKey returns undefined', async () => {
+      const journal = makeJournal([]);
+      const local = createMockLocalStore(journal);
+      const remote = createMockRemoteStore(makeJournal([]));
+
+      const engine = new SyncEngine(local, remote);
+      await engine.syncAll(() => undefined);
+
+      expect(local.getJournal).toHaveBeenCalledWith('journal-1', undefined);
+    });
+
+    it('passes undefined when getKey is omitted', async () => {
+      const journal = makeJournal([]);
+      const local = createMockLocalStore(journal);
+      const remote = createMockRemoteStore(makeJournal([]));
+
+      const engine = new SyncEngine(local, remote);
+      await engine.syncAll();
+
+      expect(local.getJournal).toHaveBeenCalledWith('journal-1', undefined);
+    });
+  });
+
+  describe('error handling', () => {
+    it('propagates remote upload errors', async () => {
+      const page = makePage('p1', 1000);
+      const local = createMockLocalStore(makeJournal([page]));
+      const remote = createMockRemoteStore(makeJournal([]));
+      (remote.uploadPage as jest.Mock).mockRejectedValueOnce(new Error('Upload failed'));
+
+      const engine = new SyncEngine(local, remote);
+      await expect(engine.sync('journal-1')).rejects.toThrow('Upload failed');
+    });
+
+    it('propagates remote download errors', async () => {
+      const remotePage = makePage('p1', 1000);
+      const local = createMockLocalStore(makeJournal([]));
+      const remote = createMockRemoteStore(makeJournal([remotePage]));
+      (remote.downloadPage as jest.Mock).mockRejectedValueOnce(new Error('Download failed'));
+
+      const engine = new SyncEngine(local, remote);
+      await expect(engine.sync('journal-1')).rejects.toThrow('Download failed');
+    });
+
+    it('propagates local save errors', async () => {
+      const remotePage = makePage('p1', 1000);
+      const local = createMockLocalStore(makeJournal([]));
+      const remote = createMockRemoteStore(makeJournal([remotePage]));
+      (local.savePage as jest.Mock).mockRejectedValueOnce(new Error('Disk full'));
+
+      const engine = new SyncEngine(local, remote);
+      await expect(engine.sync('journal-1')).rejects.toThrow('Disk full');
+    });
+
+    it('propagates getJournal errors', async () => {
+      const local = createMockLocalStore(null);
+      const remote = createMockRemoteStore(null);
+      (local.getJournal as jest.Mock).mockRejectedValueOnce(new Error('Decrypt failed'));
+
+      const engine = new SyncEngine(local, remote);
+      await expect(engine.sync('journal-1')).rejects.toThrow('Decrypt failed');
+    });
+  });
+
+  describe('attachment sync', () => {
+    const makeAttachment = (id: string, path: string) => ({
+      id,
+      path,
+      name: `${id}.png`,
+      type: 'image' as const,
+      encrypted: false,
+      deleted: false,
+    });
+
+    it('uploads local attachments when uploading a page', async () => {
+      const att = makeAttachment('img1', '/local/img1.png');
+      const page = { ...makePage('p1', 1000), images: [att] };
+      const local = createMockLocalStore(makeJournal([page]));
+      const remote = createMockRemoteStore(makeJournal([]));
+      (local.getAttachment as jest.Mock).mockResolvedValue('base64data');
+
+      const engine = new SyncEngine(local, remote);
+      await engine.sync('journal-1');
+
+      expect(local.getAttachment).toHaveBeenCalledWith('/local/img1.png');
+      expect(remote.uploadAttachment).toHaveBeenCalledWith(
+        'journal-1',
+        '/local/img1.png',
+        'base64data',
+      );
+    });
+
+    it('skips already-remote attachments during upload', async () => {
+      const att = makeAttachment('img1', 'gdrive://journal-1/attachments/img1.png');
+      const page = { ...makePage('p1', 1000), images: [att] };
+      const local = createMockLocalStore(makeJournal([page]));
+      const remote = createMockRemoteStore(makeJournal([]));
+
+      const engine = new SyncEngine(local, remote);
+      await engine.sync('journal-1');
+
+      expect(local.getAttachment).not.toHaveBeenCalled();
+      expect(remote.uploadAttachment).not.toHaveBeenCalled();
+    });
+
+    it('warns and continues when local attachment is missing', async () => {
+      const att = makeAttachment('img1', '/local/missing.png');
+      const page = { ...makePage('p1', 1000), images: [att] };
+      const local = createMockLocalStore(makeJournal([page]));
+      const remote = createMockRemoteStore(makeJournal([]));
+      (local.getAttachment as jest.Mock).mockResolvedValue(null);
+
+      const consoleSpy = jest.spyOn(console, 'warn').mockImplementation();
+      const engine = new SyncEngine(local, remote);
+      const result = await engine.sync('journal-1');
+
+      expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('Missing local attachment'));
+      expect(remote.uploadAttachment).not.toHaveBeenCalled();
+      expect(result.uploaded).toContain('p1'); // page still uploaded
+      consoleSpy.mockRestore();
+    });
+
+    it('downloads remote attachments and updates paths', async () => {
+      const att = makeAttachment('img1', '/remote/img1.png');
+      const remotePage = { ...makePage('p1', 1000), images: [att] };
+      const local = createMockLocalStore(makeJournal([]));
+      const remote = createMockRemoteStore(makeJournal([remotePage]));
+      (remote.downloadAttachment as jest.Mock).mockResolvedValue('base64data');
+      (local.saveAttachment as jest.Mock).mockResolvedValue('/local/saved/img1.png');
+
+      const engine = new SyncEngine(local, remote);
+      const result = await engine.sync('journal-1');
+
+      expect(result.downloaded).toContain('p1');
+      expect(remote.downloadAttachment).toHaveBeenCalled();
+      expect(local.saveAttachment).toHaveBeenCalled();
+    });
+
+    it('skips deleted attachments', async () => {
+      const att = { ...makeAttachment('img1', '/local/img1.png'), deleted: true };
+      const page = { ...makePage('p1', 1000), images: [att] };
+      const local = createMockLocalStore(makeJournal([page]));
+      const remote = createMockRemoteStore(makeJournal([]));
+
+      const engine = new SyncEngine(local, remote);
+      await engine.sync('journal-1');
+
+      expect(local.getAttachment).not.toHaveBeenCalled();
+    });
+  });
+
   describe('progress callback', () => {
     it('calls onProgress for each page', async () => {
       const pages = [makePage('p1', 1000), makePage('p2', 2000), makePage('p3', 3000)];

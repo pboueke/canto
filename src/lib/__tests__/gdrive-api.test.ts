@@ -27,11 +27,16 @@ function mockFetchOk(data: unknown) {
 }
 
 function mockFetchError(status: number, body = '') {
-  (global.fetch as jest.Mock).mockResolvedValueOnce({
+  const response = {
     ok: false,
     status,
     text: () => Promise.resolve(body),
-  });
+  };
+  (global.fetch as jest.Mock).mockResolvedValueOnce(response);
+  // 5xx triggers a retry, so provide a second identical response
+  if (status >= 500) {
+    (global.fetch as jest.Mock).mockResolvedValueOnce({ ...response });
+  }
 }
 
 describe('Google Drive API helper', () => {
@@ -82,7 +87,7 @@ describe('Google Drive API helper', () => {
 
     it('throws on 404', async () => {
       mockFetchError(404, 'Not found');
-      await expect(getFile(TOKEN, 'missing')).rejects.toThrow('Drive API 404');
+      await expect(getFile(TOKEN, 'missing')).rejects.toThrow('Drive API error (404)');
     });
   });
 
@@ -98,7 +103,7 @@ describe('Google Drive API helper', () => {
 
     it('throws on expired token (401)', async () => {
       mockFetchError(401, 'Unauthorized');
-      await expect(getFileContent(TOKEN, 'f1')).rejects.toThrow('Drive API 401');
+      await expect(getFileContent(TOKEN, 'f1')).rejects.toThrow('Drive API error (401)');
     });
   });
 
@@ -167,14 +172,21 @@ describe('Google Drive API helper', () => {
 
     it('throws on other errors', async () => {
       mockFetchError(500, 'Server error');
-      await expect(deleteFile(TOKEN, 'f1')).rejects.toThrow('Drive API 500');
+      await expect(deleteFile(TOKEN, 'f1')).rejects.toThrow('Drive API error (500)');
     });
   });
 
   describe('error diagnostics', () => {
-    it('includes response body in error for non-OK responses', async () => {
+    it('does not leak response body in error messages', async () => {
       mockFetchError(403, 'insufficient permissions for this file');
-      await expect(listFiles(TOKEN, "name = 'test'")).rejects.toThrow('insufficient permissions');
+      await expect(listFiles(TOKEN, "name = 'test'")).rejects.toThrow('Drive API error (403)');
+      // Verify the sensitive body text is NOT in the error
+      await mockFetchError(403, 'secret-token-leaked');
+      try {
+        await listFiles(TOKEN, "name = 'test'");
+      } catch (err) {
+        expect((err as Error).message).not.toContain('secret-token-leaked');
+      }
     });
 
     it('throws diagnostic error when response is OK but not valid JSON', async () => {
@@ -188,7 +200,7 @@ describe('Google Drive API helper', () => {
       await expect(listFiles(TOKEN, "name = 'test'")).rejects.toThrow('invalid JSON response');
     });
 
-    it('includes first 200 chars of invalid response in error', async () => {
+    it('does not leak response content in JSON parse errors', async () => {
       const htmlResponse = '<html>' + 'x'.repeat(300) + '</html>';
       (global.fetch as jest.Mock).mockResolvedValueOnce({
         ok: true,
@@ -199,7 +211,7 @@ describe('Google Drive API helper', () => {
 
       await expect(listFiles(TOKEN, "name = 'test'")).rejects.toThrow(
         expect.objectContaining({
-          message: expect.stringContaining('<html>'),
+          message: expect.not.stringContaining('<html>'),
         }),
       );
     });

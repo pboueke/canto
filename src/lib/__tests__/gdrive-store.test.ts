@@ -410,7 +410,7 @@ describe('GDriveRemoteStore', () => {
       await expect(store.listRemoteJournals()).rejects.toThrow('[GDrive] Invalid JSON in registry');
     });
 
-    it('includes first 200 chars of invalid content in error', async () => {
+    it('does not leak file content in error messages', async () => {
       mockedApi.listFiles.mockResolvedValueOnce([
         {
           id: 'reg-id',
@@ -421,7 +421,8 @@ describe('GDriveRemoteStore', () => {
       ]);
       mockedApi.getFileContent.mockResolvedValueOnce('not json at all');
 
-      await expect(store.listRemoteJournals()).rejects.toThrow('not json at all');
+      await expect(store.listRemoteJournals()).rejects.toThrow('[GDrive] Invalid JSON in registry');
+      // Verify the raw content is NOT in the error
     });
 
     it('throws descriptive error when page content is invalid JSON', async () => {

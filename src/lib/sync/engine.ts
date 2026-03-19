@@ -10,11 +10,11 @@ async function parallel<T>(
   fn: (item: T) => Promise<void>,
   concurrency = CONCURRENCY,
 ): Promise<void> {
-  let i = 0;
+  const queue = items.slice();
   async function worker() {
-    while (i < items.length) {
-      const idx = i++;
-      await fn(items[idx]);
+    while (queue.length > 0) {
+      const item = queue.shift()!;
+      await fn(item);
     }
   }
   await Promise.all(Array.from({ length: Math.min(concurrency, items.length) }, () => worker()));
@@ -42,9 +42,11 @@ export class SyncEngine {
     await parallel(atts, async (att) => {
       // Read without derivedKey: strips device encryption, preserves password layer
       const data = await this.local.getAttachment(att.path);
-      if (data) {
-        await this.remote.uploadAttachment(journalId, att.path, data);
+      if (!data) {
+        console.warn(`[Sync] Missing local attachment: ${att.path} (page ${page.id})`);
+        return;
       }
+      await this.remote.uploadAttachment(journalId, att.path, data);
     });
   }
 
@@ -154,13 +156,15 @@ export class SyncEngine {
 
   /**
    * Sync all journals.
+   * @param getKey - lookup function for per-journal derived keys (encrypted journals)
    */
-  async syncAll(): Promise<SyncResult[]> {
+  async syncAll(getKey?: (journalId: string) => Uint8Array | undefined): Promise<SyncResult[]> {
     const journals = await this.local.listJournals();
     const results: SyncResult[] = [];
 
     for (const journal of journals) {
-      const result = await this.sync(journal.id);
+      const derivedKey = getKey?.(journal.id);
+      const result = await this.sync(journal.id, derivedKey);
       results.push(result);
     }
 
