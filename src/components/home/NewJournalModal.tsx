@@ -151,7 +151,7 @@ export function NewJournalModal({
     setCloudError(null);
     setCloudLoading(true);
     try {
-      await manager.connectIfNeeded(accessToken);
+      await manager.connectWithToken(accessToken);
       const store = manager.getRemoteStore();
       const remoteJournals = await store.listRemoteJournals();
       // Filter out journals already local
@@ -171,7 +171,7 @@ export function NewJournalModal({
     setShowCloudImport(false);
     setImporting(true);
     try {
-      await manager.connectIfNeeded(accessToken);
+      await manager.connectWithToken(accessToken);
       const store = manager.getRemoteStore();
       const journal = await store.downloadJournalMeta(remote.id);
       if (!journal) throw new Error('Journal not found on remote');
