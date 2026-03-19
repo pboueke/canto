@@ -205,6 +205,10 @@ export interface Dictionary {
     journalAlreadyLocal: string;
     connectAccount: string;
     account: string;
+    manageJournals: string;
+    deleteRemoteJournal: string;
+    deleteRemoteConfirm: string;
+    deleteRemoteSuccess: string;
   };
 }
 
@@ -418,6 +422,11 @@ const en: Dictionary = {
     journalAlreadyLocal: 'Already on this device',
     connectAccount: 'Connect account',
     account: 'Account',
+    manageJournals: 'Manage journals',
+    deleteRemoteJournal: 'Delete from cloud',
+    deleteRemoteConfirm:
+      'This will permanently delete this journal from Google Drive. Local copies will not be affected. This action cannot be undone.',
+    deleteRemoteSuccess: 'Journal deleted from cloud',
   },
 };
 
@@ -631,6 +640,11 @@ const pt: Dictionary = {
     journalAlreadyLocal: 'Ja esta neste dispositivo',
     connectAccount: 'Conectar conta',
     account: 'Conta',
+    manageJournals: 'Gerenciar diarios',
+    deleteRemoteJournal: 'Excluir da nuvem',
+    deleteRemoteConfirm:
+      'Isso excluira permanentemente este diario do Google Drive. Copias locais nao serao afetadas. Esta acao nao pode ser desfeita.',
+    deleteRemoteSuccess: 'Diario excluido da nuvem',
   },
 };
 
@@ -844,6 +858,11 @@ const es: Dictionary = {
     journalAlreadyLocal: 'Ya esta en este dispositivo',
     connectAccount: 'Conectar cuenta',
     account: 'Cuenta',
+    manageJournals: 'Gestionar diarios',
+    deleteRemoteJournal: 'Eliminar de la nube',
+    deleteRemoteConfirm:
+      'Esto eliminara permanentemente este diario de Google Drive. Las copias locales no se veran afectadas. Esta accion no se puede deshacer.',
+    deleteRemoteSuccess: 'Diario eliminado de la nube',
   },
 };
 
@@ -1057,6 +1076,11 @@ const de: Dictionary = {
     journalAlreadyLocal: 'Bereits auf diesem Gerat',
     connectAccount: 'Konto verbinden',
     account: 'Konto',
+    manageJournals: 'Tagebucher verwalten',
+    deleteRemoteJournal: 'Aus der Cloud loschen',
+    deleteRemoteConfirm:
+      'Dies wird dieses Tagebuch dauerhaft aus Google Drive loschen. Lokale Kopien werden nicht betroffen. Diese Aktion kann nicht ruckgangig gemacht werden.',
+    deleteRemoteSuccess: 'Tagebuch aus der Cloud geloscht',
   },
 };
 
@@ -1270,6 +1294,11 @@ const fr: Dictionary = {
     journalAlreadyLocal: 'Deja sur cet appareil',
     connectAccount: 'Connecter un compte',
     account: 'Compte',
+    manageJournals: 'Gerer les journaux',
+    deleteRemoteJournal: 'Supprimer du cloud',
+    deleteRemoteConfirm:
+      'Cela supprimera definitivement ce journal de Google Drive. Les copies locales ne seront pas affectees. Cette action est irreversible.',
+    deleteRemoteSuccess: 'Journal supprime du cloud',
   },
 };
 
@@ -1483,6 +1512,11 @@ const ru: Dictionary = {
     journalAlreadyLocal: 'Уже на этом устройстве',
     connectAccount: 'Подключить аккаунт',
     account: 'Аккаунт',
+    manageJournals: 'Управление дневниками',
+    deleteRemoteJournal: 'Удалить из облака',
+    deleteRemoteConfirm:
+      'Это навсегда удалит этот дневник из Google Drive. Локальные копии не будут затронуты. Это действие нельзя отменить.',
+    deleteRemoteSuccess: 'Дневник удален из облака',
   },
 };
 
@@ -1695,6 +1729,11 @@ const zh: Dictionary = {
     journalAlreadyLocal: '已在此设备上',
     connectAccount: '连接账户',
     account: '账户',
+    manageJournals: '管理日记',
+    deleteRemoteJournal: '从云端删除',
+    deleteRemoteConfirm:
+      '这将永久删除Google Drive上的此日记。本地副本不会受到影响。此操作无法撤消。',
+    deleteRemoteSuccess: '日记已从云端删除',
   },
 };
 
@@ -1908,6 +1947,11 @@ const it: Dictionary = {
     journalAlreadyLocal: 'Gia su questo dispositivo',
     connectAccount: 'Connetti account',
     account: 'Account',
+    manageJournals: 'Gestisci diari',
+    deleteRemoteJournal: 'Elimina dal cloud',
+    deleteRemoteConfirm:
+      'Questo eliminera permanentemente questo diario da Google Drive. Le copie locali non saranno interessate. Questa azione non puo essere annullata.',
+    deleteRemoteSuccess: 'Diario eliminato dal cloud',
   },
 };
 

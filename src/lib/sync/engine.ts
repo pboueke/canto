@@ -1,11 +1,48 @@
+import type { Page, Attachment } from '@/models';
 import type { LocalStore } from '@/lib/storage/types';
 import type { RemoteStore, SyncResult } from './types';
+
+/** Collect all non-deleted attachments from a page. */
+function pageAttachments(page: Page): Attachment[] {
+  return [...(page.images ?? []), ...(page.files ?? [])].filter((a) => !a.deleted && a.path);
+}
+
+/** Extract filename from a local file path. */
+function filenameFromPath(path: string): string {
+  return path.split('/').pop() ?? path;
+}
 
 export class SyncEngine {
   constructor(
     private local: LocalStore,
     private remote: RemoteStore,
   ) {}
+
+  /** Upload all attachments for a page that are stored locally. */
+  private async uploadPageAttachments(journalId: string, page: Page): Promise<void> {
+    for (const att of pageAttachments(page)) {
+      if (att.path.startsWith('gdrive://')) continue; // already remote
+      // Read without derivedKey: strips device encryption, preserves password layer
+      const data = await this.local.getAttachment(att.path);
+      if (data) {
+        await this.remote.uploadAttachment(journalId, att.path, data);
+      }
+    }
+  }
+
+  /** Download all attachments for a page from remote and update paths to local. */
+  private async downloadPageAttachments(journalId: string, page: Page): Promise<void> {
+    for (const att of pageAttachments(page)) {
+      const filename = filenameFromPath(att.path);
+      const remotePath = `gdrive://${journalId}/attachments/${filename}`;
+      const data = await this.remote.downloadAttachment(remotePath);
+      if (data) {
+        // Save without derivedKey: applies device encryption only, password layer preserved in data
+        const localPath = await this.local.saveAttachment(journalId, page.id, att, data);
+        att.path = localPath;
+      }
+    }
+  }
 
   /**
    * Sync a single journal between local and remote.
@@ -49,6 +86,7 @@ export class SyncEngine {
       if (localPage && !remotePage) {
         // Local only: upload
         if (localPage.deleted) continue; // don't upload deleted pages that were never synced
+        await this.uploadPageAttachments(journalId, localPage);
         await this.remote.uploadPage(journalId, localPage);
         result.uploaded.push(pageId);
       } else if (!localPage && remotePage) {
@@ -56,6 +94,7 @@ export class SyncEngine {
         if (remotePage.deleted) continue; // don't download deleted pages
         const downloaded = await this.remote.downloadPage(journalId, pageId);
         if (downloaded) {
+          await this.downloadPageAttachments(journalId, downloaded);
           await this.local.savePage(journalId, downloaded, derivedKey);
           result.downloaded.push(pageId);
         }
@@ -76,12 +115,14 @@ export class SyncEngine {
           // In sync, nothing to do
         } else if (localPage.modified > remotePage.modified) {
           // Local is newer: upload
+          await this.uploadPageAttachments(journalId, localPage);
           await this.remote.uploadPage(journalId, localPage);
           result.uploaded.push(pageId);
         } else {
           // Remote is newer: download
           const downloaded = await this.remote.downloadPage(journalId, pageId);
           if (downloaded) {
+            await this.downloadPageAttachments(journalId, downloaded);
             await this.local.savePage(journalId, downloaded, derivedKey);
             result.downloaded.push(pageId);
           }

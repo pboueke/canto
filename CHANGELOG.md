@@ -1,5 +1,17 @@
 # Changelog
 
+## v0.11.2 - Attachment Sync, Cloud Import UX & Journal Management
+
+- feat: sync engine now uploads and downloads attachment files alongside pages (previously only page JSON was synced, images were lost on cross-device import)
+- feat: cloud import downloads all attachments before saving journal locally, preserving password encryption layer across devices
+- feat: cloud import modal now shows all remote journals — local ones displayed as disabled with "Already on this device" badge
+- feat: "Manage journals" button in account popover — lists all remote journals, shows local availability, and allows deletion from cloud
+- feat: delete confirmation modal for remote journal deletion with warning about permanence
+- feat: deleting a remote journal automatically disables sync on the local copy (if any)
+- feat: `deleteJournal()` added to `RemoteStore` interface and `GDriveRemoteStore` (deletes folder + registry entry)
+- feat: 4 new i18n keys across all 8 languages for journal management UI
+- fix: cloud import journal list items missing horizontal padding (icon/text flush against edges)
+
 ## v0.11.1 - Auth Migration, Sync Fixes & Sync UI
 
 - feat: migrated Google OAuth from `expo-auth-session` to `@react-native-google-signin/google-signin` (native Google Play Services, no redirect URIs needed)
