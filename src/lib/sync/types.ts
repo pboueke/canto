@@ -43,6 +43,9 @@ export interface RemoteStore {
 
   /** Delete an attachment on the remote. */
   deleteAttachment(remotePath: string): Promise<void>;
+
+  /** Delete a journal and all its contents from the remote. */
+  deleteJournal(journalId: string): Promise<void>;
 }
 
 export interface SyncConflict {

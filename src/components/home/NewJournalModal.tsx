@@ -93,6 +93,7 @@ export function NewJournalModal({
   // Cloud import state
   const [showCloudImport, setShowCloudImport] = useState(false);
   const [cloudJournals, setCloudJournals] = useState<RemoteJournalMeta[]>([]);
+  const [cloudLocalTitles, setCloudLocalTitles] = useState<Set<string>>(new Set());
   const [cloudLoading, setCloudLoading] = useState(false);
   const [cloudError, setCloudError] = useState<string | null>(null);
 
@@ -154,10 +155,8 @@ export function NewJournalModal({
       await manager.connectWithToken(accessToken);
       const store = manager.getRemoteStore();
       const remoteJournals = await store.listRemoteJournals();
-      // Filter out journals already local
-      const localIds = new Set(existingTitles);
-      const available = remoteJournals.filter((rj) => !localIds.has(rj.title));
-      setCloudJournals(available);
+      setCloudLocalTitles(new Set(existingTitles));
+      setCloudJournals(remoteJournals);
       setShowCloudImport(true);
     } catch (err) {
       setCloudError(err instanceof Error ? err.message : String(err));
@@ -176,9 +175,23 @@ export function NewJournalModal({
       const journal = await store.downloadJournalMeta(remote.id);
       if (!journal) throw new Error('Journal not found on remote');
 
-      // Save locally
+      // Download attachments and save locally
       const { getLocalStore } = await import('@/hooks/useStorage');
       const localStore = await getLocalStore();
+      for (const page of journal.pages) {
+        const attachments = [...(page.images ?? []), ...(page.files ?? [])].filter(
+          (a) => !a.deleted && a.path,
+        );
+        for (const att of attachments) {
+          const filename = att.path.split('/').pop() ?? att.path;
+          const remotePath = `gdrive://${journal.id}/attachments/${filename}`;
+          const data = await store.downloadAttachment(remotePath);
+          if (data) {
+            const localPath = await localStore.saveAttachment(journal.id, page.id, att, data);
+            att.path = localPath;
+          }
+        }
+      }
       await localStore.saveJournal(journal);
       for (const page of journal.pages) {
         await localStore.savePage(journal.id, page);
@@ -1008,26 +1021,55 @@ export function NewJournalModal({
               </Text>
             ) : (
               <ScrollView style={styles.explainScroll}>
-                {cloudJournals.map((rj) => (
-                  <Pressable
-                    key={rj.id}
-                    onPress={() => handleCloudJournalSelect(rj)}
-                    style={[
-                      styles.importButton,
-                      { borderColor: theme.colors.border, backgroundColor: theme.colors.surface },
-                    ]}
-                  >
-                    <Feather name="book" size={16} color={theme.colors.text} />
-                    <Text
+                {cloudJournals.map((rj) => {
+                  const isLocal = cloudLocalTitles.has(rj.title);
+                  return (
+                    <Pressable
+                      key={rj.id}
+                      onPress={() => !isLocal && handleCloudJournalSelect(rj)}
+                      disabled={isLocal}
                       style={[
-                        styles.importText,
-                        { color: theme.colors.text, fontFamily: theme.fonts.regular },
+                        styles.importButton,
+                        {
+                          borderColor: theme.colors.border,
+                          backgroundColor: theme.colors.surface,
+                          opacity: isLocal ? 0.5 : 1,
+                          paddingHorizontal: 14,
+                          justifyContent: 'flex-start',
+                        },
                       ]}
                     >
-                      {rj.title}
-                    </Text>
-                  </Pressable>
-                ))}
+                      <Feather
+                        name={isLocal ? 'check-circle' : 'book'}
+                        size={16}
+                        color={isLocal ? theme.colors.textSecondary : theme.colors.text}
+                      />
+                      <Text
+                        style={[
+                          styles.importText,
+                          {
+                            color: isLocal ? theme.colors.textSecondary : theme.colors.text,
+                            fontFamily: theme.fonts.regular,
+                            flex: 1,
+                          },
+                        ]}
+                      >
+                        {rj.title}
+                      </Text>
+                      {isLocal && (
+                        <Text
+                          style={{
+                            color: theme.colors.textSecondary,
+                            fontFamily: theme.fonts.regular,
+                            fontSize: 12,
+                          }}
+                        >
+                          {t.sync.journalAlreadyLocal}
+                        </Text>
+                      )}
+                    </Pressable>
+                  );
+                })}
               </ScrollView>
             )}
             <Pressable

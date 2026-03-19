@@ -286,4 +286,36 @@ export class GDriveRemoteStore implements RemoteStore {
       this.fileIdCache.delete(`file:${attachmentsFolderId}/${name}`);
     }
   }
+
+  async deleteJournal(journalId: string): Promise<void> {
+    // Delete the journal folder (recursively deletes pages, attachments, meta)
+    const rootId = await this.getRootFolderId();
+    const cacheKey = `folder:${rootId}/${journalId}`;
+    const folderId = this.fileIdCache.get(cacheKey);
+    if (folderId) {
+      await api.deleteFile(this.token(), folderId);
+      // Clear all cached entries for this journal
+      for (const key of this.fileIdCache.keys()) {
+        if (key.includes(journalId)) {
+          this.fileIdCache.delete(key);
+        }
+      }
+    } else {
+      // Not cached — look it up
+      const files = await api.listFiles(
+        this.token(),
+        `name = '${journalId}' and mimeType = 'application/vnd.google-apps.folder' and '${rootId}' in parents and trashed = false`,
+      );
+      if (files.length > 0) {
+        await api.deleteFile(this.token(), files[0].id);
+      }
+    }
+
+    // Remove from registry
+    const registry = await this.readRegistry();
+    const updated = registry.filter((e) => e.id !== journalId);
+    if (updated.length !== registry.length) {
+      await this.writeRegistry(updated);
+    }
+  }
 }
