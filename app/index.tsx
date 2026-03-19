@@ -1,5 +1,13 @@
-import { useCallback, useState } from 'react';
-import { ActivityIndicator, Modal, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useCallback, useRef, useState } from 'react';
+import {
+  ActivityIndicator,
+  Modal,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '@/hooks/useTheme';
@@ -31,6 +39,17 @@ export default function HomeScreen() {
       refresh();
     }, [clearAll, refresh]),
   );
+
+  const [devUnlocked, setDevUnlocked] = useState(false);
+  const tapCountRef = useRef(0);
+
+  const handleLogoPress = useCallback(() => {
+    tapCountRef.current += 1;
+    if (tapCountRef.current >= 7) {
+      setDevUnlocked(true);
+      tapCountRef.current = 0;
+    }
+  }, []);
 
   const [showNewModal, setShowNewModal] = useState(false);
   const [accessJournal, setAccessJournal] = useState<Journal | null>(null);
@@ -113,10 +132,12 @@ export default function HomeScreen() {
       >
         <View style={styles.headerRow}>
           <View style={styles.logoSection}>
-            <Logo size={170} />
+            <Pressable onPress={handleLogoPress}>
+              <Logo size={170} />
+            </Pressable>
           </View>
           <View style={styles.infoSection}>
-            <InfoBox />
+            <InfoBox devUnlocked={devUnlocked} />
           </View>
         </View>
       </View>

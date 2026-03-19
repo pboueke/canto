@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import { ActivityIndicator, Alert, ScrollView, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, Alert, BackHandler, ScrollView, StyleSheet, View } from 'react-native';
 import { useLocalSearchParams, router } from 'expo-router';
+import { useNavigation } from '@react-navigation/native';
 import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
 import * as Location from 'expo-location';
@@ -17,6 +18,7 @@ import {
   useAttachment,
 } from '@/hooks/useStorage';
 import { useJournalKeys } from '@/contexts/JournalKeyContext';
+import { generateThumbnail } from '@/lib/thumbnail';
 import { PageHeader } from '@/components/page/PageHeader';
 import { TagEditor } from '@/components/page/TagEditor';
 import { PageContent } from '@/components/page/PageContent';
@@ -71,12 +73,59 @@ export default function PageScreen() {
   const [editingComment, setEditingComment] = useState<Comment | null>(null);
   const [addPopupVisible, setAddPopupVisible] = useState(false);
   const [isDirty, setIsDirty] = useState(false);
+  const navigation = useNavigation();
 
   useEffect(() => {
     if (page && !draft) {
       setDraft({ ...page });
     }
   }, [page]);
+
+  // Android hardware back button interception
+  useEffect(() => {
+    const handler = BackHandler.addEventListener('hardwareBackPress', () => {
+      if (isEditing && isDirty) {
+        Alert.alert(t.page.discardChanges, t.page.discardMessage, [
+          { text: t.page.keep, style: 'cancel' },
+          {
+            text: t.page.discard,
+            style: 'destructive',
+            onPress: () => {
+              if (page) setDraft({ ...page });
+              setIsDirty(false);
+              setIsEditing(false);
+              router.back();
+            },
+          },
+        ]);
+        return true;
+      }
+      return false;
+    });
+    return () => handler.remove();
+  }, [isEditing, isDirty, page, t]);
+
+  // Navigation beforeRemove interception
+  useEffect(() => {
+    const unsubscribe = navigation.addListener('beforeRemove', (e) => {
+      if (!isEditing || !isDirty) return;
+      e.preventDefault();
+      Alert.alert(t.page.discardChanges, t.page.discardMessage, [
+        { text: t.page.keep, style: 'cancel' },
+        {
+          text: t.page.discard,
+          style: 'destructive',
+          onPress: () => {
+            if (page) setDraft({ ...page });
+            setIsDirty(false);
+            setIsEditing(false);
+            navigation.dispatch(e.data.action);
+          },
+        },
+      ]);
+    });
+    return unsubscribe;
+  }, [navigation, isEditing, isDirty, page, t]);
 
   const updateDraft = useCallback(
     (updates: Partial<Page>) => {
@@ -89,10 +138,27 @@ export default function PageScreen() {
 
   const handleSave = useCallback(async () => {
     if (!draft) return;
-    await save({ ...draft, modified: Date.now() });
+    const toSave = { ...draft, modified: Date.now() };
+
+    // Generate thumbnail from first non-deleted image
+    const firstImage = toSave.images.find((img) => !img.deleted);
+    if (firstImage && journalId && id) {
+      try {
+        const base64 = await getAttachment(firstImage.path, firstImage.encrypted);
+        if (base64) {
+          toSave.thumbnail = await generateThumbnail(base64);
+        }
+      } catch {
+        // Non-critical — skip thumbnail generation on error
+      }
+    } else if (!toSave.images.some((img) => !img.deleted)) {
+      toSave.thumbnail = undefined;
+    }
+
+    await save(toSave);
     setIsDirty(false);
     setIsEditing(false);
-  }, [draft, save]);
+  }, [draft, save, getAttachment, journalId, id]);
 
   const handleDelete = useCallback(() => {
     Alert.alert(t.page.deleteConfirm, t.page.deleteMessage, [
@@ -329,6 +395,33 @@ export default function PageScreen() {
     [getAttachment],
   );
 
+  const handleDateChange = useCallback(
+    (newDate: Date) => {
+      updateDraft({ date: newDate.toISOString() });
+    },
+    [updateDraft],
+  );
+
+  const handleBack = useCallback(() => {
+    if (isEditing && isDirty) {
+      Alert.alert(t.page.discardChanges, t.page.discardMessage, [
+        { text: t.page.keep, style: 'cancel' },
+        {
+          text: t.page.discard,
+          style: 'destructive',
+          onPress: () => {
+            if (page) setDraft({ ...page });
+            setIsDirty(false);
+            setIsEditing(false);
+            router.back();
+          },
+        },
+      ]);
+    } else {
+      router.back();
+    }
+  }, [isEditing, isDirty, page, t]);
+
   if (loading) {
     return (
       <ThemeContext.Provider value={themeContextValue}>
@@ -363,7 +456,14 @@ export default function PageScreen() {
   return (
     <ThemeContext.Provider value={themeContextValue}>
       <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
-        <PageHeader date={dateStr} time={timeStr} />
+        <PageHeader
+          date={dateStr}
+          time={timeStr}
+          dateValue={dateObj}
+          isEditing={isEditing}
+          onDateChange={handleDateChange}
+          onBack={handleBack}
+        />
 
         <ScrollView contentContainerStyle={styles.content}>
           <TagEditor

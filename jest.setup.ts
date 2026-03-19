@@ -250,3 +250,16 @@ jest.mock('expo-local-authentication', () => ({
 (globalThis as any).__setBiometricAuthResult = (v: boolean) => {
   mockBiometricAuthResult = v;
 };
+
+// ---------------------------------------------------------------------------
+// Mock: expo-image-manipulator (virtual — not yet installed)
+// ---------------------------------------------------------------------------
+jest.mock('expo-image-manipulator', () => ({
+  manipulateAsync: jest.fn(async () => ({
+    uri: 'file:///tmp/manipulated.jpg',
+    base64: 'dGh1bWJuYWls',
+    width: 80,
+    height: 80,
+  })),
+  SaveFormat: { JPEG: 'jpeg', PNG: 'png' },
+}));

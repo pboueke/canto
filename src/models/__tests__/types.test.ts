@@ -93,6 +93,16 @@ describe('pageToPreview', () => {
     expect(preview.hasComments).toBe(false);
   });
 
+  it('carries thumbnail field through to preview', () => {
+    const preview = pageToPreview(makePage({ thumbnail: 'base64data' }));
+    expect(preview.thumbnail).toBe('base64data');
+  });
+
+  it('leaves thumbnail undefined when page has none', () => {
+    const preview = pageToPreview(makePage());
+    expect(preview.thumbnail).toBeUndefined();
+  });
+
   it('returns firstImage from first non-encrypted, non-deleted image', () => {
     const preview = pageToPreview(
       makePage({

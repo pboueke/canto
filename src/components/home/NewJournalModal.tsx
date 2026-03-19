@@ -96,6 +96,9 @@ export function NewJournalModal({
   const [cloudLocalTitles, setCloudLocalTitles] = useState<Set<string>>(new Set());
   const [cloudLoading, setCloudLoading] = useState(false);
   const [cloudError, setCloudError] = useState<string | null>(null);
+  const [importProgress, setImportProgress] = useState<{ current: number; total: number } | null>(
+    null,
+  );
 
   useEffect(() => {
     isBiometricAvailable().then(setBiometricSupported);
@@ -169,11 +172,16 @@ export function NewJournalModal({
     if (!manager || !accessToken) return;
     setShowCloudImport(false);
     setImporting(true);
+    setImportProgress(null);
     try {
       await manager.connectWithToken(accessToken);
       const store = manager.getRemoteStore();
       const journal = await store.downloadJournalMeta(remote.id);
       if (!journal) throw new Error('Journal not found on remote');
+
+      const activePages = journal.pages.filter((p) => !p.deleted);
+      const total = activePages.length;
+      let current = 0;
 
       // Download attachments and save locally
       const { getLocalStore } = await import('@/hooks/useStorage');
@@ -182,16 +190,23 @@ export function NewJournalModal({
         const attachments = [...(page.images ?? []), ...(page.files ?? [])].filter(
           (a) => !a.deleted && a.path,
         );
-        for (const att of attachments) {
-          const filename = att.path.split('/').pop() ?? att.path;
-          const remotePath = `gdrive://${journal.id}/attachments/${filename}`;
-          const data = await store.downloadAttachment(remotePath);
-          if (data) {
-            const localPath = await localStore.saveAttachment(journal.id, page.id, att, data);
-            att.path = localPath;
-          }
+        await Promise.all(
+          attachments.map(async (att) => {
+            const filename = att.path.split('/').pop() ?? att.path;
+            const remotePath = `gdrive://${journal.id}/attachments/${filename}`;
+            const data = await store.downloadAttachment(remotePath);
+            if (data) {
+              const localPath = await localStore.saveAttachment(journal.id, page.id, att, data);
+              att.path = localPath;
+            }
+          }),
+        );
+        if (!page.deleted) {
+          current++;
+          setImportProgress({ current, total });
         }
       }
+
       await localStore.saveJournal(journal);
       for (const page of journal.pages) {
         await localStore.savePage(journal.id, page);
@@ -204,6 +219,7 @@ export function NewJournalModal({
       setImportError(err instanceof Error ? err.message : String(err));
     } finally {
       setImporting(false);
+      setImportProgress(null);
     }
   }
 
@@ -386,6 +402,29 @@ export function NewJournalModal({
             >
               {importing ? t.backup.importing : t.common.loading}
             </Text>
+            {importProgress && (
+              <>
+                <View style={[styles.progressTrack, { backgroundColor: theme.colors.border }]}>
+                  <View
+                    style={[
+                      styles.progressFill,
+                      {
+                        backgroundColor: theme.colors.primary,
+                        width: `${Math.round((importProgress.current / importProgress.total) * 100)}%`,
+                      },
+                    ]}
+                  />
+                </View>
+                <Text
+                  style={[
+                    styles.progressText,
+                    { color: theme.colors.textSecondary, fontFamily: theme.fonts.regular },
+                  ]}
+                >
+                  {importProgress.current} / {importProgress.total}
+                </Text>
+              </>
+            )}
           </View>
         ) : (
           <>
@@ -1118,6 +1157,19 @@ const styles = StyleSheet.create({
   },
   busyText: {
     fontSize: 14,
+  },
+  progressTrack: {
+    width: '60%',
+    height: 6,
+    borderRadius: 3,
+    overflow: 'hidden',
+  },
+  progressFill: {
+    height: '100%',
+    borderRadius: 3,
+  },
+  progressText: {
+    fontSize: 12,
   },
   body: {
     flex: 1,

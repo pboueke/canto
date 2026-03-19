@@ -3,12 +3,16 @@ import { useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import { useTheme } from '@/hooks/useTheme';
 
-export function BackButton() {
+interface BackButtonProps {
+  onBack?: () => void;
+}
+
+export function BackButton({ onBack }: BackButtonProps) {
   const { theme } = useTheme();
   const router = useRouter();
 
   return (
-    <Pressable onPress={() => router.back()} style={styles.button}>
+    <Pressable onPress={onBack ?? (() => router.back())} style={styles.button}>
       <Feather name="arrow-left" size={22} color={theme.colors.text} />
     </Pressable>
   );

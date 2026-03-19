@@ -7,6 +7,7 @@ import { loadChangelog, parseVersionFromChangelog } from '@/lib/changelog';
 import { ThemePickerModal } from '@/components/home/ThemePickerModal';
 import { LanguagePickerModal } from '@/components/home/LanguagePickerModal';
 import { SecuritySettingsModal } from '@/components/home/SecuritySettingsModal';
+import { DevMenu } from '@/components/dev/DevMenu';
 
 const CANTO_REPO_URL = 'https://github.com/pboueke/canto';
 
@@ -19,13 +20,18 @@ const THEME_DISPLAY_NAMES: Record<string, string> = {
   dracula: 'Dracula',
 };
 
-export function InfoBox() {
+interface InfoBoxProps {
+  devUnlocked?: boolean;
+}
+
+export function InfoBox({ devUnlocked }: InfoBoxProps) {
   const { theme } = useTheme();
   const { lang, t } = useI18n();
   const [showChangelog, setShowChangelog] = useState(false);
   const [showThemePicker, setShowThemePicker] = useState(false);
   const [showLangPicker, setShowLangPicker] = useState(false);
   const [showSecurity, setShowSecurity] = useState(false);
+  const [showDevMenu, setShowDevMenu] = useState(false);
   const [changelog, setChangelog] = useState<string | null>(null);
   const [version, setVersion] = useState('...');
 
@@ -130,6 +136,27 @@ export function InfoBox() {
                 {changelog ?? 'Loading...'}
               </Text>
             </ScrollView>
+            {devUnlocked && (
+              <Pressable
+                onPress={() => {
+                  setShowChangelog(false);
+                  setShowDevMenu(true);
+                }}
+                style={[
+                  styles.modalClose,
+                  { backgroundColor: theme.colors.highlight, marginBottom: 8 },
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.modalCloseText,
+                    { color: theme.colors.primary, fontFamily: theme.fonts.regular },
+                  ]}
+                >
+                  Dev Menu
+                </Text>
+              </Pressable>
+            )}
             <Pressable
               onPress={() => setShowChangelog(false)}
               style={[styles.modalClose, { backgroundColor: theme.colors.highlight }]}
@@ -146,6 +173,8 @@ export function InfoBox() {
           </View>
         </View>
       </Modal>
+
+      <DevMenu visible={showDevMenu} onClose={() => setShowDevMenu(false)} />
     </View>
   );
 }

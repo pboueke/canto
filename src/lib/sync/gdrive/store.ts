@@ -236,11 +236,13 @@ export class GDriveRemoteStore implements RemoteStore {
       `'${pagesFolderId}' in parents and trashed = false`,
     );
 
-    const pages: Page[] = [];
-    for (const pf of pageFiles) {
-      const pageContent = await api.getFileContent(this.token(), pf.id);
-      pages.push(safeJsonParse<Page>(pageContent, `page:${pf.name}`));
-    }
+    const token = this.token();
+    const pages = await Promise.all(
+      pageFiles.map(async (pf) => {
+        const pageContent = await api.getFileContent(token, pf.id);
+        return safeJsonParse<Page>(pageContent, `page:${pf.name}`);
+      }),
+    );
 
     return { ...meta, pages } as JournalContent;
   }

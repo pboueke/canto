@@ -31,6 +31,12 @@ export function PageListItem({ page, journalId, settings }: PageListItemProps) {
   const use24h = settings?.use24h ?? false;
 
   useEffect(() => {
+    // Prefer inline base64 thumbnail (generated at save time)
+    if (page.thumbnail && showThumbnail) {
+      setThumbnailUri(`data:image/jpeg;base64,${page.thumbnail}`);
+      return;
+    }
+
     if (!page.firstImage || !showThumbnail) return;
     const cancel = enqueueThumbnail(
       page.id,
@@ -47,7 +53,7 @@ export function PageListItem({ page, journalId, settings }: PageListItemProps) {
       },
     );
     return cancel;
-  }, [page.firstImage, showThumbnail]);
+  }, [page.thumbnail, page.firstImage, showThumbnail]);
 
   const dateObj = new Date(page.date);
   const dateStr = dateObj.toLocaleDateString();
