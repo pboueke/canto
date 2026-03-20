@@ -28,7 +28,16 @@ const PROVIDER_LABELS: Record<SyncProvider, string> = {
 export function AccountButton() {
   const { theme } = useTheme();
   const { t } = useI18n();
-  const { user, isSignedIn, isLoading, accessToken, signIn, signOut } = useGoogleAuth();
+  const {
+    user,
+    isSignedIn,
+    isLoading,
+    accessToken,
+    signIn,
+    signOut,
+    retentionDays,
+    setRetentionDays,
+  } = useGoogleAuth();
   const { manager, provider } = useSyncManager();
   const { journals: localJournals } = useJournals();
   const [showPopover, setShowPopover] = useState(false);
@@ -231,6 +240,57 @@ export function AccountButton() {
                 {t.sync.signOut}
               </Text>
             </Pressable>
+            {Platform.OS === 'web' && (
+              <View style={styles.retentionSection}>
+                <Text
+                  style={[
+                    styles.retentionLabel,
+                    { color: theme.colors.textSecondary, fontFamily: theme.fonts.regular },
+                  ]}
+                >
+                  {t.sync.sessionRetention}
+                </Text>
+                <View style={styles.retentionRow}>
+                  {([1, 7, 30, 0] as const).map((days) => {
+                    const label =
+                      days === 1
+                        ? t.sync.retentionOneDay
+                        : days === 7
+                          ? t.sync.retentionOneWeek
+                          : days === 30
+                            ? t.sync.retentionOneMonth
+                            : t.sync.retentionNever;
+                    const isActive = retentionDays === days;
+                    return (
+                      <Pressable
+                        key={days}
+                        onPress={() => setRetentionDays(days)}
+                        style={[
+                          styles.retentionChip,
+                          {
+                            backgroundColor: isActive
+                              ? theme.colors.primary
+                              : theme.colors.highlight,
+                          },
+                        ]}
+                      >
+                        <Text
+                          style={[
+                            styles.retentionChipText,
+                            {
+                              color: isActive ? theme.colors.foreground : theme.colors.text,
+                              fontFamily: isActive ? theme.fonts.bold : theme.fonts.regular,
+                            },
+                          ]}
+                        >
+                          {label}
+                        </Text>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+              </View>
+            )}
           </View>
         </Pressable>
       </Modal>
@@ -606,6 +666,29 @@ const styles = StyleSheet.create({
     fontSize: 14,
     lineHeight: 22,
     marginBottom: 20,
+  },
+  retentionSection: {
+    marginTop: 8,
+    paddingTop: 12,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: 'rgba(128,128,128,0.3)',
+    gap: 8,
+  },
+  retentionLabel: {
+    fontSize: 12,
+  },
+  retentionRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+  },
+  retentionChip: {
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 6,
+  },
+  retentionChipText: {
+    fontSize: 12,
   },
   confirmButtons: {
     flexDirection: 'row',

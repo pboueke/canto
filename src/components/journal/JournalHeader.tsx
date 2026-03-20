@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import { Animated, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Animated, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
 import { useTheme } from '@/hooks/useTheme';
@@ -121,22 +121,20 @@ export function JournalHeader({
         {journal.title}
       </Text>
       <View style={styles.actions}>
-        {Platform.OS !== 'web' && (
-          <Pressable onPress={onPressSync} style={styles.actionButton}>
-            <View>
-              <Feather
-                name="cloud"
-                size={20}
-                color={syncStatus === 'syncing' ? theme.colors.primary : theme.colors.text}
-              />
-              <SyncDot
-                status={syncStatus}
-                isSyncEnabled={isSyncEnabled}
-                hasUnsyncedChanges={hasUnsyncedChanges}
-              />
-            </View>
-          </Pressable>
-        )}
+        <Pressable onPress={onPressSync} style={styles.actionButton}>
+          <View>
+            <Feather
+              name="cloud"
+              size={20}
+              color={syncStatus === 'syncing' ? theme.colors.primary : theme.colors.text}
+            />
+            <SyncDot
+              status={syncStatus}
+              isSyncEnabled={isSyncEnabled}
+              hasUnsyncedChanges={hasUnsyncedChanges}
+            />
+          </View>
+        </Pressable>
         <Pressable onPress={onPressExport} style={styles.actionButton}>
           <Feather name="archive" size={20} color={theme.colors.text} />
         </Pressable>

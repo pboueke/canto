@@ -61,7 +61,7 @@ export function JournalSettings({
   const [showIconPicker, setShowIconPicker] = useState(false);
   const [showNameInput, setShowNameInput] = useState(false);
   const [newName, setNewName] = useState(journal.title);
-  const [deleteError, setDeleteError] = useState('');
+  const [deleteError, setDeleteError] = useState<string | null>(null);
   const [passwordProgress, setPasswordProgress] = useState('');
   const [passwordError, setPasswordError] = useState('');
   const [saving, setSaving] = useState(false);
@@ -129,7 +129,7 @@ export function JournalSettings({
 
   const handleDelete = useCallback(
     async (password?: string) => {
-      setDeleteError('');
+      setDeleteError(null);
       if (journal.secure && password && journal.salt) {
         try {
           await deriveAndCache(journal.id, password, journal.salt, journal.kdfIterations);
@@ -659,7 +659,7 @@ export function JournalSettings({
         onConfirm={handleDelete}
         onCancel={() => {
           setShowDeleteModal(false);
-          setDeleteError('');
+          setDeleteError(null);
         }}
         error={deleteError}
       />

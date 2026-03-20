@@ -10,7 +10,7 @@ interface ConfirmDeleteModalProps {
   isSecure: boolean;
   onConfirm: (password?: string) => void;
   onCancel: () => void;
-  error?: string;
+  error?: string | null;
 }
 
 export function ConfirmDeleteModal({
@@ -82,13 +82,13 @@ export function ConfirmDeleteModal({
             autoCapitalize="none"
           />
 
-          {error && (
+          {error ? (
             <Text
               style={[styles.error, { color: theme.colors.error, fontFamily: theme.fonts.regular }]}
             >
               {error}
             </Text>
-          )}
+          ) : null}
 
           <View style={styles.buttons}>
             <Pressable

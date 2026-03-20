@@ -2,6 +2,7 @@ import { useCallback, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Modal,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -71,8 +72,8 @@ export default function HomeScreen() {
   }
 
   async function handleJournalPress(journal: Journal) {
-    // Biometric gate: always require biometric auth first when enabled
-    if (journal.biometric && !getKey(journal.id)) {
+    // Biometric gate: skip on web (biometric is unavailable), fall through to password
+    if (journal.biometric && !getKey(journal.id) && Platform.OS !== 'web') {
       const success = await authenticateBiometric(t.home.biometricReason);
       if (!success) return;
     }

@@ -212,6 +212,11 @@ export interface Dictionary {
     selectProvider: string;
     googleDrive: string;
     loggedInWith: string;
+    sessionRetention: string;
+    retentionOneDay: string;
+    retentionOneWeek: string;
+    retentionOneMonth: string;
+    retentionNever: string;
   };
 }
 
@@ -433,6 +438,11 @@ const en: Dictionary = {
     selectProvider: 'Select sync provider',
     googleDrive: 'Google Drive',
     loggedInWith: 'Logged in with {provider}',
+    sessionRetention: 'Session retention',
+    retentionOneDay: '1 day',
+    retentionOneWeek: '1 week',
+    retentionOneMonth: '1 month',
+    retentionNever: 'Never expire',
   },
 };
 
@@ -654,6 +664,11 @@ const pt: Dictionary = {
     selectProvider: 'Selecionar provedor de sincronização',
     googleDrive: 'Google Drive',
     loggedInWith: 'Conectado com {provider}',
+    sessionRetention: 'Retencao da sessao',
+    retentionOneDay: '1 dia',
+    retentionOneWeek: '1 semana',
+    retentionOneMonth: '1 mes',
+    retentionNever: 'Nunca expirar',
   },
 };
 
@@ -875,6 +890,11 @@ const es: Dictionary = {
     selectProvider: 'Seleccionar proveedor de sincronización',
     googleDrive: 'Google Drive',
     loggedInWith: 'Conectado con {provider}',
+    sessionRetention: 'Retencion de sesion',
+    retentionOneDay: '1 dia',
+    retentionOneWeek: '1 semana',
+    retentionOneMonth: '1 mes',
+    retentionNever: 'Nunca expirar',
   },
 };
 
@@ -1096,6 +1116,11 @@ const de: Dictionary = {
     selectProvider: 'Sync-Anbieter auswählen',
     googleDrive: 'Google Drive',
     loggedInWith: 'Angemeldet mit {provider}',
+    sessionRetention: 'Sitzungsspeicherung',
+    retentionOneDay: '1 Tag',
+    retentionOneWeek: '1 Woche',
+    retentionOneMonth: '1 Monat',
+    retentionNever: 'Nie ablaufen',
   },
 };
 
@@ -1317,6 +1342,11 @@ const fr: Dictionary = {
     selectProvider: 'Choisir le fournisseur de synchronisation',
     googleDrive: 'Google Drive',
     loggedInWith: 'Connecté avec {provider}',
+    sessionRetention: 'Conservation de session',
+    retentionOneDay: '1 jour',
+    retentionOneWeek: '1 semaine',
+    retentionOneMonth: '1 mois',
+    retentionNever: 'Ne jamais expirer',
   },
 };
 
@@ -1538,6 +1568,11 @@ const ru: Dictionary = {
     selectProvider: 'Выберите провайдер синхронизации',
     googleDrive: 'Google Drive',
     loggedInWith: 'Вход через {provider}',
+    sessionRetention: 'Хранение сессии',
+    retentionOneDay: '1 день',
+    retentionOneWeek: '1 неделя',
+    retentionOneMonth: '1 месяц',
+    retentionNever: 'Не истекает',
   },
 };
 
@@ -1758,6 +1793,11 @@ const zh: Dictionary = {
     selectProvider: '选择同步提供商',
     googleDrive: 'Google Drive',
     loggedInWith: '已通过 {provider} 登录',
+    sessionRetention: '会话保留',
+    retentionOneDay: '1 天',
+    retentionOneWeek: '1 周',
+    retentionOneMonth: '1 个月',
+    retentionNever: '永不过期',
   },
 };
 
@@ -1979,6 +2019,11 @@ const it: Dictionary = {
     selectProvider: 'Seleziona provider di sincronizzazione',
     googleDrive: 'Google Drive',
     loggedInWith: 'Connesso con {provider}',
+    sessionRetention: 'Conservazione sessione',
+    retentionOneDay: '1 giorno',
+    retentionOneWeek: '1 settimana',
+    retentionOneMonth: '1 mese',
+    retentionNever: 'Non scade mai',
   },
 };
 
