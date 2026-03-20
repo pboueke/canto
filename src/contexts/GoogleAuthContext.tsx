@@ -13,6 +13,8 @@ const SCOPES = [
   'https://www.googleapis.com/auth/drive.file',
 ];
 
+export type RetentionDays = 0 | 1 | 7 | 30;
+
 export interface GoogleUser {
   email: string;
   name: string;
@@ -28,6 +30,9 @@ interface GoogleAuthState {
   isLoading: boolean;
   signIn: () => Promise<void>;
   signOut: () => Promise<void>;
+  /** Web only — session retention period. No-op on native. */
+  retentionDays: RetentionDays;
+  setRetentionDays: (days: RetentionDays) => void;
 }
 
 const GoogleAuthCtx = createContext<GoogleAuthState>({
@@ -38,6 +43,8 @@ const GoogleAuthCtx = createContext<GoogleAuthState>({
   isLoading: true,
   signIn: async () => {},
   signOut: async () => {},
+  retentionDays: 7,
+  setRetentionDays: () => {},
 });
 
 export function useGoogleAuth() {
@@ -151,6 +158,8 @@ export function GoogleAuthProvider({ children }: { children: ReactNode }) {
         isLoading,
         signIn,
         signOut,
+        retentionDays: 7,
+        setRetentionDays: () => {},
       }}
     >
       {children}

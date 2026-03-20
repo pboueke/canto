@@ -1,5 +1,17 @@
 # Changelog
 
+## v0.14.2 - Web Google Drive Sync
+
+- feat: full Google Drive sync on web — `GoogleAuthContext.web.tsx` replaced no-op stub with real OAuth via `expo-auth-session/providers/google` (implicit flow)
+- feat: configurable session retention on web — 1 day / 1 week (default) / 1 month / never expire, stored in localStorage
+- feat: retention picker UI in AccountButton popover (web only)
+- feat: sync button now visible in journal header on web (removed `Platform.OS !== 'web'` gate)
+- fix: biometric-locked journals inaccessible on web — biometric gate skipped on web, falls through to password prompt
+- fix: DevMenu buttons non-functional on web — `Alert.alert()` with callbacks replaced by `window.alert()` / `window.confirm()` on web
+- fix: "Unexpected text node: ." warning in ConfirmDeleteModal on web — `deleteError` changed from empty string to `null`
+- deps: `expo-auth-session`, `expo-web-browser`
+- test: updated GoogleAuthContextWeb tests, added web token storage tests (9), web sync integration tests (4)
+
 ## v0.14.1 - Web Feature Implementations
 
 - feat: web backup export — generates ZIP in memory and triggers browser download via Blob URL

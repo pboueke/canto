@@ -3,6 +3,7 @@ import {
   ActivityIndicator,
   Alert,
   Modal,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -67,13 +68,29 @@ export function DevMenu({ visible, onClose }: DevMenuProps) {
     }
   };
 
+  const showAlert = (title: string, message: string) => {
+    if (Platform.OS === 'web') {
+      window.alert(`${title}\n\n${message}`);
+    } else {
+      Alert.alert(title, message);
+    }
+  };
+
+  const showConfirm = (title: string, message: string): boolean => {
+    if (Platform.OS === 'web') {
+      return window.confirm(`${title}\n\n${message}`);
+    }
+    // Native uses Alert.alert with callbacks — not used in this path
+    return false;
+  };
+
   const runAction = async (action: () => Promise<void>, label: string) => {
     setRunning(true);
     try {
       await action();
-      Alert.alert('Success', `${label} completed`);
+      showAlert('Success', `${label} completed`);
     } catch (err) {
-      Alert.alert('Error', String(err));
+      showAlert('Error', String(err));
     } finally {
       setRunning(false);
     }
@@ -102,33 +119,47 @@ export function DevMenu({ visible, onClose }: DevMenuProps) {
   };
 
   const handleWipeAll = () => {
-    Alert.alert(
-      'Wipe All Data',
-      'This will permanently delete ALL journals, pages, and attachments from this device. This cannot be undone.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete Everything',
-          style: 'destructive',
-          onPress: () => {
-            Alert.alert(
-              'Are you sure?',
-              'Last chance. All local data will be permanently destroyed.',
-              [
-                { text: 'Cancel', style: 'cancel' },
-                {
-                  text: 'Yes, wipe all data',
-                  style: 'destructive',
-                  onPress: () => {
-                    runAction(() => wipeAllData(), 'Wiped all data');
+    if (Platform.OS === 'web') {
+      const first = showConfirm(
+        'Wipe All Data',
+        'This will permanently delete ALL journals, pages, and attachments from this device. This cannot be undone.',
+      );
+      if (!first) return;
+      const second = showConfirm(
+        'Are you sure?',
+        'Last chance. All local data will be permanently destroyed.',
+      );
+      if (!second) return;
+      runAction(() => wipeAllData(), 'Wiped all data');
+    } else {
+      Alert.alert(
+        'Wipe All Data',
+        'This will permanently delete ALL journals, pages, and attachments from this device. This cannot be undone.',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Delete Everything',
+            style: 'destructive',
+            onPress: () => {
+              Alert.alert(
+                'Are you sure?',
+                'Last chance. All local data will be permanently destroyed.',
+                [
+                  { text: 'Cancel', style: 'cancel' },
+                  {
+                    text: 'Yes, wipe all data',
+                    style: 'destructive',
+                    onPress: () => {
+                      runAction(() => wipeAllData(), 'Wiped all data');
+                    },
                   },
-                },
-              ],
-            );
+                ],
+              );
+            },
           },
-        },
-      ],
-    );
+        ],
+      );
+    }
   };
 
   const handleJournalSelected = async (journal: Journal) => {
