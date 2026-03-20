@@ -1,10 +1,14 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
-import DateTimePicker, { type DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import { useTheme } from '@/hooks/useTheme';
 import { BackButton } from '@/components/common/BackButton';
+
+// Only import native DateTimePicker on non-web platforms
+const DateTimePicker =
+  Platform.OS !== 'web' ? require('@react-native-community/datetimepicker').default : null;
+type DateTimePickerEvent = { type: string; nativeEvent: { timestamp: number } };
 
 interface PageHeaderProps {
   date: string;
@@ -27,6 +31,8 @@ export function PageHeader({
   const insets = useSafeAreaInsets();
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [showTimePicker, setShowTimePicker] = useState(false);
+  const dateInputRef = useRef<HTMLInputElement>(null);
+  const timeInputRef = useRef<HTMLInputElement>(null);
 
   const currentDate = dateValue ?? new Date();
 
@@ -91,21 +97,74 @@ export function PageHeader({
       <BackButton onBack={onBack} />
 
       {isEditing && onDateChange ? (
-        <Pressable onPress={() => setShowDatePicker(true)}>{dateContent}</Pressable>
+        <Pressable
+          onPress={() => {
+            if (Platform.OS === 'web' && dateInputRef.current) {
+              dateInputRef.current.showPicker();
+            } else {
+              setShowDatePicker(true);
+            }
+          }}
+        >
+          {dateContent}
+        </Pressable>
       ) : (
         dateContent
       )}
 
       {isEditing && onDateChange ? (
-        <Pressable onPress={() => setShowTimePicker(true)}>{timeContent}</Pressable>
+        <Pressable
+          onPress={() => {
+            if (Platform.OS === 'web' && timeInputRef.current) {
+              timeInputRef.current.showPicker();
+            } else {
+              setShowTimePicker(true);
+            }
+          }}
+        >
+          {timeContent}
+        </Pressable>
       ) : (
         timeContent
       )}
 
-      {showDatePicker && (
+      {Platform.OS === 'web' && isEditing && onDateChange && (
+        <>
+          <input
+            ref={dateInputRef}
+            type="date"
+            value={currentDate.toISOString().slice(0, 10)}
+            onChange={(e) => {
+              const val = e.target.value;
+              if (!val) return;
+              const [y, m, d] = val.split('-').map(Number);
+              const merged = new Date(currentDate);
+              merged.setFullYear(y, m - 1, d);
+              onDateChange(merged);
+            }}
+            style={{ position: 'absolute', opacity: 0, width: 0, height: 0 }}
+          />
+          <input
+            ref={timeInputRef}
+            type="time"
+            value={`${String(currentDate.getHours()).padStart(2, '0')}:${String(currentDate.getMinutes()).padStart(2, '0')}`}
+            onChange={(e) => {
+              const val = e.target.value;
+              if (!val) return;
+              const [h, min] = val.split(':').map(Number);
+              const merged = new Date(currentDate);
+              merged.setHours(h, min);
+              onDateChange(merged);
+            }}
+            style={{ position: 'absolute', opacity: 0, width: 0, height: 0 }}
+          />
+        </>
+      )}
+
+      {Platform.OS !== 'web' && showDatePicker && DateTimePicker && (
         <DateTimePicker value={currentDate} mode="date" onChange={handleDateChange} />
       )}
-      {showTimePicker && (
+      {Platform.OS !== 'web' && showTimePicker && DateTimePicker && (
         <DateTimePicker value={currentDate} mode="time" onChange={handleTimeChange} />
       )}
     </View>

@@ -7,7 +7,11 @@ import * as fs from 'fs';
 import * as path from 'path';
 
 const SRC_DIR = path.resolve(__dirname, '../../..');
-const NATIVE_ONLY_MODULES = ['expo-file-system', 'expo-secure-store'];
+const NATIVE_ONLY_MODULES = [
+  'expo-file-system',
+  'expo-secure-store',
+  '@react-native-google-signin/google-signin',
+];
 
 function findTsFiles(dir: string): string[] {
   const results: string[] = [];
