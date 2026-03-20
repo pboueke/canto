@@ -3,6 +3,7 @@ import { Feather } from '@expo/vector-icons';
 import { useTheme } from '@/hooks/useTheme';
 import { useI18n } from '@/hooks/useI18n';
 import { type LangCode, langCodes, langNativeNames } from '@/i18n/dictionaries';
+import { webModalContent } from '@/styles/web';
 
 interface LanguagePickerModalProps {
   visible: boolean;
@@ -24,6 +25,7 @@ export function LanguagePickerModal({ visible, onClose }: LanguagePickerModalPro
         <View
           style={[
             styles.content,
+            webModalContent,
             {
               backgroundColor: theme.colors.foreground,
               borderColor: theme.colors.border,

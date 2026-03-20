@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react';
-import { Image, StyleSheet, Text, View } from 'react-native';
+import { Image, Platform, StyleSheet, Text, View } from 'react-native';
 import { useRouter } from 'expo-router';
-import { Paths, File as ExpoFile } from 'expo-file-system';
 import { Feather } from '@expo/vector-icons';
 import { Card } from '@/components/common/Card';
 import { Tag } from '@/components/common/Tag';
@@ -43,6 +42,11 @@ export function PageListItem({ page, journalId, settings }: PageListItemProps) {
       async () => {
         const data = await getAttachment(page.firstImage!, false);
         if (!data) return null;
+        if (Platform.OS === 'web') {
+          return `data:image/jpeg;base64,${data}`;
+        }
+        // Native: write to cache file for better memory management
+        const { Paths, File: ExpoFile } = require('expo-file-system');
         const tmpFile = new ExpoFile(Paths.cache, `thumb-${page.id}.jpg`);
         if (!tmpFile.exists) tmpFile.create({ intermediates: true });
         tmpFile.write(data, { encoding: 'base64' });

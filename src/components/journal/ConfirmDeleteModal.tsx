@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Modal, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useTheme } from '@/hooks/useTheme';
 import { useI18n } from '@/hooks/useI18n';
+import { webModalContent } from '@/styles/web';
 
 interface ConfirmDeleteModalProps {
   visible: boolean;
@@ -47,6 +48,7 @@ export function ConfirmDeleteModal({
         <View
           style={[
             styles.content,
+            webModalContent,
             { backgroundColor: theme.colors.background, borderColor: theme.colors.border },
           ]}
         >

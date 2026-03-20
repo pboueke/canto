@@ -7,6 +7,7 @@ import { useGoogleAuth } from '@/contexts/GoogleAuthContext';
 import { useSyncManager, useSyncState } from '@/contexts/SyncManagerContext';
 import { useSaveJournal } from '@/hooks/useStorage';
 import type { JournalContent, JournalSettings } from '@/models';
+import { webModalContent } from '@/styles/web';
 
 interface SyncModalProps {
   visible: boolean;
@@ -120,6 +121,7 @@ export function SyncModal({
         <View
           style={[
             styles.content,
+            webModalContent,
             {
               backgroundColor: theme.colors.foreground,
               borderColor: theme.colors.border,

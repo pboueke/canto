@@ -9,7 +9,7 @@ import {
   Text,
   View,
 } from 'react-native';
-import ImageViewing from 'react-native-image-viewing';
+import ImageViewing from './ImageViewing';
 import { Feather } from '@expo/vector-icons';
 import { useTheme } from '@/hooks/useTheme';
 import { useI18n } from '@/hooks/useI18n';

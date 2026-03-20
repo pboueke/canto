@@ -8,6 +8,7 @@ import { ThemePickerModal } from '@/components/home/ThemePickerModal';
 import { LanguagePickerModal } from '@/components/home/LanguagePickerModal';
 import { SecuritySettingsModal } from '@/components/home/SecuritySettingsModal';
 import { DevMenu } from '@/components/dev/DevMenu';
+import { webModalContent } from '@/styles/web';
 
 const CANTO_REPO_URL = 'https://github.com/pboueke/canto';
 
@@ -111,6 +112,7 @@ export function InfoBox({ devUnlocked }: InfoBoxProps) {
           <View
             style={[
               styles.modalContent,
+              webModalContent,
               {
                 backgroundColor: theme.colors.foreground,
                 borderColor: theme.colors.border,

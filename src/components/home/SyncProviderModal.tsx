@@ -3,6 +3,7 @@ import { Feather } from '@expo/vector-icons';
 import { useTheme } from '@/hooks/useTheme';
 import { useI18n } from '@/hooks/useI18n';
 import type { SyncProvider } from '@/lib/sync/types';
+import { webModalContent } from '@/styles/web';
 
 interface SyncProviderModalProps {
   visible: boolean;
@@ -20,6 +21,7 @@ export function SyncProviderModal({ visible, onClose, onSelect }: SyncProviderMo
         <View
           style={[
             styles.content,
+            webModalContent,
             {
               backgroundColor: theme.colors.foreground,
               borderColor: theme.colors.border,

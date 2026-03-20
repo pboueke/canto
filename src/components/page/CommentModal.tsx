@@ -3,6 +3,7 @@ import { Modal, Pressable, StyleSheet, Text, TextInput, View } from 'react-nativ
 import { useTheme } from '@/hooks/useTheme';
 import { useI18n } from '@/hooks/useI18n';
 import type { Comment } from '@/models';
+import { webModalContent } from '@/styles/web';
 
 interface CommentModalProps {
   visible: boolean;
@@ -34,6 +35,7 @@ export function CommentModal({ visible, comment, onSave, onDelete, onClose }: Co
         <View
           style={[
             styles.content,
+            webModalContent,
             {
               backgroundColor: theme.colors.foreground,
               borderColor: theme.colors.border,

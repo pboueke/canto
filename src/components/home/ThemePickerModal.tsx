@@ -3,6 +3,7 @@ import { Feather } from '@expo/vector-icons';
 import { useTheme } from '@/hooks/useTheme';
 import { useI18n } from '@/hooks/useI18n';
 import { type ThemeName, themes, themeNames } from '@/styles/themes';
+import { webModalContent } from '@/styles/web';
 
 interface ThemePickerModalProps {
   visible: boolean;
@@ -88,6 +89,7 @@ export function ThemePickerModal({
         <View
           style={[
             styles.content,
+            webModalContent,
             {
               backgroundColor: theme.colors.foreground,
               borderColor: theme.colors.border,
