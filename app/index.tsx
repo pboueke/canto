@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Modal,
@@ -9,7 +9,8 @@ import {
   Text,
   View,
 } from 'react-native';
-import { useRouter, useFocusEffect } from 'expo-router';
+import { useRouter, useFocusEffect, useLocalSearchParams } from 'expo-router';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '@/hooks/useTheme';
 import { useI18n } from '@/hooks/useI18n';
@@ -23,6 +24,7 @@ import { NewJournalModal } from '@/components/home/NewJournalModal';
 import { JournalAccessModal } from '@/components/home/JournalAccessModal';
 import { AccountButton } from '@/components/home/AccountButton';
 import { authenticateBiometric } from '@/lib/biometric';
+import { ONBOARDING_KEY } from './onboarding';
 import type { Journal } from '@/models';
 
 export default function HomeScreen() {
@@ -30,9 +32,27 @@ export default function HomeScreen() {
   const { t } = useI18n();
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const params = useLocalSearchParams<{ fromOnboarding?: string }>();
   const { journals, loading, refresh } = useJournals();
   const { create } = useCreateJournal();
   const { deriveAndCache, getKey, clearKey, clearAll } = useJournalKeys();
+  const [onboardingChecked, setOnboardingChecked] = useState(false);
+
+  // Check onboarding status on mount
+  useEffect(() => {
+    AsyncStorage.getItem(ONBOARDING_KEY)
+      .then((value) => {
+        if (value !== 'true') {
+          router.replace('/onboarding');
+        } else {
+          setOnboardingChecked(true);
+        }
+      })
+      .catch(() => {
+        // If read fails, show onboarding as safe fallback
+        router.replace('/onboarding');
+      });
+  }, [router]);
 
   useFocusEffect(
     useCallback(() => {
@@ -40,6 +60,8 @@ export default function HomeScreen() {
       refresh();
     }, [clearAll, refresh]),
   );
+
+  const autoOpenedRef = useRef(false);
 
   const [devUnlocked, setDevUnlocked] = useState(false);
   const tapCountRef = useRef(0);
@@ -53,6 +75,15 @@ export default function HomeScreen() {
   }, []);
 
   const [showNewModal, setShowNewModal] = useState(false);
+
+  // Auto-open NewJournalModal when arriving from onboarding
+  useEffect(() => {
+    if (params.fromOnboarding === 'true' && !autoOpenedRef.current && onboardingChecked) {
+      autoOpenedRef.current = true;
+      setShowNewModal(true);
+    }
+  }, [params.fromOnboarding, onboardingChecked]);
+
   const [accessJournal, setAccessJournal] = useState<Journal | null>(null);
   const [accessError, setAccessError] = useState<string | null>(null);
   const [unlocking, setUnlocking] = useState(false);
@@ -122,6 +153,9 @@ export default function HomeScreen() {
       setAccessError(t.home.wrongPassword);
     }
   }
+
+  // Don't render until onboarding check completes (avoids flash before redirect)
+  if (!onboardingChecked) return null;
 
   return (
     <View style={[styles.container, { backgroundColor: theme.colors.background }]}>

@@ -185,6 +185,19 @@ export interface Dictionary {
     importing: string;
     or: string;
   };
+  onboarding: {
+    welcomeTitle: string;
+    welcomeSubtitle: string;
+    encryptionTitle: string;
+    encryptionBody: string;
+    privacyTitle: string;
+    privacyBody: string;
+    getStartedTitle: string;
+    getStartedBody: string;
+    getStartedButton: string;
+    next: string;
+    stepOf: string;
+  };
   sync: {
     sync: string;
     syncNow: string;
@@ -444,6 +457,21 @@ const en: Dictionary = {
     retentionOneMonth: '1 month',
     retentionNever: 'Never expire',
   },
+  onboarding: {
+    welcomeTitle: 'Welcome to Canto',
+    welcomeSubtitle: 'Your private, encrypted journal.',
+    encryptionTitle: 'Your entries are encrypted',
+    encryptionBody:
+      'Canto uses AES-256 encryption. Your data is encrypted on your device before it goes anywhere.',
+    privacyTitle: 'No tracking. No ads.\nNo data collection.',
+    privacyBody:
+      'Canto is open source. Your journal never leaves your device unless you choose to sync it yourself.',
+    getStartedTitle: 'Start writing.',
+    getStartedBody: 'Create your first journal and start journaling privately.',
+    getStartedButton: 'Get started',
+    next: 'Next',
+    stepOf: '{step} of {total}',
+  },
 };
 
 const pt: Dictionary = {
@@ -669,6 +697,21 @@ const pt: Dictionary = {
     retentionOneWeek: '1 semana',
     retentionOneMonth: '1 mes',
     retentionNever: 'Nunca expirar',
+  },
+  onboarding: {
+    welcomeTitle: 'Bem-vindo ao Canto',
+    welcomeSubtitle: 'Seu diário privado e criptografado.',
+    encryptionTitle: 'Suas entradas são criptografadas',
+    encryptionBody:
+      'O Canto usa criptografia AES-256. Seus dados são criptografados no seu dispositivo antes de ir a qualquer lugar.',
+    privacyTitle: 'Sem rastreamento. Sem anúncios.\nSem coleta de dados.',
+    privacyBody:
+      'O Canto é código aberto. Seu diário nunca sai do seu dispositivo a menos que você escolha sincronizá-lo.',
+    getStartedTitle: 'Comece a escrever.',
+    getStartedBody: 'Crie seu primeiro diário e comece a escrever com privacidade.',
+    getStartedButton: 'Começar',
+    next: 'Próximo',
+    stepOf: '{step} de {total}',
   },
 };
 
@@ -896,6 +939,21 @@ const es: Dictionary = {
     retentionOneMonth: '1 mes',
     retentionNever: 'Nunca expirar',
   },
+  onboarding: {
+    welcomeTitle: 'Bienvenido a Canto',
+    welcomeSubtitle: 'Tu diario privado y cifrado.',
+    encryptionTitle: 'Tus entradas estan cifradas',
+    encryptionBody:
+      'Canto usa cifrado AES-256. Tus datos se cifran en tu dispositivo antes de ir a cualquier lugar.',
+    privacyTitle: 'Sin rastreo. Sin anuncios.\nSin recopilacion de datos.',
+    privacyBody:
+      'Canto es codigo abierto. Tu diario nunca sale de tu dispositivo a menos que elijas sincronizarlo.',
+    getStartedTitle: 'Empieza a escribir.',
+    getStartedBody: 'Crea tu primer diario y comienza a escribir con privacidad.',
+    getStartedButton: 'Comenzar',
+    next: 'Siguiente',
+    stepOf: '{step} de {total}',
+  },
 };
 
 const de: Dictionary = {
@@ -1121,6 +1179,21 @@ const de: Dictionary = {
     retentionOneWeek: '1 Woche',
     retentionOneMonth: '1 Monat',
     retentionNever: 'Nie ablaufen',
+  },
+  onboarding: {
+    welcomeTitle: 'Willkommen bei Canto',
+    welcomeSubtitle: 'Dein privates, verschlusseltes Tagebuch.',
+    encryptionTitle: 'Deine Eintrage sind verschlusselt',
+    encryptionBody:
+      'Canto verwendet AES-256-Verschlusselung. Deine Daten werden auf deinem Gerat verschlusselt, bevor sie irgendwohin gehen.',
+    privacyTitle: 'Kein Tracking. Keine Werbung.\nKeine Datenerfassung.',
+    privacyBody:
+      'Canto ist Open Source. Dein Tagebuch verlasst dein Gerat nie, es sei denn, du entscheidest dich fur die Synchronisierung.',
+    getStartedTitle: 'Fang an zu schreiben.',
+    getStartedBody: 'Erstelle dein erstes Tagebuch und beginne privat zu schreiben.',
+    getStartedButton: 'Loslegen',
+    next: 'Weiter',
+    stepOf: '{step} von {total}',
   },
 };
 
@@ -1348,6 +1421,21 @@ const fr: Dictionary = {
     retentionOneMonth: '1 mois',
     retentionNever: 'Ne jamais expirer',
   },
+  onboarding: {
+    welcomeTitle: 'Bienvenue sur Canto',
+    welcomeSubtitle: 'Votre journal prive et chiffre.',
+    encryptionTitle: 'Vos entrees sont chiffrees',
+    encryptionBody:
+      'Canto utilise le chiffrement AES-256. Vos donnees sont chiffrees sur votre appareil avant tout transfert.',
+    privacyTitle: 'Pas de suivi. Pas de pubs.\nPas de collecte de donnees.',
+    privacyBody:
+      'Canto est open source. Votre journal ne quitte jamais votre appareil sauf si vous choisissez de le synchroniser.',
+    getStartedTitle: 'Commencez a ecrire.',
+    getStartedBody: 'Creez votre premier journal et commencez a ecrire en toute confidentialite.',
+    getStartedButton: 'Commencer',
+    next: 'Suivant',
+    stepOf: '{step} sur {total}',
+  },
 };
 
 const ru: Dictionary = {
@@ -1574,6 +1662,21 @@ const ru: Dictionary = {
     retentionOneMonth: '1 месяц',
     retentionNever: 'Не истекает',
   },
+  onboarding: {
+    welcomeTitle: 'Добро пожаловать в Canto',
+    welcomeSubtitle: 'Ваш личный зашифрованный дневник.',
+    encryptionTitle: 'Ваши записи зашифрованы',
+    encryptionBody:
+      'Canto использует шифрование AES-256. Ваши данные шифруются на вашем устройстве перед отправкой куда-либо.',
+    privacyTitle: 'Без отслеживания. Без рекламы.\nБез сбора данных.',
+    privacyBody:
+      'Canto — открытый исходный код. Ваш дневник никогда не покидает ваше устройство, если вы сами не решите его синхронизировать.',
+    getStartedTitle: 'Начните писать.',
+    getStartedBody: 'Создайте свой первый дневник и начните вести записи конфиденциально.',
+    getStartedButton: 'Начать',
+    next: 'Далее',
+    stepOf: '{step} из {total}',
+  },
 };
 
 const zh: Dictionary = {
@@ -1798,6 +1901,19 @@ const zh: Dictionary = {
     retentionOneWeek: '1 周',
     retentionOneMonth: '1 个月',
     retentionNever: '永不过期',
+  },
+  onboarding: {
+    welcomeTitle: '欢迎使用 Canto',
+    welcomeSubtitle: '您的私密加密日记。',
+    encryptionTitle: '您的日记条目已加密',
+    encryptionBody: 'Canto 使用 AES-256 加密。您的数据在离开设备之前就已在本地加密。',
+    privacyTitle: '无追踪。无广告。\n无数据收集。',
+    privacyBody: 'Canto 是开源的。除非您选择同步，否则您的日记永远不会离开您的设备。',
+    getStartedTitle: '开始写作。',
+    getStartedBody: '创建您的第一本日记，开始私密写作。',
+    getStartedButton: '开始使用',
+    next: '下一步',
+    stepOf: '第 {step} 步，共 {total} 步',
   },
 };
 
@@ -2024,6 +2140,21 @@ const it: Dictionary = {
     retentionOneWeek: '1 settimana',
     retentionOneMonth: '1 mese',
     retentionNever: 'Non scade mai',
+  },
+  onboarding: {
+    welcomeTitle: 'Benvenuto su Canto',
+    welcomeSubtitle: 'Il tuo diario privato e crittografato.',
+    encryptionTitle: 'Le tue voci sono crittografate',
+    encryptionBody:
+      'Canto utilizza la crittografia AES-256. I tuoi dati vengono crittografati sul dispositivo prima di andare ovunque.',
+    privacyTitle: 'Nessun tracciamento. Nessuna pubblicita.\nNessuna raccolta dati.',
+    privacyBody:
+      'Canto e open source. Il tuo diario non lascia mai il tuo dispositivo a meno che tu non scelga di sincronizzarlo.',
+    getStartedTitle: 'Inizia a scrivere.',
+    getStartedBody: 'Crea il tuo primo diario e inizia a scrivere in privato.',
+    getStartedButton: 'Inizia',
+    next: 'Avanti',
+    stepOf: '{step} di {total}',
   },
 };
 

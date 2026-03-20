@@ -1,21 +1,46 @@
 #!/bin/sh
 
-# Sync version from CHANGELOG.md to package.json, app.json, and README.md
+# Sync version from CHANGELOG.md to package.json, app.json, build.gradle, and README.md
 VERSION=$(grep -m1 '^## v' CHANGELOG.md | sed 's/^## v\([^ ]*\).*/\1/')
 if [ -n "$VERSION" ]; then
   CHANGED=0
+
+  # Sync package.json
   PKG_VERSION=$(node -p "require('./package.json').version")
   if [ "$VERSION" != "$PKG_VERSION" ]; then
     sed -i "s/\"version\": \"$PKG_VERSION\"/\"version\": \"$VERSION\"/" package.json
-    sed -i "s/\"version\": \"$PKG_VERSION\"/\"version\": \"$VERSION\"/" app.json
     CHANGED=1
   fi
+
+  # Sync app.json (read its own version, not package.json's)
+  APP_VERSION=$(node -p "require('./app.json').expo.version")
+  if [ "$VERSION" != "$APP_VERSION" ]; then
+    sed -i "s/\"version\": \"$APP_VERSION\"/\"version\": \"$VERSION\"/" app.json
+    CHANGED=1
+  fi
+
+  # Sync build.gradle versionName and auto-increment versionCode
+  GRADLE_FILE="android/app/build.gradle"
+  if [ -f "$GRADLE_FILE" ]; then
+    GRADLE_VERSION=$(grep -oP 'versionName "\K[^"]+' "$GRADLE_FILE")
+    if [ "$VERSION" != "$GRADLE_VERSION" ]; then
+      sed -i "s/versionName \"$GRADLE_VERSION\"/versionName \"$VERSION\"/" "$GRADLE_FILE"
+      OLD_CODE=$(grep -oP 'versionCode \K[0-9]+' "$GRADLE_FILE")
+      NEW_CODE=$((OLD_CODE + 1))
+      sed -i "s/versionCode $OLD_CODE/versionCode $NEW_CODE/" "$GRADLE_FILE"
+      CHANGED=1
+    fi
+  fi
+
+  # Sync README badge
   if ! grep -q "version-$VERSION-" README.md; then
     sed -i "s/version-[0-9.]*-/version-$VERSION-/" README.md
     CHANGED=1
   fi
+
   if [ "$CHANGED" = 1 ]; then
     git add package.json app.json README.md
+    [ -f "$GRADLE_FILE" ] && git add "$GRADLE_FILE"
   fi
 fi
 
