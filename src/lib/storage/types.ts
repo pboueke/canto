@@ -1,4 +1,4 @@
-import type { Journal, JournalContent, Page, Attachment } from '@/models';
+import type { Journal, JournalContent, Page, Attachment } from '@/data';
 
 export interface LocalStore {
   /** Initialize storage directories. Must be called before other operations. */

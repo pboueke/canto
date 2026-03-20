@@ -1,6 +1,6 @@
 import { renderHook, act } from '@testing-library/react-native';
 import { useFilter } from '../useFilter';
-import type { PagePreview } from '@/models';
+import type { PagePreview } from '@/data';
 
 function makePreview(overrides: Partial<PagePreview> = {}): PagePreview {
   return {

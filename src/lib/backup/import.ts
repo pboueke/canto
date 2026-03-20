@@ -1,11 +1,13 @@
 import JSZip from 'jszip';
 import { File } from 'expo-file-system';
-import type { JournalContent, JournalSettings, Page, Attachment } from '@/models';
-import { DEFAULT_JOURNAL_SETTINGS } from '@/models';
+import type { JournalContent, JournalSettings, Page, Attachment } from '@/data';
+import { DEFAULT_JOURNAL_SETTINGS } from '@/data';
 import { getLocalStore } from '@/hooks/useStorage';
 import { aesGcmDecryptBytes, base64ToUint8, generateUUID } from '@/lib/encryption/utils';
 import { deriveKey, LEGACY_KDF_ITERATIONS } from '@/lib/encryption/password';
-import type { ExportManifest } from './export';
+import type { ExportManifest } from '@/data/format';
+import { parseManifest } from '@/data/format';
+import { SCHEMA_VERSION } from '@/data/version';
 
 export interface ImportResult {
   journalId: string;
@@ -33,10 +35,7 @@ export async function inspectBackup(zipUri: string): Promise<ImportInfo> {
     throw new Error('Invalid backup: missing manifest.json');
   }
 
-  const manifest = JSON.parse(await manifestFile.async('string')) as ExportManifest;
-  if (manifest.version !== 1) {
-    throw new Error(`Unsupported backup version: ${manifest.version}`);
-  }
+  const manifest = parseManifest(await manifestFile.async('string'));
 
   return {
     manifest,
@@ -79,7 +78,7 @@ export async function importJournal(
   // --- Read manifest ---
   const manifestFile = zip.file('manifest.json');
   if (!manifestFile) throw new Error('Invalid backup: missing manifest.json');
-  const manifest = JSON.parse(await manifestFile.async('string')) as ExportManifest;
+  const manifest = parseManifest(await manifestFile.async('string'));
 
   const isEncrypted = manifest.encrypted;
 
@@ -262,6 +261,7 @@ export async function importJournal(
     ...(preserveSalt ? { kdfIterations: journalData.kdfIterations ?? LEGACY_KDF_ITERATIONS } : {}),
     pages: finalPages,
     settings,
+    schemaVersion: SCHEMA_VERSION,
     version: 1,
   };
 

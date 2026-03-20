@@ -1,6 +1,6 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { InteractionManager } from 'react-native';
-import type { Attachment } from '@/models';
+import type { Attachment } from '@/data';
 
 const MAX_CONCURRENT = 1;
 

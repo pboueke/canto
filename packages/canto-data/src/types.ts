@@ -48,7 +48,7 @@ export interface PagePreview {
   thumbnail?: string;
 }
 
-import type { SyncProvider } from '@/lib/sync/types';
+export type SyncProvider = 'gdrive'; // extend as providers are added
 
 export interface JournalSettings {
   use24h: boolean;
@@ -80,6 +80,8 @@ export interface Journal {
 export interface JournalContent extends Journal {
   pages: Page[];
   settings: JournalSettings;
+  schemaVersion?: string;
+  /** @deprecated Use schemaVersion instead. Kept for backward compatibility. */
   version: number;
 }
 

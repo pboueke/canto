@@ -1,48 +1,14 @@
 import JSZip from 'jszip';
-import type { JournalContent, Page } from '@/models';
+import type { JournalContent } from '@/data';
+import {
+  buildExportManifest,
+  collectAttachmentEntries,
+  rewriteAttachmentPaths,
+} from '@/data/format';
 import { getLocalStore } from '@/hooks/useStorage';
 import { aesGcmEncryptBytes } from '@/lib/encryption/utils';
 
-export interface ExportManifest {
-  version: 1;
-  appVersion: string;
-  exportDate: string;
-  encrypted: boolean;
-  salt?: string;
-  kdfIterations?: number;
-  journalTitle: string;
-}
-
-interface AttachmentEntry {
-  zipFilename: string;
-  diskPath: string;
-  isPasswordEncrypted: boolean;
-}
-
-function collectAttachments(pages: Page[]): AttachmentEntry[] {
-  const seen = new Set<string>();
-  const entries: AttachmentEntry[] = [];
-
-  for (const page of pages) {
-    const allAttachments = [...page.images, ...page.files].filter((a) => !a.deleted);
-    for (const att of allAttachments) {
-      if (!att.path || seen.has(att.path)) continue;
-      seen.add(att.path);
-      const ext = att.name.split('.').pop() ?? 'bin';
-      const zipFilename = `${att.type}-${att.id}.${ext}`;
-      entries.push({ zipFilename, diskPath: att.path, isPasswordEncrypted: att.encrypted });
-    }
-  }
-  return entries;
-}
-
-function rewriteAttachmentPaths(pages: Page[], pathMap: Map<string, string>): Page[] {
-  return pages.map((page) => ({
-    ...page,
-    images: page.images.map((a) => ({ ...a, path: pathMap.get(a.path) ?? a.path })),
-    files: page.files.map((a) => ({ ...a, path: pathMap.get(a.path) ?? a.path })),
-  }));
-}
+export type { ExportManifest } from '@/data/format';
 
 export interface ExportProgress {
   current: number;
@@ -64,21 +30,19 @@ export async function exportJournal(
   const zip = new JSZip();
 
   const activePages = journal.pages.filter((p) => !p.deleted);
-  const attachmentEntries = collectAttachments(activePages);
+  const attachmentEntries = collectAttachmentEntries(activePages);
 
   const total = activePages.length + attachmentEntries.length;
   let current = 0;
 
   // --- Manifest (always plaintext) ---
-  const manifest: ExportManifest = {
-    version: 1,
-    appVersion: '0.14.0',
-    exportDate: new Date().toISOString(),
+  const manifest = buildExportManifest({
+    appVersion: '0.15.0',
     encrypted,
     journalTitle: journal.title,
-    ...(journal.salt ? { salt: journal.salt } : {}),
-    ...(journal.kdfIterations ? { kdfIterations: journal.kdfIterations } : {}),
-  };
+    salt: journal.salt,
+    kdfIterations: journal.kdfIterations,
+  });
   zip.file('manifest.json', JSON.stringify(manifest, null, 2));
 
   // --- Journal metadata (without pages) ---

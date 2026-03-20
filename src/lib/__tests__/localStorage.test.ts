@@ -1,6 +1,6 @@
 import { createLocalStore } from '../storage/local';
 import type { EncryptionService } from '../encryption';
-import type { JournalContent, Page, Attachment } from '@/models';
+import type { JournalContent, Page, Attachment } from '@/data';
 
 // In-memory filesystem mock
 const filesystem: Record<string, string> = {};

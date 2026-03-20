@@ -2,7 +2,7 @@ import JSZip from 'jszip';
 import { aesGcmEncryptBytes, aesGcmDecryptBytes } from '../encryption/utils';
 import { hasNameConflict, resolveNameConflict } from '../backup/conflicts';
 import type { ExportManifest } from '../backup/export';
-import type { JournalContent, Page, Attachment } from '@/models';
+import type { JournalContent, Page, Attachment } from '@/data';
 import { createLocalStore } from '../storage/local';
 import type { EncryptionService } from '../encryption';
 import type { LocalStore } from '../storage';
@@ -630,7 +630,7 @@ describe('inspectBackup', () => {
       journalJson: '{}',
     });
 
-    await expect(inspectBackup(uri)).rejects.toThrow('Unsupported backup version');
+    await expect(inspectBackup(uri)).rejects.toThrow('manifest.version');
   });
 });
 

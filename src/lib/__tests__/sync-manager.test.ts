@@ -1,7 +1,7 @@
 import { SyncManager, type SyncState } from '../sync/manager';
 import type { LocalStore } from '../storage/types';
 import type { RemoteStore } from '../sync/types';
-import type { Page, JournalContent } from '@/models';
+import type { Page, JournalContent } from '@/data';
 
 // Mock AsyncStorage
 const asyncStore: Record<string, string> = {};

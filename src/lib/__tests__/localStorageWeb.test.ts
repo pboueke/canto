@@ -5,7 +5,7 @@
 import 'fake-indexeddb/auto';
 import { createLocalStore, _resetDB } from '../storage/local.web';
 import type { EncryptionService } from '../encryption';
-import type { JournalContent, Page, Attachment } from '@/models';
+import type { JournalContent, Page, Attachment } from '@/data';
 
 // Passthrough encryption mock (no actual encryption for test simplicity)
 function createMockEncryption(): EncryptionService {

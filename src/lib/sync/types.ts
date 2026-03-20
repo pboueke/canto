@@ -1,6 +1,6 @@
-import type { JournalContent, Page } from '@/models';
+import type { JournalContent, Page, SyncProvider } from '@/data';
 
-export type SyncProvider = 'gdrive'; // extend as providers are added
+export type { SyncProvider };
 
 export interface RemoteJournalMeta {
   id: string;

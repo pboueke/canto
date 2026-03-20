@@ -4,7 +4,9 @@
     "strict": true,
     "baseUrl": ".",
     "paths": {
-      "@/*": ["src/*"]
+      "@/*": ["src/*"],
+      "canto-data": ["packages/canto-data/src/index.ts"],
+      "canto-data/*": ["packages/canto-data/src/*"]
     }
   },
   "include": ["**/*.ts", "**/*.tsx"]
