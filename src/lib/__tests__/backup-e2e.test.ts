@@ -8,7 +8,7 @@
 import JSZip from 'jszip';
 import { aesGcmEncryptBytes, generateSalt } from '../encryption/utils';
 import { deriveKey } from '../encryption/password';
-import type { JournalContent, JournalSettings, Page, Attachment } from '@/models';
+import type { JournalContent, JournalSettings, Page, Attachment } from '@/data';
 import { createLocalStore } from '../storage/local';
 import type { EncryptionService } from '../encryption';
 import type { LocalStore } from '../storage';

@@ -1,7 +1,7 @@
 import { renderHook, act } from '@testing-library/react-native';
 import { InteractionManager } from 'react-native';
 import { useImageQueue, enqueueThumbnail } from '../useImageQueue';
-import type { Attachment } from '@/models';
+import type { Attachment } from '@/data';
 
 // InteractionManager.runAfterInteractions should invoke callback immediately in tests
 jest.spyOn(InteractionManager, 'runAfterInteractions').mockImplementation((cb) => {

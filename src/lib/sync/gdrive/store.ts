@@ -1,4 +1,4 @@
-import type { JournalContent, Page } from '@/models';
+import type { JournalContent, Page } from '@/data';
 import type { RemoteStore, RemoteJournalMeta } from '../types';
 import * as api from './api';
 

@@ -12,7 +12,7 @@ import { exportJournal } from '../backup/export.web';
 import type { ExportManifest } from '../backup/export.web';
 import { inspectBackup, importJournal } from '../backup/import.web';
 import type { EncryptionService } from '../encryption';
-import type { JournalContent, Page, Attachment } from '@/models';
+import type { JournalContent, Page, Attachment } from '@/data';
 
 // ---------------------------------------------------------------------------
 // Mocks
@@ -323,7 +323,7 @@ describe('inspectBackup (web)', () => {
     zip.file('manifest.json', JSON.stringify({ version: 99 }));
     fetchResponse = await zip.generateAsync({ type: 'arraybuffer' });
 
-    await expect(inspectBackup('blob:mock')).rejects.toThrow('Unsupported backup version: 99');
+    await expect(inspectBackup('blob:mock')).rejects.toThrow('manifest.version');
   });
 });
 

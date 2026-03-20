@@ -6,7 +6,7 @@ const DateTimePicker =
   Platform.OS !== 'web' ? require('@react-native-community/datetimepicker').default : null;
 import { useTheme } from '@/hooks/useTheme';
 import { useI18n } from '@/hooks/useI18n';
-import type { Filter } from '@/models';
+import type { Filter } from '@/data';
 import { FilterModal } from './FilterModal';
 
 interface FilterBarProps {

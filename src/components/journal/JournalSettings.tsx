@@ -29,7 +29,7 @@ import { ConfirmDeleteModal } from './ConfirmDeleteModal';
 import { ChangePasswordModal } from './ChangePasswordModal';
 import { isBiometricAvailable } from '@/lib/biometric';
 import { type ThemeName, themes } from '@/styles/themes';
-import type { JournalContent, JournalSettings as JournalSettingsType } from '@/models';
+import type { JournalContent, JournalSettings as JournalSettingsType } from '@/data';
 import { webModalContent } from '@/styles/web';
 
 interface JournalSettingsProps {

@@ -1,5 +1,5 @@
 import { Paths, File, Directory } from 'expo-file-system';
-import type { Journal, JournalContent, Page, Attachment } from '@/models';
+import type { Journal, JournalContent, Page, Attachment } from '@/data';
 import type { EncryptionService } from '@/lib/encryption';
 import { aesGcmEncrypt, aesGcmDecrypt } from '@/lib/encryption/utils';
 import type { LocalStore } from './types';

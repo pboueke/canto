@@ -1,7 +1,7 @@
 import { getLocalStore, getEncryptionService } from '@/hooks/useStorage';
 import { generateUUID, uint8ToBase64 } from '@/lib/encryption/utils';
-import { DEFAULT_JOURNAL_SETTINGS } from '@/models';
-import type { JournalContent, Page, Attachment } from '@/models';
+import { DEFAULT_JOURNAL_SETTINGS, SCHEMA_VERSION } from '@/data';
+import type { JournalContent, Page, Attachment } from '@/data';
 
 /**
  * Duplicate a journal N times (deep copy with new IDs, including pages and attachments).
@@ -180,6 +180,7 @@ export async function generateBlankJournals(count = 1): Promise<string[]> {
       salt,
       pages: [],
       settings: { ...DEFAULT_JOURNAL_SETTINGS },
+      schemaVersion: SCHEMA_VERSION,
       version: 1,
     };
 

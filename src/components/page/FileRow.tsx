@@ -1,7 +1,7 @@
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useTheme } from '@/hooks/useTheme';
-import type { Attachment } from '@/models';
+import type { Attachment } from '@/data';
 
 interface FileRowProps {
   files: Attachment[];

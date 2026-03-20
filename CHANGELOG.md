@@ -1,5 +1,21 @@
 # Changelog
 
+## v0.16.0 - canto-data: MIT-licensed data model library
+
+- feat: `canto-data` workspace package (`packages/canto-data/`) — MIT-licensed TypeScript library with zero dependencies for reading, validating, and manipulating Canto journals
+- feat: runtime validation layer — type guards (`isPage`, `isJournal`, etc.) and structural validators (`validateJournalContent`) with `ValidationError` including field paths
+- feat: schema versioning — `SCHEMA_VERSION` constant, semver comparison utilities, forward-only migration framework
+- feat: export format utilities — `buildExportManifest()`, `parseManifest()`, `collectAttachmentEntries()`, `rewriteAttachmentPaths()`, `serializePages()`/`deserializePages()` extracted as pure functions
+- feat: `schemaVersion` field on `JournalContent` and `ExportManifest` — legacy data without it treated as `"1.0.0"`
+- refactor: all data types moved from `src/models/` to `canto-data` package; app imports via `@/data` re-export shims
+- refactor: backup export/import modules use `canto-data/format` utilities instead of inline logic
+- fix: `SyncProvider` type circular dependency — now defined in `canto-data`, re-exported by `src/lib/sync/types.ts`
+- docs: `DATA.md` — full data model reference, export format spec, usage examples, dual-license explanation
+- docs: README updated with Data Portability section and dual-license note
+- chore: npm workspaces (`packages/*`) for monorepo structure
+- chore: pre-commit hook syncs `canto-data` package version with app version
+- test: 85 new tests — validation (25), migration (12), format (15), version (13), types (15), plus 5 existing tests updated
+
 ## v0.15.0 - Credible Launch: onboarding, security docs, store listing, landing page
 
 - feat: first-launch onboarding flow — 4 screens (welcome, encryption, privacy, get started) with slide animations, skip button, and auto-open journal creation on completion

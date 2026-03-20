@@ -25,7 +25,7 @@ import { JournalAccessModal } from '@/components/home/JournalAccessModal';
 import { AccountButton } from '@/components/home/AccountButton';
 import { authenticateBiometric } from '@/lib/biometric';
 import { ONBOARDING_KEY } from './onboarding';
-import type { Journal } from '@/models';
+import type { Journal } from '@/data';
 
 export default function HomeScreen() {
   const { theme } = useTheme();

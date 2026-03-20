@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { Modal, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useTheme } from '@/hooks/useTheme';
 import { useI18n } from '@/hooks/useI18n';
-import type { Comment } from '@/models';
+import type { Comment } from '@/data';
 import { webModalContent } from '@/styles/web';
 
 interface CommentModalProps {

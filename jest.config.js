@@ -3,6 +3,8 @@ const config = {
   preset: 'jest-expo',
   setupFiles: ['./jest.setup.ts'],
   moduleNameMapper: {
+    '^canto-data/(.*)$': '<rootDir>/packages/canto-data/src/$1',
+    '^canto-data$': '<rootDir>/packages/canto-data/src/index.ts',
     '^@/(.*)$': '<rootDir>/src/$1',
     '^@noble/ciphers/(.*)\\.js$': '<rootDir>/node_modules/@noble/ciphers/$1.js',
     '^@noble/hashes/(.*)\\.js$': '<rootDir>/node_modules/@noble/hashes/$1.js',
@@ -17,6 +19,7 @@ const config = {
   ],
   collectCoverageFrom: [
     'src/**/*.{ts,tsx}',
+    'packages/canto-data/src/**/*.ts',
     'app/**/*.{ts,tsx}',
     '!**/*.d.ts',
     '!src/components/**',

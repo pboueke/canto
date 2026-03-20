@@ -1,7 +1,7 @@
 import { SyncEngine } from '../sync/engine';
 import type { LocalStore } from '../storage/types';
 import type { RemoteStore } from '../sync/types';
-import type { Page, JournalContent } from '@/models';
+import type { Page, JournalContent } from '@/data';
 
 const makePage = (id: string, modified: number, deleted = false): Page => ({
   id,

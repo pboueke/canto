@@ -3,7 +3,7 @@ import { Feather } from '@expo/vector-icons';
 import * as Clipboard from 'expo-clipboard';
 import { useTheme } from '@/hooks/useTheme';
 import { useI18n } from '@/hooks/useI18n';
-import type { GeoLocation } from '@/models';
+import type { GeoLocation } from '@/data';
 
 interface LocationTagProps {
   location: GeoLocation;

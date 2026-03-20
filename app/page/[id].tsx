@@ -37,7 +37,7 @@ import { CommentList } from '@/components/page/CommentList';
 import { CommentModal } from '@/components/page/CommentModal';
 import { AddAttachmentPopup } from '@/components/page/AddAttachmentPopup';
 import { FloatingActionButton } from '@/components/common/FloatingActionButton';
-import type { Attachment, Comment, GeoLocation, Page } from '@/models';
+import type { Attachment, Comment, GeoLocation, Page } from '@/data';
 
 function generateUUID(): string {
   const bytes = new Uint8Array(16);

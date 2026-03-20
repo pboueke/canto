@@ -14,7 +14,7 @@ import { Feather } from '@expo/vector-icons';
 import { useTheme } from '@/hooks/useTheme';
 import { useI18n } from '@/hooks/useI18n';
 import { useImageQueue } from '@/hooks/useImageQueue';
-import type { Attachment } from '@/models';
+import type { Attachment } from '@/data';
 
 const SCREEN_WIDTH = Dimensions.get('window').width;
 const IMAGE_WIDTH = SCREEN_WIDTH - 20;

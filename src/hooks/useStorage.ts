@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
-import type { Journal, JournalContent, Page, Attachment } from '@/models';
-import { DEFAULT_JOURNAL_SETTINGS } from '@/models';
+import type { Journal, JournalContent, Page, Attachment } from '@/data';
+import { DEFAULT_JOURNAL_SETTINGS, SCHEMA_VERSION } from '@/data';
 import { createEncryptionService } from '@/lib/encryption';
 import { createLocalStore } from '@/lib/storage';
 import type { LocalStore } from '@/lib/storage';
@@ -218,6 +218,7 @@ export function useCreateJournal() {
           kdfIterations: input.kdfIterations,
           pages: [],
           settings: { ...DEFAULT_JOURNAL_SETTINGS, themeOverride: input.themeOverride },
+          schemaVersion: SCHEMA_VERSION,
           version: 1,
         };
 

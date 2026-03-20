@@ -8,7 +8,7 @@ import { useTheme } from '@/hooks/useTheme';
 import { useAttachment } from '@/hooks/useStorage';
 import { enqueueThumbnail } from '@/hooks/useImageQueue';
 import { useJournalKeys } from '@/contexts/JournalKeyContext';
-import type { PagePreview, JournalSettings } from '@/models';
+import type { PagePreview, JournalSettings } from '@/data';
 
 interface PageListItemProps {
   page: PagePreview;

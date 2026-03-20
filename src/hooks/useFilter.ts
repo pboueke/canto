@@ -1,5 +1,5 @@
 import { useState, useMemo, useCallback } from 'react';
-import type { Filter, PagePreview } from '@/models';
+import type { Filter, PagePreview } from '@/data';
 
 const EMPTY_FILTER: Filter = {
   query: '',

@@ -1,4 +1,4 @@
-import type { Page, Attachment } from '@/models';
+import type { Page, Attachment } from '@/data';
 import type { LocalStore } from '@/lib/storage/types';
 import type { RemoteStore, SyncResult } from './types';
 

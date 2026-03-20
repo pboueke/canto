@@ -22,7 +22,7 @@ import {
   generateBlankPages,
   wipeAllData,
 } from '@/lib/devTools';
-import type { Journal, Page } from '@/models';
+import type { Journal, Page } from '@/data';
 import { webModalContent } from '@/styles/web';
 
 interface DevMenuProps {

@@ -1,6 +1,6 @@
 import { renderHook, act, waitFor } from '@testing-library/react-native';
-import type { JournalContent, Page, Journal } from '@/models';
-import { DEFAULT_JOURNAL_SETTINGS } from '@/models';
+import type { JournalContent, Page, Journal } from '@/data';
+import { DEFAULT_JOURNAL_SETTINGS } from '@/data';
 
 // ---------------------------------------------------------------------------
 // Mock store

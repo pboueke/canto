@@ -32,6 +32,16 @@ if [ -n "$VERSION" ]; then
     fi
   fi
 
+  # Sync canto-data package.json
+  CANTO_DATA_PKG="packages/canto-data/package.json"
+  if [ -f "$CANTO_DATA_PKG" ]; then
+    DATA_VERSION=$(node -p "require('./$CANTO_DATA_PKG').version")
+    if [ "$VERSION" != "$DATA_VERSION" ]; then
+      sed -i "s/\"version\": \"$DATA_VERSION\"/\"version\": \"$VERSION\"/" "$CANTO_DATA_PKG"
+      CHANGED=1
+    fi
+  fi
+
   # Sync README badge
   if ! grep -q "version-$VERSION-" README.md; then
     sed -i "s/version-[0-9.]*-/version-$VERSION-/" README.md
@@ -40,7 +50,8 @@ if [ -n "$VERSION" ]; then
 
   if [ "$CHANGED" = 1 ]; then
     git add package.json app.json README.md
-    [ -f "$GRADLE_FILE" ] && git add "$GRADLE_FILE"
+    [ -f "$CANTO_DATA_PKG" ] && git add "$CANTO_DATA_PKG"
+    [ -f "$GRADLE_FILE" ] && git add -f "$GRADLE_FILE"
   fi
 fi
 
