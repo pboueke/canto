@@ -1,12 +1,31 @@
 # Changelog
 
+## v0.17.0 - UI refinements, first schema migration, accessibility
+
+- feat: image download button — overlay on carousel images in view mode, platform-specific download via `downloadAttachment` utility (native: expo-sharing, web: Blob + anchor)
+- feat: full-text search — `searchText` field on `PagePreview` indexes full page text and tags; `useFilter` searches against it instead of first-line preview only
+- feat: search debounce — 200ms debounce on `FilterBar` search input with cleanup on unmount
+- feat: help button — added to home screen info box beside version, opens modal with GitHub Issues link
+- feat: accessibility annotations — `accessibilityLabel`/`accessibilityRole` on ImageCarousel, FilterBar, FileRow, PageListItem, Card, and InfoBox; new `a11y` i18n section (11 keys × 8 languages)
+- feat: `help` i18n section — title, body, and link text for all 8 languages
+- feat: first schema migration (`0.16.0` → `0.17.0`) — removes deprecated `showMarkdownPlaceholder` setting; validates the migration framework end-to-end
+- fix: encrypted images disappearing on repeated edit/save — `ImageCarousel` useEffect dependency changed from `activeImages.length` to stable ID-based key
+- fix: cloud import conflict detection — changed from title-based to UUID-based matching (`existingIds` prop with `rj.id`)
+- fix: image scaling — `resizeMode="cover"` changed to `"contain"` with surface background color to prevent cropping
+- fix: thumbnail size — generation and display increased from 80px to 120px
+- refactor: removed dead `showMarkdownPlaceholder` toggle — stripped from `JournalSettings` interface, defaults, validation, UI, and all 8 language dictionaries
+- docs: `DATA.md` updated with migration history table, corrected version references (`0.16.0` legacy default)
+- test: 29 new migration corruption-safety tests covering edge cases, idempotency, secure journals, and forward compatibility
+- test: new tests for ImageCarousel download button, downloadAttachment web implementation, InfoBox help modal, full-text/tag search, pageToPreview searchText field
+- test: 706 tests across 50 suites, all passing
+
 ## v0.16.0 - canto-data: MIT-licensed data model library
 
 - feat: `canto-data` workspace package (`packages/canto-data/`) — MIT-licensed TypeScript library with zero dependencies for reading, validating, and manipulating Canto journals
 - feat: runtime validation layer — type guards (`isPage`, `isJournal`, etc.) and structural validators (`validateJournalContent`) with `ValidationError` including field paths
 - feat: schema versioning — `SCHEMA_VERSION` constant, semver comparison utilities, forward-only migration framework
 - feat: export format utilities — `buildExportManifest()`, `parseManifest()`, `collectAttachmentEntries()`, `rewriteAttachmentPaths()`, `serializePages()`/`deserializePages()` extracted as pure functions
-- feat: `schemaVersion` field on `JournalContent` and `ExportManifest` — legacy data without it treated as `"1.0.0"`
+- feat: `schemaVersion` field on `JournalContent` and `ExportManifest` — legacy data without it treated as `"0.16.0"`
 - refactor: all data types moved from `src/models/` to `canto-data` package; app imports via `@/data` re-export shims
 - refactor: backup export/import modules use `canto-data/format` utilities instead of inline logic
 - fix: `SyncProvider` type circular dependency — now defined in `canto-data`, re-exported by `src/lib/sync/types.ts`

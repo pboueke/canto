@@ -77,19 +77,19 @@ describe('parseManifest', () => {
   test('parses valid manifest with schemaVersion', () => {
     const json = JSON.stringify({
       version: 1,
-      schemaVersion: '1.0.0',
-      appVersion: '0.15.0',
+      schemaVersion: '0.17.0',
+      appVersion: '0.17.0',
       exportDate: '2026-01-01T00:00:00.000Z',
       encrypted: false,
       journalTitle: 'Test',
     });
 
     const manifest = parseManifest(json);
-    expect(manifest.schemaVersion).toBe('1.0.0');
+    expect(manifest.schemaVersion).toBe('0.17.0');
     expect(manifest.journalTitle).toBe('Test');
   });
 
-  test('defaults schemaVersion to "1.0.0" for legacy manifests', () => {
+  test('defaults schemaVersion to "0.16.0" for legacy manifests', () => {
     const json = JSON.stringify({
       version: 1,
       appVersion: '0.9.0',
@@ -99,7 +99,7 @@ describe('parseManifest', () => {
     });
 
     const manifest = parseManifest(json);
-    expect(manifest.schemaVersion).toBe('1.0.0');
+    expect(manifest.schemaVersion).toBe('0.16.0');
   });
 
   test('rejects invalid JSON', () => {

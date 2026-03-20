@@ -132,7 +132,6 @@ function makeJournalContent(id: string, pages: Page[] = []): JournalContent {
       previewIcons: true,
       filterBar: true,
       sort: 'descending',
-      showMarkdownPlaceholder: true,
       autoLocation: false,
       remoteSync: false,
       autoSync: false,

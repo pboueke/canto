@@ -209,7 +209,6 @@ export function validateJournalSettings(v: unknown, path = 'settings'): JournalS
   checkBoolean(`${path}.previewIcons`, o.previewIcons);
   checkBoolean(`${path}.filterBar`, o.filterBar);
   checkEnum(`${path}.sort`, o.sort, ['ascending', 'descending', 'none']);
-  checkBoolean(`${path}.showMarkdownPlaceholder`, o.showMarkdownPlaceholder);
   checkBoolean(`${path}.autoLocation`, o.autoLocation);
   checkBoolean(`${path}.remoteSync`, o.remoteSync);
   if (o.syncProvider !== undefined) {

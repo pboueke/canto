@@ -15,7 +15,10 @@ const EMPTY_FILTER: Filter = {
 function matchesFilter(page: PagePreview, filter: Filter): boolean {
   if (filter.query) {
     const q = filter.query.toLowerCase();
-    if (!page.previewText.toLowerCase().includes(q)) return false;
+    const inText = page.searchText
+      ? page.searchText.includes(q)
+      : page.previewText.toLowerCase().includes(q);
+    if (!inText) return false;
   }
 
   if (filter.properties.hasImage && !page.hasImage) return false;

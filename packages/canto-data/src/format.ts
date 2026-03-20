@@ -9,7 +9,7 @@ import { ValidationError } from './validation';
 export interface ExportManifest {
   /** Manifest format version (always 1). */
   version: 1;
-  /** Canto journal schema version (semver). Absent in legacy exports (treated as "1.0.0"). */
+  /** Canto journal schema version (semver). Absent in legacy exports (treated as "0.16.0"). */
   schemaVersion?: string;
   appVersion: string;
   exportDate: string;
@@ -43,7 +43,7 @@ export function buildExportManifest(opts: BuildManifestOptions): ExportManifest 
 
 /**
  * Parse and validate a manifest JSON string.
- * Legacy manifests (without schemaVersion) are treated as "1.0.0".
+ * Legacy manifests (without schemaVersion) are treated as "0.16.0".
  */
 export function parseManifest(json: string): ExportManifest {
   let raw: unknown;
@@ -79,8 +79,8 @@ export function parseManifest(json: string): ExportManifest {
     throw new ValidationError('manifest.journalTitle', 'string', typeof o.journalTitle);
   }
 
-  // Legacy manifests don't have schemaVersion — default to "1.0.0"
-  const schemaVersion = typeof o.schemaVersion === 'string' ? o.schemaVersion : '1.0.0';
+  // Legacy manifests don't have schemaVersion — default to "0.16.0"
+  const schemaVersion = typeof o.schemaVersion === 'string' ? o.schemaVersion : '0.16.0';
 
   return {
     version: 1,

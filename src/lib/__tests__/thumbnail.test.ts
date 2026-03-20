@@ -25,7 +25,7 @@ describe('generateThumbnail', () => {
 
     expect(ImageManipulator.manipulateAsync).toHaveBeenCalledWith(
       expect.any(String),
-      [{ resize: { width: 80 } }],
+      [{ resize: { width: 120 } }],
       { compress: 0.5, format: 'jpeg', base64: true },
     );
     expect(result).toBe('dGh1bWJuYWls');

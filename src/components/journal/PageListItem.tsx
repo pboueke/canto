@@ -5,6 +5,7 @@ import { Feather } from '@expo/vector-icons';
 import { Card } from '@/components/common/Card';
 import { Tag } from '@/components/common/Tag';
 import { useTheme } from '@/hooks/useTheme';
+import { useI18n } from '@/hooks/useI18n';
 import { useAttachment } from '@/hooks/useStorage';
 import { enqueueThumbnail } from '@/hooks/useImageQueue';
 import { useJournalKeys } from '@/contexts/JournalKeyContext';
@@ -18,6 +19,7 @@ interface PageListItemProps {
 
 export function PageListItem({ page, journalId, settings }: PageListItemProps) {
   const { theme } = useTheme();
+  const { t } = useI18n();
   const router = useRouter();
   const { getKey } = useJournalKeys();
   const derivedKey = getKey(journalId);
@@ -74,6 +76,7 @@ export function PageListItem({ page, journalId, settings }: PageListItemProps) {
         router.push(`/page/${page.id}?journalId=${journalId}${themeParam}`);
       }}
       style={styles.card}
+      accessibilityLabel={`${t.a11y.pageEntry}: ${dateStr} ${page.previewText}`}
     >
       <View style={styles.row}>
         <View style={styles.textContent}>
@@ -175,8 +178,8 @@ const styles = StyleSheet.create({
     opacity: 0.7,
   },
   thumbnail: {
-    width: 80,
-    height: 80,
+    width: 120,
+    height: 120,
     borderRadius: 8,
     marginLeft: 10,
   },

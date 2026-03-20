@@ -53,7 +53,6 @@ describe('Dictionaries', () => {
       'previewThumbnail',
       'previewIcons',
       'filterBarToggle',
-      'showMarkdownPlaceholder',
       'autoLocation',
       'sortOrder',
       'ascending',

@@ -101,7 +101,6 @@ export interface Dictionary {
     previewThumbnail: string;
     previewIcons: string;
     filterBarToggle: string;
-    showMarkdownPlaceholder: string;
     autoLocation: string;
     sortOrder: string;
     ascending: string;
@@ -231,6 +230,24 @@ export interface Dictionary {
     retentionOneMonth: string;
     retentionNever: string;
   };
+  a11y: {
+    imageNofM: string;
+    deleteImage: string;
+    moveLeft: string;
+    moveRight: string;
+    downloadImage: string;
+    searchPages: string;
+    clearSearch: string;
+    filterButton: string;
+    fileAttachment: string;
+    deleteFile: string;
+    pageEntry: string;
+  };
+  help: {
+    title: string;
+    body: string;
+    linkText: string;
+  };
 }
 
 const en: Dictionary = {
@@ -336,7 +353,6 @@ const en: Dictionary = {
     previewThumbnail: 'Show thumbnail in preview',
     previewIcons: 'Show content icons in preview',
     filterBarToggle: 'Show filter bar',
-    showMarkdownPlaceholder: 'Show markdown tips',
     autoLocation: 'Auto-add location',
     sortOrder: 'Sort order',
     ascending: 'Oldest first',
@@ -472,6 +488,24 @@ const en: Dictionary = {
     next: 'Next',
     stepOf: '{step} of {total}',
   },
+  a11y: {
+    imageNofM: 'Image {n} of {m}',
+    deleteImage: 'Delete image',
+    moveLeft: 'Move left',
+    moveRight: 'Move right',
+    downloadImage: 'Download image',
+    searchPages: 'Search pages',
+    clearSearch: 'Clear search',
+    filterButton: 'Filter',
+    fileAttachment: 'File attachment',
+    deleteFile: 'Delete file',
+    pageEntry: 'Page entry',
+  },
+  help: {
+    title: 'Help',
+    body: 'If you need help or want to report a bug, please visit the Canto project page on GitHub.',
+    linkText: 'Open GitHub Issues',
+  },
 };
 
 const pt: Dictionary = {
@@ -577,7 +611,6 @@ const pt: Dictionary = {
     previewThumbnail: 'Mostrar miniatura na previa',
     previewIcons: 'Mostrar icones de conteudo na previa',
     filterBarToggle: 'Mostrar barra de filtros',
-    showMarkdownPlaceholder: 'Mostrar dicas de markdown',
     autoLocation: 'Adicionar localizacao automaticamente',
     sortOrder: 'Ordem de classificacao',
     ascending: 'Mais antigos primeiro',
@@ -713,6 +746,24 @@ const pt: Dictionary = {
     next: 'Próximo',
     stepOf: '{step} de {total}',
   },
+  a11y: {
+    imageNofM: 'Imagem {n} de {m}',
+    deleteImage: 'Excluir imagem',
+    moveLeft: 'Mover para a esquerda',
+    moveRight: 'Mover para a direita',
+    downloadImage: 'Baixar imagem',
+    searchPages: 'Pesquisar paginas',
+    clearSearch: 'Limpar pesquisa',
+    filterButton: 'Filtrar',
+    fileAttachment: 'Anexo de arquivo',
+    deleteFile: 'Excluir arquivo',
+    pageEntry: 'Entrada da pagina',
+  },
+  help: {
+    title: 'Ajuda',
+    body: 'Se voce precisa de ajuda ou deseja relatar um erro, visite a pagina do projeto Canto no GitHub.',
+    linkText: 'Abrir GitHub Issues',
+  },
 };
 
 const es: Dictionary = {
@@ -818,7 +869,6 @@ const es: Dictionary = {
     previewThumbnail: 'Mostrar miniatura en vista previa',
     previewIcons: 'Mostrar iconos de contenido en vista previa',
     filterBarToggle: 'Mostrar barra de filtros',
-    showMarkdownPlaceholder: 'Mostrar consejos de markdown',
     autoLocation: 'Agregar ubicacion automaticamente',
     sortOrder: 'Orden de clasificacion',
     ascending: 'Mas antiguos primero',
@@ -954,6 +1004,24 @@ const es: Dictionary = {
     next: 'Siguiente',
     stepOf: '{step} de {total}',
   },
+  a11y: {
+    imageNofM: 'Imagen {n} de {m}',
+    deleteImage: 'Eliminar imagen',
+    moveLeft: 'Mover a la izquierda',
+    moveRight: 'Mover a la derecha',
+    downloadImage: 'Descargar imagen',
+    searchPages: 'Buscar paginas',
+    clearSearch: 'Limpiar busqueda',
+    filterButton: 'Filtrar',
+    fileAttachment: 'Archivo adjunto',
+    deleteFile: 'Eliminar archivo',
+    pageEntry: 'Entrada de pagina',
+  },
+  help: {
+    title: 'Ayuda',
+    body: 'Si necesitas ayuda o deseas reportar un error, visita la pagina del proyecto Canto en GitHub.',
+    linkText: 'Abrir GitHub Issues',
+  },
 };
 
 const de: Dictionary = {
@@ -1059,7 +1127,6 @@ const de: Dictionary = {
     previewThumbnail: 'Miniatur in Vorschau anzeigen',
     previewIcons: 'Inhaltsicons in Vorschau anzeigen',
     filterBarToggle: 'Filterleiste anzeigen',
-    showMarkdownPlaceholder: 'Markdown-Tipps anzeigen',
     autoLocation: 'Standort automatisch hinzufugen',
     sortOrder: 'Sortierreihenfolge',
     ascending: 'Alteste zuerst',
@@ -1195,6 +1262,24 @@ const de: Dictionary = {
     next: 'Weiter',
     stepOf: '{step} von {total}',
   },
+  a11y: {
+    imageNofM: 'Bild {n} von {m}',
+    deleteImage: 'Bild loschen',
+    moveLeft: 'Nach links verschieben',
+    moveRight: 'Nach rechts verschieben',
+    downloadImage: 'Bild herunterladen',
+    searchPages: 'Seiten durchsuchen',
+    clearSearch: 'Suche loschen',
+    filterButton: 'Filtern',
+    fileAttachment: 'Dateianhang',
+    deleteFile: 'Datei loschen',
+    pageEntry: 'Seiteneintrag',
+  },
+  help: {
+    title: 'Hilfe',
+    body: 'Wenn Sie Hilfe benotigen oder einen Fehler melden mochten, besuchen Sie die Canto-Projektseite auf GitHub.',
+    linkText: 'GitHub Issues offnen',
+  },
 };
 
 const fr: Dictionary = {
@@ -1300,7 +1385,6 @@ const fr: Dictionary = {
     previewThumbnail: "Afficher la miniature dans l'apercu",
     previewIcons: "Afficher les icones de contenu dans l'apercu",
     filterBarToggle: 'Afficher la barre de filtres',
-    showMarkdownPlaceholder: 'Afficher les astuces markdown',
     autoLocation: "Ajouter l'emplacement automatiquement",
     sortOrder: 'Ordre de tri',
     ascending: 'Plus anciens en premier',
@@ -1436,6 +1520,24 @@ const fr: Dictionary = {
     next: 'Suivant',
     stepOf: '{step} sur {total}',
   },
+  a11y: {
+    imageNofM: 'Image {n} sur {m}',
+    deleteImage: "Supprimer l'image",
+    moveLeft: 'Deplacer a gauche',
+    moveRight: 'Deplacer a droite',
+    downloadImage: "Telecharger l'image",
+    searchPages: 'Rechercher des pages',
+    clearSearch: 'Effacer la recherche',
+    filterButton: 'Filtrer',
+    fileAttachment: 'Piece jointe',
+    deleteFile: 'Supprimer le fichier',
+    pageEntry: 'Entree de page',
+  },
+  help: {
+    title: 'Aide',
+    body: "Si vous avez besoin d'aide ou souhaitez signaler un bug, visitez la page du projet Canto sur GitHub.",
+    linkText: 'Ouvrir GitHub Issues',
+  },
 };
 
 const ru: Dictionary = {
@@ -1541,7 +1643,6 @@ const ru: Dictionary = {
     previewThumbnail: 'Показывать миниатюру в превью',
     previewIcons: 'Показывать иконки содержимого в превью',
     filterBarToggle: 'Показать панель фильтров',
-    showMarkdownPlaceholder: 'Показать подсказки markdown',
     autoLocation: 'Автоматически добавлять местоположение',
     sortOrder: 'Порядок сортировки',
     ascending: 'Сначала старые',
@@ -1677,6 +1778,24 @@ const ru: Dictionary = {
     next: 'Далее',
     stepOf: '{step} из {total}',
   },
+  a11y: {
+    imageNofM: 'Изображение {n} из {m}',
+    deleteImage: 'Удалить изображение',
+    moveLeft: 'Переместить влево',
+    moveRight: 'Переместить вправо',
+    downloadImage: 'Скачать изображение',
+    searchPages: 'Поиск страниц',
+    clearSearch: 'Очистить поиск',
+    filterButton: 'Фильтр',
+    fileAttachment: 'Вложение файла',
+    deleteFile: 'Удалить файл',
+    pageEntry: 'Запись страницы',
+  },
+  help: {
+    title: 'Помощь',
+    body: 'Если вам нужна помощь или вы хотите сообщить об ошибке, посетите страницу проекта Canto на GitHub.',
+    linkText: 'Открыть GitHub Issues',
+  },
 };
 
 const zh: Dictionary = {
@@ -1781,7 +1900,6 @@ const zh: Dictionary = {
     previewThumbnail: '在预览中显示缩略图',
     previewIcons: '在预览中显示内容图标',
     filterBarToggle: '显示筛选栏',
-    showMarkdownPlaceholder: '显示markdown提示',
     autoLocation: '自动添加位置',
     sortOrder: '排序方式',
     ascending: '最旧优先',
@@ -1915,6 +2033,24 @@ const zh: Dictionary = {
     next: '下一步',
     stepOf: '第 {step} 步，共 {total} 步',
   },
+  a11y: {
+    imageNofM: '图片 {n}/{m}',
+    deleteImage: '删除图片',
+    moveLeft: '向左移动',
+    moveRight: '向右移动',
+    downloadImage: '下载图片',
+    searchPages: '搜索页面',
+    clearSearch: '清除搜索',
+    filterButton: '筛选',
+    fileAttachment: '文件附件',
+    deleteFile: '删除文件',
+    pageEntry: '页面条目',
+  },
+  help: {
+    title: '帮助',
+    body: '如果您需要帮助或想要报告错误，请访问 GitHub 上的 Canto 项目页面。',
+    linkText: '打开 GitHub Issues',
+  },
 };
 
 const it: Dictionary = {
@@ -2020,7 +2156,6 @@ const it: Dictionary = {
     previewThumbnail: "Mostra miniatura nell'anteprima",
     previewIcons: "Mostra icone contenuto nell'anteprima",
     filterBarToggle: 'Mostra barra dei filtri',
-    showMarkdownPlaceholder: 'Mostra suggerimenti markdown',
     autoLocation: 'Aggiungi posizione automaticamente',
     sortOrder: 'Ordine di ordinamento',
     ascending: 'Piu vecchi prima',
@@ -2155,6 +2290,24 @@ const it: Dictionary = {
     getStartedButton: 'Inizia',
     next: 'Avanti',
     stepOf: '{step} di {total}',
+  },
+  a11y: {
+    imageNofM: 'Immagine {n} di {m}',
+    deleteImage: 'Elimina immagine',
+    moveLeft: 'Sposta a sinistra',
+    moveRight: 'Sposta a destra',
+    downloadImage: 'Scarica immagine',
+    searchPages: 'Cerca pagine',
+    clearSearch: 'Cancella ricerca',
+    filterButton: 'Filtra',
+    fileAttachment: 'Allegato file',
+    deleteFile: 'Elimina file',
+    pageEntry: 'Voce della pagina',
+  },
+  help: {
+    title: 'Aiuto',
+    body: 'Se hai bisogno di aiuto o vuoi segnalare un bug, visita la pagina del progetto Canto su GitHub.',
+    linkText: 'Apri GitHub Issues',
   },
 };
 

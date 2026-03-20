@@ -53,7 +53,6 @@ export const makeJournal = (
     previewIcons: true,
     filterBar: true,
     sort: 'descending',
-    showMarkdownPlaceholder: true,
     autoLocation: false,
     remoteSync: true,
     syncProvider: 'gdrive',

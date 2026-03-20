@@ -157,7 +157,6 @@ function makeJournal(id: string, overrides: Partial<JournalContent> = {}): Journ
       previewIcons: true,
       filterBar: true,
       sort: 'descending',
-      showMarkdownPlaceholder: true,
       autoLocation: false,
       remoteSync: false,
       autoSync: false,
@@ -697,7 +696,6 @@ describe('data equivalence validation', () => {
       previewIcons: false,
       filterBar: false,
       sort: 'ascending',
-      showMarkdownPlaceholder: false,
       autoLocation: true,
       remoteSync: true,
       autoSync: false,
@@ -716,7 +714,6 @@ describe('data equivalence validation', () => {
     expect(loaded!.settings.previewIcons).toBe(false);
     expect(loaded!.settings.filterBar).toBe(false);
     expect(loaded!.settings.sort).toBe('ascending');
-    expect(loaded!.settings.showMarkdownPlaceholder).toBe(false);
     expect(loaded!.settings.autoLocation).toBe(true);
     expect(loaded!.settings.remoteSync).toBe(true);
     expect(loaded!.settings.themeOverride).toBe('dark-blue');

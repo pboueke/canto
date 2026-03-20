@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 
@@ -39,6 +39,35 @@ export function FilterBar({
   const dateEndRef = useRef<HTMLInputElement>(null);
   const [showDateStart, setShowDateStart] = useState(false);
   const [showDateEnd, setShowDateEnd] = useState(false);
+  const [localQuery, setLocalQuery] = useState(filter.query);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Sync local query when filter is cleared externally
+  useEffect(() => {
+    if (filter.query === '' && localQuery !== '') setLocalQuery('');
+  }, [filter.query]);
+
+  const handleQueryChange = useCallback(
+    (text: string) => {
+      setLocalQuery(text);
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+      debounceRef.current = setTimeout(() => onSetQuery(text), 200);
+    },
+    [onSetQuery],
+  );
+
+  // Cleanup debounce on unmount
+  useEffect(() => {
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+    };
+  }, []);
+
+  const handleClearQuery = useCallback(() => {
+    setLocalQuery('');
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    onSetQuery('');
+  }, [onSetQuery]);
 
   const formatDate = (iso: string | undefined) => {
     if (!iso) return null;
@@ -57,6 +86,8 @@ export function FilterBar({
         <Pressable
           style={[styles.filterBtn, { backgroundColor: theme.colors.surface }]}
           onPress={() => setShowFilterModal(true)}
+          accessibilityLabel={t.a11y.filterButton}
+          accessibilityRole="button"
         >
           <Feather name="filter" size={14} color={theme.colors.primary} />
         </Pressable>
@@ -75,12 +106,17 @@ export function FilterBar({
             ]}
             placeholder={t.filterBar.searchPlaceholder}
             placeholderTextColor={theme.colors.textSecondary}
-            value={filter.query}
-            onChangeText={onSetQuery}
+            value={localQuery}
+            onChangeText={handleQueryChange}
             returnKeyType="search"
+            accessibilityLabel={t.a11y.searchPages}
           />
-          {filter.query !== '' && (
-            <Pressable onPress={() => onSetQuery('')}>
+          {localQuery !== '' && (
+            <Pressable
+              onPress={handleClearQuery}
+              accessibilityLabel={t.a11y.clearSearch}
+              accessibilityRole="button"
+            >
               <Feather name="x" size={13} color={theme.colors.textSecondary} />
             </Pressable>
           )}

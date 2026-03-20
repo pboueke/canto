@@ -22,7 +22,7 @@ canto (GPLv3)
             ├── validation.ts   # Type guards and structural validators
             ├── version.ts      # Schema version constant and semver utils
             ├── migration.ts    # Forward-only migration runner
-            ├── migrations/     # Migration registry (empty for v1 baseline)
+            ├── migrations/     # Migration registry
             └── format.ts       # Export manifest and ZIP format utilities
 ```
 
@@ -90,7 +90,7 @@ try {
 import { parseManifest } from 'canto-data';
 
 const manifest = parseManifest(manifestJsonString);
-// manifest.schemaVersion defaults to "1.0.0" for legacy exports
+// manifest.schemaVersion defaults to "0.16.0" for legacy exports
 console.log(manifest.encrypted); // whether the export is password-encrypted
 console.log(manifest.journalTitle); // original journal title
 ```
@@ -167,7 +167,6 @@ JournalContent
 │   ├── previewIcons: boolean
 │   ├── filterBar: boolean
 │   ├── sort: 'ascending' | 'descending' | 'none'
-│   ├── showMarkdownPlaceholder: boolean
 │   ├── autoLocation: boolean
 │   ├── remoteSync: boolean
 │   ├── syncProvider?: 'gdrive'
@@ -212,7 +211,13 @@ Canto journal schemas follow [semver](https://semver.org/):
 | New optional field                     | MINOR        | No                |
 | Documentation or validation fix        | PATCH        | No                |
 
-The schema version is stored in `JournalContent.schemaVersion` and `ExportManifest.schemaVersion`. Legacy data without `schemaVersion` is treated as `"1.0.0"`. Migrations are forward-only.
+The schema version is stored in `JournalContent.schemaVersion` and `ExportManifest.schemaVersion`. The schema version tracks the app version (e.g., app v0.17.0 uses schema `0.17.0`). Legacy data without `schemaVersion` is treated as `"0.16.0"` (the last version before the migration framework was first used). Migrations are forward-only.
+
+### Migration history
+
+| From   | To     | Description                                         |
+| ------ | ------ | --------------------------------------------------- |
+| 0.16.0 | 0.17.0 | Remove deprecated `showMarkdownPlaceholder` setting |
 
 ## Export Format Details
 
@@ -221,8 +226,8 @@ The schema version is stored in `JournalContent.schemaVersion` and `ExportManife
 ```json
 {
   "version": 1,
-  "schemaVersion": "1.0.0",
-  "appVersion": "0.15.0",
+  "schemaVersion": "0.17.0",
+  "appVersion": "0.17.0",
   "exportDate": "2026-01-01T00:00:00.000Z",
   "encrypted": false,
   "journalTitle": "My Journal",
@@ -232,7 +237,7 @@ The schema version is stored in `JournalContent.schemaVersion` and `ExportManife
 ```
 
 - `version`: Manifest format version (always `1`)
-- `schemaVersion`: Journal schema version (semver). Absent in legacy exports (treated as `"1.0.0"`)
+- `schemaVersion`: Journal schema version (semver, tracks app version). Absent in legacy exports (treated as `"0.16.0"`)
 - `encrypted`: If `true`, all JSON and attachment content is AES-256-GCM encrypted
 - `salt` and `kdfIterations`: Present for password-protected journals
 
