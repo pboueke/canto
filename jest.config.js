@@ -11,6 +11,7 @@ const config = {
     '^expo-auth-session$': '<rootDir>/src/__mocks__/expo-auth-session.ts',
     '^expo-web-browser$': '<rootDir>/src/__mocks__/expo-web-browser.ts',
   },
+  testPathIgnorePatterns: ['/node_modules/', '/__tests__/helpers/'],
   transformIgnorePatterns: [
     'node_modules/(?!((jest-)?react-native|@react-native(-community)?)|expo(nent)?|@expo(nent)?/.*|@expo-google-fonts/.*|react-navigation|@react-navigation/.*|@sentry/react-native|native-base|react-native-svg|@noble/ciphers|@noble/hashes|expo-crypto)',
   ],

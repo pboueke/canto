@@ -19,8 +19,15 @@ export interface LocalStore {
   /** Get a single page from a journal. derivedKey for password-protected journals. */
   getPage(journalId: string, pageId: string, derivedKey?: Uint8Array): Promise<Page | null>;
 
-  /** Save or update a page in a journal. derivedKey for password-protected journals. */
-  savePage(journalId: string, page: Page, derivedKey?: Uint8Array): Promise<void>;
+  /** Save or update a page in a journal. derivedKey for password-protected journals.
+   *  When preserveModified is true, the page's existing modified timestamp is kept
+   *  (used by sync to preserve remote timestamps on download). */
+  savePage(
+    journalId: string,
+    page: Page,
+    derivedKey?: Uint8Array,
+    preserveModified?: boolean,
+  ): Promise<void>;
 
   /** Soft-delete a page (marks as deleted for sync). derivedKey for password-protected journals. */
   deletePage(journalId: string, pageId: string, derivedKey?: Uint8Array): Promise<void>;

@@ -6,227 +6,21 @@
 import { SyncEngine } from '../sync/engine';
 import { GDriveRemoteStore } from '../sync/gdrive/store';
 import * as api from '../sync/gdrive/api';
-import type { LocalStore } from '../storage/types';
-import type { Page, JournalContent, Attachment } from '@/models';
+import { InMemoryDrive } from './helpers/in-memory-drive';
+import {
+  makePage,
+  makeAttachment,
+  makeJournal,
+  createMockLocalStore,
+} from './helpers/sync-test-helpers';
 
 jest.mock('../sync/gdrive/api');
 const mockedApi = api as jest.Mocked<typeof api>;
 
-// ---------- In-memory GDrive simulation ----------
-
-interface DriveFile {
-  id: string;
-  name: string;
-  mimeType: string;
-  parentId?: string;
-  content: string;
-  trashed: boolean;
-}
-
-class InMemoryDrive {
-  private files = new Map<string, DriveFile>();
-  private nextId = 1;
-
-  setup() {
-    this.files.clear();
-    this.nextId = 1;
-
-    mockedApi.listFiles.mockImplementation(
-      async (_token: string, query: string, space?: string) => {
-        const results: DriveFile[] = [];
-        for (const f of this.files.values()) {
-          if (f.trashed) continue;
-          if (space === 'appDataFolder' && !f.parentId?.startsWith('appData')) continue;
-          if (this.matchesQuery(f, query)) {
-            results.push(f);
-          }
-        }
-        return results.map((f) => ({
-          id: f.id,
-          name: f.name,
-          mimeType: f.mimeType,
-          modifiedTime: '',
-        }));
-      },
-    );
-
-    mockedApi.createFile.mockImplementation(
-      async (
-        _token: string,
-        metadata: { name: string; mimeType?: string; parents?: string[] },
-        content: string,
-        space?: string,
-      ) => {
-        const id = `file-${this.nextId++}`;
-        const parentId = space === 'appDataFolder' ? 'appData' : metadata.parents?.[0];
-        const file: DriveFile = {
-          id,
-          name: metadata.name,
-          mimeType: metadata.mimeType || 'application/json',
-          parentId,
-          content: content ?? '',
-          trashed: false,
-        };
-        this.files.set(id, file);
-        return { id, name: file.name, mimeType: file.mimeType, modifiedTime: '' };
-      },
-    );
-
-    mockedApi.getFileContent.mockImplementation(async (_token: string, fileId: string) => {
-      const file = this.files.get(fileId);
-      if (!file) throw new Error(`File not found: ${fileId}`);
-      return file.content;
-    });
-
-    mockedApi.updateFile.mockImplementation(
-      async (_token: string, fileId: string, _metadata: unknown, content: string) => {
-        const file = this.files.get(fileId);
-        if (file && content !== undefined) {
-          file.content = content;
-        }
-        return {
-          id: fileId,
-          name: file?.name ?? '',
-          mimeType: file?.mimeType ?? '',
-          modifiedTime: '',
-        };
-      },
-    );
-
-    mockedApi.deleteFile.mockImplementation(async (_token: string, fileId: string) => {
-      const file = this.files.get(fileId);
-      if (file) file.trashed = true;
-    });
-  }
-
-  /** Put a file directly into the simulated drive (for setting up remote state). */
-  putFile(name: string, parentId: string, content: string, mimeType = 'application/json'): string {
-    const id = `file-${this.nextId++}`;
-    this.files.set(id, { id, name, mimeType, parentId, content, trashed: false });
-    return id;
-  }
-
-  putFolder(name: string, parentId?: string): string {
-    const id = `file-${this.nextId++}`;
-    this.files.set(id, {
-      id,
-      name,
-      mimeType: 'application/vnd.google-apps.folder',
-      parentId,
-      content: '',
-      trashed: false,
-    });
-    return id;
-  }
-
-  getFileContent(fileId: string): string | undefined {
-    return this.files.get(fileId)?.content;
-  }
-
-  isTrashed(fileId: string): boolean {
-    return this.files.get(fileId)?.trashed ?? false;
-  }
-
-  private matchesQuery(file: DriveFile, query: string): boolean {
-    // Simple query parser for GDrive-like queries
-    if (query.includes(`name = '`)) {
-      const nameMatch = query.match(/name = '([^']+)'/);
-      if (nameMatch && file.name !== nameMatch[1]) return false;
-    }
-    if (query.includes(`mimeType = '`)) {
-      const mimeMatch = query.match(/mimeType = '([^']+)'/);
-      if (mimeMatch && file.mimeType !== mimeMatch[1]) return false;
-    }
-    if (query.includes(`' in parents`)) {
-      const parentMatch = query.match(/'([^']+)' in parents/);
-      if (parentMatch && file.parentId !== parentMatch[1]) return false;
-    }
-    if (query.includes('trashed = false') && file.trashed) return false;
-    return true;
-  }
-}
-
-// ---------- helpers ----------
-
-const makePage = (
-  id: string,
-  modified: number,
-  deleted = false,
-  images: Attachment[] = [],
-): Page => ({
-  id,
-  text: `Page ${id} content`,
-  date: '2026-03-12T10:00:00Z',
-  tags: ['test'],
-  files: [],
-  images,
-  comments: [],
-  modified,
-  deleted,
-});
-
-const makeAttachment = (id: string, path: string): Attachment => ({
-  id,
-  path,
-  name: `${id}.png`,
-  type: 'image',
-  encrypted: false,
-  deleted: false,
-});
-
-const makeJournal = (pages: Page[], secure = false, salt?: string): JournalContent => ({
-  id: 'j1',
-  title: 'My Journal',
-  icon: 'book',
-  date: '2026-01-01T00:00:00Z',
-  secure,
-  salt,
-  pages,
-  settings: {
-    use24h: false,
-    previewTags: true,
-    previewThumbnail: true,
-    previewIcons: true,
-    filterBar: true,
-    sort: 'descending',
-    showMarkdownPlaceholder: true,
-    autoLocation: false,
-    remoteSync: true,
-    syncProvider: 'gdrive',
-    autoSync: false,
-  },
-  version: 1,
-});
-
-function createMockLocalStore(journal: JournalContent | null): LocalStore {
-  const pages = new Map(journal?.pages.map((p) => [p.id, p]) ?? []);
-  return {
-    initialize: jest.fn(),
-    listJournals: jest.fn().mockResolvedValue(journal ? [journal] : []),
-    getJournal: jest.fn().mockResolvedValue(journal),
-    saveJournal: jest.fn(),
-    deleteJournal: jest.fn(),
-    getPage: jest
-      .fn()
-      .mockImplementation((_jId: string, pId: string) => Promise.resolve(pages.get(pId) ?? null)),
-    savePage: jest.fn(),
-    deletePage: jest.fn(),
-    saveAttachment: jest
-      .fn()
-      .mockImplementation((_jId: string, _pId: string, att: Attachment) =>
-        Promise.resolve(`/local/files/${att.name}`),
-      ),
-    getAttachment: jest.fn().mockResolvedValue('base64imagedata'),
-    deleteAttachment: jest.fn(),
-    reencryptJournal: jest.fn(),
-    reencryptAll: jest.fn(),
-  };
-}
-
 // ---------- tests ----------
 
 describe('GDrive sync E2E', () => {
-  const drive = new InMemoryDrive();
+  const drive = new InMemoryDrive(mockedApi);
   let store: GDriveRemoteStore;
 
   beforeEach(async () => {
@@ -251,12 +45,10 @@ describe('GDrive sync E2E', () => {
   });
 
   it('second sync: downloads remote-only pages', async () => {
-    // Simulate: first device synced p1, second device has no local pages
     const p1 = makePage('p1', 1000);
     const emptyJournal = makeJournal([]);
     const local = createMockLocalStore(emptyJournal);
 
-    // Set up remote state: journal with p1 already synced
     const rootId = drive.putFolder('Canto');
     const jFolderId = drive.putFolder('j1', rootId);
     const pagesFolderId = drive.putFolder('pages', jFolderId);
@@ -272,7 +64,7 @@ describe('GDrive sync E2E', () => {
     const result = await engine.sync('j1');
 
     expect(result.downloaded).toContain('p1');
-    expect(local.savePage).toHaveBeenCalledWith('j1', p1, undefined);
+    expect(local.savePage).toHaveBeenCalledWith('j1', p1, undefined, true);
   });
 
   it('conflict resolution: local newer wins', async () => {
@@ -281,7 +73,6 @@ describe('GDrive sync E2E', () => {
     const journal = makeJournal([localPage]);
     const local = createMockLocalStore(journal);
 
-    // Set up remote with older page
     const rootId = drive.putFolder('Canto');
     const jFolderId = drive.putFolder('j1', rootId);
     const pagesFolderId = drive.putFolder('pages', jFolderId);
@@ -306,7 +97,6 @@ describe('GDrive sync E2E', () => {
     const journal = makeJournal([localPage]);
     const local = createMockLocalStore(journal);
 
-    // Set up remote with newer page
     const rootId = drive.putFolder('Canto');
     const jFolderId = drive.putFolder('j1', rootId);
     const pagesFolderId = drive.putFolder('pages', jFolderId);
@@ -323,16 +113,15 @@ describe('GDrive sync E2E', () => {
 
     expect(result.downloaded).toContain('p1');
     expect(result.uploaded).toHaveLength(0);
-    expect(local.savePage).toHaveBeenCalledWith('j1', remotePage, undefined);
+    expect(local.savePage).toHaveBeenCalledWith('j1', remotePage, undefined, true);
   });
 
   it('local deletion propagates to remote', async () => {
-    const localPage = makePage('p1', 2000, true); // locally deleted
-    const remotePage = makePage('p1', 1000, false); // alive on remote
+    const localPage = makePage('p1', 2000, true);
+    const remotePage = makePage('p1', 1000, false);
     const journal = makeJournal([localPage]);
     const local = createMockLocalStore(journal);
 
-    // Set up remote with alive page
     const rootId = drive.putFolder('Canto');
     const jFolderId = drive.putFolder('j1', rootId);
     const pagesFolderId = drive.putFolder('pages', jFolderId);
@@ -353,7 +142,7 @@ describe('GDrive sync E2E', () => {
 
   it('remote deletion propagates to local', async () => {
     const localPage = makePage('p1', 1000, false);
-    const remotePage = makePage('p1', 2000, true); // remotely deleted
+    const remotePage = makePage('p1', 2000, true);
     const journal = makeJournal([localPage]);
     const local = createMockLocalStore(journal);
 
@@ -386,7 +175,6 @@ describe('GDrive sync E2E', () => {
 
     expect(result.uploaded).toContain('p1');
     expect(local.getAttachment).toHaveBeenCalledWith('/local/files/img1.png');
-    // uploadAttachment should have been called (via the API mock)
     expect(mockedApi.createFile).toHaveBeenCalledWith(
       'test-token',
       expect.objectContaining({ name: 'img1.png' }),
@@ -400,7 +188,6 @@ describe('GDrive sync E2E', () => {
     const journal = makeJournal([]);
     const local = createMockLocalStore(journal);
 
-    // Set up remote with page that has attachment
     const rootId = drive.putFolder('Canto');
     const jFolderId = drive.putFolder('j1', rootId);
     const pagesFolderId = drive.putFolder('pages', jFolderId);
@@ -438,7 +225,7 @@ describe('GDrive sync E2E', () => {
     const page = makePage('p1', 1000, false, [att]);
     const journal = makeJournal([page]);
     const local = createMockLocalStore(journal);
-    (local.getAttachment as jest.Mock).mockResolvedValue(null); // attachment missing
+    (local.getAttachment as jest.Mock).mockResolvedValue(null);
 
     const consoleSpy = jest.spyOn(console, 'warn').mockImplementation();
     const engine = new SyncEngine(local, store);
@@ -461,12 +248,10 @@ describe('GDrive sync E2E', () => {
     const result = await engine.sync('j1');
 
     expect(result.uploaded).toHaveLength(2);
-    // Both attachments should be uploaded
     expect(local.getAttachment).toHaveBeenCalledTimes(2);
   });
 
   it('sync with one corrupted remote page still downloads others', async () => {
-    // Set up remote with two pages, one with corrupt JSON
     const rootId = drive.putFolder('Canto');
     const jFolderId = drive.putFolder('j1', rootId);
     const pagesFolderId = drive.putFolder('pages', jFolderId);
@@ -486,13 +271,11 @@ describe('GDrive sync E2E', () => {
     const engine = new SyncEngine(local, store);
     const result = await engine.sync('j1');
 
-    // p1 should download successfully despite p2 being corrupt
     expect(result.downloaded).toContain('p1');
     consoleSpy.mockRestore();
   });
 
   it('full cycle: sync, modify remotely, re-sync downloads changes', async () => {
-    // First sync: upload local page
     const p1 = makePage('p1', 1000);
     const journal = makeJournal([p1]);
     const local = createMockLocalStore(journal);
@@ -501,20 +284,12 @@ describe('GDrive sync E2E', () => {
     const result1 = await engine.sync('j1');
     expect(result1.uploaded).toContain('p1');
 
-    // Simulate remote edit: create a new store instance (like a second device)
-    // The in-memory drive already has the page. Update it with newer timestamp.
-    // Find the page file and update its content
     const updatedPage = makePage('p1', 5000);
 
-    // Re-create store (simulates reconnection)
     const store2 = new GDriveRemoteStore();
     await store2.connect({ accessToken: 'test-token' });
-
-    // Update the remote page directly via the drive simulation
-    // We need to upload via the store to ensure the page file gets updated
     await store2.uploadPage('j1', updatedPage);
 
-    // Now sync again with the original local (still has modified=1000)
     const store3 = new GDriveRemoteStore();
     await store3.connect({ accessToken: 'test-token' });
     const engine2 = new SyncEngine(local, store3);

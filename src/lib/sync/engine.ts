@@ -116,7 +116,7 @@ export class SyncEngine {
         const downloaded = await this.remote.downloadPage(journalId, pageId);
         if (downloaded) {
           await this.downloadPageAttachments(journalId, downloaded);
-          await this.local.savePage(journalId, downloaded, derivedKey);
+          await this.local.savePage(journalId, downloaded, derivedKey, true);
           result.downloaded.push(pageId);
         }
       } else if (localPage && remotePage) {
@@ -144,7 +144,7 @@ export class SyncEngine {
           const downloaded = await this.remote.downloadPage(journalId, pageId);
           if (downloaded) {
             await this.downloadPageAttachments(journalId, downloaded);
-            await this.local.savePage(journalId, downloaded, derivedKey);
+            await this.local.savePage(journalId, downloaded, derivedKey, true);
             result.downloaded.push(pageId);
           }
         }

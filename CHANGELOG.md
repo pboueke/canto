@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.14.3 - Cross-platform sync tests, timestamp fix, web navigation fix
+
+- fix: `savePage()` no longer overwrites `modified` timestamp during sync downloads and cloud imports — added `preserveModified` parameter to prevent unnecessary re-uploads after import/sync
+- fix: back button on web after page refresh — `useSafeBack` hook falls back to home when navigation stack is empty
+- test: 46 new cross-platform sync e2e tests — web e2e suite (21), cross-platform native↔web suite (23), import regression guards (2)
+- test: shared test infrastructure — `InMemoryLocalStore`, `InMemoryDrive`, `MockEncryptionService`, shared factories and assertions
+- chore: jest config excludes `__tests__/helpers/` from test discovery
+
 ## v0.14.2 - Web Google Drive Sync
 
 - feat: full Google Drive sync on web — `GoogleAuthContext.web.tsx` replaced no-op stub with real OAuth via `expo-auth-session/providers/google` (implicit flow)

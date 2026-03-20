@@ -9,6 +9,7 @@ import {
   View,
 } from 'react-native';
 import { useLocalSearchParams, router } from 'expo-router';
+import { useSafeBack } from '@/hooks/useSafeBack';
 import { useNavigation } from '@react-navigation/native';
 import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
@@ -66,6 +67,7 @@ export default function PageScreen() {
     [theme, setThemeName, isDark],
   );
   const { getKey } = useJournalKeys();
+  const safeBack = useSafeBack();
 
   const derivedKey = journalId ? getKey(journalId) : null;
   const { page, loading } = usePage(journalId, id, derivedKey);
@@ -101,7 +103,7 @@ export default function PageScreen() {
               if (page) setDraft({ ...page });
               setIsDirty(false);
               setIsEditing(false);
-              router.back();
+              safeBack();
             },
           },
         ]);
@@ -110,7 +112,7 @@ export default function PageScreen() {
       return false;
     });
     return () => handler.remove();
-  }, [isEditing, isDirty, page, t]);
+  }, [isEditing, isDirty, page, t, safeBack]);
 
   // Navigation beforeRemove interception
   useEffect(() => {
@@ -176,7 +178,7 @@ export default function PageScreen() {
         onPress: async () => {
           if (id) {
             await deletePage(id);
-            router.back();
+            safeBack();
           }
         },
       },
@@ -460,14 +462,14 @@ export default function PageScreen() {
             if (page) setDraft({ ...page });
             setIsDirty(false);
             setIsEditing(false);
-            router.back();
+            safeBack();
           },
         },
       ]);
     } else {
-      router.back();
+      safeBack();
     }
-  }, [isEditing, isDirty, page, t]);
+  }, [isEditing, isDirty, page, t, safeBack]);
 
   if (loading) {
     return (
