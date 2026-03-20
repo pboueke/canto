@@ -3,11 +3,15 @@ import { useFilter } from '../useFilter';
 import type { PagePreview } from '@/data';
 
 function makePreview(overrides: Partial<PagePreview> = {}): PagePreview {
+  const previewText = overrides.previewText ?? 'Hello world';
+  const tags = overrides.tags ?? [];
   return {
     id: 'p1',
     date: '2026-03-12T10:00:00Z',
-    previewText: 'Hello world',
-    tags: [],
+    previewText,
+    searchText:
+      overrides.searchText ?? previewText.toLowerCase() + ' ' + tags.join(' ').toLowerCase(),
+    tags,
     hasImage: false,
     hasAttachment: false,
     hasLocation: false,
@@ -175,5 +179,55 @@ describe('useFilter', () => {
     const { result } = renderHook(() => useFilter(PAGES));
     act(() => result.current.setQuery('nonexistent'));
     expect(result.current.filteredPages).toHaveLength(0);
+  });
+
+  it('empty query returns all pages', () => {
+    const { result } = renderHook(() => useFilter(PAGES));
+    act(() => result.current.setQuery('morning'));
+    expect(result.current.filteredPages).toHaveLength(1);
+    act(() => result.current.setQuery(''));
+    expect(result.current.filteredPages).toHaveLength(4);
+    expect(result.current.isActive).toBe(false);
+  });
+
+  it('search is case-insensitive', () => {
+    const { result } = renderHook(() => useFilter(PAGES));
+    act(() => result.current.setQuery('RECIPE'));
+    expect(result.current.filteredPages).toHaveLength(1);
+    expect(result.current.filteredPages[0].id).toBe('p4');
+    act(() => result.current.setQuery('Recipe'));
+    expect(result.current.filteredPages).toHaveLength(1);
+    expect(result.current.filteredPages[0].id).toBe('p4');
+  });
+
+  it('search matches text beyond the first line via searchText', () => {
+    const pages: PagePreview[] = [
+      ...PAGES,
+      makePreview({
+        id: 'p5',
+        previewText: 'First line',
+        searchText: 'first line\nsecond line with recipe details',
+        date: '2026-03-14T10:00:00Z',
+      }),
+    ];
+    const { result } = renderHook(() => useFilter(pages));
+    act(() => result.current.setQuery('recipe details'));
+    expect(result.current.filteredPages.map((p) => p.id)).toContain('p5');
+  });
+
+  it('search matches tags via searchText', () => {
+    const pages: PagePreview[] = [
+      ...PAGES,
+      makePreview({
+        id: 'p6',
+        previewText: 'No match here',
+        searchText: 'no match here cooking baking',
+        tags: ['cooking', 'baking'],
+        date: '2026-03-15T10:00:00Z',
+      }),
+    ];
+    const { result } = renderHook(() => useFilter(pages));
+    act(() => result.current.setQuery('baking'));
+    expect(result.current.filteredPages.map((p) => p.id)).toContain('p6');
   });
 });

@@ -39,6 +39,7 @@ export interface PagePreview {
   id: string;
   date: string;
   previewText: string;
+  searchText: string;
   tags: string[];
   hasImage: boolean;
   hasAttachment: boolean;
@@ -57,7 +58,6 @@ export interface JournalSettings {
   previewIcons: boolean;
   filterBar: boolean;
   sort: 'ascending' | 'descending' | 'none';
-  showMarkdownPlaceholder: boolean;
   autoLocation: boolean;
   remoteSync: boolean;
   syncProvider?: SyncProvider;
@@ -105,7 +105,6 @@ export const DEFAULT_JOURNAL_SETTINGS: JournalSettings = {
   previewIcons: true,
   filterBar: true,
   sort: 'descending',
-  showMarkdownPlaceholder: true,
   autoLocation: false,
   remoteSync: false,
   autoSync: false,
@@ -117,10 +116,13 @@ export function pageToPreview(page: Page): PagePreview {
 
   const firstNonEncryptedImage = page.images.find((img) => !img.encrypted && !img.deleted);
 
+  const searchText = page.text.toLowerCase() + ' ' + page.tags.join(' ').toLowerCase();
+
   return {
     id: page.id,
     date: page.date,
     previewText,
+    searchText,
     tags: page.tags,
     hasImage: page.images.length > 0,
     hasAttachment: page.files.length > 0,

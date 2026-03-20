@@ -62,7 +62,6 @@ const makeJournal = (pages: Page[]): JournalContent => ({
     previewIcons: true,
     filterBar: true,
     sort: 'descending',
-    showMarkdownPlaceholder: true,
     autoLocation: false,
     remoteSync: true,
     autoSync: false,

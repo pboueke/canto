@@ -18,12 +18,12 @@ export interface MigrationResult {
 /**
  * Apply any needed migrations to bring data from `fromVersion` to SCHEMA_VERSION.
  *
- * - If `fromVersion` is undefined, treats data as "1.0.0" (legacy).
- * - Migrations apply in sequence (1.0.0 → 2.0.0 → 3.0.0).
+ * - If `fromVersion` is undefined, treats data as "0.16.0" (legacy).
+ * - Migrations apply in sequence (0.16.0 → 0.17.0 → ...).
  * - Throws if the data is from a future version (can't downgrade).
  */
 export function migrateIfNeeded(data: unknown, fromVersion?: string): MigrationResult {
-  const version = fromVersion ?? '1.0.0';
+  const version = fromVersion ?? '0.16.0';
 
   if (isFutureVersion(version)) {
     throw new Error(

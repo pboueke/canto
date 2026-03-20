@@ -17,7 +17,7 @@ export async function generateThumbnail(base64Image: string): Promise<string> {
   try {
     const result = await ImageManipulator.manipulateAsync(
       srcFile.uri,
-      [{ resize: { width: 80 } }],
+      [{ resize: { width: 120 } }],
       { compress: 0.5, format: ImageManipulator.SaveFormat.JPEG, base64: true },
     );
 

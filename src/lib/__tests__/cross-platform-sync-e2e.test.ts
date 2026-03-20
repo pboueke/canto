@@ -137,7 +137,6 @@ describe('Cross-platform sync E2E', () => {
           previewIcons: false,
           filterBar: true,
           sort: 'ascending',
-          showMarkdownPlaceholder: false,
           autoLocation: true,
           remoteSync: true,
           syncProvider: 'gdrive',

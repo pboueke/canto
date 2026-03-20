@@ -228,13 +228,7 @@ export function JournalSettings({
     label: string,
     key: keyof Pick<
       JournalSettingsType,
-      | 'use24h'
-      | 'previewTags'
-      | 'previewThumbnail'
-      | 'previewIcons'
-      | 'filterBar'
-      | 'showMarkdownPlaceholder'
-      | 'autoLocation'
+      'use24h' | 'previewTags' | 'previewThumbnail' | 'previewIcons' | 'filterBar' | 'autoLocation'
     >,
   ) => (
     <View style={styles.settingRow}>
@@ -339,7 +333,6 @@ export function JournalSettings({
           {renderToggle(t.journalSettings.previewThumbnail, 'previewThumbnail')}
           {renderToggle(t.journalSettings.previewIcons, 'previewIcons')}
           {renderToggle(t.journalSettings.filterBarToggle, 'filterBar')}
-          {renderToggle(t.journalSettings.showMarkdownPlaceholder, 'showMarkdownPlaceholder')}
           {renderToggle(t.journalSettings.autoLocation, 'autoLocation')}
 
           {/* Sort order */}

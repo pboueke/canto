@@ -43,6 +43,7 @@ interface NewJournalModalProps {
   }) => Promise<void>;
   onImportComplete?: (journalId: string) => void;
   existingTitles?: string[];
+  existingIds?: string[];
 }
 
 const THEME_DISPLAY_NAMES: Record<string, string> = {
@@ -60,6 +61,7 @@ export function NewJournalModal({
   onCreate,
   onImportComplete,
   existingTitles = [],
+  existingIds = [],
 }: NewJournalModalProps) {
   const { theme } = useTheme();
   const { t } = useI18n();
@@ -94,7 +96,7 @@ export function NewJournalModal({
   // Cloud import state
   const [showCloudImport, setShowCloudImport] = useState(false);
   const [cloudJournals, setCloudJournals] = useState<RemoteJournalMeta[]>([]);
-  const [cloudLocalTitles, setCloudLocalTitles] = useState<Set<string>>(new Set());
+  const [cloudLocalIds, setCloudLocalIds] = useState<Set<string>>(new Set());
   const [cloudLoading, setCloudLoading] = useState(false);
   const [cloudError, setCloudError] = useState<string | null>(null);
   const [importProgress, setImportProgress] = useState<{ current: number; total: number } | null>(
@@ -159,7 +161,7 @@ export function NewJournalModal({
       await manager.connectWithToken(accessToken);
       const store = manager.getRemoteStore();
       const remoteJournals = await store.listRemoteJournals();
-      setCloudLocalTitles(new Set(existingTitles));
+      setCloudLocalIds(new Set(existingIds));
       setCloudJournals(remoteJournals);
       setShowCloudImport(true);
     } catch (err) {
@@ -1062,7 +1064,7 @@ export function NewJournalModal({
             ) : (
               <ScrollView style={styles.explainScroll}>
                 {cloudJournals.map((rj) => {
-                  const isLocal = cloudLocalTitles.has(rj.title);
+                  const isLocal = cloudLocalIds.has(rj.id);
                   return (
                     <Pressable
                       key={rj.id}

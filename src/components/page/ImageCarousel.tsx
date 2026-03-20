@@ -27,6 +27,7 @@ interface ImageCarouselProps {
   onRemove?: (id: string) => void;
   onMoveLeft?: (id: string) => void;
   onMoveRight?: (id: string) => void;
+  onDownload?: (image: Attachment) => void;
   loadImage: (path: string) => Promise<string | null>;
 }
 
@@ -37,6 +38,7 @@ export function ImageCarousel({
   onRemove,
   onMoveLeft,
   onMoveRight,
+  onDownload,
   loadImage,
 }: ImageCarouselProps) {
   const { theme } = useTheme();
@@ -47,10 +49,12 @@ export function ImageCarousel({
 
   const activeImages = images.filter((img) => !img.deleted);
 
+  const activeImagesKey = activeImages.map((img) => img.id).join(',');
+
   useEffect(() => {
     enqueue(activeImages);
     return () => cancelAll();
-  }, [activeImages.length]);
+  }, [activeImagesKey]);
 
   if (activeImages.length === 0) return null;
 
@@ -92,15 +96,25 @@ export function ImageCarousel({
           const isLoading = loadingImages[item.id];
 
           return (
-            <View style={[styles.imageWrapper, { width: IMAGE_WIDTH }]}>
+            <View
+              style={[styles.imageWrapper, { width: IMAGE_WIDTH }]}
+              accessibilityLabel={t.a11y.imageNofM
+                .replace('{n}', String(index + 1))
+                .replace('{m}', String(activeImages.length))}
+            >
               {imageUri ? (
                 <Pressable
                   onPress={() => {
                     setCurrentIndex(index);
                     setViewerVisible(true);
                   }}
+                  accessibilityRole="image"
                 >
-                  <Image source={{ uri: imageUri }} style={styles.image} resizeMode="cover" />
+                  <Image
+                    source={{ uri: imageUri }}
+                    style={[styles.image, { backgroundColor: theme.colors.surface }]}
+                    resizeMode="contain"
+                  />
                 </Pressable>
               ) : (
                 <View style={[styles.imagePlaceholder, { backgroundColor: theme.colors.surface }]}>
@@ -112,11 +126,26 @@ export function ImageCarousel({
                 </View>
               )}
 
+              {!editable && onDownload && imageUri && (
+                <View style={styles.downloadOverlay}>
+                  <Pressable
+                    onPress={() => onDownload(item)}
+                    style={[styles.editButton, { backgroundColor: theme.colors.surface }]}
+                    accessibilityLabel={t.a11y.downloadImage}
+                    accessibilityRole="button"
+                  >
+                    <Feather name="download" size={16} color={theme.colors.text} />
+                  </Pressable>
+                </View>
+              )}
+
               {editable && (
                 <View style={styles.editOverlay}>
                   <Pressable
                     onPress={() => onRemove?.(item.id)}
                     style={[styles.editButton, { backgroundColor: theme.colors.deleteAction }]}
+                    accessibilityLabel={t.a11y.deleteImage}
+                    accessibilityRole="button"
                   >
                     <Feather name="x" size={16} color="#fff" />
                   </Pressable>
@@ -124,6 +153,8 @@ export function ImageCarousel({
                     <Pressable
                       onPress={() => onMoveLeft?.(item.id)}
                       style={[styles.editButton, { backgroundColor: theme.colors.surface }]}
+                      accessibilityLabel={t.a11y.moveLeft}
+                      accessibilityRole="button"
                     >
                       <Feather name="chevron-left" size={16} color={theme.colors.text} />
                     </Pressable>
@@ -132,6 +163,8 @@ export function ImageCarousel({
                     <Pressable
                       onPress={() => onMoveRight?.(item.id)}
                       style={[styles.editButton, { backgroundColor: theme.colors.surface }]}
+                      accessibilityLabel={t.a11y.moveRight}
+                      accessibilityRole="button"
                     >
                       <Feather name="chevron-right" size={16} color={theme.colors.text} />
                     </Pressable>
@@ -199,6 +232,11 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  downloadOverlay: {
+    position: 'absolute',
+    bottom: 8,
+    right: 8,
   },
   editOverlay: {
     position: 'absolute',

@@ -33,6 +33,7 @@ export function InfoBox({ devUnlocked }: InfoBoxProps) {
   const [showLangPicker, setShowLangPicker] = useState(false);
   const [showSecurity, setShowSecurity] = useState(false);
   const [showDevMenu, setShowDevMenu] = useState(false);
+  const [showHelp, setShowHelp] = useState(false);
   const [changelog, setChangelog] = useState<string | null>(null);
   const [version, setVersion] = useState('...');
 
@@ -59,25 +60,41 @@ export function InfoBox({ devUnlocked }: InfoBoxProps) {
         },
       ]}
     >
-      <Pressable onPress={() => setShowThemePicker(true)} style={styles.row}>
+      <Pressable
+        onPress={() => setShowThemePicker(true)}
+        style={styles.row}
+        accessibilityRole="button"
+      >
         <Text style={[styles.label, { color: theme.colors.text, fontFamily: theme.fonts.regular }]}>
           {t.settings.theme}: {THEME_DISPLAY_NAMES[theme.name] ?? theme.name}
         </Text>
       </Pressable>
 
-      <Pressable onPress={() => setShowLangPicker(true)} style={styles.row}>
+      <Pressable
+        onPress={() => setShowLangPicker(true)}
+        style={styles.row}
+        accessibilityRole="button"
+      >
         <Text style={[styles.label, { color: theme.colors.text, fontFamily: theme.fonts.regular }]}>
           {t.settings.language}: {langNativeNames[lang]}
         </Text>
       </Pressable>
 
-      <Pressable onPress={() => setShowSecurity(true)} style={styles.row}>
+      <Pressable
+        onPress={() => setShowSecurity(true)}
+        style={styles.row}
+        accessibilityRole="button"
+      >
         <Text style={[styles.label, { color: theme.colors.text, fontFamily: theme.fonts.regular }]}>
           {t.security.title}
         </Text>
       </Pressable>
 
-      <Pressable onPress={() => Linking.openURL(CANTO_REPO_URL)} style={styles.row}>
+      <Pressable
+        onPress={() => Linking.openURL(CANTO_REPO_URL)}
+        style={styles.row}
+        accessibilityRole="link"
+      >
         <Text
           style={[styles.link, { color: theme.colors.primary, fontFamily: theme.fonts.regular }]}
         >
@@ -85,16 +102,33 @@ export function InfoBox({ devUnlocked }: InfoBoxProps) {
         </Text>
       </Pressable>
 
-      <Pressable onPress={() => setShowChangelog(true)} style={styles.row}>
-        <Text
-          style={[
-            styles.version,
-            { color: theme.colors.textSecondary, fontFamily: theme.fonts.light },
-          ]}
-        >
-          v{version}
-        </Text>
-      </Pressable>
+      <View style={styles.bottomRow}>
+        <Pressable onPress={() => setShowChangelog(true)} accessibilityRole="button">
+          <Text
+            style={[
+              styles.version,
+              { color: theme.colors.textSecondary, fontFamily: theme.fonts.light },
+            ]}
+          >
+            v{version}
+          </Text>
+        </Pressable>
+        <Text style={[styles.version, { color: theme.colors.textSecondary }]}> · </Text>
+        <Pressable onPress={() => setShowHelp(true)} accessibilityRole="button">
+          <Text
+            style={[
+              styles.version,
+              {
+                color: theme.colors.textSecondary,
+                fontFamily: theme.fonts.light,
+                textDecorationLine: 'underline',
+              },
+            ]}
+          >
+            {t.help.title}
+          </Text>
+        </Pressable>
+      </View>
 
       <ThemePickerModal visible={showThemePicker} onClose={() => setShowThemePicker(false)} />
 
@@ -176,6 +210,73 @@ export function InfoBox({ devUnlocked }: InfoBoxProps) {
         </View>
       </Modal>
 
+      <Modal
+        visible={showHelp}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowHelp(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View
+            style={[
+              styles.modalContent,
+              webModalContent,
+              {
+                backgroundColor: theme.colors.foreground,
+                borderColor: theme.colors.border,
+                borderWidth: theme.borderWidth,
+              },
+            ]}
+          >
+            <Text
+              style={[
+                styles.modalTitle,
+                { color: theme.colors.text, fontFamily: theme.fonts.bold },
+              ]}
+            >
+              {t.help.title}
+            </Text>
+            <Text
+              style={[
+                styles.modalText,
+                { color: theme.colors.text, fontFamily: theme.fonts.regular, marginBottom: 15 },
+              ]}
+            >
+              {t.help.body}
+            </Text>
+            <Pressable
+              onPress={() => Linking.openURL(`${CANTO_REPO_URL}/issues`)}
+              style={[
+                styles.modalClose,
+                { backgroundColor: theme.colors.primary, marginBottom: 8 },
+              ]}
+            >
+              <Text
+                style={[
+                  styles.modalCloseText,
+                  { color: theme.colors.foreground, fontFamily: theme.fonts.bold },
+                ]}
+              >
+                {t.help.linkText}
+              </Text>
+            </Pressable>
+            <Pressable
+              onPress={() => setShowHelp(false)}
+              style={[styles.modalClose, { backgroundColor: theme.colors.highlight }]}
+            >
+              <Text
+                style={[
+                  styles.modalCloseText,
+                  { color: theme.colors.text, fontFamily: theme.fonts.regular },
+                ]}
+              >
+                {t.common.close}
+              </Text>
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
+
       <DevMenu visible={showDevMenu} onClose={() => setShowDevMenu(false)} />
     </View>
   );
@@ -201,6 +302,11 @@ const styles = StyleSheet.create({
   version: {
     fontSize: 12,
     textDecorationLine: 'underline',
+  },
+  bottomRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 4,
   },
   modalOverlay: {
     flex: 1,

@@ -103,6 +103,24 @@ describe('pageToPreview', () => {
     expect(preview.thumbnail).toBeUndefined();
   });
 
+  it('builds searchText from lowercased text and tags', () => {
+    const preview = pageToPreview(makePage({ text: 'Hello World', tags: ['Travel', 'Fun'] }));
+    expect(preview.searchText).toBe('hello world travel fun');
+  });
+
+  it('searchText contains full page text, not just preview line', () => {
+    const preview = pageToPreview(
+      makePage({ text: 'First line\nSecond line with details\nThird', tags: [] }),
+    );
+    expect(preview.searchText).toContain('second line with details');
+    expect(preview.searchText).toContain('third');
+  });
+
+  it('searchText includes tags at the end', () => {
+    const preview = pageToPreview(makePage({ text: 'Note', tags: ['Cooking', 'Baking'] }));
+    expect(preview.searchText).toBe('note cooking baking');
+  });
+
   it('returns firstImage from first non-encrypted, non-deleted image', () => {
     const preview = pageToPreview(
       makePage({

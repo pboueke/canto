@@ -6,14 +6,17 @@ interface CardProps {
   children: ReactNode;
   onPress?: () => void;
   style?: StyleProp<ViewStyle>;
+  accessibilityLabel?: string;
 }
 
-export function Card({ children, onPress, style }: CardProps) {
+export function Card({ children, onPress, style, accessibilityLabel }: CardProps) {
   const { theme } = useTheme();
 
   return (
     <Pressable
       onPress={onPress}
+      accessibilityLabel={accessibilityLabel}
+      accessibilityRole={onPress ? 'button' : undefined}
       style={[
         styles.card,
         {

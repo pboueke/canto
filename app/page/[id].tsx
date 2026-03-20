@@ -27,6 +27,7 @@ import {
 } from '@/hooks/useStorage';
 import { useJournalKeys } from '@/contexts/JournalKeyContext';
 import { generateThumbnail } from '@/lib/thumbnail';
+import { downloadAttachment } from '@/lib/downloadAttachment';
 import { PageHeader } from '@/components/page/PageHeader';
 import { TagEditor } from '@/components/page/TagEditor';
 import { PageContent } from '@/components/page/PageContent';
@@ -373,6 +374,19 @@ export default function PageScreen() {
     [getAttachment],
   );
 
+  const handleDownloadImage = useCallback(
+    async (image: Attachment) => {
+      try {
+        const data = await getAttachment(image.path, image.encrypted);
+        if (!data) return;
+        await downloadAttachment(data, image.name);
+      } catch (err) {
+        Alert.alert('Error', err instanceof Error ? err.message : String(err));
+      }
+    },
+    [getAttachment, t],
+  );
+
   const handleSaveComment = useCallback(
     (text: string, existingId?: string) => {
       if (!draft) return;
@@ -528,6 +542,7 @@ export default function PageScreen() {
             onRemove={handleRemoveImage}
             onMoveLeft={(imgId) => handleMoveImage(imgId, 'left', false)}
             onMoveRight={(imgId) => handleMoveImage(imgId, 'right', false)}
+            onDownload={handleDownloadImage}
             loadImage={loadImage}
           />
 
@@ -539,6 +554,7 @@ export default function PageScreen() {
               onRemove={handleRemoveImage}
               onMoveLeft={(imgId) => handleMoveImage(imgId, 'left', true)}
               onMoveRight={(imgId) => handleMoveImage(imgId, 'right', true)}
+              onDownload={handleDownloadImage}
               loadImage={loadEncryptedImage}
             />
           )}

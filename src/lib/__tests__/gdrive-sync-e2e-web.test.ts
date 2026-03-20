@@ -427,7 +427,6 @@ describe('GDrive sync E2E (web platform)', () => {
         previewIcons: false,
         filterBar: false,
         sort: 'ascending',
-        showMarkdownPlaceholder: false,
         autoLocation: true,
         remoteSync: true,
         syncProvider: 'gdrive',

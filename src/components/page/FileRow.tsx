@@ -1,6 +1,7 @@
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useTheme } from '@/hooks/useTheme';
+import { useI18n } from '@/hooks/useI18n';
 import type { Attachment } from '@/data';
 
 interface FileRowProps {
@@ -19,6 +20,7 @@ function formatSize(bytes?: number): string {
 
 export function FileRow({ files, editable, onRemove, onOpen }: FileRowProps) {
   const { theme } = useTheme();
+  const { t } = useI18n();
   const activeFiles = files.filter((f) => !f.deleted);
 
   if (activeFiles.length === 0) return null;
@@ -41,6 +43,8 @@ export function FileRow({ files, editable, onRemove, onOpen }: FileRowProps) {
               },
             ]}
             onPress={() => onOpen?.(file)}
+            accessibilityLabel={`${file.name} ${sizeStr}`}
+            accessibilityRole="button"
           >
             <View style={styles.fileIcon}>
               <Feather name="paperclip" size={20} color={theme.colors.textSecondary} />
@@ -82,6 +86,8 @@ export function FileRow({ files, editable, onRemove, onOpen }: FileRowProps) {
               <Pressable
                 onPress={() => onRemove?.(file.id)}
                 style={[styles.removeButton, { backgroundColor: theme.colors.deleteAction }]}
+                accessibilityLabel={t.a11y.deleteFile}
+                accessibilityRole="button"
               >
                 <Feather name="x" size={12} color="#fff" />
               </Pressable>
