@@ -1,5 +1,24 @@
 # Changelog
 
+## v0.15.0 - Credible Launch: onboarding, security docs, store listing, landing page
+
+- feat: first-launch onboarding flow — 4 screens (welcome, encryption, privacy, get started) with slide animations, skip button, and auto-open journal creation on completion
+- feat: onboarding i18n — all 8 languages (en, pt, es, de, fr, ru, zh, it)
+- feat: static landing page (`docs/index.html`) — no JavaScript, four pillars (encrypted at rest, not AI training data, open source, data portability)
+- feat: hosted privacy policy (`docs/privacy.html`) for Play Store URL requirement
+- feat: EAS Build configuration (`eas.json`) with development, preview, and production profiles
+- feat: Google Play Store listing copy (`store/google-play-listing.md`)
+- docs: `SECURITY.md` — comprehensive security whitepaper covering threat model, two-tier encryption, key management, session security, backup encryption, data collection, and cryptographic dependencies
+- docs: `PRIVACY.md` — privacy policy addressing encryption at rest, no data collection, Google Drive sync behavior, biometrics, data portability
+- docs: `CONTRIBUTING.md` — setup instructions, code style, quality gates, encryption and i18n guidelines
+- docs: `TODOS.md` — post-launch roadmap (iOS, CI/CD, format spec, monetization, design system)
+- fix: pre-commit hook version sync bug — app.json sed now reads its own version instead of package.json's, preventing permanent drift
+- fix: pre-commit hook now syncs build.gradle versionName and auto-increments versionCode
+- chore: README security section replaced with links to SECURITY.md and PRIVACY.md
+- chore: README contributing section replaced with link to CONTRIBUTING.md
+- chore: secrets added to .gitignore (play-store-key.json, \*.keystore)
+- test: 9 new onboarding tests (render, navigation, flag write, skip, i18n content, icons, error handling)
+
 ## v0.14.3 - Cross-platform sync tests, timestamp fix, web navigation fix
 
 - fix: `savePage()` no longer overwrites `modified` timestamp during sync downloads and cloud imports — added `preserveModified` parameter to prevent unnecessary re-uploads after import/sync

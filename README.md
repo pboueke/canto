@@ -3,8 +3,8 @@
 A private, encrypted journaling app for Android, iOS, and Web.
 
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
-![Version](https://img.shields.io/badge/version-0.14.3-green)
-![Tests](https://img.shields.io/badge/tests-579%20passed-brightgreen)
+![Version](https://img.shields.io/badge/version-0.15.0-green)
+![Tests](https://img.shields.io/badge/tests-588%20passed-brightgreen)
 ![Platforms](https://img.shields.io/badge/platforms-Android%20%7C%20iOS%20%7C%20Web-lightgrey)
 
 ## Features
@@ -57,7 +57,7 @@ npm run web        # Web browser
 ```bash
 npm run lint          # ESLint
 npm run typecheck     # TypeScript strict
-npm test              # Jest (579 tests)
+npm test              # Jest (588 tests)
 npm run test:coverage # Coverage report (80% threshold)
 npm run audit         # npm audit (production deps)
 make check            # lint + typecheck + test
@@ -84,49 +84,16 @@ canto/
 └── .husky/                 # Git hooks (pre-commit, pre-push)
 ```
 
-## Security Model
+## Security & Privacy
 
-Canto encrypts all journal data at rest using a two-tier architecture.
+Canto encrypts all journal data at rest using two-tier AES-256-GCM encryption. Your data never leaves your device unless you explicitly export or sync it. No analytics, no trackers, no data collection.
 
-### Encryption layers
-
-1. **Device layer** (always active) — A 256-bit AES-GCM key is generated on first launch and stored in the OS secure store (`expo-secure-store`). All data written to disk is encrypted with this key via native `expo-crypto` (JSI). The key never leaves the device.
-
-2. **Password layer** (optional, per journal) — When a journal is password-protected, a second AES-256-GCM key is derived from the user's password using PBKDF2-SHA256 with configurable iterations (50k–1M). Data is first encrypted with the password-derived key, then with the device key.
-
-### Key management
-
-- **Device key** is stored in `expo-secure-store` (hardware-backed keychain on iOS, Android Keystore on Android). It can be rotated — all data is re-encrypted atomically.
-- **Password-derived keys** are cached in memory during a session and zeroed (`fill(0)`) on lock/timeout. JavaScript GC limitations mean this is best-effort (per OWASP guidance).
-- **Biometric gate** — Journals can optionally require biometric authentication (`expo-local-authentication`) before the key cache is accessed.
-
-### Session security
-
-- **Auto-lock** — Derived keys are cleared after a configurable inactivity timeout (1 min / 5 min / 15 min / off). Both foreground inactivity and background-to-foreground transitions are monitored.
-- **Rate limiting** — Failed password attempts trigger exponential backoff: 30 s after 5 attempts, 5 min after 10, 30 min after 15.
-
-### Backup encryption
-
-Exported `.canto.zip` archives are encrypted with a user-supplied password via PBKDF2 + AES-256-GCM. The archive contains encrypted journal metadata, pages, and attachments. On import, the password is verified in two phases (metadata first, then full content).
-
-### Cryptographic dependencies
-
-- [`expo-crypto`](https://docs.expo.dev/versions/latest/sdk/crypto/) — Native AES-256-GCM encryption via JSI
-- [`@noble/hashes`](https://github.com/paulmillr/noble-hashes) — PBKDF2-SHA256 key derivation (audited, zero-dependency)
-
-### Storage
-
-Local storage uses `expo-file-system` with a structured directory layout. Each journal and its pages are stored as encrypted JSON files. Attachments (images, files) are stored alongside entries with optional per-file encryption. File writes use an atomic temp-file pattern to prevent corruption.
-
-A sync engine interface is defined for future remote backup support (Google Drive, Dropbox, WebDAV) using last-write-wins conflict resolution.
+- **[Security Model](SECURITY.md)** — Full technical details: encryption layers, key management, threat model, cryptographic dependencies
+- **[Privacy Policy](PRIVACY.md)** — What data Canto collects (none), how your data is stored, and your rights
 
 ## Contributing
 
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/my-feature`)
-3. Make your changes
-4. Ensure quality gates pass: `make check`
-5. Open a pull request
+See [CONTRIBUTING.md](CONTRIBUTING.md) for setup instructions, code style, and development workflow.
 
 ## License
 

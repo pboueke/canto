@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Canto — Private Journal</title>
+  <meta name="description" content="Encrypted journaling app. Open source. No tracking, no ads, no data collection.">
+  <style>
+    :root {
+      --background: rgb(210, 210, 210);
+      --foreground: rgb(255, 255, 255);
+      --surface: rgb(245, 245, 245);
+      --text: rgb(0, 0, 0);
+      --text-secondary: rgb(80, 80, 80);
+      --text-muted: rgb(130, 130, 130);
+      --primary: rgb(1, 85, 92);
+      --accent: rgb(87, 196, 173);
+      --border-light: rgb(220, 220, 220);
+    }
+
+    @font-face {
+      font-family: 'Lato';
+      font-weight: 400;
+      font-display: swap;
+      src: url('https://fonts.gstatic.com/s/lato/v24/S6uyw4BMUTPHvxk.woff2') format('woff2');
+    }
+    @font-face {
+      font-family: 'Lato';
+      font-weight: 300;
+      font-display: swap;
+      src: url('https://fonts.gstatic.com/s/lato/v24/S6u9w4BMUTPHh7USew8.woff2') format('woff2');
+    }
+    @font-face {
+      font-family: 'Lato';
+      font-weight: 700;
+      font-display: swap;
+      src: url('https://fonts.gstatic.com/s/lato/v24/S6u9w4BMUTPHh6UVew8.woff2') format('woff2');
+    }
+    @font-face {
+      font-family: 'Merriweather';
+      font-weight: 700;
+      font-display: swap;
+      src: url('https://fonts.gstatic.com/s/merriweather/v30/u-4n0qyriQwlOrhSvowK_l52xwNZVcf6.woff2') format('woff2');
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: 'Lato', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      color: var(--text);
+      background: var(--background);
+      line-height: 1.6;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    .page {
+      max-width: 840px;
+      margin: 0 auto;
+      background: var(--foreground);
+      min-height: 100vh;
+      box-shadow: 0 0 40px rgba(0, 0, 0, 0.08);
+    }
+
+    .hero {
+      padding: 80px 40px 64px;
+      text-align: center;
+    }
+
+    .hero-logo {
+      width: 88px;
+      height: 101px;
+      margin-bottom: 32px;
+      opacity: 0.9;
+    }
+
+    .hero h1 {
+      font-family: 'Merriweather', Georgia, serif;
+      font-size: 32px;
+      font-weight: 700;
+      line-height: 1.4;
+      color: var(--text);
+      margin-bottom: 32px;
+      letter-spacing: -0.3px;
+    }
+
+    .hero h1 span { display: block; }
+
+    .cta {
+      display: inline-block;
+      padding: 12px 36px;
+      background: var(--primary);
+      color: var(--foreground);
+      border-radius: 24px;
+      font-size: 15px;
+      font-weight: 700;
+      text-decoration: none;
+      letter-spacing: 0.2px;
+      transition: background 0.15s;
+    }
+
+    .cta:hover { background: rgb(1, 70, 76); }
+
+    .pillars {
+      padding: 48px 40px;
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 24px;
+      background: var(--surface);
+    }
+
+    .pillar {
+      text-align: center;
+      padding: 8px 4px;
+    }
+
+    .pillar-icon {
+      font-size: 24px;
+      margin-bottom: 12px;
+      display: block;
+    }
+
+    .pillar h3 {
+      font-size: 14px;
+      font-weight: 700;
+      color: var(--primary);
+      margin-bottom: 6px;
+    }
+
+    .pillar p {
+      font-size: 13px;
+      font-weight: 300;
+      color: var(--text-secondary);
+      line-height: 1.5;
+    }
+
+    footer {
+      padding: 24px 40px;
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+      font-size: 12px;
+      font-weight: 300;
+      color: var(--text-muted);
+    }
+
+    footer a {
+      color: var(--primary);
+      text-decoration: none;
+      font-weight: 400;
+    }
+
+    footer a:hover { text-decoration: underline; }
+
+    .footer-links {
+      display: flex;
+      gap: 20px;
+    }
+
+    @media (max-width: 700px) {
+      .hero { padding: 56px 28px 48px; }
+      .hero h1 { font-size: 26px; }
+      .hero-logo { width: 68px; height: 78px; }
+      .pillars { grid-template-columns: 1fr 1fr; padding: 36px 28px; gap: 20px; }
+      footer { padding: 20px 28px; }
+    }
+
+    @media (max-width: 400px) {
+      .pillars { grid-template-columns: 1fr; }
+      footer { flex-direction: column; text-align: center; }
+      .footer-links { justify-content: center; }
+    }
+  </style>
+</head>
+<body>
+
+  <div class="page">
+    <section class="hero">
+      <img src="logo.svg" alt="Canto" class="hero-logo">
+      <h1>
+        <span>Your journal.</span>
+        <span>Your thoughts.</span>
+        <span>Your data.</span>
+      </h1>
+      <a class="cta" href="https://github.com/pboueke/canto/releases">
+        Download Canto
+      </a>
+    </section>
+
+    <section class="pillars">
+      <div class="pillar">
+        <span class="pillar-icon" aria-hidden="true">&#x1F512;</span>
+        <h3>Encrypted at rest</h3>
+        <p>AES-256-GCM on your device. Unreadable without your key.</p>
+      </div>
+      <div class="pillar">
+        <span class="pillar-icon" aria-hidden="true">&#x1F6E1;</span>
+        <h3>Not AI training data</h3>
+        <p>Your inner thoughts stay yours &mdash; never scraped, never sold.</p>
+      </div>
+      <div class="pillar">
+        <span class="pillar-icon" aria-hidden="true">&#x1F4E6;</span>
+        <h3>Open source</h3>
+        <p>GPLv3. Read every line. Audit it yourself.</p>
+      </div>
+      <div class="pillar">
+        <span class="pillar-icon" aria-hidden="true">&#x1F4E4;</span>
+        <h3>Data portability</h3>
+        <p>Export everything, anytime. No lock-in.</p>
+      </div>
+    </section>
+
+    <footer>
+      <span>&copy; 2026 Canto &middot; GPLv3</span>
+      <div class="footer-links">
+        <a href="https://github.com/pboueke/canto/blob/main/SECURITY.md">Security</a>
+        <a href="privacy.html">Privacy</a>
+        <a href="https://github.com/pboueke/canto">Source</a>
+      </div>
+    </footer>
+  </div>
+
+</body>
+</html>
