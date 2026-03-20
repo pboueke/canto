@@ -210,7 +210,7 @@ export function NewJournalModal({
 
       await localStore.saveJournal(journal);
       for (const page of journal.pages) {
-        await localStore.savePage(journal.id, page);
+        await localStore.savePage(journal.id, page, undefined, true);
       }
 
       resetForm();

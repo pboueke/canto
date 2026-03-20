@@ -230,7 +230,7 @@ describe('SyncEngine — provider-agnostic interface', () => {
       const result = await engine.sync('journal-1');
 
       expect(result.downloaded).toContain('p2');
-      expect(local.savePage).toHaveBeenCalledWith('journal-1', page, undefined);
+      expect(local.savePage).toHaveBeenCalledWith('journal-1', page, undefined, true);
     });
 
     it('resolves conflicts with last-write-wins', async () => {

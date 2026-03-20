@@ -111,7 +111,7 @@ describe('SyncEngine', () => {
     const result = await engine.sync('journal-1');
 
     expect(result.downloaded).toContain('p2');
-    expect(local.savePage).toHaveBeenCalledWith('journal-1', remotePage, undefined);
+    expect(local.savePage).toHaveBeenCalledWith('journal-1', remotePage, undefined, true);
   });
 
   it('uploads locally newer pages', async () => {
@@ -237,7 +237,7 @@ describe('SyncEngine', () => {
       const engine = new SyncEngine(local, remote);
       await engine.sync('journal-1', key);
 
-      expect(local.savePage).toHaveBeenCalledWith('journal-1', remotePage, key);
+      expect(local.savePage).toHaveBeenCalledWith('journal-1', remotePage, key, true);
     });
 
     it('passes derivedKey to local.deletePage on remote deletion', async () => {

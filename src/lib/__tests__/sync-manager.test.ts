@@ -292,7 +292,7 @@ describe('SyncManager', () => {
 
       await manager.syncJournal('j1', 'token', key);
 
-      expect(local.savePage).toHaveBeenCalledWith('j1', remotePage, key);
+      expect(local.savePage).toHaveBeenCalledWith('j1', remotePage, key, true);
     });
   });
 

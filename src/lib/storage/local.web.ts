@@ -296,8 +296,13 @@ export function createLocalStore(encryption: EncryptionService): LocalStore {
       return JSON.parse(raw) as Page;
     },
 
-    async savePage(journalId: string, page: Page, derivedKey?: Uint8Array): Promise<void> {
-      const updated = { ...page, modified: Date.now() };
+    async savePage(
+      journalId: string,
+      page: Page,
+      derivedKey?: Uint8Array,
+      preserveModified?: boolean,
+    ): Promise<void> {
+      const updated = preserveModified ? page : { ...page, modified: Date.now() };
       await writeEncrypted(
         getPagePath(journalId, page.id),
         JSON.stringify(updated),

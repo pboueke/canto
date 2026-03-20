@@ -1,7 +1,7 @@
 import { Pressable, StyleSheet } from 'react-native';
-import { useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import { useTheme } from '@/hooks/useTheme';
+import { useSafeBack } from '@/hooks/useSafeBack';
 
 interface BackButtonProps {
   onBack?: () => void;
@@ -9,10 +9,10 @@ interface BackButtonProps {
 
 export function BackButton({ onBack }: BackButtonProps) {
   const { theme } = useTheme();
-  const router = useRouter();
+  const safeBack = useSafeBack();
 
   return (
-    <Pressable onPress={onBack ?? (() => router.back())} style={styles.button}>
+    <Pressable onPress={onBack ?? safeBack} style={styles.button}>
       <Feather name="arrow-left" size={22} color={theme.colors.text} />
     </Pressable>
   );
