@@ -7,6 +7,37 @@ import { exportJournal, type ExportProgress } from '@/lib/backup';
 import type { JournalContent } from '@/models';
 import { webModalContent } from '@/styles/web';
 
+function ProgressBar({ current, total }: { current: number; total: number }) {
+  const { theme } = useTheme();
+  const fraction = total > 0 ? current / total : 0;
+
+  return (
+    <View style={[progressStyles.track, { backgroundColor: theme.colors.border }]}>
+      <View
+        style={[
+          progressStyles.fill,
+          {
+            backgroundColor: theme.colors.primary,
+            width: `${Math.round(fraction * 100)}%`,
+          },
+        ]}
+      />
+    </View>
+  );
+}
+
+const progressStyles = StyleSheet.create({
+  track: {
+    height: 6,
+    borderRadius: 3,
+    overflow: 'hidden',
+  },
+  fill: {
+    height: '100%',
+    borderRadius: 3,
+  },
+});
+
 interface ExportJournalModalProps {
   visible: boolean;
   journal: JournalContent;
@@ -31,7 +62,6 @@ export function ExportJournalModal({
   async function handleExport() {
     setExporting(true);
     setError(null);
-    // Let React render the spinner
     await new Promise((r) => setTimeout(r, 100));
     try {
       await exportJournal(journal, encrypted, derivedKey ?? undefined, setProgress);
@@ -60,51 +90,74 @@ export function ExportJournalModal({
           style={[
             styles.content,
             webModalContent,
-            { backgroundColor: theme.colors.background, borderColor: theme.colors.border },
+            {
+              backgroundColor: theme.colors.foreground,
+              borderColor: theme.colors.border,
+              borderWidth: theme.borderWidth,
+            },
           ]}
         >
           <Text style={[styles.title, { color: theme.colors.text, fontFamily: theme.fonts.bold }]}>
             {t.backup.exportJournal}
           </Text>
 
-          <View style={styles.journalInfo}>
-            <Feather
-              name={(journal.icon || 'book') as React.ComponentProps<typeof Feather>['name']}
-              size={20}
-              color={theme.colors.text}
-            />
-            <Text
-              style={[
-                styles.journalName,
-                { color: theme.colors.text, fontFamily: theme.fonts.regular },
-              ]}
-              numberOfLines={1}
-            >
-              {journal.title}
-            </Text>
+          {/* Journal info */}
+          <View style={styles.row}>
+            <View style={styles.journalInfo}>
+              <Feather
+                name={(journal.icon || 'book') as React.ComponentProps<typeof Feather>['name']}
+                size={18}
+                color={theme.colors.text}
+              />
+              <Text
+                style={[
+                  styles.label,
+                  { color: theme.colors.text, fontFamily: theme.fonts.regular },
+                ]}
+                numberOfLines={1}
+              >
+                {journal.title}
+              </Text>
+            </View>
           </View>
 
           {exporting ? (
-            <View style={styles.progressContainer}>
-              <ActivityIndicator size="large" color={theme.colors.primary} />
-              <Text
-                style={[
-                  styles.progressText,
-                  { color: theme.colors.textSecondary, fontFamily: theme.fonts.regular },
-                ]}
-              >
-                {t.backup.exporting}
-                {progress ? ` (${progress.current}/${progress.total})` : ''}
-              </Text>
-            </View>
-          ) : (
             <>
-              {journal.secure && (
-                <View style={styles.encryptRow}>
-                  <Feather name="lock" size={16} color={theme.colors.text} />
+              {progress && (
+                <View style={styles.progressSection}>
+                  <ProgressBar current={progress.current} total={progress.total} />
                   <Text
                     style={[
-                      styles.encryptLabel,
+                      styles.progressText,
+                      { color: theme.colors.textSecondary, fontFamily: theme.fonts.regular },
+                    ]}
+                  >
+                    {t.backup.exporting} ({progress.current}/{progress.total})
+                  </Text>
+                </View>
+              )}
+              {!progress && (
+                <View style={styles.spinnerRow}>
+                  <ActivityIndicator size="small" color={theme.colors.primary} />
+                  <Text
+                    style={[
+                      styles.label,
+                      { color: theme.colors.textSecondary, fontFamily: theme.fonts.regular },
+                    ]}
+                  >
+                    {t.backup.exporting}
+                  </Text>
+                </View>
+              )}
+            </>
+          ) : (
+            <>
+              {/* Encryption toggle */}
+              {journal.secure && (
+                <View style={styles.settingRow}>
+                  <Text
+                    style={[
+                      styles.settingLabel,
                       { color: theme.colors.text, fontFamily: theme.fonts.regular },
                     ]}
                   >
@@ -118,50 +171,54 @@ export function ExportJournalModal({
                 </View>
               )}
 
-              {error && (
-                <View style={[styles.errorBox, { borderColor: theme.colors.error }]}>
-                  <Feather name="alert-circle" size={14} color={theme.colors.error} />
-                  <Text
-                    style={[
-                      styles.errorText,
-                      { color: theme.colors.text, fontFamily: theme.fonts.regular },
-                    ]}
-                  >
-                    {error}
-                  </Text>
-                </View>
-              )}
-
-              <View style={styles.buttons}>
-                <Pressable
-                  onPress={handleClose}
-                  style={[styles.button, { backgroundColor: theme.colors.highlight }]}
+              {/* Export button */}
+              <Pressable
+                onPress={handleExport}
+                style={[styles.actionBtn, { backgroundColor: theme.colors.primary }]}
+              >
+                <Feather name="download" size={16} color={theme.colors.foreground} />
+                <Text
+                  style={[
+                    styles.actionBtnText,
+                    { color: theme.colors.foreground, fontFamily: theme.fonts.bold },
+                  ]}
                 >
-                  <Text
-                    style={[
-                      styles.buttonText,
-                      { color: theme.colors.text, fontFamily: theme.fonts.regular },
-                    ]}
-                  >
-                    {t.common.cancel}
-                  </Text>
-                </Pressable>
-                <Pressable
-                  onPress={handleExport}
-                  style={[styles.button, { backgroundColor: theme.colors.primary }]}
-                >
-                  <Text
-                    style={[
-                      styles.buttonText,
-                      { color: theme.colors.foreground, fontFamily: theme.fonts.bold },
-                    ]}
-                  >
-                    {t.backup.export}
-                  </Text>
-                </Pressable>
-              </View>
+                  {t.backup.export}
+                </Text>
+              </Pressable>
             </>
           )}
+
+          {/* Error */}
+          {error && (
+            <Text
+              style={[
+                styles.feedback,
+                { color: theme.colors.error, fontFamily: theme.fonts.regular },
+              ]}
+            >
+              {error}
+            </Text>
+          )}
+
+          {/* Close */}
+          <Pressable
+            onPress={handleClose}
+            disabled={exporting}
+            style={[
+              styles.closeBtn,
+              { backgroundColor: theme.colors.highlight, opacity: exporting ? 0.5 : 1 },
+            ]}
+          >
+            <Text
+              style={[
+                styles.closeBtnText,
+                { color: theme.colors.text, fontFamily: theme.fonts.regular },
+              ]}
+            >
+              {t.common.close}
+            </Text>
+          </Pressable>
         </View>
       </View>
     </Modal>
@@ -171,73 +228,76 @@ export function ExportJournalModal({
 const styles = StyleSheet.create({
   overlay: {
     flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.4)',
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: 'rgba(0,0,0,0.4)',
     padding: 30,
   },
   content: {
-    width: '100%',
     borderRadius: 16,
     padding: 24,
-    borderWidth: 1,
+    width: '100%',
+    gap: 12,
   },
   title: {
     fontSize: 18,
-    marginBottom: 16,
+    marginBottom: 4,
+  },
+  row: {
+    paddingVertical: 2,
   },
   journalInfo: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
-    marginBottom: 20,
+    gap: 8,
   },
-  journalName: {
-    fontSize: 16,
-    flex: 1,
+  label: {
+    fontSize: 13,
   },
-  encryptRow: {
+  settingRow: {
     flexDirection: 'row',
+    justifyContent: 'space-between',
     alignItems: 'center',
-    gap: 10,
-    marginBottom: 20,
   },
-  encryptLabel: {
+  settingLabel: {
     fontSize: 14,
-    flex: 1,
   },
-  progressContainer: {
-    alignItems: 'center',
-    gap: 12,
-    paddingVertical: 20,
+  progressSection: {
+    gap: 4,
   },
   progressText: {
-    fontSize: 14,
+    fontSize: 11,
+    textAlign: 'right',
   },
-  errorBox: {
+  spinnerRow: {
     flexDirection: 'row',
-    alignItems: 'flex-start',
+    alignItems: 'center',
+    justifyContent: 'center',
     gap: 8,
-    borderRadius: 8,
-    borderWidth: 1,
-    padding: 12,
-    marginBottom: 16,
+    paddingVertical: 8,
   },
-  errorText: {
-    fontSize: 13,
-    flex: 1,
-  },
-  buttons: {
+  actionBtn: {
     flexDirection: 'row',
-    gap: 10,
-  },
-  button: {
-    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
     paddingVertical: 12,
     borderRadius: 8,
-    alignItems: 'center',
   },
-  buttonText: {
-    fontSize: 15,
+  actionBtnText: {
+    fontSize: 14,
+  },
+  feedback: {
+    fontSize: 12,
+    textAlign: 'center',
+  },
+  closeBtn: {
+    paddingVertical: 10,
+    borderRadius: 8,
+    alignItems: 'center',
+    marginTop: 4,
+  },
+  closeBtnText: {
+    fontSize: 14,
   },
 });

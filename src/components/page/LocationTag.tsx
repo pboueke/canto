@@ -1,4 +1,4 @@
-import { Alert, Linking, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Alert, Linking, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import * as Clipboard from 'expo-clipboard';
 import { useTheme } from '@/hooks/useTheme';
@@ -18,7 +18,10 @@ export function LocationTag({ location, editable, onRemove }: LocationTagProps) 
   const coordText = `${location.latitude.toFixed(4)}, ${location.longitude.toFixed(4)}`;
 
   const handlePress = () => {
-    const url = `geo:${location.latitude},${location.longitude}`;
+    const url =
+      Platform.OS === 'web'
+        ? `https://www.google.com/maps?q=${location.latitude},${location.longitude}`
+        : `geo:${location.latitude},${location.longitude}`;
     Linking.openURL(url);
   };
 

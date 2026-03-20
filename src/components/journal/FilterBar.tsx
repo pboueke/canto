@@ -1,7 +1,9 @@
-import { useState } from 'react';
-import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { useRef, useState } from 'react';
+import { Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { Feather } from '@expo/vector-icons';
-import DateTimePicker from '@react-native-community/datetimepicker';
+
+const DateTimePicker =
+  Platform.OS !== 'web' ? require('@react-native-community/datetimepicker').default : null;
 import { useTheme } from '@/hooks/useTheme';
 import { useI18n } from '@/hooks/useI18n';
 import type { Filter } from '@/models';
@@ -33,6 +35,8 @@ export function FilterBar({
   const { theme } = useTheme();
   const { t } = useI18n();
   const [showFilterModal, setShowFilterModal] = useState(false);
+  const dateStartRef = useRef<HTMLInputElement>(null);
+  const dateEndRef = useRef<HTMLInputElement>(null);
   const [showDateStart, setShowDateStart] = useState(false);
   const [showDateEnd, setShowDateEnd] = useState(false);
 
@@ -91,7 +95,13 @@ export function FilterBar({
               borderColor: theme.colors.border,
             },
           ]}
-          onPress={() => setShowDateStart(true)}
+          onPress={() => {
+            if (Platform.OS === 'web' && dateStartRef.current) {
+              dateStartRef.current.showPicker();
+            } else {
+              setShowDateStart(true);
+            }
+          }}
         >
           <Feather
             name="calendar"
@@ -124,7 +134,13 @@ export function FilterBar({
               borderColor: theme.colors.border,
             },
           ]}
-          onPress={() => setShowDateEnd(true)}
+          onPress={() => {
+            if (Platform.OS === 'web' && dateEndRef.current) {
+              dateEndRef.current.showPicker();
+            } else {
+              setShowDateEnd(true);
+            }
+          }}
         >
           <Feather
             name="calendar"
@@ -190,24 +206,47 @@ export function FilterBar({
         </View>
       )}
 
-      {showDateStart && (
+      {Platform.OS === 'web' && (
+        <>
+          <input
+            ref={dateStartRef}
+            type="date"
+            value={filter.dateStart ? new Date(filter.dateStart).toISOString().slice(0, 10) : ''}
+            onChange={(e) => {
+              if (e.target.value) onSetDateStart(new Date(e.target.value).toISOString());
+            }}
+            style={{ position: 'absolute', opacity: 0, width: 0, height: 0 }}
+          />
+          <input
+            ref={dateEndRef}
+            type="date"
+            value={filter.dateEnd ? new Date(filter.dateEnd).toISOString().slice(0, 10) : ''}
+            onChange={(e) => {
+              if (e.target.value) onSetDateEnd(new Date(e.target.value).toISOString());
+            }}
+            style={{ position: 'absolute', opacity: 0, width: 0, height: 0 }}
+          />
+        </>
+      )}
+
+      {Platform.OS !== 'web' && showDateStart && DateTimePicker && (
         <DateTimePicker
           value={filter.dateStart ? new Date(filter.dateStart) : new Date()}
           mode="date"
           display="calendar"
-          onChange={(_e, date) => {
+          onChange={(_e: unknown, date?: Date) => {
             setShowDateStart(false);
             if (date) onSetDateStart(date.toISOString());
           }}
         />
       )}
 
-      {showDateEnd && (
+      {Platform.OS !== 'web' && showDateEnd && DateTimePicker && (
         <DateTimePicker
           value={filter.dateEnd ? new Date(filter.dateEnd) : new Date()}
           mode="date"
           display="calendar"
-          onChange={(_e, date) => {
+          onChange={(_e: unknown, date?: Date) => {
             setShowDateEnd(false);
             if (date) onSetDateEnd(date.toISOString());
           }}

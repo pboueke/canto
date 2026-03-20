@@ -8,6 +8,7 @@ import {
   Switch,
   Text,
   TextInput,
+  Platform,
   View,
 } from 'react-native';
 import { Feather } from '@expo/vector-icons';

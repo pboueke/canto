@@ -1,5 +1,18 @@
 # Changelog
 
+## v0.14.1 - Web Feature Implementations
+
+- feat: web backup export — generates ZIP in memory and triggers browser download via Blob URL
+- feat: web backup import — reads ZIP from DocumentPicker blob URL via `fetch()`, full import with ID regeneration and attachment rewriting
+- feat: web date/time picker — hidden HTML `<input type="date/time">` triggered via `.showPicker()` in PageHeader and FilterBar
+- feat: `GoogleAuthContext.web.tsx` — no-op provider (Google Sign-In library is sponsors-only on web); sync UI naturally hidden
+- feat: export modal restyled to match sync modal (progress bar, single action button, consistent spacing)
+- fix: removed intermediate ExportMenu dropdown — archive button opens export modal directly
+- fix: `LocationTag` uses Google Maps URL on web instead of unsupported `geo:` scheme
+- fix: cloud/sync button hidden in journal header on web
+- deps: updated expo-constants, expo-linking, expo-location, expo-router, expo-sharing, expo-splash-screen, jest-expo to Expo SDK 55 recommended versions
+- test: 46 new web tests — backup export/import (18), stubs/biometric/thumbnail/styles (13), GoogleAuthContext (8), encrypted storage ops (7)
+
 ## v0.14.0 - Web Platform Support
 
 - feat: full web platform support — app runs on `npx expo start --web` with IndexedDB storage and localStorage device keys

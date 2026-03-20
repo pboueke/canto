@@ -12,7 +12,7 @@ import { JournalHeader } from '@/components/journal/JournalHeader';
 import { PageListItem } from '@/components/journal/PageListItem';
 import { FilterBar } from '@/components/journal/FilterBar';
 import { JournalSettings } from '@/components/journal/JournalSettings';
-import { ExportMenu } from '@/components/journal/ExportMenu';
+// ExportMenu removed — header button opens ExportJournalModal directly
 import { ExportJournalModal } from '@/components/journal/ExportJournalModal';
 import { SyncModal } from '@/components/journal/SyncModal';
 import { FloatingActionButton } from '@/components/common/FloatingActionButton';
@@ -35,7 +35,7 @@ export default function JournalScreen() {
   const { syncJournal } = useSyncManager();
   const syncState = useSyncState(id ?? '');
   const [showSettings, setShowSettings] = useState(false);
-  const [showExportMenu, setShowExportMenu] = useState(false);
+  // showExportMenu removed — header opens modal directly
   const [showExportModal, setShowExportModal] = useState(false);
   const [showSyncModal, setShowSyncModal] = useState(false);
 
@@ -177,7 +177,7 @@ export default function JournalScreen() {
         <JournalHeader
           journal={journal}
           onPressSettings={() => setShowSettings(true)}
-          onPressExport={() => setShowExportMenu(true)}
+          onPressExport={() => setShowExportModal(true)}
           onPressSync={() => setShowSyncModal(true)}
           syncStatus={syncState.status}
           isSyncEnabled={journal.settings.syncProvider === 'gdrive'}
@@ -240,12 +240,6 @@ export default function JournalScreen() {
           }}
           backgroundColor={theme.colors.popAction.new.background}
           color={theme.colors.popAction.new.text}
-        />
-
-        <ExportMenu
-          visible={showExportMenu}
-          onClose={() => setShowExportMenu(false)}
-          onExport={() => setShowExportModal(true)}
         />
 
         <ExportJournalModal
