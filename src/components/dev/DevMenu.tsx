@@ -22,6 +22,7 @@ import {
   wipeAllData,
 } from '@/lib/devTools';
 import type { Journal, Page } from '@/models';
+import { webModalContent } from '@/styles/web';
 
 interface DevMenuProps {
   visible: boolean;
@@ -170,6 +171,7 @@ export function DevMenu({ visible, onClose }: DevMenuProps) {
         <View
           style={[
             styles.content,
+            webModalContent,
             {
               backgroundColor: theme.colors.foreground,
               borderColor: theme.colors.border,
@@ -308,6 +310,7 @@ export function DevMenu({ visible, onClose }: DevMenuProps) {
             <View
               style={[
                 styles.pickerContent,
+                webModalContent,
                 {
                   backgroundColor: theme.colors.foreground,
                   borderColor: theme.colors.border,
@@ -369,6 +372,7 @@ export function DevMenu({ visible, onClose }: DevMenuProps) {
             <View
               style={[
                 styles.pickerContent,
+                webModalContent,
                 {
                   backgroundColor: theme.colors.foreground,
                   borderColor: theme.colors.border,

@@ -5,6 +5,7 @@ import { useTheme } from '@/hooks/useTheme';
 import { useI18n } from '@/hooks/useI18n';
 import { exportJournal, type ExportProgress } from '@/lib/backup';
 import type { JournalContent } from '@/models';
+import { webModalContent } from '@/styles/web';
 
 interface ExportJournalModalProps {
   visible: boolean;
@@ -58,6 +59,7 @@ export function ExportJournalModal({
         <View
           style={[
             styles.content,
+            webModalContent,
             { backgroundColor: theme.colors.background, borderColor: theme.colors.border },
           ]}
         >

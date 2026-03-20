@@ -7,6 +7,7 @@ import { useI18n } from '@/hooks/useI18n';
 import { getLocalStore, getEncryptionService } from '@/hooks/useStorage';
 import { rotateKey } from '@/lib/encryption/device';
 import { aesGcmEncrypt, aesGcmDecrypt } from '@/lib/encryption/utils';
+import { webModalContent } from '@/styles/web';
 
 const AUTO_LOCK_KEY = 'canto_auto_lock_timeout';
 
@@ -99,6 +100,7 @@ export function SecuritySettingsModal({ visible, onClose }: SecuritySettingsModa
         <View
           style={[
             styles.content,
+            webModalContent,
             { backgroundColor: theme.colors.background, borderColor: theme.colors.border },
           ]}
         >

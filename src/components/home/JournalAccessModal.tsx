@@ -11,6 +11,7 @@ import {
 import { useTheme } from '@/hooks/useTheme';
 import { useI18n } from '@/hooks/useI18n';
 import { createUnlockRateLimiter } from '@/lib/encryption/ratelimit';
+import { webModalContent } from '@/styles/web';
 
 interface JournalAccessModalProps {
   visible: boolean;
@@ -69,6 +70,7 @@ export function JournalAccessModal({
         <View
           style={[
             styles.content,
+            webModalContent,
             {
               backgroundColor: theme.colors.foreground,
               borderColor: theme.colors.border,

@@ -1,5 +1,6 @@
 import 'react-native-get-random-values'; // CSPRNG polyfill — must be first import
 import { useCallback, useEffect, useState } from 'react';
+import { Platform, StyleSheet, View } from 'react-native';
 import { Stack } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFonts } from 'expo-font';
@@ -79,27 +80,39 @@ export default function RootLayout() {
           <JournalKeyProvider>
             <SyncManagerProvider>
               <StatusBar style={isDark ? 'light' : 'dark'} />
-              <Stack
-                screenOptions={{
-                  headerStyle: { backgroundColor: theme.colors.headerBackground },
-                  headerTintColor: theme.colors.text,
-                  contentStyle: { backgroundColor: theme.colors.background },
-                }}
+              <View
+                style={[layoutStyles.outer, { backgroundColor: isDark ? '#1a1a1a' : '#e8e8e8' }]}
               >
-                <Stack.Screen name="index" options={{ headerShown: false }} />
-                <Stack.Screen
-                  name="journal/[id]"
-                  options={{
-                    headerShown: false,
-                  }}
-                />
-                <Stack.Screen
-                  name="page/[id]"
-                  options={{
-                    headerShown: false,
-                  }}
-                />
-              </Stack>
+                <View
+                  style={[
+                    layoutStyles.inner,
+                    Platform.OS === 'web' && layoutStyles.innerWeb,
+                    { backgroundColor: theme.colors.background },
+                  ]}
+                >
+                  <Stack
+                    screenOptions={{
+                      headerStyle: { backgroundColor: theme.colors.headerBackground },
+                      headerTintColor: theme.colors.text,
+                      contentStyle: { backgroundColor: theme.colors.background },
+                    }}
+                  >
+                    <Stack.Screen name="index" options={{ headerShown: false }} />
+                    <Stack.Screen
+                      name="journal/[id]"
+                      options={{
+                        headerShown: false,
+                      }}
+                    />
+                    <Stack.Screen
+                      name="page/[id]"
+                      options={{
+                        headerShown: false,
+                      }}
+                    />
+                  </Stack>
+                </View>
+              </View>
             </SyncManagerProvider>
           </JournalKeyProvider>
         </GoogleAuthProvider>
@@ -107,3 +120,20 @@ export default function RootLayout() {
     </ThemeContext.Provider>
   );
 }
+
+const MAX_APP_WIDTH = 1200;
+
+const layoutStyles = StyleSheet.create({
+  outer: {
+    flex: 1,
+    alignItems: Platform.OS === 'web' ? 'center' : undefined,
+  },
+  inner: {
+    flex: 1,
+    width: '100%',
+    maxWidth: Platform.OS === 'web' ? MAX_APP_WIDTH : undefined,
+  },
+  innerWeb: {
+    boxShadow: '0 0 20px rgba(0, 0, 0, 0.15)',
+  },
+});

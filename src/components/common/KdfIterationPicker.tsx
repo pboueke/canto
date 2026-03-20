@@ -4,6 +4,7 @@ import { Feather } from '@expo/vector-icons';
 import { useTheme } from '@/hooks/useTheme';
 import { useI18n } from '@/hooks/useI18n';
 import { KDF_PRESETS } from '@/lib/encryption/password';
+import { webModalContent } from '@/styles/web';
 
 interface KdfIterationPickerProps {
   value: number;
@@ -74,6 +75,7 @@ export function KdfIterationPicker({ value, onChange }: KdfIterationPickerProps)
           <View
             style={[
               styles.explainContent,
+              webModalContent,
               { backgroundColor: theme.colors.background, borderColor: theme.colors.border },
             ]}
           >

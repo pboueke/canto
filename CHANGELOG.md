@@ -1,5 +1,25 @@
 # Changelog
 
+## v0.14.0 - Web Platform Support
+
+- feat: full web platform support — app runs on `npx expo start --web` with IndexedDB storage and localStorage device keys
+- feat: `local.web.ts` — IndexedDB-backed `LocalStore` implementation (single `files` object store, virtual path keys)
+- feat: `device.web.ts` — localStorage-backed device encryption key (with console security warning)
+- feat: `changelog.web.ts` — uses `fetch()` to load changelog asset on web
+- feat: `biometric.web.ts` — stub returning false/null (biometrics unavailable in browsers)
+- feat: `thumbnail.web.ts` — no-op stub (returns input unchanged, web has more bandwidth)
+- feat: `export.web.ts` / `import.web.ts` — stubs that throw "not supported on web"
+- feat: max-width 1200px app container on web with centered layout and subtle box-shadow
+- feat: max-width 1000px for all floating modals on web via shared `webModalContent` style
+- feat: image loading on web returns `data:image/jpeg;base64,...` URIs instead of writing to cache files
+- feat: file attachment reading on web uses `fetch()` + `FileReader` instead of `expo-file-system`
+- feat: file sharing on web triggers browser download via `Blob` + anchor element
+- fix: `PageListItem` thumbnail fallback uses data URI on web instead of `expo-file-system` cache file
+- fix: `app/page/[id].tsx` replaced top-level `expo-file-system` import with lazy `require()` behind `Platform.OS` checks
+- test: 36 new web-specific tests — IndexedDB storage (24), web device key (11), web compat regression (1)
+- test: regression test scans all source files and fails if any `expo-file-system`/`expo-secure-store` import lacks a `.web.ts` counterpart
+- deps: `fake-indexeddb` (devDependency for testing IndexedDB in Jest/Node)
+
 ## v0.12.1 - Security & Reliability Hardening
 
 - fix: race condition in parallel sync worker — shared index could cause skipped items

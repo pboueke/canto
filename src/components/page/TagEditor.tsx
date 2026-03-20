@@ -4,6 +4,7 @@ import { Feather } from '@expo/vector-icons';
 import { useTheme } from '@/hooks/useTheme';
 import { useI18n } from '@/hooks/useI18n';
 import { Tag } from '@/components/common/Tag';
+import { webModalContent } from '@/styles/web';
 
 interface TagEditorProps {
   tags: string[];
@@ -60,6 +61,7 @@ export function TagEditor({ tags, allJournalTags, editable, onChange }: TagEdito
           <View
             style={[
               styles.modalContent,
+              webModalContent,
               {
                 backgroundColor: theme.colors.foreground,
                 borderColor: theme.colors.border,

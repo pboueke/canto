@@ -14,6 +14,7 @@ import { useI18n } from '@/hooks/useI18n';
 import { PasswordStrengthMeter } from '@/components/common/PasswordStrengthMeter';
 import { KdfIterationPicker } from '@/components/common/KdfIterationPicker';
 import { DEFAULT_KDF_ITERATIONS } from '@/lib/encryption/password';
+import { webModalContent } from '@/styles/web';
 
 interface ChangePasswordModalProps {
   visible: boolean;
@@ -91,6 +92,7 @@ export function ChangePasswordModal({
         <View
           style={[
             styles.content,
+            webModalContent,
             { backgroundColor: theme.colors.background, borderColor: theme.colors.border },
           ]}
         >

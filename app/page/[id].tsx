@@ -1,12 +1,19 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import { ActivityIndicator, Alert, BackHandler, ScrollView, StyleSheet, View } from 'react-native';
+import {
+  ActivityIndicator,
+  Alert,
+  BackHandler,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  View,
+} from 'react-native';
 import { useLocalSearchParams, router } from 'expo-router';
 import { useNavigation } from '@react-navigation/native';
 import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
 import * as Location from 'expo-location';
 import * as Sharing from 'expo-sharing';
-import { Paths, File as ExpoFile } from 'expo-file-system';
 import { ThemeContext, useTheme } from '@/hooks/useTheme';
 import { useI18n } from '@/hooks/useI18n';
 import { type ThemeName, themes } from '@/styles/themes';
@@ -234,13 +241,31 @@ export default function PageScreen() {
       if (result.canceled || !result.assets[0]) return;
 
       const asset = result.assets[0];
-      const file = new ExpoFile(asset.uri);
-      const bytes = await file.bytes();
-      let b64 = '';
-      for (let i = 0; i < bytes.length; i++) {
-        b64 += String.fromCharCode(bytes[i]);
+      let b64: string;
+      let fileSize: number;
+      if (Platform.OS === 'web') {
+        const response = await fetch(asset.uri);
+        const blob = await response.blob();
+        fileSize = blob.size;
+        b64 = await new Promise<string>((resolve) => {
+          const reader = new FileReader();
+          reader.onloadend = () => {
+            const dataUrl = reader.result as string;
+            resolve(dataUrl.split(',')[1]);
+          };
+          reader.readAsDataURL(blob);
+        });
+      } else {
+        const { File: ExpoFile } = require('expo-file-system');
+        const file = new ExpoFile(asset.uri);
+        const bytes = await file.bytes();
+        fileSize = bytes.length;
+        let raw = '';
+        for (let i = 0; i < bytes.length; i++) {
+          raw += String.fromCharCode(bytes[i]);
+        }
+        b64 = btoa(raw);
       }
-      b64 = btoa(b64);
 
       const attachment: Attachment = {
         id: generateUUID(),
@@ -248,7 +273,7 @@ export default function PageScreen() {
         name: asset.name,
         type: 'file',
         encrypted,
-        size: bytes.length,
+        size: fileSize,
         deleted: false,
       };
 
@@ -319,15 +344,29 @@ export default function PageScreen() {
       const data = await getAttachment(file.path, file.encrypted);
       if (!data) return;
 
-      const tempDir = Paths.cache;
-      const tempFile = new ExpoFile(tempDir, file.name);
-      if (!tempFile.exists) {
-        tempFile.create({ intermediates: true });
+      if (Platform.OS === 'web') {
+        // On web, trigger a download via a temporary anchor element
+        const byteChars = atob(data);
+        const byteNumbers = new Uint8Array(byteChars.length);
+        for (let i = 0; i < byteChars.length; i++) byteNumbers[i] = byteChars.charCodeAt(i);
+        const blob = new Blob([byteNumbers]);
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = file.name;
+        a.click();
+        URL.revokeObjectURL(url);
+      } else {
+        const { Paths, File: ExpoFile } = require('expo-file-system');
+        const tempDir = Paths.cache;
+        const tempFile = new ExpoFile(tempDir, file.name);
+        if (!tempFile.exists) {
+          tempFile.create({ intermediates: true });
+        }
+        const decoded = atob(data);
+        tempFile.write(decoded);
+        await Sharing.shareAsync(tempFile.uri);
       }
-      const decoded = atob(data);
-      tempFile.write(decoded);
-
-      await Sharing.shareAsync(tempFile.uri);
     },
     [getAttachment],
   );
@@ -365,8 +404,12 @@ export default function PageScreen() {
     async (path: string): Promise<string | null> => {
       const data = await getAttachment(path, false);
       if (!data) return null;
-      // Yield before synchronous base64 decode + disk write
+      if (Platform.OS === 'web') {
+        return `data:image/jpeg;base64,${data}`;
+      }
+      // Native: write to cache file for better memory management
       await new Promise((r) => setTimeout(r, 0));
+      const { Paths, File: ExpoFile } = require('expo-file-system');
       const tmpFile = new ExpoFile(
         Paths.cache,
         `img-${Date.now()}-${Math.random().toString(36).slice(2)}.jpg`,
@@ -382,8 +425,12 @@ export default function PageScreen() {
     async (path: string): Promise<string | null> => {
       const data = await getAttachment(path, true);
       if (!data) return null;
-      // Yield before synchronous base64 decode + disk write
+      if (Platform.OS === 'web') {
+        return `data:image/jpeg;base64,${data}`;
+      }
+      // Native: write to cache file for better memory management
       await new Promise((r) => setTimeout(r, 0));
+      const { Paths, File: ExpoFile } = require('expo-file-system');
       const tmpFile = new ExpoFile(
         Paths.cache,
         `eimg-${Date.now()}-${Math.random().toString(36).slice(2)}.jpg`,

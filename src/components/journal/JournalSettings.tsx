@@ -30,6 +30,7 @@ import { ChangePasswordModal } from './ChangePasswordModal';
 import { isBiometricAvailable } from '@/lib/biometric';
 import { type ThemeName, themes } from '@/styles/themes';
 import type { JournalContent, JournalSettings as JournalSettingsType } from '@/models';
+import { webModalContent } from '@/styles/web';
 
 interface JournalSettingsProps {
   journal: JournalContent;
@@ -589,6 +590,7 @@ export function JournalSettings({
           <View
             style={[
               styles.nameModalContent,
+              webModalContent,
               { backgroundColor: theme.colors.background, borderColor: theme.colors.border },
             ]}
           >

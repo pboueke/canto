@@ -18,6 +18,7 @@ import { useSyncManager } from '@/contexts/SyncManagerContext';
 import { SyncProviderModal } from '@/components/home/SyncProviderModal';
 import type { RemoteJournalMeta } from '@/lib/sync';
 import type { SyncProvider } from '@/lib/sync/types';
+import { webModalContent } from '@/styles/web';
 
 const PROVIDER_LABELS: Record<SyncProvider, string> = {
   gdrive: 'Google',
@@ -176,6 +177,7 @@ export function AccountButton() {
           <View
             style={[
               styles.popover,
+              webModalContent,
               {
                 backgroundColor: theme.colors.foreground,
                 borderColor: theme.colors.border,
@@ -243,6 +245,7 @@ export function AccountButton() {
           <View
             style={[
               styles.manageContent,
+              webModalContent,
               {
                 backgroundColor: theme.colors.foreground,
                 borderColor: theme.colors.border,
@@ -371,6 +374,7 @@ export function AccountButton() {
           <View
             style={[
               styles.confirmContent,
+              webModalContent,
               {
                 backgroundColor: theme.colors.foreground,
                 borderColor: theme.colors.border,
