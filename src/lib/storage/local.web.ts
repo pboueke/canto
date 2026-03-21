@@ -393,6 +393,25 @@ export function createLocalStore(encryption: EncryptionService): LocalStore {
         encryption,
         derivedKey,
       );
+
+      // Clean up attachment entries from IDB (non-blocking)
+      const attachments = [...(page.images ?? []), ...(page.files ?? [])];
+      if (attachments.length > 0) {
+        Promise.resolve()
+          .then(async () => {
+            for (const att of attachments) {
+              const path = getAttachmentPath(journalId, pageId, att);
+              try {
+                await idbDelete(path);
+              } catch {
+                // Best-effort cleanup
+              }
+            }
+          })
+          .catch((err) => {
+            console.warn(`[Canto] Failed to clean up attachments for page ${pageId}:`, err);
+          });
+      }
     },
 
     async saveAttachment(

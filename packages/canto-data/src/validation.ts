@@ -145,6 +145,16 @@ export function validateGeoLocation(v: unknown, path = 'location'): GeoLocation 
   const o = v as Record<string, unknown>;
   checkNumber(`${path}.latitude`, o.latitude);
   checkNumber(`${path}.longitude`, o.longitude);
+  if ((o.latitude as number) < -90 || (o.latitude as number) > 90) {
+    throw new ValidationError(`${path}.latitude`, 'number in range [-90, 90]', String(o.latitude));
+  }
+  if ((o.longitude as number) < -180 || (o.longitude as number) > 180) {
+    throw new ValidationError(
+      `${path}.longitude`,
+      'number in range [-180, 180]',
+      String(o.longitude),
+    );
+  }
   checkOptionalType(`${path}.altitude`, o.altitude, 'number');
   checkOptionalType(`${path}.accuracy`, o.accuracy, 'number');
   return v as GeoLocation;
@@ -185,6 +195,9 @@ export function validatePage(v: unknown, path = 'page'): Page {
   checkArray(`${path}.tags`, o.tags);
   for (let i = 0; i < (o.tags as unknown[]).length; i++) {
     checkString(`${path}.tags[${i}]`, (o.tags as unknown[])[i]);
+    if (((o.tags as unknown[])[i] as string).trim() === '') {
+      throw new ValidationError(`${path}.tags[${i}]`, 'non-empty string', '""');
+    }
   }
   checkArray(`${path}.files`, o.files);
   for (let i = 0; i < (o.files as unknown[]).length; i++) {

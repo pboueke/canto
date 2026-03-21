@@ -16,6 +16,7 @@ export interface SyncState {
   status: SyncStatus;
   lastSynced: number | null; // unix ms
   error?: string;
+  errorStack?: string;
   progress?: SyncProgress;
 }
 
@@ -88,12 +89,13 @@ export class SyncManager {
       return result;
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
-      console.error(`[Canto] Sync failed for ${journalId}:`, message);
-      console.error(`[Canto] Full error:`, err);
+      const stack = err instanceof Error ? err.stack : undefined;
+      console.error(`[Canto] Sync failed for ${journalId}:`, err);
       this.setState(journalId, {
         status: 'error',
         lastSynced: lastSynced ?? null,
         error: message,
+        errorStack: stack,
       });
       return null;
     } finally {

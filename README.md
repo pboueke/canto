@@ -3,8 +3,8 @@
 A private, encrypted journaling app for Android, iOS, and Web.
 
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
-![Version](https://img.shields.io/badge/version-0.17.3-green)
-![Tests](https://img.shields.io/badge/tests-723%20passed-brightgreen)
+![Version](https://img.shields.io/badge/version-0.17.4-green)
+![Tests](https://img.shields.io/badge/tests-763%20passed-brightgreen)
 ![Platforms](https://img.shields.io/badge/platforms-Android%20%7C%20iOS%20%7C%20Web-lightgrey)
 
 ## Features

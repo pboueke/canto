@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, fireEvent } from '@testing-library/react-native';
+import { render, fireEvent, waitFor } from '@testing-library/react-native';
 import { Linking } from 'react-native';
 
 jest.mock('@/lib/changelog', () => ({
@@ -58,31 +58,45 @@ beforeEach(() => {
 });
 
 describe('InfoBox - Help button', () => {
-  it('renders the help button with the help title text', () => {
+  it('renders the help button with the help title text', async () => {
     const { getByText } = renderInfoBox();
-    expect(getByText(tDict.help.title)).toBeTruthy();
+    await waitFor(() => {
+      expect(getByText(tDict.help.title)).toBeTruthy();
+    });
   });
 
-  it('opens the help modal when the help button is pressed', () => {
+  it('opens the help modal when the help button is pressed', async () => {
     const { getByText, queryAllByText } = renderInfoBox();
+
+    await waitFor(() => {
+      expect(getByText(tDict.help.title)).toBeTruthy();
+    });
 
     // Press the help button (the first occurrence of help title text)
     fireEvent.press(getByText(tDict.help.title));
 
     // The modal should now show the help body text
-    expect(queryAllByText(tDict.help.body).length).toBeGreaterThanOrEqual(1);
+    await waitFor(() => {
+      expect(queryAllByText(tDict.help.body).length).toBeGreaterThanOrEqual(1);
+    });
   });
 
-  it('contains a GitHub issues link button in the help modal', () => {
+  it('contains a GitHub issues link button in the help modal', async () => {
     const { getByText } = renderInfoBox();
+
+    await waitFor(() => {
+      expect(getByText(tDict.help.title)).toBeTruthy();
+    });
 
     // Open help modal
     fireEvent.press(getByText(tDict.help.title));
 
+    await waitFor(() => {
+      expect(getByText(tDict.help.linkText)).toBeTruthy();
+    });
+
     // Find and press the link button
     const linkButton = getByText(tDict.help.linkText);
-    expect(linkButton).toBeTruthy();
-
     fireEvent.press(linkButton);
     expect(Linking.openURL).toHaveBeenCalledWith('https://github.com/pboueke/canto/issues');
   });

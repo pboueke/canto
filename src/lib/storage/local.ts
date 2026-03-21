@@ -312,6 +312,27 @@ export function createLocalStore(encryption: EncryptionService): LocalStore {
         encryption,
         derivedKey,
       );
+
+      // Clean up attachment files (non-blocking)
+      const attachments = [...(page.images ?? []), ...(page.files ?? [])];
+      if (attachments.length > 0) {
+        Promise.resolve()
+          .then(async () => {
+            for (const att of attachments) {
+              if (att.path) {
+                try {
+                  const file = new File(att.path);
+                  if (file.exists) file.delete();
+                } catch {
+                  // Best-effort cleanup
+                }
+              }
+            }
+          })
+          .catch((err) => {
+            console.warn(`[Canto] Failed to clean up attachments for page ${pageId}:`, err);
+          });
+      }
     },
 
     async saveAttachment(

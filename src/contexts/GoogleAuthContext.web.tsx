@@ -43,6 +43,17 @@ interface StoredAuth {
   retentionDays: RetentionDays;
 }
 
+const AUTH_TIMEOUT_MS = 15_000;
+
+function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error(`${label} timed out after ${ms}ms`)), ms),
+    ),
+  ]);
+}
+
 const GoogleAuthCtx = createContext<GoogleAuthState>({
   user: null,
   accessToken: null,
@@ -59,11 +70,25 @@ export function useGoogleAuth() {
   return useContext(GoogleAuthCtx);
 }
 
+function isValidStoredAuth(data: unknown): data is StoredAuth {
+  if (!data || typeof data !== 'object') return false;
+  const o = data as Record<string, unknown>;
+  return (
+    typeof o.accessToken === 'string' &&
+    typeof o.storedAt === 'number' &&
+    typeof o.retentionDays === 'number'
+  );
+}
+
 function readStoredAuth(): StoredAuth | null {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return null;
-    const data: StoredAuth = JSON.parse(raw);
+    const data = JSON.parse(raw);
+    if (!isValidStoredAuth(data)) {
+      localStorage.removeItem(STORAGE_KEY);
+      return null;
+    }
     // Check retention policy
     if (data.retentionDays > 0) {
       const expiresAt = data.storedAt + data.retentionDays * 24 * 60 * 60 * 1000;
@@ -193,7 +218,11 @@ export function GoogleAuthProvider({ children }: { children: ReactNode }) {
     // Token expired — try silent re-auth (user already granted consent)
     if (promptAsyncRef.current) {
       try {
-        const result = await promptAsyncRef.current();
+        const result = await withTimeout(
+          promptAsyncRef.current(),
+          AUTH_TIMEOUT_MS,
+          'Silent re-auth',
+        );
         if (result.type === 'success' && result.authentication?.accessToken) {
           const newToken = result.authentication.accessToken;
           const expiresIn = result.authentication.expiresIn ?? 3600;

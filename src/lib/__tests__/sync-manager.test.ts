@@ -368,6 +368,27 @@ describe('SyncManager', () => {
 
       expect(manager.getState('j1').error).toBe('string error');
     });
+
+    it('captures errorStack from Error objects', async () => {
+      const local = createMockLocalStore(null);
+      (local.getJournal as jest.Mock).mockRejectedValueOnce(new Error('stack test'));
+      const manager = new SyncManager(local, createMockRemoteStore());
+
+      await manager.syncJournal('j1', 'token');
+
+      expect(manager.getState('j1').errorStack).toBeDefined();
+      expect(manager.getState('j1').errorStack).toContain('stack test');
+    });
+
+    it('errorStack is undefined for non-Error throws', async () => {
+      const local = createMockLocalStore(null);
+      (local.getJournal as jest.Mock).mockRejectedValueOnce('plain string');
+      const manager = new SyncManager(local, createMockRemoteStore());
+
+      await manager.syncJournal('j1', 'token');
+
+      expect(manager.getState('j1').errorStack).toBeUndefined();
+    });
   });
 
   describe('multiple listeners', () => {
