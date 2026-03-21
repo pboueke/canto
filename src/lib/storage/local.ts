@@ -2,6 +2,7 @@ import { Paths, File, Directory } from 'expo-file-system';
 import type { Journal, JournalContent, Page, Attachment } from '@/data';
 import type { EncryptionService } from '@/lib/encryption';
 import { aesGcmEncrypt, aesGcmDecrypt } from '@/lib/encryption/utils';
+import { safeJsonParse } from '@/lib/utils/json';
 import type { LocalStore } from './types';
 
 const BASE_DIR_NAME = 'canto';
@@ -158,7 +159,7 @@ export function createLocalStore(encryption: EncryptionService): LocalStore {
     const file = getJournalsIndexFile();
     const raw = await readEncrypted(file, encryption);
     if (!raw) return { journals: [] };
-    return JSON.parse(raw) as JournalIndex;
+    return safeJsonParse<JournalIndex>(raw, 'journals index');
   }
 
   async function writeIndex(index: JournalIndex): Promise<void> {
@@ -192,7 +193,7 @@ export function createLocalStore(encryption: EncryptionService): LocalStore {
       const raw = await readEncrypted(metaFile, encryption, derivedKey);
       if (!raw) return null;
 
-      const metadata = JSON.parse(raw) as Omit<JournalContent, 'pages'>;
+      const metadata = safeJsonParse<Omit<JournalContent, 'pages'>>(raw, `journal:${id} metadata`);
 
       const pagesDirectory = getPagesDir(id);
       const pages: Page[] = [];
@@ -203,7 +204,7 @@ export function createLocalStore(encryption: EncryptionService): LocalStore {
           if (entry instanceof File && entry.uri.endsWith('.json')) {
             const pageRaw = await readEncrypted(entry, encryption, derivedKey);
             if (pageRaw) {
-              pages.push(JSON.parse(pageRaw) as Page);
+              pages.push(safeJsonParse<Page>(pageRaw, `page:${entry.name}`));
             }
           }
         }
@@ -280,7 +281,7 @@ export function createLocalStore(encryption: EncryptionService): LocalStore {
       const file = getPageFile(journalId, pageId);
       const raw = await readEncrypted(file, encryption, derivedKey);
       if (!raw) return null;
-      return JSON.parse(raw) as Page;
+      return safeJsonParse<Page>(raw, `page:${pageId}`);
     },
 
     async savePage(
@@ -458,7 +459,7 @@ export function createLocalStore(encryption: EncryptionService): LocalStore {
         if (!tmp.exists) tmp.create({ intermediates: true });
         tmp.write(reencrypted);
         moveFile(tmp, indexFile);
-        journals = (JSON.parse(decrypted) as JournalIndex).journals;
+        journals = safeJsonParse<JournalIndex>(decrypted, 'journals index').journals;
       }
       let processed = 0;
       const total = journals.length;

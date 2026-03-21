@@ -1,5 +1,20 @@
 # Changelog
 
+## v0.17.3 - Medium priority code quality and hardening fixes
+
+- fix: wire `existingIds` cloud import detection — dead fallback branch in filter, duplicate `generateUUID` removed
+- fix: FilterBar bidirectional debounce sync — `localQuery` now updates on all external `filter.query` changes
+- fix: try-catch around `saveAttachment` in image/file handlers — failed saves show error alert instead of adding broken attachments
+- fix: cloud import `Promise.all` → `Promise.allSettled` — one failed attachment download no longer aborts all others
+- fix: attachment `encrypted` flag preserves original value from backup instead of recalculating based on key availability
+- fix: GDrive `connect()` validates access token is non-empty
+- fix: folder cache key collision — always includes `parentId` (defaults to `'root'`)
+- fix: consistent `safeJsonParse` across all storage/import/sync code — extracted to `src/lib/utils/json.ts`
+- fix: runtime validation of imported journal metadata via `validateJournal()`
+- fix: IndexedDB transaction timeout (10s) and abort handlers on all IDB helpers
+- refactor: `handleOpenFile` delegates to `downloadAttachment` utility, removed duplicate web download logic
+- test: 4 new `safeJsonParse` tests, updated GDrive store error message assertions
+
 ## v0.17.2 - High priority data-integrity and safety fixes
 
 - fix: wire `existingIds` prop to `NewJournalModal` — cloud import "already local" detection was broken

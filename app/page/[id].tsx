@@ -14,7 +14,6 @@ import { useNavigation } from '@react-navigation/native';
 import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
 import * as Location from 'expo-location';
-import * as Sharing from 'expo-sharing';
 import { ThemeContext, useTheme } from '@/hooks/useTheme';
 import { useI18n } from '@/hooks/useI18n';
 import { type ThemeName, themes } from '@/styles/themes';
@@ -38,16 +37,8 @@ import { CommentList } from '@/components/page/CommentList';
 import { CommentModal } from '@/components/page/CommentModal';
 import { AddAttachmentPopup } from '@/components/page/AddAttachmentPopup';
 import { FloatingActionButton } from '@/components/common/FloatingActionButton';
+import { generateUUID } from '@/lib/encryption/utils';
 import type { Attachment, Comment, GeoLocation, Page } from '@/data';
-
-function generateUUID(): string {
-  const bytes = new Uint8Array(16);
-  crypto.getRandomValues(bytes);
-  bytes[6] = (bytes[6] & 0x0f) | 0x40;
-  bytes[8] = (bytes[8] & 0x3f) | 0x80;
-  const hex = Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
-  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
-}
 
 export default function PageScreen() {
   const { id, journalId, edit, themeOverride } = useLocalSearchParams<{
@@ -229,10 +220,13 @@ export default function PageScreen() {
         deleted: false,
       };
 
-      const path = await saveAttachment(journalId!, id!, attachment, base64Data);
-      attachment.path = path;
-
-      updateDraft({ images: [...draft.images, attachment] });
+      try {
+        const path = await saveAttachment(journalId!, id!, attachment, base64Data);
+        attachment.path = path;
+        updateDraft({ images: [...draft.images, attachment] });
+      } catch (err) {
+        Alert.alert('Error', err instanceof Error ? err.message : String(err));
+      }
     },
     [draft, journalId, id, saveAttachment, updateDraft],
   );
@@ -280,10 +274,13 @@ export default function PageScreen() {
         deleted: false,
       };
 
-      const path = await saveAttachment(journalId!, id!, attachment, b64);
-      attachment.path = path;
-
-      updateDraft({ files: [...draft.files, attachment] });
+      try {
+        const path = await saveAttachment(journalId!, id!, attachment, b64);
+        attachment.path = path;
+        updateDraft({ files: [...draft.files, attachment] });
+      } catch (err) {
+        Alert.alert('Error', err instanceof Error ? err.message : String(err));
+      }
     },
     [draft, journalId, id, saveAttachment, updateDraft],
   );
@@ -346,30 +343,7 @@ export default function PageScreen() {
     async (file: Attachment) => {
       const data = await getAttachment(file.path, file.encrypted);
       if (!data) return;
-
-      if (Platform.OS === 'web') {
-        // On web, trigger a download via a temporary anchor element
-        const byteChars = atob(data);
-        const byteNumbers = new Uint8Array(byteChars.length);
-        for (let i = 0; i < byteChars.length; i++) byteNumbers[i] = byteChars.charCodeAt(i);
-        const blob = new Blob([byteNumbers]);
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = file.name;
-        a.click();
-        URL.revokeObjectURL(url);
-      } else {
-        const { Paths, File: ExpoFile } = require('expo-file-system');
-        const tempDir = Paths.cache;
-        const tempFile = new ExpoFile(tempDir, file.name);
-        if (!tempFile.exists) {
-          tempFile.create({ intermediates: true });
-        }
-        const decoded = atob(data);
-        tempFile.write(decoded);
-        await Sharing.shareAsync(tempFile.uri);
-      }
+      await downloadAttachment(data, file.name);
     },
     [getAttachment],
   );
@@ -384,7 +358,7 @@ export default function PageScreen() {
         Alert.alert('Error', err instanceof Error ? err.message : String(err));
       }
     },
-    [getAttachment, t],
+    [getAttachment],
   );
 
   const handleSaveComment = useCallback(

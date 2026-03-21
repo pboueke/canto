@@ -7,7 +7,9 @@ import { aesGcmDecryptBytes, base64ToUint8, generateUUID } from '@/lib/encryptio
 import { deriveKey, LEGACY_KDF_ITERATIONS } from '@/lib/encryption/password';
 import type { ExportManifest } from '@/data/format';
 import { parseManifest } from '@/data/format';
+import { validateJournal } from '@/data';
 import { SCHEMA_VERSION } from '@/data/version';
+import { safeJsonParse } from '@/lib/utils/json';
 
 export interface AttachmentError {
   name: string;
@@ -116,15 +118,21 @@ export async function importJournal(
   // --- Read journal metadata ---
   const journalFile = zip.file('journal.json');
   if (!journalFile) throw new Error('Invalid backup: missing journal.json');
-  const journalData = JSON.parse(
+  const journalRaw = safeJsonParse<JournalContent>(
     await readEntry(journalFile, 'journal metadata'),
-  ) as JournalContent;
+    'journal metadata',
+  );
+  validateJournal(journalRaw);
+  const journalData = journalRaw;
 
   // --- Read settings ---
   let settings: JournalSettings = { ...DEFAULT_JOURNAL_SETTINGS };
   const settingsFile = zip.file('settings.json');
   if (settingsFile) {
-    settings = JSON.parse(await readEntry(settingsFile, 'settings'));
+    settings = safeJsonParse<JournalSettings>(
+      await readEntry(settingsFile, 'settings'),
+      'settings',
+    );
   }
 
   // Track whether the key was explicitly provided vs auto-derived.
@@ -148,7 +156,7 @@ export async function importJournal(
   let current = 0;
 
   for (const pf of pageFiles) {
-    const pageData = JSON.parse(await readEntry(pf, `page ${pf.name}`)) as Page;
+    const pageData = safeJsonParse<Page>(await readEntry(pf, `page ${pf.name}`), `page:${pf.name}`);
     const newPageId = generateUUID();
     pageIdMap.set(pageData.id, newPageId);
 
@@ -205,7 +213,7 @@ export async function importJournal(
 
     // Save a copy for each owning page
     for (const owner of owners) {
-      const reEncrypt = owner.encrypted && !!derivedKey;
+      const canReEncrypt = owner.encrypted && !!derivedKey;
       const newAttId = generateUUID();
 
       const attachment: Attachment = {
@@ -213,7 +221,7 @@ export async function importJournal(
         path: '', // Will be set by saveAttachment
         name: owner.name ?? `imported-${newAttId}.${ext}`,
         type: type as 'image' | 'file',
-        encrypted: reEncrypt,
+        encrypted: owner.encrypted,
         deleted: false,
       };
 
@@ -223,7 +231,7 @@ export async function importJournal(
           owner.pageId,
           attachment,
           data,
-          reEncrypt ? derivedKey : undefined,
+          canReEncrypt ? derivedKey : undefined,
         );
 
         pageAttachmentPaths.set(`${owner.pageId}:${zipFilename}`, savedPath);
@@ -249,8 +257,6 @@ export async function importJournal(
       return {
         ...att,
         path: newPath ?? att.path,
-        // Preserve password-encryption flag only when we have the key
-        encrypted: att.encrypted && !!derivedKey,
       };
     }),
     files: page.files.map((att) => {
@@ -258,7 +264,6 @@ export async function importJournal(
       return {
         ...att,
         path: newPath ?? att.path,
-        encrypted: att.encrypted && !!derivedKey,
       };
     }),
   }));

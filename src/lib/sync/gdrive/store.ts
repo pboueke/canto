@@ -1,18 +1,11 @@
 import type { JournalContent, Page } from '@/data';
 import type { RemoteStore, RemoteJournalMeta, DownloadResult } from '../types';
+import { safeJsonParse } from '@/lib/utils/json';
 import * as api from './api';
 
 /** Escape a string for use in a Google Drive API query (ODATA-style). */
 function escapeQuery(value: string): string {
   return value.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
-}
-
-function safeJsonParse<T>(content: string, label: string): T {
-  try {
-    return JSON.parse(content) as T;
-  } catch {
-    throw new Error(`[GDrive] Invalid JSON in ${label}`);
-  }
 }
 
 const REGISTRY_FILE = 'canto-journals.json';
@@ -44,6 +37,9 @@ export class GDriveRemoteStore implements RemoteStore {
   }
 
   async connect(credentials: { accessToken: string }): Promise<void> {
+    if (!credentials.accessToken) {
+      throw new Error('[GDrive] Access token is required');
+    }
     const isFirstConnect = this.accessToken === null;
     this.accessToken = credentials.accessToken;
     // Clear cache on first connection (stale entries from previous session)
@@ -111,7 +107,7 @@ export class GDriveRemoteStore implements RemoteStore {
   // ---------- folder resolution ----------
 
   private async getOrCreateFolder(name: string, parentId?: string): Promise<string> {
-    const cacheKey = parentId ? `folder:${parentId}/${name}` : `folder:${name}`;
+    const cacheKey = `folder:${parentId ?? 'root'}/${name}`;
     const cached = this.fileIdCache.get(cacheKey);
     if (cached) return cached;
 

@@ -15,9 +15,7 @@ const EMPTY_FILTER: Filter = {
 function matchesFilter(page: PagePreview, filter: Filter): boolean {
   if (filter.query) {
     const q = filter.query.toLowerCase();
-    const inText = page.searchText
-      ? page.searchText.includes(q)
-      : page.previewText.toLowerCase().includes(q);
+    const inText = page.searchText.includes(q);
     if (!inText) return false;
   }
 

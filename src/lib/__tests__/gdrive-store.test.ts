@@ -481,7 +481,7 @@ describe('GDriveRemoteStore', () => {
       ]);
       mockedApi.getFileContent.mockResolvedValueOnce('login required');
 
-      await expect(store.listRemoteJournals()).rejects.toThrow('[GDrive] Invalid JSON in registry');
+      await expect(store.listRemoteJournals()).rejects.toThrow('Invalid JSON in registry');
     });
 
     it('does not leak file content in error messages', async () => {
@@ -495,7 +495,7 @@ describe('GDriveRemoteStore', () => {
       ]);
       mockedApi.getFileContent.mockResolvedValueOnce('not json at all');
 
-      await expect(store.listRemoteJournals()).rejects.toThrow('[GDrive] Invalid JSON in registry');
+      await expect(store.listRemoteJournals()).rejects.toThrow('Invalid JSON in registry');
       // Verify the raw content is NOT in the error
     });
 
@@ -534,7 +534,7 @@ describe('GDriveRemoteStore', () => {
       mockedApi.getFileContent.mockResolvedValueOnce('corrupted data');
 
       await expect(store.downloadPage('journal-1', 'p1')).rejects.toThrow(
-        '[GDrive] Invalid JSON in page:p1',
+        'Invalid JSON in page:p1',
       );
     });
   });
