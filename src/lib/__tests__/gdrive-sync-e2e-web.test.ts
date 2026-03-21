@@ -441,11 +441,11 @@ describe('GDrive sync E2E (web platform)', () => {
     // Verify metadata is on remote by downloading it via a fresh store
     const store2 = new GDriveRemoteStore();
     await store2.connect({ accessToken: 'test-token' });
-    const remoteMeta = await store2.downloadJournalMeta('j1');
-    expect(remoteMeta!.title).toBe('Custom Title');
-    expect(remoteMeta!.icon).toBe('star');
-    expect(remoteMeta!.settings.use24h).toBe(true);
-    expect(remoteMeta!.settings.sort).toBe('ascending');
+    const remoteResult = await store2.downloadJournalMeta('j1');
+    expect(remoteResult!.content.title).toBe('Custom Title');
+    expect(remoteResult!.content.icon).toBe('star');
+    expect(remoteResult!.content.settings.use24h).toBe(true);
+    expect(remoteResult!.content.settings.sort).toBe('ascending');
   });
 
   it('soft-deleted pages not re-downloaded after sync', async () => {

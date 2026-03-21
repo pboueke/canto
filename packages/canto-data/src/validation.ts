@@ -54,6 +54,9 @@ function checkString(path: string, value: unknown): void {
 
 function checkNumber(path: string, value: unknown): void {
   checkType(path, value, 'number');
+  if (!Number.isFinite(value as number)) {
+    throw new ValidationError(path, 'finite number', String(value));
+  }
 }
 
 function checkBoolean(path: string, value: unknown): void {

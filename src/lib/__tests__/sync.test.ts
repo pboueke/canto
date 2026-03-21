@@ -74,7 +74,7 @@ function createMockRemoteStore(journal: JournalContent | null): RemoteStore {
         journal ? [{ id: journal.id, title: journal.title, lastModified: 0 }] : [],
       ),
     uploadJournalMeta: jest.fn(),
-    downloadJournalMeta: jest.fn().mockResolvedValue(journal),
+    downloadJournalMeta: jest.fn().mockResolvedValue(journal ? { content: journal } : null),
     uploadPage: jest.fn(),
     downloadPage: jest.fn().mockImplementation((_jId: string, pId: string) => {
       const page = journal?.pages.find((p) => p.id === pId);

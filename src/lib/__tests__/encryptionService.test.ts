@@ -1,4 +1,5 @@
 import { createEncryptionService } from '../encryption';
+import { _resetKeyCreationPromise } from '../encryption/device';
 
 jest.mock('expo-secure-store', () => {
   const store: Record<string, string> = {};
@@ -16,6 +17,7 @@ jest.mock('expo-secure-store', () => {
 
 afterEach(() => {
   require('expo-secure-store').__clear();
+  _resetKeyCreationPromise();
 });
 
 describe('EncryptionService', () => {

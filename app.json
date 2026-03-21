@@ -2,7 +2,7 @@
   "expo": {
     "name": "Canto",
     "slug": "canto",
-    "version": "0.17.0",
+    "version": "0.17.1",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",

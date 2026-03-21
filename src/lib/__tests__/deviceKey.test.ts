@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { createDeviceEncryption, rotateKey } from '../encryption/device';
+import { createDeviceEncryption, rotateKey, _resetKeyCreationPromise } from '../encryption/device';
 import { bytesToHex, hexToBytes } from '@noble/ciphers/utils.js';
 import * as SecureStore from 'expo-secure-store';
 
@@ -8,6 +8,7 @@ import * as SecureStore from 'expo-secure-store';
 describe('Device key — rotateKey', () => {
   beforeEach(() => {
     (globalThis as any).__secureStoreClear();
+    _resetKeyCreationPromise();
   });
 
   it('returns old and new keys as 32-byte Uint8Arrays', async () => {
@@ -79,6 +80,7 @@ describe('hex encoding round-trip', () => {
 describe('createDeviceEncryption — key lifecycle', () => {
   beforeEach(() => {
     (globalThis as any).__secureStoreClear();
+    _resetKeyCreationPromise();
   });
 
   it('first call creates key in SecureStore', async () => {

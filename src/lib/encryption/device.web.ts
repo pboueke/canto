@@ -29,15 +29,25 @@ if (typeof window !== 'undefined') {
   );
 }
 
-async function getOrCreateDeviceKey(): Promise<Uint8Array> {
-  const existing = localStorage.getItem(DEVICE_KEY_ALIAS);
-  if (existing) {
-    return hexToBytes(existing);
-  }
+let keyCreationPromise: Promise<Uint8Array> | null = null;
 
-  const key = getRandomBytes(32);
-  localStorage.setItem(DEVICE_KEY_ALIAS, bytesToHex(key));
-  return key;
+async function getOrCreateDeviceKey(): Promise<Uint8Array> {
+  if (!keyCreationPromise) {
+    keyCreationPromise = (async () => {
+      const existing = localStorage.getItem(DEVICE_KEY_ALIAS);
+      if (existing) {
+        return hexToBytes(existing);
+      }
+
+      const key = getRandomBytes(32);
+      localStorage.setItem(DEVICE_KEY_ALIAS, bytesToHex(key));
+      return key;
+    })().catch((err) => {
+      keyCreationPromise = null;
+      throw err;
+    });
+  }
+  return keyCreationPromise;
 }
 
 export async function rotateKey(): Promise<{ oldKey: Uint8Array; newKey: Uint8Array }> {
@@ -45,7 +55,14 @@ export async function rotateKey(): Promise<{ oldKey: Uint8Array; newKey: Uint8Ar
   const oldKey = existingHex ? hexToBytes(existingHex) : getRandomBytes(32);
   const newKey = getRandomBytes(32);
   localStorage.setItem(DEVICE_KEY_ALIAS, bytesToHex(newKey));
+  // Reset the cached promise so the next getOrCreateDeviceKey returns the new key
+  keyCreationPromise = null;
   return { oldKey, newKey };
+}
+
+/** @internal Reset module-level state for testing only. */
+export function _resetKeyCreationPromise(): void {
+  keyCreationPromise = null;
 }
 
 export function createDeviceEncryption(): EncryptionProvider {
@@ -74,6 +91,8 @@ export function createDeviceEncryption(): EncryptionProvider {
         cachedKey.fill(0);
         cachedKey = null;
       }
+      // Reset the module-level promise so the next getKey() re-reads from SecureStore
+      keyCreationPromise = null;
     },
   };
 }

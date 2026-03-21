@@ -1051,6 +1051,59 @@ describe('importJournal', () => {
     const imported = journals.find((j) => j.id === result.journalId);
     expect(imported!.icon).toBe('heart');
   });
+
+  it('collects attachment errors without failing the import', async () => {
+    const att = makeAttachment('a1', { name: 'photo.jpg', path: 'image-a1.jpg' });
+    const page = makePage('p1', { images: [att] });
+    const journal = makeJournal('j1', { title: 'Att Error Test' });
+
+    const uri = await buildZip({
+      manifest: {
+        version: 1,
+        appVersion: '0.9.0',
+        exportDate: '2026-03-13T00:00:00Z',
+        encrypted: false,
+        journalTitle: 'Att Error Test',
+      },
+      journalJson: JSON.stringify(journal),
+      pages: [{ id: 'p1', json: JSON.stringify(page) }],
+      attachments: [{ filename: 'image-a1.jpg', data: btoa('fake-image-data') }],
+    });
+
+    // Make saveAttachment throw on the first call
+    const originalSaveAttachment = mockStore.saveAttachment.bind(mockStore);
+    let callCount = 0;
+    jest.spyOn(mockStore, 'saveAttachment').mockImplementation(async (...args) => {
+      callCount++;
+      if (callCount === 1) {
+        throw new Error('Disk full');
+      }
+      return originalSaveAttachment(...args);
+    });
+
+    const saveJournalSpy = jest.spyOn(mockStore, 'saveJournal');
+
+    const result = await importJournal(uri, 'Att Error Test');
+
+    // Attachment error was collected
+    expect(result.attachmentErrors).toBeDefined();
+    expect(result.attachmentErrors).toHaveLength(1);
+    expect(result.attachmentErrors![0].name).toBe('photo.jpg');
+    expect(result.attachmentErrors![0].error).toBe('Disk full');
+
+    // Journal was still saved despite the attachment error
+    expect(saveJournalSpy).toHaveBeenCalled();
+
+    // The imported journal exists in the store
+    const loaded = await mockStore.getJournal(result.journalId);
+    expect(loaded).not.toBeNull();
+    expect(loaded!.title).toBe('Att Error Test');
+
+    // The failed attachment has an empty path
+    const importedAtt = loaded!.pages[0].images.find((a) => a.name === 'photo.jpg');
+    expect(importedAtt).toBeDefined();
+    expect(importedAtt!.path).toBe('');
+  });
 });
 
 // ===================================================================

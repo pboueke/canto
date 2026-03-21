@@ -294,6 +294,81 @@ describe('GDriveRemoteStore', () => {
     });
   });
 
+  describe('downloadJournalMeta', () => {
+    it('returns failure details when a page download fails', async () => {
+      await store.connect({ accessToken: TOKEN });
+
+      const page1 = makePage('p1', 1000);
+      const page2 = makePage('p2', 2000);
+
+      const folder = (id: string, name: string) => ({
+        id,
+        name,
+        mimeType: 'application/vnd.google-apps.folder',
+        modifiedTime: '',
+      });
+      const file = (id: string, name: string) => ({
+        id,
+        name,
+        mimeType: 'application/json',
+        modifiedTime: '',
+      });
+
+      // Resolve root folder
+      mockedApi.listFiles.mockResolvedValueOnce([folder('root-id', 'Canto')]);
+      // Resolve journal folder
+      mockedApi.listFiles.mockResolvedValueOnce([folder('j-id', 'journal-1')]);
+      // findFile for meta.json
+      mockedApi.listFiles.mockResolvedValueOnce([file('meta-id', 'meta.json')]);
+      // Resolve pages folder (journal folder already cached, just pages subfolder)
+      mockedApi.listFiles.mockResolvedValueOnce([folder('pages-id', 'pages')]);
+      // List page files in pages folder — 3 files
+      mockedApi.listFiles.mockResolvedValueOnce([
+        file('pf1', 'p1.json'),
+        file('pf2', 'p2.json'),
+        file('pf3', 'p3.json'),
+      ]);
+
+      const metaContent = JSON.stringify({
+        id: 'journal-1',
+        title: 'Test Journal',
+        icon: 'book',
+        date: '2026-01-01T00:00:00Z',
+        secure: false,
+        settings: {
+          use24h: false,
+          previewTags: true,
+          previewThumbnail: true,
+          previewIcons: true,
+          filterBar: true,
+          sort: 'descending',
+          autoLocation: false,
+          remoteSync: true,
+          autoSync: false,
+        },
+        version: 1,
+      });
+
+      // getFileContent: first call is meta.json, then page downloads
+      mockedApi.getFileContent
+        .mockResolvedValueOnce(metaContent) // meta.json
+        .mockResolvedValueOnce(JSON.stringify(page1)) // p1.json — success
+        .mockRejectedValueOnce(new Error('Network timeout')) // p2.json — failure
+        .mockResolvedValueOnce(JSON.stringify(page2)); // p3.json — success
+
+      const result = await store.downloadJournalMeta('journal-1');
+
+      expect(result).not.toBeNull();
+      expect(result!.content.pages).toHaveLength(2);
+      expect(result!.content.pages).toEqual(expect.arrayContaining([page1, page2]));
+      expect(result!.failures).toHaveLength(1);
+      expect(result!.failures![0]).toEqual({
+        name: 'p2.json',
+        reason: 'Network timeout',
+      });
+    });
+  });
+
   describe('deletePage', () => {
     it('deletes a page file', async () => {
       await store.connect({ accessToken: TOKEN });

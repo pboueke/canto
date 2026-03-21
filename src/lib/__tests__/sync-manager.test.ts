@@ -286,7 +286,9 @@ describe('SyncManager', () => {
       const key = new Uint8Array(32);
 
       // Make the remote store return a page to download
-      (remote.downloadJournalMeta as jest.Mock).mockResolvedValueOnce(makeJournal([remotePage]));
+      (remote.downloadJournalMeta as jest.Mock).mockResolvedValueOnce({
+        content: makeJournal([remotePage]),
+      });
       (remote.downloadPage as jest.Mock).mockResolvedValueOnce(remotePage);
 
       await manager.syncJournal('j1', 'token', key);
