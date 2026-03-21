@@ -1,11 +1,16 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { createDeviceEncryption, rotateKey, _resetKeyCreationPromise } from '../encryption/device';
+import {
+  createDeviceEncryption,
+  prepareKeyRotation,
+  commitKeyRotation,
+  _resetKeyCreationPromise,
+} from '../encryption/device';
 import { bytesToHex, hexToBytes } from '@noble/ciphers/utils.js';
 import * as SecureStore from 'expo-secure-store';
 
 // Uses global mock from jest.setup.ts
 
-describe('Device key — rotateKey', () => {
+describe('Device key — prepareKeyRotation / commitKeyRotation', () => {
   beforeEach(() => {
     (globalThis as any).__secureStoreClear();
     _resetKeyCreationPromise();
@@ -17,19 +22,31 @@ describe('Device key — rotateKey', () => {
     await device.encrypt('seed');
     device.clearKey!();
 
-    const { oldKey, newKey } = await rotateKey();
+    const { oldKey, newKey } = await prepareKeyRotation();
     expect(oldKey).toBeInstanceOf(Uint8Array);
     expect(newKey).toBeInstanceOf(Uint8Array);
     expect(oldKey.length).toBe(32);
     expect(newKey.length).toBe(32);
   });
 
-  it('stores new key in SecureStore', async () => {
+  it('prepareKeyRotation does NOT persist new key', async () => {
     const device = createDeviceEncryption();
     await device.encrypt('seed');
     device.clearKey!();
 
-    const { newKey } = await rotateKey();
+    const before = await SecureStore.getItemAsync('canto_device_encryption_key');
+    await prepareKeyRotation();
+    const after = await SecureStore.getItemAsync('canto_device_encryption_key');
+    expect(after).toBe(before);
+  });
+
+  it('commitKeyRotation persists new key in SecureStore', async () => {
+    const device = createDeviceEncryption();
+    await device.encrypt('seed');
+    device.clearKey!();
+
+    const { newKey } = await prepareKeyRotation();
+    await commitKeyRotation(newKey);
     const stored = await SecureStore.getItemAsync('canto_device_encryption_key');
     expect(stored).toBe(bytesToHex(newKey));
   });
@@ -40,12 +57,12 @@ describe('Device key — rotateKey', () => {
     device.clearKey!();
 
     const before = await SecureStore.getItemAsync('canto_device_encryption_key');
-    const { oldKey } = await rotateKey();
+    const { oldKey } = await prepareKeyRotation();
     expect(bytesToHex(oldKey)).toBe(before);
   });
 
   it('generates random oldKey when no existing key', async () => {
-    const { oldKey, newKey } = await rotateKey();
+    const { oldKey, newKey } = await prepareKeyRotation();
     expect(oldKey.length).toBe(32);
     expect(newKey.length).toBe(32);
     // They should be different (random)
@@ -57,7 +74,7 @@ describe('Device key — rotateKey', () => {
     await device.encrypt('seed');
     device.clearKey!();
 
-    const { oldKey, newKey } = await rotateKey();
+    const { oldKey, newKey } = await prepareKeyRotation();
     expect(bytesToHex(oldKey)).not.toBe(bytesToHex(newKey));
   });
 });

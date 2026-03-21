@@ -1,5 +1,17 @@
 # Changelog
 
+## v0.17.2 - High priority data-integrity and safety fixes
+
+- fix: wire `existingIds` prop to `NewJournalModal` — cloud import "already local" detection was broken
+- fix: auto-lock interval accumulation — use ref pattern to prevent effect re-registration on `clearAll` identity changes
+- fix: untracked promise in `scheduleSyncDebounced` — capture manager ref at call time, add staleness check and `.catch()` for OAuth failures
+- fix: `deserializePages` validates parsed pages via `validatePage()` instead of blind `as Page` cast
+- fix: malformed ZIP attachments now collected and returned as `skippedAttachments` in `ImportResult` instead of silently skipped
+- fix: `downloadPageAttachments` throws on null download instead of silently skipping — prevents pages saved with stale remote paths
+- fix: `reencryptJournal` wrapped in try-catch — restores original key on failure so journal remains accessible
+- fix: transactional key rotation — `rotateKey()` replaced with `prepareKeyRotation()` + `commitKeyRotation()` two-phase API; new key only persisted after re-encryption succeeds
+- test: 3 new `deserializePages` validation tests, updated device key rotation tests for two-phase API
+
 ## v0.17.1 - Critical data-corruption fixes
 
 - fix: race condition in store initialization — concurrent `ensureInitialized()` calls now share a single Promise instead of racing through a boolean flag

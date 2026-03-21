@@ -28,7 +28,8 @@ Object.defineProperty(globalThis, 'window', { value: undefined, writable: true }
 
 import {
   createDeviceEncryption,
-  rotateKey,
+  prepareKeyRotation,
+  commitKeyRotation,
   _resetKeyCreationPromise,
 } from '../encryption/device.web';
 
@@ -46,7 +47,7 @@ function hexToBytes(hex: string): Uint8Array {
 
 const DEVICE_KEY_ALIAS = 'canto_device_encryption_key';
 
-describe('Device key web — rotateKey', () => {
+describe('Device key web — prepareKeyRotation / commitKeyRotation', () => {
   beforeEach(() => {
     localStorageMock.clear();
     _resetKeyCreationPromise();
@@ -57,19 +58,31 @@ describe('Device key web — rotateKey', () => {
     await device.encrypt('seed');
     device.clearKey!();
 
-    const { oldKey, newKey } = await rotateKey();
+    const { oldKey, newKey } = await prepareKeyRotation();
     expect(oldKey).toBeInstanceOf(Uint8Array);
     expect(newKey).toBeInstanceOf(Uint8Array);
     expect(oldKey.length).toBe(32);
     expect(newKey.length).toBe(32);
   });
 
-  it('stores new key in localStorage', async () => {
+  it('prepareKeyRotation does NOT persist new key', async () => {
     const device = createDeviceEncryption();
     await device.encrypt('seed');
     device.clearKey!();
 
-    const { newKey } = await rotateKey();
+    const before = localStorageMock.getItem(DEVICE_KEY_ALIAS);
+    await prepareKeyRotation();
+    const after = localStorageMock.getItem(DEVICE_KEY_ALIAS);
+    expect(after).toBe(before);
+  });
+
+  it('commitKeyRotation persists new key in localStorage', async () => {
+    const device = createDeviceEncryption();
+    await device.encrypt('seed');
+    device.clearKey!();
+
+    const { newKey } = await prepareKeyRotation();
+    await commitKeyRotation(newKey);
     const stored = localStorageMock.getItem(DEVICE_KEY_ALIAS);
     expect(stored).toBe(bytesToHex(newKey));
   });
@@ -80,12 +93,12 @@ describe('Device key web — rotateKey', () => {
     device.clearKey!();
 
     const before = localStorageMock.getItem(DEVICE_KEY_ALIAS);
-    const { oldKey } = await rotateKey();
+    const { oldKey } = await prepareKeyRotation();
     expect(bytesToHex(oldKey)).toBe(before);
   });
 
   it('generates random oldKey when no existing key', async () => {
-    const { oldKey, newKey } = await rotateKey();
+    const { oldKey, newKey } = await prepareKeyRotation();
     expect(oldKey.length).toBe(32);
     expect(newKey.length).toBe(32);
     expect(bytesToHex(oldKey)).not.toBe(bytesToHex(newKey));
@@ -96,7 +109,7 @@ describe('Device key web — rotateKey', () => {
     await device.encrypt('seed');
     device.clearKey!();
 
-    const { oldKey, newKey } = await rotateKey();
+    const { oldKey, newKey } = await prepareKeyRotation();
     expect(bytesToHex(oldKey)).not.toBe(bytesToHex(newKey));
   });
 });

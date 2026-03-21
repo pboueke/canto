@@ -19,6 +19,7 @@ export interface ImportResult {
   journalId: string;
   title: string;
   attachmentErrors?: AttachmentError[];
+  skippedAttachments?: string[];
 }
 
 export interface ImportInfo {
@@ -137,6 +138,7 @@ export async function importJournal(
   // This ensures shared attachments get their own copy under each page's directory.
   const pageAttachmentPaths = new Map<string, string>();
   const attachmentErrors: AttachmentError[] = [];
+  const skippedAttachments: string[] = [];
 
   // --- Read pages ---
   const pageFiles = zip.file(/^pages\/.*\.json$/);
@@ -180,7 +182,10 @@ export async function importJournal(
     // Parse the zip filename to reconstruct attachment info
     // Format: {type}-{id}.{ext}
     const match = zipFilename.match(/^(image|file)-([^.]+)\.(.+)$/);
-    if (!match) continue;
+    if (!match) {
+      skippedAttachments.push(zipFilename);
+      continue;
+    }
 
     const [, type, oldAttId, ext] = match;
 
@@ -299,6 +304,7 @@ export async function importJournal(
     journalId: newJournalId,
     title,
     attachmentErrors: attachmentErrors.length > 0 ? attachmentErrors : undefined,
+    skippedAttachments: skippedAttachments.length > 0 ? skippedAttachments : undefined,
   };
 }
 

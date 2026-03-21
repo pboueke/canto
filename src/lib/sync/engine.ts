@@ -57,11 +57,12 @@ export class SyncEngine {
       const filename = filenameFromPath(att.path);
       const remotePath = this.remote.buildRemotePath(journalId, filename);
       const data = await this.remote.downloadAttachment(remotePath);
-      if (data) {
-        // Save without derivedKey: applies device encryption only, password layer preserved in data
-        const localPath = await this.local.saveAttachment(journalId, page.id, att, data);
-        att.path = localPath;
+      if (!data) {
+        throw new Error(`[Sync] Attachment not found on remote: ${remotePath} (page ${page.id})`);
       }
+      // Save without derivedKey: applies device encryption only, password layer preserved in data
+      const localPath = await this.local.saveAttachment(journalId, page.id, att, data);
+      att.path = localPath;
     });
   }
 
