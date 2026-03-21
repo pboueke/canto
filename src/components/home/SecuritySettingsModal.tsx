@@ -5,7 +5,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTheme } from '@/hooks/useTheme';
 import { useI18n } from '@/hooks/useI18n';
 import { getLocalStore, getEncryptionService } from '@/hooks/useStorage';
-import { rotateKey } from '@/lib/encryption/device';
+import { prepareKeyRotation, commitKeyRotation } from '@/lib/encryption/device';
 import { aesGcmEncrypt, aesGcmDecrypt } from '@/lib/encryption/utils';
 import { webModalContent } from '@/styles/web';
 
@@ -61,10 +61,9 @@ export function SecuritySettingsModal({ visible, onClose }: SecuritySettingsModa
             const store = await getLocalStore();
             const encryption = getEncryptionService();
 
-            // Grab the SecureStore key BEFORE rotation (may differ from
-            // the singleton's cached key if a previous rotation partially
-            // failed — re-encrypting the index but not journal data).
-            const { oldKey: secureStoreKey, newKey } = await rotateKey();
+            // Generate the new key WITHOUT persisting — only persist after
+            // re-encryption succeeds to avoid data loss on partial failure.
+            const { oldKey: secureStoreKey, newKey } = await prepareKeyRotation();
 
             // Try the singleton's cached key first (for journal data that
             // was never re-encrypted), fall back to the SecureStore key
@@ -81,6 +80,8 @@ export function SecuritySettingsModal({ visible, onClose }: SecuritySettingsModa
             const newEncrypt = (plaintext: string) => aesGcmEncrypt(plaintext, newKey);
 
             await store.reencryptAll(oldDecrypt, oldEncrypt, newEncrypt);
+            // Only persist the new key after re-encryption succeeds
+            await commitKeyRotation(newKey);
             // Clear the singleton's cached device key so it picks up the new one
             encryption.clearSession();
             Alert.alert(t.security.rotateSuccess);

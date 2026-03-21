@@ -50,14 +50,18 @@ async function getOrCreateDeviceKey(): Promise<Uint8Array> {
   return keyCreationPromise;
 }
 
-export async function rotateKey(): Promise<{ oldKey: Uint8Array; newKey: Uint8Array }> {
+/** Generate a new device key without persisting it. Call commitKeyRotation() after re-encryption succeeds. */
+export async function prepareKeyRotation(): Promise<{ oldKey: Uint8Array; newKey: Uint8Array }> {
   const existingHex = localStorage.getItem(DEVICE_KEY_ALIAS);
   const oldKey = existingHex ? hexToBytes(existingHex) : getRandomBytes(32);
   const newKey = getRandomBytes(32);
-  localStorage.setItem(DEVICE_KEY_ALIAS, bytesToHex(newKey));
-  // Reset the cached promise so the next getOrCreateDeviceKey returns the new key
-  keyCreationPromise = null;
   return { oldKey, newKey };
+}
+
+/** Persist the new device key after re-encryption succeeds. */
+export async function commitKeyRotation(newKey: Uint8Array): Promise<void> {
+  localStorage.setItem(DEVICE_KEY_ALIAS, bytesToHex(newKey));
+  keyCreationPromise = null;
 }
 
 /** @internal Reset module-level state for testing only. */

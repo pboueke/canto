@@ -1,6 +1,7 @@
 import type { Page, Attachment } from './types';
 import { SCHEMA_VERSION } from './version';
 import { ValidationError } from './validation';
+import { validatePage } from './validation';
 
 // ---------------------------------------------------------------------------
 // Export manifest
@@ -166,7 +167,8 @@ export function serializePages(pages: Page[]): Map<string, string> {
 export function deserializePages(entries: Map<string, string>): Page[] {
   const pages: Page[] = [];
   for (const [, json] of entries) {
-    pages.push(JSON.parse(json) as Page);
+    const parsed = JSON.parse(json);
+    pages.push(validatePage(parsed));
   }
   return pages;
 }

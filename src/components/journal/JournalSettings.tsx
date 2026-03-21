@@ -199,18 +199,32 @@ export function JournalSettings({
       };
 
       // Step 4: Atomic re-encryption with progress
-      await store.reencryptJournal(
-        updatedJournal,
-        derivedKey ?? undefined,
-        newKey,
-        (current, total) => {
-          setPasswordProgress(
-            t.journalSettings.reencryptProgress
-              .replace('{current}', String(current))
-              .replace('{total}', String(total)),
-          );
-        },
-      );
+      try {
+        await store.reencryptJournal(
+          updatedJournal,
+          derivedKey ?? undefined,
+          newKey,
+          (current, total) => {
+            setPasswordProgress(
+              t.journalSettings.reencryptProgress
+                .replace('{current}', String(current))
+                .replace('{total}', String(total)),
+            );
+          },
+        );
+      } catch (err) {
+        // Restore the original key so user can still access their data
+        if (derivedKey) {
+          setKey(journal.id, derivedKey);
+        } else {
+          clearKey(journal.id);
+        }
+        setPasswordProgress('');
+        throw new Error(
+          `Re-encryption failed: ${err instanceof Error ? err.message : String(err)}. ` +
+            `Your journal data is unchanged — the original password still works.`,
+        );
+      }
 
       // Step 5: Update key cache
       if (!newPwd) {

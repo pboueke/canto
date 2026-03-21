@@ -18,6 +18,7 @@ export interface ImportResult {
   journalId: string;
   title: string;
   attachmentErrors?: AttachmentError[];
+  skippedAttachments?: string[];
 }
 
 export interface ImportInfo {
@@ -118,6 +119,7 @@ export async function importJournal(
   const pageIdMap = new Map<string, string>();
   const pageAttachmentPaths = new Map<string, string>();
   const attachmentErrors: AttachmentError[] = [];
+  const skippedAttachments: string[] = [];
 
   // --- Read pages ---
   const pageFiles = zip.file(/^pages\/.*\.json$/);
@@ -152,7 +154,10 @@ export async function importJournal(
     }
 
     const match = zipFilename.match(/^(image|file)-([^.]+)\.(.+)$/);
-    if (!match) continue;
+    if (!match) {
+      skippedAttachments.push(zipFilename);
+      continue;
+    }
 
     const [, type, oldAttId, ext] = match;
 
@@ -248,6 +253,7 @@ export async function importJournal(
     journalId: newJournalId,
     title,
     attachmentErrors: attachmentErrors.length > 0 ? attachmentErrors : undefined,
+    skippedAttachments: skippedAttachments.length > 0 ? skippedAttachments : undefined,
   };
 }
 

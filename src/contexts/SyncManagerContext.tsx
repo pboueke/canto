@@ -102,11 +102,16 @@ export function SyncManagerProvider({ children }: { children: ReactNode }) {
   const scheduleSyncDebounced = useCallback(
     (journalId: string, derivedKey?: Uint8Array) => {
       if (!accessToken || !managerRef.current) return;
-      getAccessToken().then((token) => {
-        if (token && managerRef.current) {
-          managerRef.current.scheduleSyncDebounced(journalId, token, derivedKey);
-        }
-      });
+      const manager = managerRef.current;
+      getAccessToken()
+        .then((token) => {
+          if (token && managerRef.current === manager) {
+            manager.scheduleSyncDebounced(journalId, token, derivedKey);
+          }
+        })
+        .catch((err) => {
+          console.error('[Canto] Failed to get access token for sync:', err);
+        });
     },
     [accessToken, getAccessToken],
   );

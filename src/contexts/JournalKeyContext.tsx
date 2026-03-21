@@ -36,6 +36,7 @@ export function JournalKeyProvider({ children }: { children: ReactNode }) {
   const keysRef = useRef(new Map<string, Uint8Array>());
   const lastActivityRef = useRef(Date.now());
   const backgroundedAtRef = useRef<number | null>(null);
+  const clearAllRef = useRef<() => void>(() => {});
 
   const deriveAndCache = useCallback(
     async (journalId: string, password: string, saltBase64: string, iterations?: number) => {
@@ -81,6 +82,9 @@ export function JournalKeyProvider({ children }: { children: ReactNode }) {
     lastActivityRef.current = Date.now();
   }, []);
 
+  // Keep clearAllRef in sync so effects use the latest clearAll without re-registering
+  clearAllRef.current = clearAll;
+
   // Auto-lock: check on app foreground resume
   useEffect(() => {
     const subscription = AppState.addEventListener('change', async (state) => {
@@ -91,12 +95,12 @@ export function JournalKeyProvider({ children }: { children: ReactNode }) {
         backgroundedAtRef.current = null;
         const timeout = await getAutoLockTimeout();
         if (timeout > 0 && elapsed >= timeout && keysRef.current.size > 0) {
-          clearAll();
+          clearAllRef.current();
         }
       }
     });
     return () => subscription.remove();
-  }, [clearAll]);
+  }, []);
 
   // Auto-lock: periodic inactivity check while foregrounded
   useEffect(() => {
@@ -104,11 +108,11 @@ export function JournalKeyProvider({ children }: { children: ReactNode }) {
       if (keysRef.current.size === 0) return;
       const timeout = await getAutoLockTimeout();
       if (timeout > 0 && Date.now() - lastActivityRef.current >= timeout) {
-        clearAll();
+        clearAllRef.current();
       }
     }, 30_000);
     return () => clearInterval(interval);
-  }, [clearAll]);
+  }, []);
 
   return (
     <JournalKeyContext.Provider

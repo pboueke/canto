@@ -234,6 +234,7 @@ export default function HomeScreen() {
         onClose={() => setShowNewModal(false)}
         onCreate={handleCreate}
         existingTitles={journals.map((j) => j.title)}
+        existingIds={journals.map((j) => j.id)}
         onImportComplete={async (journalId) => {
           await refresh();
           router.push(`/journal/${journalId}`);

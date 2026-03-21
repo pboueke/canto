@@ -221,6 +221,41 @@ describe('rewriteAttachmentPaths', () => {
 // serializePages / deserializePages
 // ---------------------------------------------------------------------------
 
+describe('deserializePages validation', () => {
+  test('throws ValidationError for page missing required id', () => {
+    const entries = new Map([['bad.json', JSON.stringify({ text: 'no id' })]]);
+    expect(() => deserializePages(entries)).toThrow(ValidationError);
+  });
+
+  test('throws ValidationError for page with wrong type for text', () => {
+    const entries = new Map([
+      [
+        'bad.json',
+        JSON.stringify({
+          id: 'p1',
+          text: 123,
+          date: '2026-01-01T00:00:00.000Z',
+          tags: [],
+          files: [],
+          images: [],
+          comments: [],
+          modified: Date.now(),
+          deleted: false,
+        }),
+      ],
+    ]);
+    expect(() => deserializePages(entries)).toThrow(ValidationError);
+  });
+
+  test('accepts valid pages', () => {
+    const page = makePage();
+    const entries = new Map([['p1.json', JSON.stringify(page)]]);
+    const result = deserializePages(entries);
+    expect(result).toHaveLength(1);
+    expect(result[0].id).toBe('p1');
+  });
+});
+
 describe('page serialization', () => {
   test('round-trips pages through serialize/deserialize', () => {
     const pages = [makePage({ id: 'p1' }), makePage({ id: 'p2', text: 'Second' })];
