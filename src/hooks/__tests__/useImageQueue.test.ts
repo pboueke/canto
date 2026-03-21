@@ -76,6 +76,90 @@ describe('useImageQueue', () => {
     expect(result.current.loadedImages).toEqual({});
   });
 
+  it('skips already-loading attachments when enqueuing', async () => {
+    // Use a load that never resolves so the image stays in "loading" state
+    const loadImage = jest.fn().mockImplementation(() => new Promise<string | null>(() => {}));
+    const { result } = renderHook(() => useImageQueue(loadImage));
+
+    await act(async () => {
+      result.current.enqueue([makeAttachment('dup1')]);
+      await Promise.resolve();
+    });
+
+    // img is now loading — enqueue the same attachment again
+    loadImage.mockClear();
+    await act(async () => {
+      result.current.enqueue([makeAttachment('dup1')]);
+      await Promise.resolve();
+    });
+
+    // Should not have been called again since it's already loading
+    expect(loadImage).not.toHaveBeenCalled();
+  });
+
+  it('skips duplicate entries already queued but not yet started', async () => {
+    // Use a load that never resolves so processNext stays blocked on the first item
+    const loadImage = jest.fn().mockImplementation(() => new Promise<string | null>(() => {}));
+    const { result } = renderHook(() => useImageQueue(loadImage));
+
+    // Enqueue two different images — first starts loading, second sits in queue
+    await act(async () => {
+      result.current.enqueue([makeAttachment('q1'), makeAttachment('q2')]);
+      await Promise.resolve();
+    });
+
+    // Enqueue q2 again — should be skipped because it's already in the queue
+    await act(async () => {
+      result.current.enqueue([makeAttachment('q2')]);
+      await Promise.resolve();
+    });
+
+    // loadImage should only have been called once (for q1)
+    expect(loadImage).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not update state after unmount during enqueue callback', async () => {
+    const loadImage = jest.fn().mockResolvedValue('data:abc');
+    const { result, unmount } = renderHook(() => useImageQueue(loadImage));
+
+    unmount();
+
+    // Enqueue after unmount — InteractionManager callback fires but mountedRef is false
+    await act(async () => {
+      result.current.enqueue([makeAttachment('unmounted1')]);
+      await Promise.resolve();
+    });
+
+    // loadImage should NOT have been called because enqueue bails when unmounted
+    expect(loadImage).not.toHaveBeenCalled();
+  });
+
+  it('does not update state when component unmounts before load resolves', async () => {
+    let resolveLoad: (v: string | null) => void;
+    const loadImage = jest
+      .fn()
+      .mockImplementation(() => new Promise<string | null>((resolve) => (resolveLoad = resolve)));
+    const { result, unmount } = renderHook(() => useImageQueue(loadImage));
+
+    await act(async () => {
+      result.current.enqueue([makeAttachment('unmount1')]);
+      await Promise.resolve();
+    });
+
+    // Unmount before the load resolves
+    unmount();
+
+    // Now resolve the load — should not update loadedImages since unmounted
+    await act(async () => {
+      resolveLoad!('data:unmounted');
+      await Promise.resolve();
+      jest.runAllTimers();
+      await Promise.resolve();
+    });
+
+    expect(result.current.loadedImages).not.toHaveProperty('unmount1');
+  });
+
   it('cancelAll marks pending entries as cancelled', async () => {
     // Use a load that never resolves until we say so
     const resolvers: Array<(v: string | null) => void> = [];
@@ -99,6 +183,10 @@ describe('useImageQueue', () => {
     await act(async () => {
       resolvers[0]('data:abc');
       await Promise.resolve();
+      await Promise.resolve();
+      // processNext fires via setTimeout — it should encounter the cancelled img2 entry
+      jest.runAllTimers();
+      await Promise.resolve();
     });
 
     // img2 was still in queue when cancelled, so it should never load
@@ -107,6 +195,13 @@ describe('useImageQueue', () => {
 });
 
 describe('enqueueThumbnail', () => {
+  beforeEach(() => {
+    jest.useFakeTimers();
+  });
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
   it('calls load and resolves via onLoaded', async () => {
     const data = 'data:thumb';
     const load = jest.fn().mockResolvedValue(data);
@@ -118,6 +213,11 @@ describe('enqueueThumbnail', () => {
 
     expect(load).toHaveBeenCalled();
     expect(onLoaded).toHaveBeenCalledWith(data);
+
+    // Drain the finally setTimeout
+    await Promise.resolve();
+    jest.runAllTimers();
+    await Promise.resolve();
   });
 
   it('cancel prevents onLoaded from being called', async () => {
@@ -137,6 +237,58 @@ describe('enqueueThumbnail', () => {
     });
 
     expect(onLoaded).not.toHaveBeenCalled();
+
+    // Drain the finally setTimeout
+    await Promise.resolve();
+    jest.runAllTimers();
+    await Promise.resolve();
+  });
+
+  it('serialises concurrent thumbnail loads (thumbnailActive guard)', async () => {
+    // First thumbnail — block it so thumbnailActive stays true
+    let resolveFirst: (v: string | null) => void;
+    const load1 = jest
+      .fn()
+      .mockImplementation(() => new Promise<string | null>((resolve) => (resolveFirst = resolve)));
+    const onLoaded1 = jest.fn();
+
+    enqueueThumbnail('s1', load1, onLoaded1);
+    // Flush microtasks for InteractionManager + processThumbnailQueue
+    await Promise.resolve();
+    await Promise.resolve();
+
+    // Second thumbnail — should be queued, not started because first is active
+    const load2 = jest.fn().mockResolvedValue('thumb2');
+    const onLoaded2 = jest.fn();
+    enqueueThumbnail('s2', load2, onLoaded2);
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(load1).toHaveBeenCalled();
+    expect(load2).not.toHaveBeenCalled();
+
+    // Resolve first thumbnail
+    resolveFirst!('thumb1');
+    // Flush the .then/.finally chain
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+    // Now the setTimeout(processThumbnailQueue, 0) fires
+    jest.runAllTimers();
+    // Flush the second load's promise chain
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(onLoaded1).toHaveBeenCalledWith('thumb1');
+    expect(load2).toHaveBeenCalled();
+    expect(onLoaded2).toHaveBeenCalledWith('thumb2');
+
+    // Drain: let the second task's finally run
+    await Promise.resolve();
+    await Promise.resolve();
+    jest.runAllTimers();
+    await Promise.resolve();
   });
 
   it('handles load failure by resolving null', async () => {
@@ -144,10 +296,17 @@ describe('enqueueThumbnail', () => {
     const onLoaded = jest.fn();
 
     enqueueThumbnail('t3', load, onLoaded);
+    // Flush InteractionManager + processThumbnailQueue + catch chain
+    await Promise.resolve();
+    await Promise.resolve();
     await Promise.resolve();
     await Promise.resolve();
     await Promise.resolve();
 
     expect(onLoaded).toHaveBeenCalledWith(null);
+
+    // Drain the finally setTimeout
+    jest.runAllTimers();
+    await Promise.resolve();
   });
 });

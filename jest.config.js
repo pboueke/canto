@@ -20,14 +20,22 @@ const config = {
   collectCoverageFrom: [
     'src/**/*.{ts,tsx}',
     'packages/canto-data/src/**/*.ts',
-    'app/**/*.{ts,tsx}',
     '!**/*.d.ts',
     '!src/components/**',
     '!app/**',
+    '!src/data/**',
+    '!src/lib/encryption/types.ts',
+    '!src/lib/storage/types.ts',
+    '!src/lib/sync/types.ts',
+    '!src/lib/devTools.ts',
+    '!**/__tests__/**',
   ],
   coverageThreshold: {
     global: {
-      statements: 80,
+      statements: 95,
+      branches: 90,
+      functions: 95,
+      lines: 95,
     },
   },
 };

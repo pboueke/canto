@@ -1,4 +1,13 @@
-import { aesGcmEncrypt, aesGcmDecrypt, generateSalt } from '../encryption/utils';
+import {
+  aesGcmEncrypt,
+  aesGcmDecrypt,
+  aesGcmEncryptBytes,
+  aesGcmDecryptBytes,
+  generateSalt,
+  generateUUID,
+  uint8ToBase64,
+  base64ToUint8,
+} from '../encryption/utils';
 import { createPasswordEncryption } from '../encryption/password';
 
 describe('AES-256-GCM encryption', () => {
@@ -73,6 +82,78 @@ describe('AES-256-GCM encryption', () => {
     const ciphertext = await aesGcmEncrypt(plaintext, key);
     const decrypted = await aesGcmDecrypt(ciphertext, key);
     expect(decrypted).toBe(plaintext);
+  });
+});
+
+describe('AES key length validation', () => {
+  const shortKey = new Uint8Array(16);
+  shortKey.fill(0xab);
+
+  it('aesGcmEncrypt rejects non-32-byte key', async () => {
+    await expect(aesGcmEncrypt('test', shortKey)).rejects.toThrow('expected 32 bytes');
+  });
+
+  it('aesGcmDecrypt rejects non-32-byte key', async () => {
+    await expect(aesGcmDecrypt('AAAA', shortKey)).rejects.toThrow('expected 32 bytes');
+  });
+
+  it('aesGcmEncryptBytes rejects non-32-byte key', async () => {
+    await expect(aesGcmEncryptBytes('test', shortKey)).rejects.toThrow('expected 32 bytes');
+  });
+
+  it('aesGcmDecryptBytes rejects non-32-byte key', async () => {
+    await expect(aesGcmDecryptBytes(new Uint8Array(100), shortKey)).rejects.toThrow(
+      'expected 32 bytes',
+    );
+  });
+});
+
+describe('aesGcmEncryptBytes / aesGcmDecryptBytes', () => {
+  const key = new Uint8Array(32);
+  key.fill(0xab);
+
+  it('encrypts and decrypts round-trip', async () => {
+    const plaintext = 'Hello bytes!';
+    const encrypted = await aesGcmEncryptBytes(plaintext, key);
+    expect(encrypted).toBeInstanceOf(Uint8Array);
+    const decrypted = await aesGcmDecryptBytes(encrypted, key);
+    expect(decrypted).toBe(plaintext);
+  });
+
+  it('rejects too-short ciphertext', async () => {
+    const tooShort = new Uint8Array(10); // less than NONCE_LENGTH + TAG_LENGTH (28)
+    await expect(aesGcmDecryptBytes(tooShort, key)).rejects.toThrow('too short');
+  });
+});
+
+describe('base64 round-trip', () => {
+  it('round-trips arbitrary bytes', () => {
+    const bytes = new Uint8Array([1, 2, 3, 4, 5]);
+    const b64 = uint8ToBase64(bytes);
+    const result = base64ToUint8(b64);
+    expect(result).toEqual(bytes);
+  });
+
+  it('strips whitespace and BOM from base64 input', () => {
+    const bytes = new Uint8Array([1, 2, 3]);
+    const b64 = uint8ToBase64(bytes);
+    // Insert whitespace and non-base64 chars
+    const dirty = `  ${b64}  \n`;
+    const result = base64ToUint8(dirty);
+    expect(result).toEqual(bytes);
+  });
+});
+
+describe('generateUUID', () => {
+  it('returns a valid UUID v4 format', () => {
+    const uuid = generateUUID();
+    expect(uuid).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
+  });
+
+  it('returns different values on each call', () => {
+    const uuid1 = generateUUID();
+    const uuid2 = generateUUID();
+    expect(uuid1).not.toBe(uuid2);
   });
 });
 

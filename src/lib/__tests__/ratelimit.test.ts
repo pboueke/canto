@@ -97,6 +97,40 @@ describe('Rate limiter — escalating lockout', () => {
     expect(await limiter2.attempt()).toBe(false); // 6th — locked
   });
 
+  it('triggers 5min lockout at >10 attempts', async () => {
+    const AsyncStorage = require('@react-native-async-storage/async-storage').default;
+    // Seed state with 10 attempts and no active lockout
+    await AsyncStorage.setItem(
+      'canto_unlock_rate_limit',
+      JSON.stringify({ attempts: 10, lockedUntil: 0 }),
+    );
+
+    const limiter = createUnlockRateLimiter();
+    // 11th attempt should trigger >10 lockout (5 minutes)
+    const result = await limiter.attempt();
+    expect(result).toBe(false);
+    const remaining = await limiter.lockoutRemaining();
+    expect(remaining).toBeGreaterThan(30_000); // more than 30s
+    expect(remaining).toBeLessThanOrEqual(5 * 60_000); // at most 5 min
+  });
+
+  it('triggers 30min lockout at >15 attempts', async () => {
+    const AsyncStorage = require('@react-native-async-storage/async-storage').default;
+    // Seed state with 15 attempts and no active lockout
+    await AsyncStorage.setItem(
+      'canto_unlock_rate_limit',
+      JSON.stringify({ attempts: 15, lockedUntil: 0 }),
+    );
+
+    const limiter = createUnlockRateLimiter();
+    // 16th attempt should trigger >15 lockout (30 minutes)
+    const result = await limiter.attempt();
+    expect(result).toBe(false);
+    const remaining = await limiter.lockoutRemaining();
+    expect(remaining).toBeGreaterThan(5 * 60_000); // more than 5 min
+    expect(remaining).toBeLessThanOrEqual(30 * 60_000); // at most 30 min
+  });
+
   it('handles corrupted AsyncStorage JSON', async () => {
     const AsyncStorage = require('@react-native-async-storage/async-storage').default;
     await AsyncStorage.setItem('canto_unlock_rate_limit', '{invalid json!!!');

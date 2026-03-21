@@ -207,6 +207,29 @@ describe('Google Drive API helper', () => {
     });
   });
 
+  describe('fetchWithRetry network error retry', () => {
+    it('retries on network error (fetch throws) and succeeds', async () => {
+      // Speed up the 1s retry delay
+      const origSetTimeout = globalThis.setTimeout;
+      globalThis.setTimeout = ((fn: () => void) => origSetTimeout(fn, 0)) as typeof setTimeout;
+
+      // First call throws (network error), second call succeeds
+      (global.fetch as jest.Mock)
+        .mockRejectedValueOnce(new Error('Network error'))
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          text: () => Promise.resolve(JSON.stringify({ files: [] })),
+        });
+
+      const result = await listFiles(TOKEN, "name = 'test'");
+      expect(result).toEqual([]);
+      expect(global.fetch).toHaveBeenCalledTimes(2);
+
+      globalThis.setTimeout = origSetTimeout;
+    });
+  });
+
   describe('error diagnostics', () => {
     it('does not leak response body in error messages', async () => {
       mockFetchError(403, 'insufficient permissions for this file');

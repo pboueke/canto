@@ -97,8 +97,18 @@ describe('type guards', () => {
     expect(isComment({ id: 'c1', text: 'A comment' })).toBe(false);
   });
 
+  test('isComment rejects non-object', () => {
+    expect(isComment(null)).toBe(false);
+    expect(isComment('string')).toBe(false);
+  });
+
   test('isAttachment accepts valid attachment', () => {
     expect(isAttachment(makeAttachment())).toBe(true);
+  });
+
+  test('isAttachment rejects non-object', () => {
+    expect(isAttachment(null)).toBe(false);
+    expect(isAttachment('string')).toBe(false);
   });
 
   test('isAttachment rejects invalid type enum', () => {
@@ -109,6 +119,11 @@ describe('type guards', () => {
     expect(isPage(makePage())).toBe(true);
   });
 
+  test('isPage rejects non-object', () => {
+    expect(isPage(null)).toBe(false);
+    expect(isPage('string')).toBe(false);
+  });
+
   test('isPage rejects missing arrays', () => {
     expect(isPage({ ...makePage(), tags: 'not-array' })).toBe(false);
   });
@@ -117,8 +132,13 @@ describe('type guards', () => {
     expect(isJournal(makeJournal())).toBe(true);
   });
 
+  test('isJournal rejects non-object', () => {
+    expect(isJournal(null)).toBe(false);
+    expect(isJournal('string')).toBe(false);
+  });
+
   test('isJournal rejects missing secure', () => {
-    const { secure: _, ...rest } = makeJournal();
+    const { secure: _secure, ...rest } = makeJournal();
     expect(isJournal(rest)).toBe(false);
   });
 
@@ -126,8 +146,13 @@ describe('type guards', () => {
     expect(isJournalContent(makeJournalContent())).toBe(true);
   });
 
+  test('isJournalContent rejects non-journal', () => {
+    expect(isJournalContent(null)).toBe(false);
+    expect(isJournalContent('string')).toBe(false);
+  });
+
   test('isJournalContent rejects missing pages', () => {
-    const { pages: _, ...rest } = makeJournalContent();
+    const { pages: _pages, ...rest } = makeJournalContent();
     expect(isJournalContent(rest)).toBe(false);
   });
 });
@@ -168,6 +193,20 @@ describe('structural validators', () => {
   test('validatePage validates nested attachments', () => {
     const page = makePage({
       images: [makeAttachment({ type: 'badtype' })],
+    });
+    expect(() => validatePage(page)).toThrow(ValidationError);
+  });
+
+  test('validatePage validates nested file attachments', () => {
+    const page = makePage({
+      files: [makeAttachment({ type: 'file' })],
+    });
+    expect(validatePage(page)).toBeDefined();
+  });
+
+  test('validatePage rejects invalid file attachment', () => {
+    const page = makePage({
+      files: [makeAttachment({ type: 'badtype' })],
     });
     expect(() => validatePage(page)).toThrow(ValidationError);
   });

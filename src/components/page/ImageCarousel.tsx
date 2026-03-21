@@ -17,7 +17,8 @@ import { useImageQueue } from '@/hooks/useImageQueue';
 import type { Attachment } from '@/data';
 
 const SCREEN_WIDTH = Dimensions.get('window').width;
-const IMAGE_WIDTH = SCREEN_WIDTH - 20;
+const HORIZONTAL_PADDING = 10;
+const IMAGE_WIDTH = SCREEN_WIDTH - HORIZONTAL_PADDING * 4;
 const IMAGE_HEIGHT = 250;
 
 interface ImageCarouselProps {
@@ -84,11 +85,15 @@ export function ImageCarousel({
       <FlatList
         data={activeImages}
         horizontal
-        pagingEnabled
         showsHorizontalScrollIndicator={false}
+        snapToInterval={IMAGE_WIDTH + HORIZONTAL_PADDING}
+        decelerationRate="fast"
+        contentContainerStyle={{ paddingHorizontal: HORIZONTAL_PADDING }}
         keyExtractor={(item) => item.id}
         onMomentumScrollEnd={(e) => {
-          const index = Math.round(e.nativeEvent.contentOffset.x / IMAGE_WIDTH);
+          const index = Math.round(
+            e.nativeEvent.contentOffset.x / (IMAGE_WIDTH + HORIZONTAL_PADDING),
+          );
           setCurrentIndex(index);
         }}
         renderItem={({ item, index }) => {
@@ -220,6 +225,7 @@ const styles = StyleSheet.create({
   imageWrapper: {
     height: IMAGE_HEIGHT,
     position: 'relative',
+    marginRight: HORIZONTAL_PADDING,
   },
   image: {
     width: '100%',

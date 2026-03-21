@@ -480,6 +480,41 @@ describe('exportJournal', () => {
     expect(zipUri).toContain('My_Journal');
   });
 
+  it('encrypts attachments when encrypted=true and derivedKey provided', async () => {
+    const key = new Uint8Array(32);
+    key.fill(0xab);
+
+    const att = makeAttachment('att1', { encrypted: true });
+    const page = makePage('p1', { images: [att] });
+    const journal = makeJournal('j1', {
+      title: 'Enc Att Export',
+      secure: true,
+      salt: 'dGVzdA==',
+      kdfIterations: 50000,
+      pages: [page],
+    });
+    await mockStore.saveJournal(journal);
+
+    // Save attachment data
+    const validBase64 = btoa('fake-image-data');
+    const savedUri = await mockStore.saveAttachment('j1', 'p1', att, validBase64, key);
+    att.path = savedUri;
+    page.images[0].path = savedUri;
+
+    await exportJournal(journal, true, key);
+
+    const zipUri = Object.keys(filesystem).find((k) => k.endsWith('.canto.zip'))!;
+    const zip = await JSZip.loadAsync(filesystem[zipUri], { base64: true });
+    const attFiles = zip.file(/^attachments\//);
+    expect(attFiles).toHaveLength(1);
+
+    // Attachment should be encrypted binary (not raw base64 text)
+    const attData = await attFiles[0].async('uint8array');
+    // Decrypt and verify
+    const decrypted = await aesGcmDecryptBytes(attData, key);
+    expect(decrypted).toBeTruthy();
+  });
+
   it('deduplicates attachments shared across pages', async () => {
     const sharedPath = '/mock-docs/canto/j1/attachments/img-shared-123.jpg';
     const att1: Attachment = {
@@ -512,6 +547,22 @@ describe('exportJournal', () => {
     const zip = await JSZip.loadAsync(filesystem[zipUri], { base64: true });
     const attFiles = zip.file(/^attachments\//);
     expect(attFiles).toHaveLength(1);
+  });
+
+  it('overwrites existing ZIP file at the output path', async () => {
+    const journal = makeJournal('j1', { title: 'Overwrite', pages: [] });
+    await mockStore.saveJournal(journal);
+
+    // Pre-populate the exact output path that export will use
+    const safeName = journal.title.replace(/[^a-zA-Z0-9_-]/g, '_');
+    const expectedPath = `/mock-cache/exports/${safeName}.canto.zip`;
+    filesystem[expectedPath] = 'old-zip-data';
+
+    await exportJournal(journal, false);
+
+    // The file should now contain new data (not the old placeholder)
+    expect(filesystem[expectedPath]).not.toBe('old-zip-data');
+    expect(filesystem[expectedPath]).toBeTruthy();
   });
 
   it('handles journal with no pages', async () => {
@@ -892,6 +943,16 @@ describe('importJournal', () => {
     await expect(importJournal(uri, 'Bad')).rejects.toThrow('missing journal.json');
   });
 
+  it('importJournal throws on missing manifest.json', async () => {
+    const zip = new JSZip();
+    zip.file('journal.json', '{}');
+    const base64 = await zip.generateAsync({ type: 'base64' });
+    const uri = '/mock-cache/no-manifest.zip';
+    filesystem[uri] = base64;
+
+    await expect(importJournal(uri, 'Bad')).rejects.toThrow('missing manifest.json');
+  });
+
   it('encrypted import preserves password protection', async () => {
     const key = new Uint8Array(32);
     key.fill(0xab);
@@ -985,6 +1046,74 @@ describe('importJournal', () => {
     expect(importedPlain!.encrypted).toBe(false);
   });
 
+  it('auto-derives key for unencrypted backup with salt and no provided key', async () => {
+    // This tests the auto-derive path: manifest has salt, backup is unencrypted, no key provided
+    const att = makeAttachment('a1', { encrypted: true, name: 'secret.jpg', path: 'image-a1.jpg' });
+    const page = makePage('p1', { images: [att] });
+    const journal = makeJournal('j1', {
+      title: 'Auto Derive',
+      secure: false,
+      salt: 'dGVzdHNhbHQ=',
+      kdfIterations: 50000,
+    });
+
+    const uri = await buildZip({
+      manifest: {
+        version: 1,
+        appVersion: '0.9.0',
+        exportDate: '2026-03-13T00:00:00Z',
+        encrypted: false,
+        salt: 'dGVzdHNhbHQ=',
+        kdfIterations: 50000,
+        journalTitle: 'Auto Derive',
+      },
+      journalJson: JSON.stringify(journal),
+      pages: [{ id: 'p1', json: JSON.stringify(page) }],
+      attachments: [{ filename: 'image-a1.jpg', data: btoa('image-data') }],
+    });
+
+    // No key provided — should auto-derive from empty password
+    const result = await importJournal(uri, 'Auto Derive');
+    expect(result.journalId).toBeTruthy();
+    // Import should complete successfully even without explicit key
+    const loaded = await mockStore.getJournal(result.journalId);
+    expect(loaded).not.toBeNull();
+  });
+
+  it('rewrites file attachment paths during import', async () => {
+    const fileAtt: Attachment = {
+      id: 'f1',
+      path: 'file-f1.pdf',
+      name: 'document.pdf',
+      type: 'file',
+      encrypted: false,
+      deleted: false,
+    };
+    const page = makePage('p1', { files: [fileAtt], images: [] });
+    const journal = makeJournal('j1', { title: 'File Att Test' });
+
+    const uri = await buildZip({
+      manifest: {
+        version: 1,
+        appVersion: '0.9.0',
+        exportDate: '2026-03-13T00:00:00Z',
+        encrypted: false,
+        journalTitle: 'File Att Test',
+      },
+      journalJson: JSON.stringify(journal),
+      pages: [{ id: 'p1', json: JSON.stringify(page) }],
+      attachments: [{ filename: 'file-f1.pdf', data: btoa('pdf-data') }],
+    });
+
+    const result = await importJournal(uri, 'File Att Test');
+    const loaded = await mockStore.getJournal(result.journalId);
+    expect(loaded).not.toBeNull();
+    expect(loaded!.pages[0].files).toHaveLength(1);
+    // Path should have been rewritten to new storage path
+    expect(loaded!.pages[0].files[0].path).toBeTruthy();
+    expect(loaded!.pages[0].files[0].path).not.toBe('file-f1.pdf');
+  });
+
   it('reports progress during import', async () => {
     const pages = [makePage('p1'), makePage('p2')];
     const uri = await buildZip({
@@ -1050,6 +1179,93 @@ describe('importJournal', () => {
     const journals = await mockStore.listJournals();
     const imported = journals.find((j) => j.id === result.journalId);
     expect(imported!.icon).toBe('heart');
+  });
+
+  it('skips attachments with unrecognized filename format', async () => {
+    const page = makePage('p1');
+    const journal = makeJournal('j1', { title: 'Skip Test' });
+
+    const uri = await buildZip({
+      manifest: {
+        version: 1,
+        appVersion: '0.9.0',
+        exportDate: '2026-03-13T00:00:00Z',
+        encrypted: false,
+        journalTitle: 'Skip Test',
+      },
+      journalJson: JSON.stringify(journal),
+      pages: [{ id: 'p1', json: JSON.stringify(page) }],
+      attachments: [{ filename: 'badly-named-file.jpg', data: btoa('data') }],
+    });
+
+    const result = await importJournal(uri, 'Skip Test');
+    expect(result.skippedAttachments).toBeDefined();
+    expect(result.skippedAttachments).toContain('badly-named-file.jpg');
+  });
+
+  it('skips orphan attachments not referenced by any page', async () => {
+    // Page has no images/files, but ZIP has an attachment
+    const page = makePage('p1', { images: [], files: [] });
+    const journal = makeJournal('j1', { title: 'Orphan Test' });
+
+    const uri = await buildZip({
+      manifest: {
+        version: 1,
+        appVersion: '0.9.0',
+        exportDate: '2026-03-13T00:00:00Z',
+        encrypted: false,
+        journalTitle: 'Orphan Test',
+      },
+      journalJson: JSON.stringify(journal),
+      pages: [{ id: 'p1', json: JSON.stringify(page) }],
+      attachments: [{ filename: 'image-orphan1.jpg', data: btoa('orphan-data') }],
+    });
+
+    const result = await importJournal(uri, 'Orphan Test');
+    // Import should succeed — the orphan attachment is simply ignored
+    expect(result.journalId).toBeTruthy();
+    // No attachment errors since it was just skipped
+    expect(result.attachmentErrors).toBeUndefined();
+  });
+
+  it('throws when encrypted attachment decryption fails', async () => {
+    const key = new Uint8Array(32);
+    key.fill(0xab);
+    const wrongKey = new Uint8Array(32);
+    wrongKey.fill(0xcd);
+
+    const att = makeAttachment('a1', { name: 'secret.jpg', path: 'image-a1.jpg', encrypted: true });
+    const page = makePage('p1', { images: [att] });
+    const journal = makeJournal('j1', {
+      title: 'Dec Fail',
+      secure: true,
+      salt: 'dGVzdA==',
+      kdfIterations: 50000,
+    });
+
+    // Encrypt attachment data with correctKey
+    const { aesGcmEncryptBytes: enc } = require('../encryption/utils');
+    await enc(btoa('image-binary'), key);
+
+    const uri = await buildZip({
+      manifest: {
+        version: 1,
+        appVersion: '0.9.0',
+        exportDate: '2026-03-13T00:00:00Z',
+        encrypted: true,
+        salt: 'dGVzdA==',
+        kdfIterations: 50000,
+        journalTitle: 'Dec Fail',
+      },
+      journalJson: await aesGcmEncryptBytes(JSON.stringify(journal), key),
+      settingsJson: await aesGcmEncryptBytes(JSON.stringify(journal.settings), key),
+      pages: [{ id: 'p1', json: await aesGcmEncryptBytes(JSON.stringify(page), key) }],
+      // Encrypt attachment with WRONG key so decryption fails
+      attachments: [{ filename: 'image-a1.jpg', data: await aesGcmEncryptBytes('data', wrongKey) }],
+    });
+
+    // Decrypt journal with correct key, but attachment decryption will fail
+    await expect(importJournal(uri, 'Dec Fail', key)).rejects.toThrow();
   });
 
   it('collects attachment errors without failing the import', async () => {

@@ -13,6 +13,7 @@ import type { ExportManifest } from '../backup/export.web';
 import { inspectBackup, importJournal } from '../backup/import.web';
 import type { EncryptionService } from '../encryption';
 import type { JournalContent, Page, Attachment } from '@/data';
+import { aesGcmEncryptBytes, aesGcmDecryptBytes } from '../encryption/utils';
 
 // ---------------------------------------------------------------------------
 // Mocks
@@ -211,6 +212,54 @@ describe('exportJournal (web)', () => {
     const zip = await JSZip.loadAsync(arrayBuffer);
     expect(zip.file('pages/p1.json')).not.toBeNull();
     expect(zip.file('pages/p-deleted.json')).toBeNull();
+  });
+
+  it('encrypts attachments when encrypted=true and derivedKey provided', async () => {
+    const key = new Uint8Array(32);
+    key.fill(0xab);
+
+    const att: Attachment = {
+      id: 'att1',
+      path: '',
+      name: 'secret.jpg',
+      type: 'image',
+      encrypted: true,
+      deleted: false,
+    };
+    const attPath = await mockTestStore.saveAttachment(
+      'j1',
+      'p1',
+      att,
+      btoa('secret-image-bytes'),
+      key,
+    );
+
+    const page = makePage('p1');
+    page.images = [{ ...att, path: attPath }];
+    const journal = makeJournal('j1', [page]);
+    journal.secure = true;
+    journal.salt = 'dGVzdA==';
+    journal.kdfIterations = 50000;
+    await mockTestStore.saveJournal(journal);
+
+    let capturedBlob: unknown = null;
+    mockCreateObjectURL.mockImplementation((blob: unknown) => {
+      capturedBlob = blob;
+      return 'blob:mock';
+    });
+
+    await exportJournal(journal, true, key);
+
+    expect(capturedBlob).not.toBeNull();
+    const arrayBuffer = await (capturedBlob as Blob).arrayBuffer();
+    const zip = await JSZip.loadAsync(arrayBuffer);
+    const attFiles = zip.file(/^attachments\//);
+    expect(attFiles.length).toBe(1);
+
+    // Attachment should be encrypted binary — verify by decrypting
+    const encBytes = await attFiles[0].async('uint8array');
+    const decrypted = await aesGcmDecryptBytes(encBytes, key);
+    expect(decrypted).toBeTruthy();
   });
 
   it('includes attachments in export', async () => {
@@ -536,7 +585,499 @@ describe('importJournal (web)', () => {
     expect(progress.some((p) => p.phase === 'pages')).toBe(true);
   });
 
-  it('throws on missing manifest', async () => {
+  it('imports encrypted backup with correct key', async () => {
+    const key = new Uint8Array(32);
+    key.fill(0xab);
+
+    const page = {
+      id: 'p1',
+      text: 'Secret content',
+      date: '2026-01-01',
+      tags: [],
+      files: [],
+      images: [],
+      comments: [],
+      modified: 1000,
+      deleted: false,
+    };
+    const journal = {
+      id: 'j1',
+      title: 'Encrypted',
+      icon: 'lock',
+      date: '2026-01-01',
+      secure: true,
+      salt: 'dGVzdA==',
+      kdfIterations: 50000,
+    };
+
+    const zip = new JSZip();
+    zip.file(
+      'manifest.json',
+      JSON.stringify({
+        version: 1,
+        appVersion: '0.14.0',
+        exportDate: '2026-01-01',
+        encrypted: true,
+        salt: 'dGVzdA==',
+        kdfIterations: 50000,
+        journalTitle: 'Encrypted',
+      }),
+    );
+    zip.file('journal.json', await aesGcmEncryptBytes(JSON.stringify(journal), key));
+    zip.file(
+      'settings.json',
+      await aesGcmEncryptBytes(
+        JSON.stringify({
+          use24h: false,
+          previewTags: true,
+          previewThumbnail: true,
+          previewIcons: true,
+          filterBar: true,
+          sort: 'descending',
+          autoLocation: false,
+          remoteSync: false,
+          autoSync: false,
+        }),
+        key,
+      ),
+    );
+    zip.file('pages/p1.json', await aesGcmEncryptBytes(JSON.stringify(page), key));
+    fetchResponse = await zip.generateAsync({ type: 'arraybuffer' });
+
+    const result = await importJournal('blob:mock', 'Encrypted', key);
+
+    const stored = await mockTestStore.getJournal(result.journalId, key);
+    expect(stored).not.toBeNull();
+    expect(stored!.pages).toHaveLength(1);
+    expect(stored!.pages[0].text).toBe('Secret content');
+  });
+
+  it('imports encrypted backup with encrypted attachments', async () => {
+    const key = new Uint8Array(32);
+    key.fill(0xab);
+
+    const page = {
+      id: 'p1',
+      text: 'With enc att',
+      date: '2026-01-01',
+      tags: [],
+      files: [],
+      images: [
+        {
+          id: 'att1',
+          path: 'image-att1.jpg',
+          name: 'photo.jpg',
+          type: 'image',
+          encrypted: true,
+          deleted: false,
+        },
+      ],
+      comments: [],
+      modified: 1000,
+      deleted: false,
+    };
+    const journal = {
+      id: 'j1',
+      title: 'Enc Att',
+      icon: 'lock',
+      date: '2026-01-01',
+      secure: true,
+      salt: 'dGVzdA==',
+      kdfIterations: 50000,
+    };
+
+    const zip = new JSZip();
+    zip.file(
+      'manifest.json',
+      JSON.stringify({
+        version: 1,
+        appVersion: '0.14.0',
+        exportDate: '2026-01-01',
+        encrypted: true,
+        salt: 'dGVzdA==',
+        kdfIterations: 50000,
+        journalTitle: 'Enc Att',
+      }),
+    );
+    zip.file('journal.json', await aesGcmEncryptBytes(JSON.stringify(journal), key));
+    zip.file(
+      'settings.json',
+      await aesGcmEncryptBytes(
+        JSON.stringify({
+          use24h: false,
+          previewTags: true,
+          previewThumbnail: true,
+          previewIcons: true,
+          filterBar: true,
+          sort: 'descending',
+          autoLocation: false,
+          remoteSync: false,
+          autoSync: false,
+        }),
+        key,
+      ),
+    );
+    zip.file('pages/p1.json', await aesGcmEncryptBytes(JSON.stringify(page), key));
+    zip.file('attachments/image-att1.jpg', await aesGcmEncryptBytes(btoa('image-data'), key));
+    fetchResponse = await zip.generateAsync({ type: 'arraybuffer' });
+
+    const result = await importJournal('blob:mock', 'Enc Att', key);
+
+    const stored = await mockTestStore.getJournal(result.journalId, key);
+    expect(stored).not.toBeNull();
+    expect(stored!.pages[0].images).toHaveLength(1);
+    expect(stored!.pages[0].images[0].path).toBeTruthy();
+  });
+
+  it('auto-derives key for unencrypted backup with salt', async () => {
+    const zip = new JSZip();
+    zip.file(
+      'manifest.json',
+      JSON.stringify({
+        version: 1,
+        appVersion: '0.14.0',
+        exportDate: '2026-01-01',
+        encrypted: false,
+        salt: 'dGVzdHNhbHQ=',
+        kdfIterations: 50000,
+        journalTitle: 'Auto Derive',
+      }),
+    );
+    zip.file(
+      'journal.json',
+      JSON.stringify({
+        id: 'j1',
+        title: 'Auto Derive',
+        icon: 'book',
+        date: '2026-01-01',
+        secure: false,
+        salt: 'dGVzdHNhbHQ=',
+        kdfIterations: 50000,
+      }),
+    );
+    zip.file(
+      'pages/p1.json',
+      JSON.stringify({
+        id: 'p1',
+        text: 'Auto derive test',
+        date: '2026-01-01',
+        tags: [],
+        files: [],
+        images: [
+          {
+            id: 'att1',
+            path: 'image-att1.jpg',
+            name: 'photo.jpg',
+            type: 'image',
+            encrypted: true,
+            deleted: false,
+          },
+        ],
+        comments: [],
+        modified: 1000,
+        deleted: false,
+      }),
+    );
+    zip.file('attachments/image-att1.jpg', 'fakeimagebytes');
+    fetchResponse = await zip.generateAsync({ type: 'arraybuffer' });
+
+    const result = await importJournal('blob:mock', 'Auto Derive');
+    expect(result.journalId).toBeTruthy();
+  });
+
+  it('skips attachments with unrecognized filename format', async () => {
+    const zip = new JSZip();
+    zip.file(
+      'manifest.json',
+      JSON.stringify({
+        version: 1,
+        appVersion: '0.14.0',
+        exportDate: '2026-01-01',
+        encrypted: false,
+        journalTitle: 'Skip',
+      }),
+    );
+    zip.file(
+      'journal.json',
+      JSON.stringify({ id: 'j1', title: 'Skip', icon: 'book', date: '2026-01-01', secure: false }),
+    );
+    zip.file(
+      'pages/p1.json',
+      JSON.stringify({
+        id: 'p1',
+        text: 'T',
+        date: '2026-01-01',
+        tags: [],
+        files: [],
+        images: [],
+        comments: [],
+        modified: 1,
+        deleted: false,
+      }),
+    );
+    zip.file('attachments/badly-named.jpg', 'data');
+    fetchResponse = await zip.generateAsync({ type: 'arraybuffer' });
+
+    const result = await importJournal('blob:mock', 'Skip');
+    expect(result.skippedAttachments).toContain('badly-named.jpg');
+  });
+
+  it('skips orphan attachments not referenced by any page', async () => {
+    const zip = new JSZip();
+    zip.file(
+      'manifest.json',
+      JSON.stringify({
+        version: 1,
+        appVersion: '0.14.0',
+        exportDate: '2026-01-01',
+        encrypted: false,
+        journalTitle: 'Orphan',
+      }),
+    );
+    zip.file(
+      'journal.json',
+      JSON.stringify({
+        id: 'j1',
+        title: 'Orphan',
+        icon: 'book',
+        date: '2026-01-01',
+        secure: false,
+      }),
+    );
+    zip.file(
+      'pages/p1.json',
+      JSON.stringify({
+        id: 'p1',
+        text: 'T',
+        date: '2026-01-01',
+        tags: [],
+        files: [],
+        images: [],
+        comments: [],
+        modified: 1,
+        deleted: false,
+      }),
+    );
+    zip.file('attachments/image-orphan1.jpg', 'data');
+    fetchResponse = await zip.generateAsync({ type: 'arraybuffer' });
+
+    const result = await importJournal('blob:mock', 'Orphan');
+    expect(result.journalId).toBeTruthy();
+    expect(result.attachmentErrors).toBeUndefined();
+  });
+
+  it('collects attachment save errors without failing import', async () => {
+    const zip = new JSZip();
+    zip.file(
+      'manifest.json',
+      JSON.stringify({
+        version: 1,
+        appVersion: '0.14.0',
+        exportDate: '2026-01-01',
+        encrypted: false,
+        journalTitle: 'Err',
+      }),
+    );
+    zip.file(
+      'journal.json',
+      JSON.stringify({ id: 'j1', title: 'Err', icon: 'book', date: '2026-01-01', secure: false }),
+    );
+    zip.file(
+      'pages/p1.json',
+      JSON.stringify({
+        id: 'p1',
+        text: 'T',
+        date: '2026-01-01',
+        tags: [],
+        files: [],
+        images: [
+          {
+            id: 'att1',
+            path: 'image-att1.jpg',
+            name: 'photo.jpg',
+            type: 'image',
+            encrypted: false,
+            deleted: false,
+          },
+        ],
+        comments: [],
+        modified: 1,
+        deleted: false,
+      }),
+    );
+    zip.file('attachments/image-att1.jpg', 'fakeimagebytes');
+    fetchResponse = await zip.generateAsync({ type: 'arraybuffer' });
+
+    jest.spyOn(mockTestStore, 'saveAttachment').mockRejectedValueOnce(new Error('Disk full'));
+
+    const result = await importJournal('blob:mock', 'Err');
+    expect(result.attachmentErrors).toBeDefined();
+    expect(result.attachmentErrors).toHaveLength(1);
+    expect(result.attachmentErrors![0].error).toBe('Disk full');
+    const stored = await mockTestStore.getJournal(result.journalId);
+    expect(stored!.pages[0].images[0].path).toBe('');
+  });
+
+  it('rewrites file attachment paths during import', async () => {
+    const zip = new JSZip();
+    zip.file(
+      'manifest.json',
+      JSON.stringify({
+        version: 1,
+        appVersion: '0.14.0',
+        exportDate: '2026-01-01',
+        encrypted: false,
+        journalTitle: 'Files',
+      }),
+    );
+    zip.file(
+      'journal.json',
+      JSON.stringify({ id: 'j1', title: 'Files', icon: 'book', date: '2026-01-01', secure: false }),
+    );
+    zip.file(
+      'pages/p1.json',
+      JSON.stringify({
+        id: 'p1',
+        text: 'T',
+        date: '2026-01-01',
+        tags: [],
+        files: [
+          {
+            id: 'f1',
+            path: 'file-f1.pdf',
+            name: 'doc.pdf',
+            type: 'file',
+            encrypted: false,
+            deleted: false,
+          },
+        ],
+        images: [],
+        comments: [],
+        modified: 1,
+        deleted: false,
+      }),
+    );
+    zip.file('attachments/file-f1.pdf', 'fakepdfdata');
+    fetchResponse = await zip.generateAsync({ type: 'arraybuffer' });
+
+    const result = await importJournal('blob:mock', 'Files');
+    const stored = await mockTestStore.getJournal(result.journalId);
+    expect(stored).not.toBeNull();
+    expect(stored!.pages[0].files).toHaveLength(1);
+    expect(stored!.pages[0].files[0].path).toBeTruthy();
+    expect(stored!.pages[0].files[0].path).not.toBe('file-f1.pdf');
+  });
+
+  it('throws when encrypted journal decryption fails with wrong key', async () => {
+    const correctKey = new Uint8Array(32);
+    correctKey.fill(0xab);
+    const wrongKey = new Uint8Array(32);
+    wrongKey.fill(0xcd);
+
+    const journal = {
+      id: 'j1',
+      title: 'Bad Key',
+      icon: 'lock',
+      date: '2026-01-01',
+      secure: true,
+    };
+
+    const zip = new JSZip();
+    zip.file(
+      'manifest.json',
+      JSON.stringify({
+        version: 1,
+        appVersion: '0.14.0',
+        exportDate: '2026-01-01',
+        encrypted: true,
+        salt: 'dGVzdA==',
+        kdfIterations: 50000,
+        journalTitle: 'Bad Key',
+      }),
+    );
+    zip.file('journal.json', await aesGcmEncryptBytes(JSON.stringify(journal), correctKey));
+    fetchResponse = await zip.generateAsync({ type: 'arraybuffer' });
+
+    // Use wrong key — readEntry will fail to decrypt
+    await expect(importJournal('blob:mock', 'Bad Key', wrongKey)).rejects.toThrow();
+  });
+
+  it('throws when encrypted attachment decryption fails', async () => {
+    const key = new Uint8Array(32);
+    key.fill(0xab);
+    const wrongKey = new Uint8Array(32);
+    wrongKey.fill(0xcd);
+
+    const page = {
+      id: 'p1',
+      text: 'T',
+      date: '2026-01-01',
+      tags: [],
+      files: [],
+      images: [
+        {
+          id: 'att1',
+          path: 'image-att1.jpg',
+          name: 'photo.jpg',
+          type: 'image',
+          encrypted: true,
+          deleted: false,
+        },
+      ],
+      comments: [],
+      modified: 1000,
+      deleted: false,
+    };
+    const journal = {
+      id: 'j1',
+      title: 'Dec Fail',
+      icon: 'lock',
+      date: '2026-01-01',
+      secure: true,
+      salt: 'dGVzdA==',
+      kdfIterations: 50000,
+    };
+
+    const zip = new JSZip();
+    zip.file(
+      'manifest.json',
+      JSON.stringify({
+        version: 1,
+        appVersion: '0.14.0',
+        exportDate: '2026-01-01',
+        encrypted: true,
+        salt: 'dGVzdA==',
+        kdfIterations: 50000,
+        journalTitle: 'Dec Fail',
+      }),
+    );
+    zip.file('journal.json', await aesGcmEncryptBytes(JSON.stringify(journal), key));
+    zip.file(
+      'settings.json',
+      await aesGcmEncryptBytes(
+        JSON.stringify({
+          use24h: false,
+          previewTags: true,
+          previewThumbnail: true,
+          previewIcons: true,
+          filterBar: true,
+          sort: 'descending',
+          autoLocation: false,
+          remoteSync: false,
+          autoSync: false,
+        }),
+        key,
+      ),
+    );
+    zip.file('pages/p1.json', await aesGcmEncryptBytes(JSON.stringify(page), key));
+    // Encrypt attachment with WRONG key so attachment decryption fails
+    zip.file('attachments/image-att1.jpg', await aesGcmEncryptBytes('data', wrongKey));
+    fetchResponse = await zip.generateAsync({ type: 'arraybuffer' });
+
+    await expect(importJournal('blob:mock', 'Dec Fail', key)).rejects.toThrow();
+  });
+
+  it('throws on missing manifest (import)', async () => {
     const zip = new JSZip();
     zip.file('random.txt', 'data');
     fetchResponse = await zip.generateAsync({ type: 'arraybuffer' });

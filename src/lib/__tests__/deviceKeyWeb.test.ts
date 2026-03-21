@@ -151,6 +151,24 @@ describe('createDeviceEncryption web — key lifecycle', () => {
     expect(decrypted).toBe('test');
   });
 
+  it('resets keyCreationPromise on localStorage error so retry works', async () => {
+    // Make localStorage.getItem throw once to trigger the .catch() branch (lines 46-47)
+    const originalGetItem = localStorageMock.getItem;
+    localStorageMock.getItem = () => {
+      throw new Error('Storage unavailable');
+    };
+
+    const device = createDeviceEncryption();
+    await expect(device.encrypt('test')).rejects.toThrow('Storage unavailable');
+
+    // Restore and verify retry works (keyCreationPromise was reset by the catch)
+    localStorageMock.getItem = originalGetItem;
+    const device2 = createDeviceEncryption();
+    const ct = await device2.encrypt('retry');
+    const pt = await device2.decrypt(ct);
+    expect(pt).toBe('retry');
+  });
+
   it('encrypt and decrypt round-trip', async () => {
     const device = createDeviceEncryption();
     const ciphertext = await device.encrypt('hello world');

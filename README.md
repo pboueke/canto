@@ -3,9 +3,10 @@
 A private, encrypted journaling app for Android, iOS, and Web.
 
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
-![Version](https://img.shields.io/badge/version-0.17.4-green)
-![Tests](https://img.shields.io/badge/tests-763%20passed-brightgreen)
-![Platforms](https://img.shields.io/badge/platforms-Android%20%7C%20iOS%20%7C%20Web-lightgrey)
+![Version](https://img.shields.io/badge/version-0.17.5-green)
+![Tests](https://img.shields.io/badge/tests-961%2F961%20passed-brightgreen)
+![Coverage](https://img.shields.io/badge/coverage-99%25-brightgreen)
+![Platforms](https://img.shields.io/badge/platforms-Android%20%7C%20Web-lightgrey)
 
 ## Features
 
@@ -48,6 +49,14 @@ Canto encrypts all journal data at rest using two-tier AES-256-GCM encryption. Y
 Canto journals are yours. The journal data model is extracted into [`canto-data`](packages/canto-data/), an MIT-licensed TypeScript library with zero dependencies. Use it to build your own tools that read, validate, or manipulate Canto journals — no copyleft obligations.
 
 See **[DATA.md](DATA.md)** for the full data model reference, export format specification, and usage examples.
+
+## Platform Support
+
+| Platform | Status    |
+| -------- | --------- |
+| Android  | Supported |
+| Web      | Supported |
+| iOS      | Pending   |
 
 ## License
 

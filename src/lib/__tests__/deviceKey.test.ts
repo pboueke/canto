@@ -116,4 +116,21 @@ describe('createDeviceEncryption — key lifecycle', () => {
     const decrypted = await device.decrypt(ciphertext);
     expect(decrypted).toBe('test');
   });
+
+  it('resets keyCreationPromise on SecureStore error so retry works', async () => {
+    // Make SecureStore.getItemAsync throw once to trigger the .catch() branch
+    (SecureStore.getItemAsync as jest.Mock).mockRejectedValueOnce(
+      new Error('Keychain unavailable'),
+    );
+
+    const device = createDeviceEncryption();
+    await expect(device.encrypt('test')).rejects.toThrow('Keychain unavailable');
+
+    // After the error, keyCreationPromise should have been reset (null) by the catch,
+    // so a subsequent call should succeed (it re-enters getOrCreateDeviceKey)
+    const device2 = createDeviceEncryption();
+    const ct = await device2.encrypt('retry');
+    const pt = await device2.decrypt(ct);
+    expect(pt).toBe('retry');
+  });
 });
