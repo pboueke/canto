@@ -129,6 +129,37 @@ describe('Google Drive API helper', () => {
         expect.objectContaining({ method: 'POST' }),
       );
     });
+
+    it('uses a unique boundary per request', async () => {
+      mockFetchOk({
+        id: 'f1',
+        name: 'a.json',
+        mimeType: 'application/json',
+        modifiedTime: '2026-01-01',
+      });
+      mockFetchOk({
+        id: 'f2',
+        name: 'b.json',
+        mimeType: 'application/json',
+        modifiedTime: '2026-01-01',
+      });
+
+      await createFile(TOKEN, { name: 'a.json' }, 'content-a');
+      await createFile(TOKEN, { name: 'b.json' }, 'content-b');
+
+      const call1 = (global.fetch as jest.Mock).mock.calls[0][1];
+      const call2 = (global.fetch as jest.Mock).mock.calls[1][1];
+      const boundary1 = call1.headers['Content-Type'].match(
+        /boundary=(---canto-[a-f0-9]+---)/,
+      )?.[1];
+      const boundary2 = call2.headers['Content-Type'].match(
+        /boundary=(---canto-[a-f0-9]+---)/,
+      )?.[1];
+
+      expect(boundary1).toBeDefined();
+      expect(boundary2).toBeDefined();
+      expect(boundary1).not.toBe(boundary2);
+    });
   });
 
   describe('updateFile', () => {

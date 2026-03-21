@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Modal, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useTheme } from '@/hooks/useTheme';
@@ -19,28 +19,33 @@ export function TagEditor({ tags, allJournalTags, editable, onChange }: TagEdito
   const [modalVisible, setModalVisible] = useState(false);
   const [newTag, setNewTag] = useState('');
 
-  if (!editable && tags.length === 0) return null;
+  const normalizedTags = useMemo(
+    () => [...new Set(tags.map((t) => t.trim().toLowerCase()))],
+    [tags],
+  );
+
+  if (!editable && normalizedTags.length === 0) return null;
 
   const suggestions = allJournalTags.filter(
-    (jt) => !tags.some((t) => t.toLowerCase() === jt.toLowerCase()),
+    (jt) => !normalizedTags.some((t) => t.toLowerCase() === jt.toLowerCase()),
   );
 
   const addTag = (tag: string) => {
     const trimmed = tag.trim().toLowerCase();
-    if (trimmed && !tags.some((t) => t.toLowerCase() === trimmed)) {
-      onChange([...tags, trimmed]);
+    if (trimmed && !normalizedTags.includes(trimmed)) {
+      onChange([...normalizedTags, trimmed]);
     }
     setNewTag('');
   };
 
   const removeTag = (tag: string) => {
-    onChange(tags.filter((t) => t !== tag));
+    onChange(normalizedTags.filter((t) => t !== tag));
   };
 
   return (
     <View style={styles.container}>
       <View style={styles.tagsRow}>
-        {tags.map((tag) => (
+        {normalizedTags.map((tag) => (
           <Tag key={tag} label={tag} onRemove={editable ? () => removeTag(tag) : undefined} />
         ))}
         {editable && (

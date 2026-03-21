@@ -1,6 +1,13 @@
 const DRIVE_API = 'https://www.googleapis.com/drive/v3';
 const UPLOAD_API = 'https://www.googleapis.com/upload/drive/v3';
 
+function generateBoundary(): string {
+  const random = Array.from(crypto.getRandomValues(new Uint8Array(16)))
+    .map((b) => b.toString(16).padStart(2, '0'))
+    .join('');
+  return `---canto-${random}---`;
+}
+
 interface FileMetadata {
   name: string;
   mimeType?: string;
@@ -88,7 +95,7 @@ export async function createFile(
   content: string,
   spaces = 'drive',
 ): Promise<DriveFile> {
-  const boundary = '---canto-boundary---';
+  const boundary = generateBoundary();
   const body = [
     `--${boundary}`,
     'Content-Type: application/json; charset=UTF-8',
@@ -121,7 +128,7 @@ export async function updateFile(
   metadata: Partial<FileMetadata>,
   content: string,
 ): Promise<DriveFile> {
-  const boundary = '---canto-boundary---';
+  const boundary = generateBoundary();
   const body = [
     `--${boundary}`,
     'Content-Type: application/json; charset=UTF-8',

@@ -100,4 +100,21 @@ describe('GoogleAuthContext.web', () => {
     });
     expect(result.current.retentionDays).toBe(30);
   });
+
+  it('readStoredAuth rejects invalid shape and removes key', async () => {
+    storageMap.set('canto-google-auth', JSON.stringify({ garbage: true }));
+    const { result } = renderHook(() => useGoogleAuth(), { wrapper });
+    await act(async () => {});
+    // Invalid shape should be cleared — user stays signed out
+    expect(result.current.isSignedIn).toBe(false);
+    expect(storageMap.has('canto-google-auth')).toBe(false);
+  });
+
+  it('readStoredAuth rejects non-JSON and removes key', async () => {
+    storageMap.set('canto-google-auth', 'not-json');
+    const { result } = renderHook(() => useGoogleAuth(), { wrapper });
+    await act(async () => {});
+    expect(result.current.isSignedIn).toBe(false);
+    expect(storageMap.has('canto-google-auth')).toBe(false);
+  });
 });

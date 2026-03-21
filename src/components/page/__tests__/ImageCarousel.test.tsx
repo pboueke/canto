@@ -96,4 +96,40 @@ describe('ImageCarousel', () => {
     expect(onDownload).toHaveBeenCalledTimes(1);
     expect(onDownload).toHaveBeenCalledWith(defaultProps.images[0]);
   });
+
+  it('shows delete button when editable', () => {
+    const onRemove = jest.fn();
+    const { getByLabelText } = render(
+      <ImageCarousel {...defaultProps} editable={true} onRemove={onRemove} />,
+    );
+
+    expect(getByLabelText('Delete image')).toBeTruthy();
+  });
+
+  it('calls onRemove when delete button is pressed', () => {
+    const onRemove = jest.fn();
+    const { getByLabelText } = render(
+      <ImageCarousel {...defaultProps} editable={true} onRemove={onRemove} />,
+    );
+
+    fireEvent.press(getByLabelText('Delete image'));
+
+    expect(onRemove).toHaveBeenCalledTimes(1);
+    expect(onRemove).toHaveBeenCalledWith('img-1');
+  });
+
+  it('hides delete button when not editable', () => {
+    const { queryByLabelText } = render(<ImageCarousel {...defaultProps} editable={false} />);
+
+    expect(queryByLabelText('Delete image')).toBeNull();
+  });
+
+  it('filters out deleted images', () => {
+    const images = [makeImage('img-1'), { ...makeImage('img-2'), deleted: true }];
+    const { queryAllByLabelText } = render(<ImageCarousel {...defaultProps} images={images} />);
+
+    // Only non-deleted images should have the image label
+    const imageLabels = queryAllByLabelText(/Image \d+ of \d+/);
+    expect(imageLabels).toHaveLength(1);
+  });
 });

@@ -1,5 +1,23 @@
 # Changelog
 
+## v0.17.4 - Low priority validation, hardening, and test coverage fixes
+
+- fix: GeoLocation validation now rejects out-of-range latitude (±90) and longitude (±180)
+- fix: empty and whitespace-only tags now rejected by `validatePage()`
+- fix: multipart boundary in GDrive API is now generated randomly per request instead of hard-coded
+- fix: sync error state now preserves `errorStack` for debugging
+- fix: TagEditor normalizes and deduplicates mixed-case tags on render via `useMemo`
+- fix: stored Google auth JSON validated at parse time — invalid shapes are cleared from localStorage
+- fix: `getAccessToken` silent re-auth wrapped in 15s timeout to prevent indefinite hangs
+- fix: soft-deleted pages now trigger non-blocking attachment cleanup (native filesystem and web IDB)
+- fix: InfoBox tests wrapped in `waitFor` to eliminate `act()` warnings from async changelog loading
+- test: native `downloadAttachment` — write-to-cache + share sheet flow
+- test: FilterBar debounce — delayed updates, batched fast typing, immediate clear, external sync
+- test: ImageCarousel edit flow — delete button visibility, `onRemove` callback, deleted image filtering
+- test: PageListItem — tag rendering, text truncation, accessibility label
+- test: TagEditor normalization — mixed-case dedup, whitespace trim, empty-state rendering
+- test: accessibility audit — FilterBar labels/roles, PageListItem accessible labels, FAB gap documented
+
 ## v0.17.3 - Medium priority code quality and hardening fixes
 
 - fix: wire `existingIds` cloud import detection — dead fallback branch in filter, duplicate `generateUUID` removed

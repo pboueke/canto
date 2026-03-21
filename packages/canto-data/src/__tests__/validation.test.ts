@@ -276,4 +276,56 @@ describe('structural validators', () => {
       ValidationError,
     );
   });
+
+  test('validateGeoLocation rejects latitude > 90', () => {
+    expect(() => validateGeoLocation({ latitude: 91, longitude: 0 })).toThrow(ValidationError);
+  });
+
+  test('validateGeoLocation rejects latitude < -90', () => {
+    expect(() => validateGeoLocation({ latitude: -91, longitude: 0 })).toThrow(ValidationError);
+  });
+
+  test('validateGeoLocation rejects longitude > 180', () => {
+    expect(() => validateGeoLocation({ latitude: 0, longitude: 181 })).toThrow(ValidationError);
+  });
+
+  test('validateGeoLocation rejects longitude < -180', () => {
+    expect(() => validateGeoLocation({ latitude: 0, longitude: -181 })).toThrow(ValidationError);
+  });
+
+  test('validateGeoLocation accepts lat=-90 (edge)', () => {
+    expect(validateGeoLocation({ latitude: -90, longitude: 0 })).toBeDefined();
+  });
+
+  test('validateGeoLocation accepts lat=90 (edge)', () => {
+    expect(validateGeoLocation({ latitude: 90, longitude: 0 })).toBeDefined();
+  });
+
+  test('validateGeoLocation accepts lon=-180 (edge)', () => {
+    expect(validateGeoLocation({ latitude: 0, longitude: -180 })).toBeDefined();
+  });
+
+  test('validateGeoLocation accepts lon=180 (edge)', () => {
+    expect(validateGeoLocation({ latitude: 0, longitude: 180 })).toBeDefined();
+  });
+
+  test('validatePage rejects empty string tag', () => {
+    const page = makePage({ tags: [''] });
+    expect(() => validatePage(page)).toThrow(ValidationError);
+  });
+
+  test('validatePage rejects whitespace-only tag', () => {
+    const page = makePage({ tags: ['   '] });
+    expect(() => validatePage(page)).toThrow(ValidationError);
+  });
+
+  test('validatePage rejects tab-only tag', () => {
+    const page = makePage({ tags: ['\t'] });
+    expect(() => validatePage(page)).toThrow(ValidationError);
+  });
+
+  test('validatePage accepts non-empty tag', () => {
+    const page = makePage({ tags: ['valid'] });
+    expect(validatePage(page)).toBeDefined();
+  });
 });
