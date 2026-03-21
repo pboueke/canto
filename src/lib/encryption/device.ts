@@ -22,16 +22,26 @@ function hexToBytes(hex: string): Uint8Array {
 
 const DEVICE_KEY_ALIAS = 'canto_device_encryption_key';
 
-async function getOrCreateDeviceKey(): Promise<Uint8Array> {
-  const existing = await SecureStore.getItemAsync(DEVICE_KEY_ALIAS);
-  if (existing) {
-    return hexToBytes(existing);
-  }
+let keyCreationPromise: Promise<Uint8Array> | null = null;
 
-  // Generate a 256-bit key via CSPRNG
-  const key = getRandomBytes(32);
-  await SecureStore.setItemAsync(DEVICE_KEY_ALIAS, bytesToHex(key));
-  return key;
+async function getOrCreateDeviceKey(): Promise<Uint8Array> {
+  if (!keyCreationPromise) {
+    keyCreationPromise = (async () => {
+      const existing = await SecureStore.getItemAsync(DEVICE_KEY_ALIAS);
+      if (existing) {
+        return hexToBytes(existing);
+      }
+
+      // Generate a 256-bit key via CSPRNG
+      const key = getRandomBytes(32);
+      await SecureStore.setItemAsync(DEVICE_KEY_ALIAS, bytesToHex(key));
+      return key;
+    })().catch((err) => {
+      keyCreationPromise = null;
+      throw err;
+    });
+  }
+  return keyCreationPromise;
 }
 
 export async function rotateKey(): Promise<{ oldKey: Uint8Array; newKey: Uint8Array }> {
@@ -39,7 +49,14 @@ export async function rotateKey(): Promise<{ oldKey: Uint8Array; newKey: Uint8Ar
   const oldKey = existingHex ? hexToBytes(existingHex) : getRandomBytes(32);
   const newKey = getRandomBytes(32);
   await SecureStore.setItemAsync(DEVICE_KEY_ALIAS, bytesToHex(newKey));
+  // Reset the cached promise so the next getOrCreateDeviceKey returns the new key
+  keyCreationPromise = null;
   return { oldKey, newKey };
+}
+
+/** @internal Reset module-level state for testing only. */
+export function _resetKeyCreationPromise(): void {
+  keyCreationPromise = null;
 }
 
 export function createDeviceEncryption(): EncryptionProvider {
@@ -68,6 +85,8 @@ export function createDeviceEncryption(): EncryptionProvider {
         cachedKey.fill(0);
         cachedKey = null;
       }
+      // Reset the module-level promise so the next getKey() re-reads from SecureStore
+      keyCreationPromise = null;
     },
   };
 }

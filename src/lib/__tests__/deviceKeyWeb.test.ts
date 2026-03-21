@@ -26,7 +26,11 @@ Object.defineProperty(globalThis, 'localStorage', { value: localStorageMock, wri
 // Suppress the console.warn from device.web.ts module-level code
 Object.defineProperty(globalThis, 'window', { value: undefined, writable: true });
 
-import { createDeviceEncryption, rotateKey } from '../encryption/device.web';
+import {
+  createDeviceEncryption,
+  rotateKey,
+  _resetKeyCreationPromise,
+} from '../encryption/device.web';
 
 function bytesToHex(bytes: Uint8Array): string {
   return Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
@@ -45,6 +49,7 @@ const DEVICE_KEY_ALIAS = 'canto_device_encryption_key';
 describe('Device key web — rotateKey', () => {
   beforeEach(() => {
     localStorageMock.clear();
+    _resetKeyCreationPromise();
   });
 
   it('returns old and new keys as 32-byte Uint8Arrays', async () => {
@@ -114,6 +119,7 @@ describe('hex encoding round-trip (web)', () => {
 describe('createDeviceEncryption web — key lifecycle', () => {
   beforeEach(() => {
     localStorageMock.clear();
+    _resetKeyCreationPromise();
   });
 
   it('first call creates key in localStorage', async () => {

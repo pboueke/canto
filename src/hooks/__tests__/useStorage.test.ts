@@ -584,3 +584,14 @@ describe('useAttachment', () => {
     expect(mockStore.deleteAttachment).toHaveBeenCalledWith('path/to/file');
   });
 });
+
+describe('ensureInitialized concurrency', () => {
+  it('concurrent getLocalStore calls return the same store instance', async () => {
+    const results = await Promise.all([getLocalStore(), getLocalStore(), getLocalStore()]);
+
+    // All should return the same store reference
+    for (const result of results) {
+      expect(result).toBe(results[0]);
+    }
+  });
+});

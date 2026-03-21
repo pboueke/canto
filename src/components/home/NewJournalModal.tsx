@@ -26,9 +26,11 @@ import { deriveKey } from '@/lib/encryption/password';
 import { base64ToUint8 } from '@/lib/encryption/utils';
 import { type ThemeName, themes } from '@/styles/themes';
 import { inspectBackup, importJournal, hasNameConflict, resolveNameConflict } from '@/lib/backup';
+import type { AttachmentError } from '@/lib/backup/import';
 import { useGoogleAuth } from '@/contexts/GoogleAuthContext';
 import { useSyncManager } from '@/contexts/SyncManagerContext';
-import type { RemoteJournalMeta } from '@/lib/sync';
+import type { RemoteJournalMeta, DownloadFailure } from '@/lib/sync';
+import { DataIntegrityWarningModal } from '@/components/common/DataIntegrityWarningModal';
 
 interface NewJournalModalProps {
   visible: boolean;
@@ -102,6 +104,14 @@ export function NewJournalModal({
   const [importProgress, setImportProgress] = useState<{ current: number; total: number } | null>(
     null,
   );
+  // Data integrity warning state
+  const [integrityWarning, setIntegrityWarning] = useState<{
+    type: 'sync' | 'import';
+    details: string[];
+    syncFailures?: DownloadFailure[];
+    attachmentErrors?: AttachmentError[];
+    retryRemote?: RemoteJournalMeta;
+  } | null>(null);
 
   useEffect(() => {
     isBiometricAvailable().then(setBiometricSupported);
@@ -179,10 +189,23 @@ export function NewJournalModal({
     try {
       await manager.connectWithToken(accessToken);
       const store = manager.getRemoteStore();
-      const journal = await store.downloadJournalMeta(remote.id);
-      if (!journal) throw new Error('Journal not found on remote');
+      const downloadResult = await store.downloadJournalMeta(remote.id);
+      if (!downloadResult) throw new Error('Journal not found on remote');
 
-      const activePages = journal.pages.filter((p) => !p.deleted);
+      // Check for page download failures
+      if (downloadResult.failures && downloadResult.failures.length > 0) {
+        setImporting(false);
+        setIntegrityWarning({
+          type: 'sync',
+          details: downloadResult.failures.map((f) => f.name),
+          syncFailures: downloadResult.failures,
+          retryRemote: remote,
+        });
+        return;
+      }
+
+      const journal = downloadResult.content;
+      const activePages = journal.pages.filter((p: { deleted: boolean }) => !p.deleted);
       const total = activePages.length;
       let current = 0;
 
@@ -362,9 +385,22 @@ export function NewJournalModal({
   async function finishImport(fileUri: string, titleToUse: string, key?: Uint8Array) {
     try {
       const imported = await importJournal(fileUri, titleToUse, key);
-      resetForm();
-      onClose();
-      onImportComplete?.(imported.journalId);
+
+      if (imported.attachmentErrors && imported.attachmentErrors.length > 0) {
+        // Show warning but still complete the import
+        setIntegrityWarning({
+          type: 'import',
+          details: imported.attachmentErrors.map((e) => e.name),
+          attachmentErrors: imported.attachmentErrors,
+        });
+        // Don't close yet — the warning modal will show.
+        // The journal is already imported, so call onImportComplete.
+        onImportComplete?.(imported.journalId);
+      } else {
+        resetForm();
+        onClose();
+        onImportComplete?.(imported.journalId);
+      }
     } catch (err) {
       console.error('[Canto] Import failed:', err);
       setImportError(err instanceof Error ? err.message : String(err));
@@ -1130,6 +1166,71 @@ export function NewJournalModal({
           </View>
         </View>
       </Modal>
+
+      {/* Data integrity warning */}
+      <DataIntegrityWarningModal
+        visible={integrityWarning !== null}
+        onClose={() => {
+          setIntegrityWarning(null);
+          if (integrityWarning?.type === 'import') {
+            resetForm();
+            onClose();
+          }
+        }}
+        title={
+          integrityWarning?.type === 'sync'
+            ? t.dataIntegrity.syncWarningTitle
+            : t.dataIntegrity.importWarningTitle
+        }
+        description={
+          integrityWarning?.type === 'sync'
+            ? t.dataIntegrity.syncWarningDesc
+                .replace('{failed}', String(integrityWarning?.details.length ?? 0))
+                .replace('{total}', String(integrityWarning?.details.length ?? 0))
+            : t.dataIntegrity.importWarningDesc.replace(
+                '{count}',
+                String(integrityWarning?.details.length ?? 0),
+              )
+        }
+        details={integrityWarning?.details ?? []}
+        suggestion={
+          integrityWarning?.type === 'sync'
+            ? t.dataIntegrity.syncSuggestion
+            : t.dataIntegrity.importSuggestion
+        }
+        actions={
+          integrityWarning?.type === 'sync'
+            ? [
+                {
+                  label: t.common.cancel,
+                  variant: 'secondary' as const,
+                  onPress: () => {
+                    setIntegrityWarning(null);
+                  },
+                },
+                {
+                  label: t.dataIntegrity.retry,
+                  variant: 'primary' as const,
+                  onPress: () => {
+                    const remote = integrityWarning?.retryRemote;
+                    setIntegrityWarning(null);
+                    if (remote) handleCloudJournalSelect(remote);
+                  },
+                },
+              ]
+            : [
+                {
+                  label: t.dataIntegrity.acknowledge,
+                  variant: 'primary' as const,
+                  onPress: () => {
+                    setIntegrityWarning(null);
+                    resetForm();
+                    onClose();
+                  },
+                },
+              ]
+        }
+      />
     </Modal>
   );
 }

@@ -91,7 +91,8 @@ export class SyncEngine {
     // Build maps of local and remote pages by ID
     const localPages = new Map(localJournal.pages.map((p) => [p.id, p]));
 
-    const remoteJournal = await this.remote.downloadJournalMeta(journalId);
+    const remoteResult = await this.remote.downloadJournalMeta(journalId);
+    const remoteJournal = remoteResult?.content ?? null;
     const remotePages = new Map((remoteJournal?.pages ?? []).map((p) => [p.id, p]));
 
     // Determine sync actions for each page

@@ -1,5 +1,18 @@
 # Changelog
 
+## v0.17.1 - Critical data-corruption fixes
+
+- fix: race condition in store initialization — concurrent `ensureInitialized()` calls now share a single Promise instead of racing through a boolean flag
+- fix: race condition in device key creation — `getOrCreateDeviceKey()` guarded by module-level Promise; `clearKey()` and `rotateKey()` reset the cached promise
+- fix: silent sync page download failures — `downloadJournalMeta` now returns structured `DownloadResult` with per-page `failures` array instead of silently dropping failed pages
+- fix: import attachment error handling — each `saveAttachment()` wrapped in try-catch; import completes with successful attachments and reports failures via `attachmentErrors` on `ImportResult`
+- fix: validation accepts NaN/Infinity — `checkNumber()` now rejects non-finite numbers with `Number.isFinite()` check
+- feat: `DataIntegrityWarningModal` component — reusable modal for data integrity warnings with warning icon, scrollable details list, suggestion box, and configurable actions
+- feat: `dataIntegrity` i18n section — 10 keys across all 8 languages (en, pt, es, de, fr, ru, zh, it)
+- refactor: `RemoteStore.downloadJournalMeta` returns `DownloadResult | null` (breaking type change for sync consumers)
+- test: 8 new tests for validation, concurrency, sync failures, and import error collection
+- test: 714 tests across 50 suites, all passing
+
 ## v0.17.0 - UI refinements, first schema migration, accessibility
 
 - feat: image download button — overlay on carousel images in view mode, platform-specific download via `downloadAttachment` utility (native: expo-sharing, web: Blob + anchor)

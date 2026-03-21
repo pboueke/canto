@@ -35,7 +35,7 @@ export interface RemoteStore {
   uploadJournalMeta(journal: JournalContent): Promise<void>;
 
   /** Download journal metadata from remote. */
-  downloadJournalMeta(journalId: string): Promise<JournalContent | null>;
+  downloadJournalMeta(journalId: string): Promise<DownloadResult | null>;
 
   /** Upload a single page. Data should already be encrypted. */
   uploadPage(journalId: string, page: Page): Promise<void>;
@@ -57,6 +57,16 @@ export interface RemoteStore {
 
   /** Delete a journal and all its contents from the remote. */
   deleteJournal(journalId: string): Promise<void>;
+}
+
+export interface DownloadFailure {
+  name: string;
+  reason: string;
+}
+
+export interface DownloadResult {
+  content: JournalContent;
+  failures?: DownloadFailure[];
 }
 
 export interface SyncConflict {

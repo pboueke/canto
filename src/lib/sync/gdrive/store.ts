@@ -1,5 +1,5 @@
 import type { JournalContent, Page } from '@/data';
-import type { RemoteStore, RemoteJournalMeta } from '../types';
+import type { RemoteStore, RemoteJournalMeta, DownloadResult } from '../types';
 import * as api from './api';
 
 /** Escape a string for use in a Google Drive API query (ODATA-style). */
@@ -249,7 +249,7 @@ export class GDriveRemoteStore implements RemoteStore {
     await this.writeRegistry(registry);
   }
 
-  async downloadJournalMeta(journalId: string): Promise<JournalContent | null> {
+  async downloadJournalMeta(journalId: string): Promise<DownloadResult | null> {
     const journalFolderId = await this.getJournalFolderId(journalId);
     const metaFileId = await this.findFile('meta.json', journalFolderId);
     if (!metaFileId) return null;
@@ -273,15 +273,23 @@ export class GDriveRemoteStore implements RemoteStore {
     );
 
     const pages: Page[] = [];
-    for (const r of results) {
+    const failures: Array<{ name: string; reason: string }> = [];
+    for (let i = 0; i < results.length; i++) {
+      const r = results[i];
       if (r.status === 'fulfilled') {
         pages.push(r.value);
       } else {
-        console.warn('[GDrive] Failed to download page:', r.reason);
+        failures.push({
+          name: pageFiles[i].name,
+          reason: r.reason instanceof Error ? r.reason.message : String(r.reason),
+        });
       }
     }
 
-    return { ...meta, pages } as JournalContent;
+    return {
+      content: { ...meta, pages } as JournalContent,
+      failures: failures.length > 0 ? failures : undefined,
+    };
   }
 
   async uploadPage(journalId: string, page: Page): Promise<void> {

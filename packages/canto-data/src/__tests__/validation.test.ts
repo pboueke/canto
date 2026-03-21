@@ -249,4 +249,31 @@ describe('structural validators', () => {
     const content = { ...makeJournalContent(), pages: [] };
     expect(validateJournalContent(content)).toBeDefined();
   });
+
+  test('validatePage rejects NaN modified timestamp', () => {
+    const page = makePage({ modified: NaN });
+    expect(() => validatePage(page)).toThrow(ValidationError);
+  });
+
+  test('validatePage rejects Infinity modified timestamp', () => {
+    const page = makePage({ modified: Infinity });
+    expect(() => validatePage(page)).toThrow(ValidationError);
+  });
+
+  test('validatePage rejects -Infinity modified timestamp', () => {
+    const page = makePage({ modified: -Infinity });
+    expect(() => validatePage(page)).toThrow(ValidationError);
+  });
+
+  test('validateGeoLocation rejects NaN latitude', () => {
+    expect(() => validateGeoLocation({ latitude: NaN, longitude: -74.006 })).toThrow(
+      ValidationError,
+    );
+  });
+
+  test('validateGeoLocation rejects Infinity longitude', () => {
+    expect(() => validateGeoLocation({ latitude: 40.7, longitude: Infinity })).toThrow(
+      ValidationError,
+    );
+  });
 });

@@ -152,12 +152,12 @@ describe('Cross-platform sync E2E', () => {
       // Verify remote has the metadata
       const remoteStore = new GDriveRemoteStore();
       await connectStore(remoteStore);
-      const remoteMeta = await remoteStore.downloadJournalMeta('j1');
-      expect(remoteMeta!.title).toBe('Travel Diary');
-      expect(remoteMeta!.icon).toBe('plane');
-      expect(remoteMeta!.settings.use24h).toBe(true);
-      expect(remoteMeta!.settings.sort).toBe('ascending');
-      expect(remoteMeta!.settings.autoLocation).toBe(true);
+      const remoteResult = await remoteStore.downloadJournalMeta('j1');
+      expect(remoteResult!.content.title).toBe('Travel Diary');
+      expect(remoteResult!.content.icon).toBe('plane');
+      expect(remoteResult!.content.settings.use24h).toBe(true);
+      expect(remoteResult!.content.settings.sort).toBe('ascending');
+      expect(remoteResult!.content.settings.autoLocation).toBe(true);
     });
 
     it('encrypted journal round-trip', async () => {
@@ -776,9 +776,9 @@ describe('Cross-platform sync E2E', () => {
       // Verify remote has updated settings
       const remoteStore = new GDriveRemoteStore();
       await connectStore(remoteStore);
-      const remoteMeta = await remoteStore.downloadJournalMeta('j1');
-      expect(remoteMeta!.settings.use24h).toBe(true);
-      expect(remoteMeta!.settings.sort).toBe('ascending');
+      const remoteResult2 = await remoteStore.downloadJournalMeta('j1');
+      expect(remoteResult2!.content.settings.use24h).toBe(true);
+      expect(remoteResult2!.content.settings.sort).toBe('ascending');
     });
   });
 });

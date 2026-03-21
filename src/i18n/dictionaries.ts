@@ -248,6 +248,18 @@ export interface Dictionary {
     body: string;
     linkText: string;
   };
+  dataIntegrity: {
+    syncWarningTitle: string;
+    syncWarningDesc: string;
+    syncSuggestion: string;
+    keepPartial: string;
+    importWarningTitle: string;
+    importWarningDesc: string;
+    importSuggestion: string;
+    failedItems: string;
+    retry: string;
+    acknowledge: string;
+  };
 }
 
 const en: Dictionary = {
@@ -505,6 +517,20 @@ const en: Dictionary = {
     title: 'Help',
     body: 'If you need help or want to report a bug, please visit the Canto project page on GitHub.',
     linkText: 'Open GitHub Issues',
+  },
+  dataIntegrity: {
+    syncWarningTitle: 'Sync Warning',
+    syncWarningDesc: '{failed} of {total} pages could not be downloaded.',
+    syncSuggestion:
+      'Check your internet connection and try again. You can also keep the partial import and re-sync later.',
+    keepPartial: 'Keep Partial',
+    importWarningTitle: 'Import Warning',
+    importWarningDesc: '{count} attachment(s) could not be saved during import.',
+    importSuggestion:
+      'The journal was imported but some attachments are missing. Try importing again from the same backup file to recover them.',
+    failedItems: 'Failed items',
+    retry: 'Retry',
+    acknowledge: 'OK',
   },
 };
 
@@ -764,6 +790,20 @@ const pt: Dictionary = {
     body: 'Se voce precisa de ajuda ou deseja relatar um erro, visite a pagina do projeto Canto no GitHub.',
     linkText: 'Abrir GitHub Issues',
   },
+  dataIntegrity: {
+    syncWarningTitle: 'Aviso de Sincronizacao',
+    syncWarningDesc: '{failed} de {total} paginas nao puderam ser baixadas.',
+    syncSuggestion:
+      'Verifique sua conexao com a internet e tente novamente. Voce tambem pode manter a importacao parcial e sincronizar novamente depois.',
+    keepPartial: 'Manter Parcial',
+    importWarningTitle: 'Aviso de Importacao',
+    importWarningDesc: '{count} anexo(s) nao puderam ser salvos durante a importacao.',
+    importSuggestion:
+      'O diario foi importado, mas alguns anexos estao faltando. Tente importar novamente do mesmo arquivo de backup para recupera-los.',
+    failedItems: 'Itens com falha',
+    retry: 'Tentar novamente',
+    acknowledge: 'OK',
+  },
 };
 
 const es: Dictionary = {
@@ -1021,6 +1061,21 @@ const es: Dictionary = {
     title: 'Ayuda',
     body: 'Si necesitas ayuda o deseas reportar un error, visita la pagina del proyecto Canto en GitHub.',
     linkText: 'Abrir GitHub Issues',
+  },
+  dataIntegrity: {
+    syncWarningTitle: 'Advertencia de sincronizacion',
+    syncWarningDesc: '{failed} de {total} paginas no pudieron descargarse.',
+    syncSuggestion:
+      'Verifica tu conexion a internet e intenta de nuevo. Tambien puedes mantener la importacion parcial y sincronizar despues.',
+    keepPartial: 'Mantener parcial',
+    importWarningTitle: 'Advertencia de importacion',
+    importWarningDesc:
+      '{count} archivo(s) adjunto(s) no pudieron guardarse durante la importacion.',
+    importSuggestion:
+      'El diario fue importado pero faltan algunos archivos adjuntos. Intenta importar de nuevo desde el mismo archivo de respaldo para recuperarlos.',
+    failedItems: 'Elementos fallidos',
+    retry: 'Reintentar',
+    acknowledge: 'OK',
   },
 };
 
@@ -1280,6 +1335,20 @@ const de: Dictionary = {
     body: 'Wenn Sie Hilfe benotigen oder einen Fehler melden mochten, besuchen Sie die Canto-Projektseite auf GitHub.',
     linkText: 'GitHub Issues offnen',
   },
+  dataIntegrity: {
+    syncWarningTitle: 'Sync-Warnung',
+    syncWarningDesc: '{failed} von {total} Seiten konnten nicht heruntergeladen werden.',
+    syncSuggestion:
+      'Prufen Sie Ihre Internetverbindung und versuchen Sie es erneut. Sie konnen auch den teilweisen Import behalten und spater erneut synchronisieren.',
+    keepPartial: 'Teilweise behalten',
+    importWarningTitle: 'Import-Warnung',
+    importWarningDesc: '{count} Anhang/Anhange konnten beim Import nicht gespeichert werden.',
+    importSuggestion:
+      'Das Tagebuch wurde importiert, aber einige Anhange fehlen. Versuchen Sie, erneut aus derselben Sicherungsdatei zu importieren.',
+    failedItems: 'Fehlgeschlagene Elemente',
+    retry: 'Erneut versuchen',
+    acknowledge: 'OK',
+  },
 };
 
 const fr: Dictionary = {
@@ -1537,6 +1606,21 @@ const fr: Dictionary = {
     title: 'Aide',
     body: "Si vous avez besoin d'aide ou souhaitez signaler un bug, visitez la page du projet Canto sur GitHub.",
     linkText: 'Ouvrir GitHub Issues',
+  },
+  dataIntegrity: {
+    syncWarningTitle: 'Avertissement de synchronisation',
+    syncWarningDesc: "{failed} sur {total} pages n'ont pas pu etre telechargees.",
+    syncSuggestion:
+      "Verifiez votre connexion Internet et reessayez. Vous pouvez aussi conserver l'importation partielle et resynchroniser plus tard.",
+    keepPartial: 'Conserver partiel',
+    importWarningTitle: "Avertissement d'importation",
+    importWarningDesc:
+      "{count} piece(s) jointe(s) n'ont pas pu etre enregistrees lors de l'importation.",
+    importSuggestion:
+      "Le journal a ete importe mais certaines pieces jointes sont manquantes. Essayez d'importer a nouveau depuis le meme fichier de sauvegarde.",
+    failedItems: 'Elements echoues',
+    retry: 'Reessayer',
+    acknowledge: 'OK',
   },
 };
 
@@ -1796,6 +1880,20 @@ const ru: Dictionary = {
     body: 'Если вам нужна помощь или вы хотите сообщить об ошибке, посетите страницу проекта Canto на GitHub.',
     linkText: 'Открыть GitHub Issues',
   },
+  dataIntegrity: {
+    syncWarningTitle: 'Предупреждение синхронизации',
+    syncWarningDesc: '{failed} из {total} страниц не удалось загрузить.',
+    syncSuggestion:
+      'Проверьте подключение к интернету и попробуйте снова. Вы также можете сохранить частичный импорт и синхронизировать позже.',
+    keepPartial: 'Сохранить частично',
+    importWarningTitle: 'Предупреждение импорта',
+    importWarningDesc: '{count} вложение(й) не удалось сохранить при импорте.',
+    importSuggestion:
+      'Журнал был импортирован, но некоторые вложения отсутствуют. Попробуйте импортировать снова из того же файла резервной копии.',
+    failedItems: 'Неудачные элементы',
+    retry: 'Повторить',
+    acknowledge: 'OK',
+  },
 };
 
 const zh: Dictionary = {
@@ -2050,6 +2148,18 @@ const zh: Dictionary = {
     title: '帮助',
     body: '如果您需要帮助或想要报告错误，请访问 GitHub 上的 Canto 项目页面。',
     linkText: '打开 GitHub Issues',
+  },
+  dataIntegrity: {
+    syncWarningTitle: '同步警告',
+    syncWarningDesc: '{total} 个页面中有 {failed} 个无法下载。',
+    syncSuggestion: '请检查您的网络连接并重试。您也可以保留部分导入，稍后重新同步。',
+    keepPartial: '保留部分',
+    importWarningTitle: '导入警告',
+    importWarningDesc: '导入过程中有 {count} 个附件无法保存。',
+    importSuggestion: '日记已导入，但某些附件缺失。请尝试从相同的备份文件重新导入以恢复它们。',
+    failedItems: '失败项目',
+    retry: '重试',
+    acknowledge: '确定',
   },
 };
 
@@ -2308,6 +2418,20 @@ const it: Dictionary = {
     title: 'Aiuto',
     body: 'Se hai bisogno di aiuto o vuoi segnalare un bug, visita la pagina del progetto Canto su GitHub.',
     linkText: 'Apri GitHub Issues',
+  },
+  dataIntegrity: {
+    syncWarningTitle: 'Avviso di sincronizzazione',
+    syncWarningDesc: '{failed} di {total} pagine non sono state scaricate.',
+    syncSuggestion:
+      "Controlla la connessione a Internet e riprova. Puoi anche mantenere l'importazione parziale e risincronizzare in seguito.",
+    keepPartial: 'Mantieni parziale',
+    importWarningTitle: 'Avviso di importazione',
+    importWarningDesc: "{count} allegato/i non sono stati salvati durante l'importazione.",
+    importSuggestion:
+      'Il diario e stato importato ma mancano alcuni allegati. Prova a importare di nuovo dallo stesso file di backup per recuperarli.',
+    failedItems: 'Elementi falliti',
+    retry: 'Riprova',
+    acknowledge: 'OK',
   },
 };
 

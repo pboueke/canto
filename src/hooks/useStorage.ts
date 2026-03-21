@@ -8,7 +8,7 @@ import { generateUUID, uint8ToBase64 } from '@/lib/encryption/utils';
 
 let storeInstance: LocalStore | null = null;
 let encryptionInstance: ReturnType<typeof createEncryptionService> | null = null;
-let initialized = false;
+let initPromise: Promise<LocalStore> | null = null;
 
 function getStore(): LocalStore {
   if (!storeInstance) {
@@ -20,11 +20,16 @@ function getStore(): LocalStore {
 
 async function ensureInitialized(): Promise<LocalStore> {
   const store = getStore();
-  if (!initialized) {
-    await store.initialize();
-    initialized = true;
+  if (!initPromise) {
+    initPromise = store
+      .initialize()
+      .then(() => store)
+      .catch((err) => {
+        initPromise = null;
+        throw err;
+      });
   }
-  return store;
+  return initPromise;
 }
 
 export function getEncryptionService() {

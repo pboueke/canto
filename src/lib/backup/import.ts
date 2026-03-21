@@ -9,9 +9,16 @@ import type { ExportManifest } from '@/data/format';
 import { parseManifest } from '@/data/format';
 import { SCHEMA_VERSION } from '@/data/version';
 
+export interface AttachmentError {
+  name: string;
+  pageId: string;
+  error: string;
+}
+
 export interface ImportResult {
   journalId: string;
   title: string;
+  attachmentErrors?: AttachmentError[];
 }
 
 export interface ImportInfo {
@@ -129,6 +136,7 @@ export async function importJournal(
   // Per-page attachment path map: "pageId:zipFilename" -> new disk path
   // This ensures shared attachments get their own copy under each page's directory.
   const pageAttachmentPaths = new Map<string, string>();
+  const attachmentErrors: AttachmentError[] = [];
 
   // --- Read pages ---
   const pageFiles = zip.file(/^pages\/.*\.json$/);
@@ -204,15 +212,24 @@ export async function importJournal(
         deleted: false,
       };
 
-      const savedPath = await store.saveAttachment(
-        newJournalId,
-        owner.pageId,
-        attachment,
-        data,
-        reEncrypt ? derivedKey : undefined,
-      );
+      try {
+        const savedPath = await store.saveAttachment(
+          newJournalId,
+          owner.pageId,
+          attachment,
+          data,
+          reEncrypt ? derivedKey : undefined,
+        );
 
-      pageAttachmentPaths.set(`${owner.pageId}:${zipFilename}`, savedPath);
+        pageAttachmentPaths.set(`${owner.pageId}:${zipFilename}`, savedPath);
+      } catch (err) {
+        attachmentErrors.push({
+          name: owner.name ?? zipFilename,
+          pageId: owner.pageId,
+          error: err instanceof Error ? err.message : String(err),
+        });
+        pageAttachmentPaths.set(`${owner.pageId}:${zipFilename}`, '');
+      }
     }
 
     current++;
@@ -281,6 +298,7 @@ export async function importJournal(
   return {
     journalId: newJournalId,
     title,
+    attachmentErrors: attachmentErrors.length > 0 ? attachmentErrors : undefined,
   };
 }
 
