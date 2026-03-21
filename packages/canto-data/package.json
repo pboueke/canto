@@ -1,6 +1,6 @@
 {
   "name": "canto-data",
-  "version": "0.17.2",
+  "version": "0.17.3",
   "description": "Canto journal data model — types, validation, versioning, and format utilities",
   "license": "MIT",
   "main": "src/index.ts",

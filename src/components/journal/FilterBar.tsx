@@ -42,9 +42,11 @@ export function FilterBar({
   const [localQuery, setLocalQuery] = useState(filter.query);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Sync local query when filter is cleared externally
+  // Sync local query when filter changes externally
   useEffect(() => {
-    if (filter.query === '' && localQuery !== '') setLocalQuery('');
+    if (filter.query !== localQuery) {
+      setLocalQuery(filter.query);
+    }
   }, [filter.query]);
 
   const handleQueryChange = useCallback(

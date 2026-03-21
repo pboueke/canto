@@ -212,11 +212,12 @@ export function NewJournalModal({
       // Download attachments and save locally
       const { getLocalStore } = await import('@/hooks/useStorage');
       const localStore = await getLocalStore();
+      const importWarnings: string[] = [];
       for (const page of journal.pages) {
         const attachments = [...(page.images ?? []), ...(page.files ?? [])].filter(
           (a) => !a.deleted && a.path,
         );
-        await Promise.all(
+        const results = await Promise.allSettled(
           attachments.map(async (att) => {
             const filename = att.path.split('/').pop() ?? att.path;
             const remotePath = `gdrive://${journal.id}/attachments/${filename}`;
@@ -227,6 +228,12 @@ export function NewJournalModal({
             }
           }),
         );
+        const failures = results.filter((r) => r.status === 'rejected');
+        if (failures.length > 0) {
+          importWarnings.push(
+            `${failures.length} attachment(s) failed to download for page ${page.id}`,
+          );
+        }
         if (!page.deleted) {
           current++;
           setImportProgress({ current, total });
@@ -236,6 +243,10 @@ export function NewJournalModal({
       await localStore.saveJournal(journal);
       for (const page of journal.pages) {
         await localStore.savePage(journal.id, page, undefined, true);
+      }
+
+      if (importWarnings.length > 0) {
+        console.warn('[Canto] Cloud import warnings:', importWarnings);
       }
 
       resetForm();

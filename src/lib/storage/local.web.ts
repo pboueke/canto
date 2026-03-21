@@ -1,6 +1,7 @@
 import type { Journal, JournalContent, Page, Attachment } from '@/data';
 import type { EncryptionService } from '@/lib/encryption';
 import { aesGcmEncrypt, aesGcmDecrypt } from '@/lib/encryption/utils';
+import { safeJsonParse } from '@/lib/utils/json';
 import type { LocalStore } from './types';
 
 const DB_NAME = 'canto';
@@ -81,39 +82,81 @@ export function _resetDB(): void {
   }
 }
 
+const IDB_TIMEOUT_MS = 10_000;
+
 async function idbGet(path: string): Promise<string | null> {
   const db = await openDB();
   return new Promise((resolve, reject) => {
+    const timeout = setTimeout(
+      () => reject(new Error(`[IDB] Timeout reading ${path}`)),
+      IDB_TIMEOUT_MS,
+    );
     const tx = db.transaction(STORE_NAME, 'readonly');
     const store = tx.objectStore(STORE_NAME);
     const req = store.get(path);
     req.onsuccess = () => {
+      clearTimeout(timeout);
       const result = req.result as { path: string; data: string } | undefined;
       resolve(result?.data ?? null);
     };
-    req.onerror = () => reject(req.error);
+    req.onerror = () => {
+      clearTimeout(timeout);
+      reject(req.error);
+    };
+    tx.onabort = () => {
+      clearTimeout(timeout);
+      reject(tx.error ?? new Error('[IDB] Transaction aborted'));
+    };
   });
 }
 
 async function idbPut(path: string, data: string): Promise<void> {
   const db = await openDB();
   return new Promise((resolve, reject) => {
+    const timeout = setTimeout(
+      () => reject(new Error(`[IDB] Timeout writing ${path}`)),
+      IDB_TIMEOUT_MS,
+    );
     const tx = db.transaction(STORE_NAME, 'readwrite');
     const store = tx.objectStore(STORE_NAME);
     store.put({ path, data });
-    tx.oncomplete = () => resolve();
-    tx.onerror = () => reject(tx.error);
+    tx.oncomplete = () => {
+      clearTimeout(timeout);
+      resolve();
+    };
+    tx.onerror = () => {
+      clearTimeout(timeout);
+      reject(tx.error);
+    };
+    tx.onabort = () => {
+      clearTimeout(timeout);
+      reject(tx.error ?? new Error('[IDB] Transaction aborted'));
+    };
   });
 }
 
 async function idbDelete(path: string): Promise<void> {
   const db = await openDB();
   return new Promise((resolve, reject) => {
+    const timeout = setTimeout(
+      () => reject(new Error(`[IDB] Timeout deleting ${path}`)),
+      IDB_TIMEOUT_MS,
+    );
     const tx = db.transaction(STORE_NAME, 'readwrite');
     const store = tx.objectStore(STORE_NAME);
     store.delete(path);
-    tx.oncomplete = () => resolve();
-    tx.onerror = () => reject(tx.error);
+    tx.oncomplete = () => {
+      clearTimeout(timeout);
+      resolve();
+    };
+    tx.onerror = () => {
+      clearTimeout(timeout);
+      reject(tx.error);
+    };
+    tx.onabort = () => {
+      clearTimeout(timeout);
+      reject(tx.error ?? new Error('[IDB] Transaction aborted'));
+    };
   });
 }
 
@@ -121,6 +164,10 @@ async function idbDelete(path: string): Promise<void> {
 async function idbDeletePrefix(prefix: string): Promise<void> {
   const db = await openDB();
   return new Promise((resolve, reject) => {
+    const timeout = setTimeout(
+      () => reject(new Error(`[IDB] Timeout deleting prefix ${prefix}`)),
+      IDB_TIMEOUT_MS,
+    );
     const tx = db.transaction(STORE_NAME, 'readwrite');
     const store = tx.objectStore(STORE_NAME);
     const range = IDBKeyRange.bound(prefix, prefix + '\uffff');
@@ -132,8 +179,18 @@ async function idbDeletePrefix(prefix: string): Promise<void> {
         cursor.continue();
       }
     };
-    tx.oncomplete = () => resolve();
-    tx.onerror = () => reject(tx.error);
+    tx.oncomplete = () => {
+      clearTimeout(timeout);
+      resolve();
+    };
+    tx.onerror = () => {
+      clearTimeout(timeout);
+      reject(tx.error);
+    };
+    tx.onabort = () => {
+      clearTimeout(timeout);
+      reject(tx.error ?? new Error('[IDB] Transaction aborted'));
+    };
   });
 }
 
@@ -141,12 +198,26 @@ async function idbDeletePrefix(prefix: string): Promise<void> {
 async function idbListKeys(prefix: string): Promise<string[]> {
   const db = await openDB();
   return new Promise((resolve, reject) => {
+    const timeout = setTimeout(
+      () => reject(new Error(`[IDB] Timeout listing keys for ${prefix}`)),
+      IDB_TIMEOUT_MS,
+    );
     const tx = db.transaction(STORE_NAME, 'readonly');
     const store = tx.objectStore(STORE_NAME);
     const range = IDBKeyRange.bound(prefix, prefix + '\uffff');
     const req = store.getAllKeys(range);
-    req.onsuccess = () => resolve(req.result as string[]);
-    req.onerror = () => reject(req.error);
+    req.onsuccess = () => {
+      clearTimeout(timeout);
+      resolve(req.result as string[]);
+    };
+    req.onerror = () => {
+      clearTimeout(timeout);
+      reject(req.error);
+    };
+    tx.onabort = () => {
+      clearTimeout(timeout);
+      reject(tx.error ?? new Error('[IDB] Transaction aborted'));
+    };
   });
 }
 
@@ -200,7 +271,7 @@ export function createLocalStore(encryption: EncryptionService): LocalStore {
   async function readIndex(): Promise<JournalIndex> {
     const raw = await readEncrypted(JOURNALS_INDEX_PATH, encryption);
     if (!raw) return { journals: [] };
-    return JSON.parse(raw) as JournalIndex;
+    return safeJsonParse<JournalIndex>(raw, 'journals index');
   }
 
   async function writeIndex(index: JournalIndex): Promise<void> {
@@ -221,7 +292,7 @@ export function createLocalStore(encryption: EncryptionService): LocalStore {
       const raw = await readEncrypted(getMetadataPath(id), encryption, derivedKey);
       if (!raw) return null;
 
-      const metadata = JSON.parse(raw) as Omit<JournalContent, 'pages'>;
+      const metadata = safeJsonParse<Omit<JournalContent, 'pages'>>(raw, `journal:${id} metadata`);
 
       const pageKeys = await idbListKeys(getPagesPrefix(id));
       const pages: Page[] = [];
@@ -230,7 +301,7 @@ export function createLocalStore(encryption: EncryptionService): LocalStore {
         if (key.endsWith('.json')) {
           const pageRaw = await readEncrypted(key, encryption, derivedKey);
           if (pageRaw) {
-            pages.push(JSON.parse(pageRaw) as Page);
+            pages.push(safeJsonParse<Page>(pageRaw, `page:${key}`));
           }
         }
       }
@@ -293,7 +364,7 @@ export function createLocalStore(encryption: EncryptionService): LocalStore {
     ): Promise<Page | null> {
       const raw = await readEncrypted(getPagePath(journalId, pageId), encryption, derivedKey);
       if (!raw) return null;
-      return JSON.parse(raw) as Page;
+      return safeJsonParse<Page>(raw, `page:${pageId}`);
     },
 
     async savePage(
@@ -442,7 +513,7 @@ export function createLocalStore(encryption: EncryptionService): LocalStore {
         const decrypted = await oldDeviceDecrypt(indexData);
         const reencrypted = await newDeviceEncrypt(decrypted);
         await idbPut(JOURNALS_INDEX_PATH, reencrypted);
-        journals = (JSON.parse(decrypted) as JournalIndex).journals;
+        journals = safeJsonParse<JournalIndex>(decrypted, 'journals index').journals;
       }
 
       let processed = 0;
