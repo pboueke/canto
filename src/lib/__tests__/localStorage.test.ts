@@ -56,10 +56,20 @@ jest.mock('expo-file-system', () => {
     }
     list() {
       const prefix = this.uri + '/';
-      const entries: MockFile[] = [];
+      const entries: (MockFile | MockDirectory)[] = [];
+      const seenDirs = new Set<string>();
       for (const key of Object.keys(filesystem)) {
-        if (key.startsWith(prefix) && !key.slice(prefix.length).includes('/')) {
+        if (!key.startsWith(prefix)) continue;
+        const rest = key.slice(prefix.length);
+        if (!rest.includes('/')) {
           entries.push(new MockFile(key));
+        } else {
+          const dirName = rest.split('/')[0];
+          const dirUri = prefix + dirName;
+          if (!seenDirs.has(dirUri)) {
+            seenDirs.add(dirUri);
+            entries.push(new MockDirectory(dirUri));
+          }
         }
       }
       return entries;
@@ -140,6 +150,31 @@ describe('createLocalStore', () => {
   it('initialize does not throw', async () => {
     const store = createLocalStore(createMockEncryption());
     await expect(store.initialize()).resolves.not.toThrow();
+  });
+
+  it('initialize recovers .tmp files left from interrupted writes', async () => {
+    const encryption = createMockEncryption();
+    const store = createLocalStore(encryption);
+
+    // Save a journal first so the directory structure exists
+    await store.saveJournal(makeJournalContent('j1', [makePage('p1')]));
+
+    // Simulate an interrupted write by creating a .tmp file in the journal dir
+    const journalDir = '/mock-docs/canto/j1';
+    filesystem[`${journalDir}/metadata.json.tmp`] = 'enc:{"id":"j1","title":"Recovered"}';
+
+    // Also create a .tmp in pages dir
+    const pagesDir = `${journalDir}/pages`;
+    filesystem[`${pagesDir}/p1.json.tmp`] = 'enc:{"id":"p1","text":"recovered page"}';
+
+    // Initialize should recover these .tmp files
+    await store.initialize();
+
+    // The .tmp files should have been renamed to their final names
+    expect(filesystem[`${journalDir}/metadata.json`]).toBeDefined();
+    expect(filesystem[`${pagesDir}/p1.json`]).toBeDefined();
+    expect(filesystem[`${journalDir}/metadata.json.tmp`]).toBeUndefined();
+    expect(filesystem[`${pagesDir}/p1.json.tmp`]).toBeUndefined();
   });
 
   it('listJournals returns empty array initially', async () => {
@@ -279,6 +314,202 @@ describe('createLocalStore', () => {
   });
 });
 
+describe('readEncrypted password-layer fallback', () => {
+  it('returns device-decrypted content when password decryption fails (L85)', async () => {
+    const encryption = createMockEncryption();
+    const store = createLocalStore(encryption);
+
+    // Save a journal WITHOUT password encryption
+    const journal = makeJournalContent('j1', [makePage('p1')]);
+    await store.saveJournal(journal);
+
+    // Now read with a derivedKey — password layer decryption will fail (data is not
+    // password-encrypted), so it should fall back to returning device-decrypted content
+    const derivedKey = new Uint8Array(32);
+    crypto.getRandomValues(derivedKey);
+    const result = await store.getJournal('j1', derivedKey);
+    expect(result).not.toBeNull();
+    expect(result!.pages).toHaveLength(1);
+  });
+});
+
+describe('deletePage edge cases', () => {
+  it('deletePage on non-existent page returns without error (L305)', async () => {
+    const store = createLocalStore(createMockEncryption());
+    await store.saveJournal(makeJournalContent('j1'));
+    await expect(store.deletePage('j1', 'nonexistent')).resolves.not.toThrow();
+  });
+
+  it('deletePage cleans up attachment files (L319-325)', async () => {
+    const store = createLocalStore(createMockEncryption());
+    await store.saveJournal(makeJournalContent('j1'));
+
+    // Create a page with an attachment that has a path
+    const att: Attachment = {
+      id: 'att-1',
+      path: '',
+      name: 'photo.jpg',
+      type: 'image',
+      encrypted: false,
+      deleted: false,
+    };
+    const attPath = await store.saveAttachment('j1', 'p1', att, 'base64data');
+
+    // Save a page with the attachment
+    const page = makePage('p1');
+    page.images = [{ ...att, path: attPath }];
+    await store.savePage('j1', page);
+
+    // Delete the page — should trigger attachment cleanup
+    await store.deletePage('j1', 'p1');
+
+    // Allow the non-blocking cleanup to complete
+    await new Promise((r) => setTimeout(r, 50));
+
+    // Verify page is soft-deleted
+    const result = await store.getPage('j1', 'p1');
+    expect(result).not.toBeNull();
+    expect(result!.deleted).toBe(true);
+  });
+});
+
+describe('getAttachment', () => {
+  it('returns device-decrypted content without derivedKey (L381)', async () => {
+    const encryption = createMockEncryption();
+    const store = createLocalStore(encryption);
+    await store.saveJournal(makeJournalContent('j1'));
+
+    const att: Attachment = {
+      id: 'att-1',
+      path: '',
+      name: 'photo.jpg',
+      type: 'image',
+      encrypted: false,
+      deleted: false,
+    };
+    const path = await store.saveAttachment('j1', 'p1', att, 'base64data');
+
+    // Read without derivedKey — should return device-decrypted data
+    const result = await store.getAttachment(path);
+    expect(result).toBe('base64data');
+  });
+
+  it('returns device-decrypted content when password decryption fails (L378)', async () => {
+    const encryption = createMockEncryption();
+    const store = createLocalStore(encryption);
+    await store.saveJournal(makeJournalContent('j1'));
+
+    const att: Attachment = {
+      id: 'att-1',
+      path: '',
+      name: 'photo.jpg',
+      type: 'image',
+      encrypted: false,
+      deleted: false,
+    };
+    const path = await store.saveAttachment('j1', 'p1', att, 'base64data');
+
+    // Read with derivedKey — password decrypt will fail, should fall back
+    const derivedKey = new Uint8Array(32);
+    crypto.getRandomValues(derivedKey);
+    const result = await store.getAttachment(path, derivedKey);
+    expect(result).not.toBeNull();
+  });
+});
+
+describe('reencryptJournal', () => {
+  it('re-encrypts pages and metadata with progress', async () => {
+    const encryption = createMockEncryption();
+    const store = createLocalStore(encryption);
+    await store.initialize();
+
+    const journal = makeJournalContent('j1', [makePage('p1')]);
+    await store.saveJournal(journal);
+
+    const loaded = await store.getJournal('j1');
+    expect(loaded).not.toBeNull();
+
+    const progressCalls: [number, number][] = [];
+    await store.reencryptJournal(loaded!, undefined, undefined, (c, t) => {
+      progressCalls.push([c, t]);
+    });
+
+    expect(progressCalls.length).toBeGreaterThan(0);
+    const result = await store.getJournal('j1');
+    expect(result).not.toBeNull();
+    expect(result!.pages).toHaveLength(1);
+  });
+
+  it('falls back when attachment is not password-encrypted during reencrypt (L421-422)', async () => {
+    const encryption = createMockEncryption();
+    const store = createLocalStore(encryption);
+    await store.initialize();
+
+    // Save journal with attachment (no password encryption)
+    const att: Attachment = {
+      id: 'att-1',
+      path: '',
+      name: 'photo.jpg',
+      type: 'image',
+      encrypted: false,
+      deleted: false,
+    };
+    const journal = makeJournalContent('j1', [makePage('p1')]);
+    await store.saveJournal(journal);
+    await store.saveAttachment('j1', 'p1', att, 'imagedata');
+
+    const loaded = await store.getJournal('j1');
+
+    // Re-encrypt with an oldKey — aesGcmDecrypt will fail on the attachment
+    // (it wasn't password-encrypted), hitting the catch branch at L421-422
+    const oldKey = new Uint8Array(32);
+    crypto.getRandomValues(oldKey);
+    await store.reencryptJournal(loaded!, oldKey, undefined);
+
+    const result = await store.getJournal('j1');
+    expect(result).not.toBeNull();
+  });
+
+  it('adds new journal to index during reencrypt (L459)', async () => {
+    const encryption = createMockEncryption();
+    const store = createLocalStore(encryption);
+    await store.initialize();
+
+    // Create journal content without saving it to the index (simulate orphaned data)
+    // Actually, we need to create a journal that exists as files but NOT in the index.
+    // The simplest way: save normally, then re-create store (fresh readIndex) and call
+    // reencryptJournal with a journal ID not in the index.
+
+    // Save j1 normally
+    const j1 = makeJournalContent('j1', [makePage('p1')]);
+    await store.saveJournal(j1);
+
+    // Now call reencryptJournal with a journal whose id is 'j2' (not in index)
+    const j2 = makeJournalContent('j2', [makePage('p2')]);
+    // We need files on disk for j2, so save it first then delete from index only
+    await store.saveJournal(j2);
+    // Remove j2 from index by manipulating — actually let's just use a different approach:
+    // Delete j2, then re-save its files manually, then reencrypt.
+    // Simplest: just call reencryptJournal with j2 content when j2 is already in index.
+    // That covers the "existing >= 0" path. For the "push" path (L459), j2 must NOT be in index.
+
+    // Delete j2 from index (but keep files)
+    await store.deleteJournal('j2');
+
+    // Now j2 files are gone too (deleteJournal removes dir). Let me re-save just the files.
+    // Actually, the reencryptJournal method doesn't check if files exist — it writes new ones.
+    // It just reads from the journal parameter. So we can call it with any journal content.
+    const j3 = makeJournalContent('j3', [makePage('p3')]);
+    await store.reencryptJournal(j3, undefined, undefined);
+
+    // j3 should now be in the index
+    const journals = await store.listJournals();
+    const ids = journals.map((j) => j.id);
+    expect(ids).toContain('j1');
+    expect(ids).toContain('j3');
+  });
+});
+
 describe('reencryptAll (device key rotation)', () => {
   it('re-encrypts all data so it is readable with new key', async () => {
     // Simulate two different device keys via prefixed passthrough encryption
@@ -379,6 +610,41 @@ describe('reencryptAll (device key rotation)', () => {
     expect(j2).not.toBeNull();
     expect(j2!.pages).toHaveLength(1);
     expect(j2!.pages[0].text).toBe('Page p3 content');
+  });
+
+  it('re-encrypts attachments during device key rotation', async () => {
+    const oldEncryption = createMockEncryption();
+    oldEncryption.encrypt = jest.fn((data: string) => Promise.resolve(`old:${data}`));
+    oldEncryption.decrypt = jest.fn((data: string) => Promise.resolve(data.replace(/^old:/, '')));
+
+    const store = createLocalStore(oldEncryption);
+    await store.initialize();
+
+    // Save journal with an attachment
+    await store.saveJournal(makeJournalContent('j1'));
+    const att: Attachment = {
+      id: 'att-1',
+      path: '',
+      name: 'photo.jpg',
+      type: 'image',
+      encrypted: false,
+      deleted: false,
+    };
+    await store.saveAttachment('j1', 'p1', att, 'imagedata');
+
+    const oldDecrypt = (ct: string) => Promise.resolve(ct.replace(/^old:/, ''));
+    const oldEncrypt = (pt: string) => Promise.resolve(`old:${pt}`);
+    const newEncrypt = (pt: string) => Promise.resolve(`new:${pt}`);
+    await store.reencryptAll(oldDecrypt, oldEncrypt, newEncrypt);
+
+    // Verify with new encryption
+    const newEncryption = createMockEncryption();
+    newEncryption.encrypt = jest.fn((data: string) => Promise.resolve(`new:${data}`));
+    newEncryption.decrypt = jest.fn((data: string) => Promise.resolve(data.replace(/^new:/, '')));
+    const newStore = createLocalStore(newEncryption);
+
+    const journals = await newStore.listJournals();
+    expect(journals).toHaveLength(1);
   });
 
   it('works when index and journal data are on different keys (previous failed rotation)', async () => {

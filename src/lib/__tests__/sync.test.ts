@@ -418,6 +418,52 @@ describe('SyncEngine', () => {
     });
   });
 
+  it('does not download remote-only deleted pages (L117)', async () => {
+    const remotePage = makePage('p2', 2000, true); // deleted on remote
+    const local = createMockLocalStore(makeJournal([]));
+    const remote = createMockRemoteStore(makeJournal([remotePage]));
+
+    const engine = new SyncEngine(local, remote);
+    const result = await engine.sync('journal-1');
+
+    expect(result.downloaded).toHaveLength(0);
+    expect(result.deleted).toHaveLength(0);
+    expect(local.savePage).not.toHaveBeenCalled();
+  });
+
+  it('marks both-deleted pages as deleted (L128)', async () => {
+    const localPage = makePage('p1', 1000, true);
+    const remotePage = makePage('p1', 2000, true);
+    const local = createMockLocalStore(makeJournal([localPage]));
+    const remote = createMockRemoteStore(makeJournal([remotePage]));
+
+    const engine = new SyncEngine(local, remote);
+    const result = await engine.sync('journal-1');
+
+    expect(result.deleted).toContain('p1');
+    // Should not call deletePage on either side (both already deleted)
+    expect(remote.deletePage).not.toHaveBeenCalled();
+    expect(local.deletePage).not.toHaveBeenCalled();
+  });
+
+  it('throws when remote attachment is missing during download (L61)', async () => {
+    const att = {
+      id: 'img1',
+      path: '/remote/img1.png',
+      name: 'img1.png',
+      type: 'image' as const,
+      encrypted: false,
+      deleted: false,
+    };
+    const remotePage = { ...makePage('p1', 1000), images: [att] };
+    const local = createMockLocalStore(makeJournal([]));
+    const remote = createMockRemoteStore(makeJournal([remotePage]));
+    (remote.downloadAttachment as jest.Mock).mockResolvedValue(null);
+
+    const engine = new SyncEngine(local, remote);
+    await expect(engine.sync('journal-1')).rejects.toThrow('Attachment not found on remote');
+  });
+
   describe('progress callback', () => {
     it('calls onProgress for each page', async () => {
       const pages = [makePage('p1', 1000), makePage('p2', 2000), makePage('p3', 3000)];

@@ -122,6 +122,41 @@ describe('parseManifest', () => {
     expect(() => parseManifest(json)).toThrow(ValidationError);
   });
 
+  test('rejects non-object (array)', () => {
+    const json = JSON.stringify([1, 2, 3]);
+    expect(() => parseManifest(json)).toThrow(ValidationError);
+  });
+
+  test('rejects missing exportDate', () => {
+    const json = JSON.stringify({
+      version: 1,
+      appVersion: '0.15.0',
+      encrypted: false,
+      journalTitle: 'Test',
+    });
+    expect(() => parseManifest(json)).toThrow(ValidationError);
+  });
+
+  test('rejects missing encrypted', () => {
+    const json = JSON.stringify({
+      version: 1,
+      appVersion: '0.15.0',
+      exportDate: '2026-01-01',
+      journalTitle: 'Test',
+    });
+    expect(() => parseManifest(json)).toThrow(ValidationError);
+  });
+
+  test('rejects missing journalTitle', () => {
+    const json = JSON.stringify({
+      version: 1,
+      appVersion: '0.15.0',
+      exportDate: '2026-01-01',
+      encrypted: false,
+    });
+    expect(() => parseManifest(json)).toThrow(ValidationError);
+  });
+
   test('preserves optional salt and kdfIterations', () => {
     const json = JSON.stringify({
       version: 1,
@@ -179,6 +214,14 @@ describe('collectAttachmentEntries', () => {
     expect(entries).toHaveLength(0);
   });
 
+  test('falls back to bin extension for attachment without extension', () => {
+    const img = { ...makeAttachment('a1', 'image', 'noext'), path: '/store/noext' };
+    const pages = [makePage({ images: [img] })];
+
+    const entries = collectAttachmentEntries(pages);
+    expect(entries[0].zipFilename).toBe('image-a1.bin');
+  });
+
   test('handles empty pages array', () => {
     expect(collectAttachmentEntries([])).toEqual([]);
   });
@@ -205,6 +248,24 @@ describe('rewriteAttachmentPaths', () => {
 
     const result = rewriteAttachmentPaths(pages, pathMap);
     expect(result[0].images[0].path).toBe('/store/photo.jpg');
+  });
+
+  test('rewrites file attachment paths', () => {
+    const file = makeAttachment('a1', 'file', 'doc.pdf');
+    const pages = [makePage({ files: [file] })];
+    const pathMap = new Map([['/store/doc.pdf', 'file-a1.pdf']]);
+
+    const result = rewriteAttachmentPaths(pages, pathMap);
+    expect(result[0].files[0].path).toBe('file-a1.pdf');
+  });
+
+  test('preserves file paths not in map', () => {
+    const file = makeAttachment('a1', 'file', 'doc.pdf');
+    const pages = [makePage({ files: [file] })];
+    const pathMap = new Map<string, string>();
+
+    const result = rewriteAttachmentPaths(pages, pathMap);
+    expect(result[0].files[0].path).toBe('/store/doc.pdf');
   });
 
   test('does not mutate original pages', () => {

@@ -281,6 +281,123 @@ describe('createLocalStore (web/IndexedDB)', () => {
   });
 });
 
+describe('readEncrypted password-layer fallback (web)', () => {
+  it('returns device-decrypted content when password decryption fails', async () => {
+    const encryption = createMockEncryption();
+    const store = createLocalStore(encryption);
+    await store.initialize();
+
+    // Save a journal WITHOUT password encryption
+    const journal = makeJournalContent('j1', [makePage('p1')]);
+    await store.saveJournal(journal);
+
+    // Read with a derivedKey — password layer decryption will fail, should fall back
+    const derivedKey = new Uint8Array(32);
+    crypto.getRandomValues(derivedKey);
+    const result = await store.getJournal('j1', derivedKey);
+    expect(result).not.toBeNull();
+    expect(result!.pages).toHaveLength(1);
+  });
+
+  it('returns null when device decryption fails', async () => {
+    const encryption = createMockEncryption();
+    const store = createLocalStore(encryption);
+    await store.initialize();
+
+    // Save journal normally
+    const journal = makeJournalContent('j1', [makePage('p1')]);
+    await store.saveJournal(journal);
+
+    // Now make decrypt fail
+    encryption.decrypt = jest.fn(() => {
+      throw new Error('Decryption failed');
+    });
+
+    // Should return null gracefully (readEncrypted catches and returns null)
+    const result = await store.getJournal('j1');
+    expect(result).toBeNull();
+  });
+});
+
+describe('getAttachment password fallback (web)', () => {
+  it('returns device-decrypted content without derivedKey', async () => {
+    const encryption = createMockEncryption();
+    const store = createLocalStore(encryption);
+    await store.initialize();
+    await store.saveJournal(makeJournalContent('j1'));
+
+    const att: Attachment = {
+      id: 'att-1',
+      path: '',
+      name: 'photo.jpg',
+      type: 'image',
+      encrypted: false,
+      deleted: false,
+    };
+    const path = await store.saveAttachment('j1', 'p1', att, 'base64data');
+    const result = await store.getAttachment(path);
+    expect(result).toBe('base64data');
+  });
+
+  it('returns device-decrypted content when password decryption fails', async () => {
+    const encryption = createMockEncryption();
+    const store = createLocalStore(encryption);
+    await store.initialize();
+    await store.saveJournal(makeJournalContent('j1'));
+
+    const att: Attachment = {
+      id: 'att-1',
+      path: '',
+      name: 'photo.jpg',
+      type: 'image',
+      encrypted: false,
+      deleted: false,
+    };
+    const path = await store.saveAttachment('j1', 'p1', att, 'base64data');
+
+    // Read with derivedKey — password decrypt will fail since data isn't password-encrypted
+    const derivedKey = new Uint8Array(32);
+    crypto.getRandomValues(derivedKey);
+    const result = await store.getAttachment(path, derivedKey);
+    expect(result).not.toBeNull();
+  });
+});
+
+describe('deletePage attachment cleanup (web)', () => {
+  it('cleans up attachments when deleting a page with images', async () => {
+    const encryption = createMockEncryption();
+    const store = createLocalStore(encryption);
+    await store.initialize();
+    await store.saveJournal(makeJournalContent('j1'));
+
+    const att: Attachment = {
+      id: 'att-1',
+      path: '',
+      name: 'photo.jpg',
+      type: 'image',
+      encrypted: false,
+      deleted: false,
+    };
+    const attPath = await store.saveAttachment('j1', 'p1', att, 'base64data');
+
+    // Save page with attachment
+    const page = makePage('p1');
+    page.images = [{ ...att, path: attPath }];
+    await store.savePage('j1', page);
+
+    // Delete the page
+    await store.deletePage('j1', 'p1');
+
+    // Wait for non-blocking cleanup
+    await new Promise((r) => setTimeout(r, 50));
+
+    // Verify page is soft-deleted
+    const result = await store.getPage('j1', 'p1');
+    expect(result).not.toBeNull();
+    expect(result!.deleted).toBe(true);
+  });
+});
+
 describe('reencryptAll (web/IndexedDB)', () => {
   it('re-encrypts all data so it is readable with new key', async () => {
     const oldEncryption = createMockEncryption();
@@ -463,6 +580,404 @@ describe('reencryptJournal (web/IndexedDB)', () => {
   });
 });
 
+describe('reencryptJournal attachment handling (web)', () => {
+  it('falls back when attachment is not password-encrypted during reencrypt', async () => {
+    const encryption = createMockEncryption();
+    const store = createLocalStore(encryption);
+    await store.initialize();
+
+    const att: Attachment = {
+      id: 'att-1',
+      path: '',
+      name: 'photo.jpg',
+      type: 'image',
+      encrypted: false,
+      deleted: false,
+    };
+    const journal = makeJournalContent('j1', [makePage('p1')]);
+    await store.saveJournal(journal);
+    await store.saveAttachment('j1', 'p1', att, 'imagedata');
+
+    const loaded = await store.getJournal('j1');
+
+    // Re-encrypt with an oldKey — aesGcmDecrypt will fail on the attachment
+    const oldKey = new Uint8Array(32);
+    crypto.getRandomValues(oldKey);
+    await store.reencryptJournal(loaded!, oldKey, undefined);
+
+    const result = await store.getJournal('j1');
+    expect(result).not.toBeNull();
+  });
+
+  it('adds new journal to index during reencrypt', async () => {
+    const encryption = createMockEncryption();
+    const store = createLocalStore(encryption);
+    await store.initialize();
+
+    // reencryptJournal with a journal not yet in the index
+    const j1 = makeJournalContent('j1', [makePage('p1')]);
+    await store.reencryptJournal(j1, undefined, undefined);
+
+    const journals = await store.listJournals();
+    expect(journals).toHaveLength(1);
+    expect(journals[0].id).toBe('j1');
+  });
+});
+
+describe('IDB error handling (web)', () => {
+  it('idbGet rejects on transaction error', async () => {
+    const encryption = createMockEncryption();
+    const store = createLocalStore(encryption);
+    await store.initialize();
+
+    // Save some data so we can try to read it
+    await store.saveJournal(makeJournalContent('j1'));
+
+    // Close the DB to cause errors on next operation
+    _resetDB();
+    // Delete the database so re-open creates a fresh one
+    indexedDB.deleteDatabase('canto');
+
+    // This should recover (openDB will re-open)
+    const journals = await store.listJournals();
+    expect(journals).toEqual([]);
+  });
+});
+
+describe('IDB error paths (web/IndexedDB)', () => {
+  let origTransaction: typeof IDBDatabase.prototype.transaction;
+
+  beforeEach(() => {
+    origTransaction = IDBDatabase.prototype.transaction;
+  });
+
+  afterEach(() => {
+    IDBDatabase.prototype.transaction = origTransaction;
+    jest.useRealTimers();
+  });
+
+  async function getInitializedStore() {
+    const encryption = createMockEncryption();
+    const store = createLocalStore(encryption);
+    await store.initialize();
+    return { store, encryption };
+  }
+
+  function interceptNextTransaction(patchTx: (tx: IDBTransaction) => void) {
+    const orig = origTransaction;
+    let intercepted = false;
+    IDBDatabase.prototype.transaction = function (
+      storeNames: string | string[],
+      mode?: IDBTransactionMode,
+    ) {
+      const tx = orig.call(this, storeNames, mode);
+      if (!intercepted) {
+        intercepted = true;
+        patchTx(tx);
+      }
+      return tx;
+    };
+  }
+
+  describe('openDB error (L73)', () => {
+    it('rejects when indexedDB.open fails', async () => {
+      _resetDB();
+      const openSpy = jest.spyOn(indexedDB, 'open').mockImplementation(() => {
+        const listeners: Record<string, ((e: Event) => void) | null> = {
+          onsuccess: null,
+          onerror: null,
+          onupgradeneeded: null,
+          onblocked: null,
+        };
+        const fakeReq = {
+          get onsuccess() {
+            return listeners.onsuccess;
+          },
+          set onsuccess(fn) {
+            listeners.onsuccess = fn;
+          },
+          get onerror() {
+            return listeners.onerror;
+          },
+          set onerror(fn) {
+            listeners.onerror = fn;
+            queueMicrotask(() => {
+              if (listeners.onerror) listeners.onerror(new Event('error'));
+            });
+          },
+          get onupgradeneeded() {
+            return listeners.onupgradeneeded;
+          },
+          set onupgradeneeded(fn) {
+            listeners.onupgradeneeded = fn;
+          },
+          get onblocked() {
+            return listeners.onblocked;
+          },
+          set onblocked(fn) {
+            listeners.onblocked = fn;
+          },
+          error: new DOMException('Open failed'),
+          result: null,
+          readyState: 'done',
+          addEventListener: jest.fn(),
+          removeEventListener: jest.fn(),
+          dispatchEvent: jest.fn(),
+          transaction: null,
+          source: null,
+        } as unknown as IDBOpenDBRequest;
+        return fakeReq;
+      });
+
+      const encryption = createMockEncryption();
+      const store = createLocalStore(encryption);
+      await expect(store.initialize()).rejects.toThrow();
+
+      openSpy.mockRestore();
+    });
+  });
+
+  describe('idbGet request onerror (L103-104)', () => {
+    it('rejects when IDB get request errors', async () => {
+      const { store } = await getInitializedStore();
+
+      interceptNextTransaction((tx) => {
+        const origOS = tx.objectStore.bind(tx);
+        tx.objectStore = (name: string) => {
+          const os = origOS(name);
+          os.get = () => {
+            const fakeReq = {
+              onsuccess: null as ((e: Event) => void) | null,
+              onerror: null as ((e: Event) => void) | null,
+              error: new DOMException('Get failed'),
+              result: undefined,
+            };
+            queueMicrotask(() => {
+              if (fakeReq.onerror) fakeReq.onerror(new Event('error'));
+            });
+            return fakeReq as unknown as IDBRequest;
+          };
+          return os;
+        };
+      });
+
+      await expect(store.getPage('j1', 'p1')).rejects.toThrow();
+    });
+  });
+
+  describe('idbGet transaction abort (L107-108)', () => {
+    it('rejects when IDB get transaction is aborted', async () => {
+      const { store } = await getInitializedStore();
+
+      interceptNextTransaction((tx) => {
+        const origOS = tx.objectStore.bind(tx);
+        tx.objectStore = (name: string) => {
+          const os = origOS(name);
+          os.get = () => {
+            queueMicrotask(() => {
+              try {
+                tx.abort();
+              } catch {
+                /* */
+              }
+            });
+            return { onsuccess: null, onerror: null } as unknown as IDBRequest;
+          };
+          return os;
+        };
+      });
+
+      await expect(store.getPage('j1', 'p1')).rejects.toThrow();
+    });
+  });
+
+  describe('idbPut transaction onerror (L128-129)', () => {
+    it('rejects when IDB put transaction errors', async () => {
+      const { store } = await getInitializedStore();
+
+      interceptNextTransaction((tx) => {
+        const origOS = tx.objectStore.bind(tx);
+        tx.objectStore = (name: string) => {
+          const os = origOS(name);
+          os.put = () => {
+            queueMicrotask(() => {
+              Object.defineProperty(tx, 'error', {
+                value: new DOMException('Write failed'),
+                configurable: true,
+              });
+              if (tx.onerror) tx.onerror(new Event('error'));
+            });
+            return { onsuccess: null, onerror: null } as unknown as IDBRequest;
+          };
+          return os;
+        };
+        Object.defineProperty(tx, 'oncomplete', {
+          set: () => {},
+          get: () => null,
+          configurable: true,
+        });
+      });
+
+      await expect(store.savePage('j1', makePage('p1'))).rejects.toThrow();
+    });
+  });
+
+  describe('idbPut transaction abort (L132-133)', () => {
+    it('rejects when IDB put transaction is aborted', async () => {
+      const { store } = await getInitializedStore();
+
+      interceptNextTransaction((tx) => {
+        const origOS = tx.objectStore.bind(tx);
+        tx.objectStore = (name: string) => {
+          const os = origOS(name);
+          os.put = () => {
+            queueMicrotask(() => {
+              try {
+                tx.abort();
+              } catch {
+                /* */
+              }
+            });
+            return { onsuccess: null, onerror: null } as unknown as IDBRequest;
+          };
+          return os;
+        };
+        Object.defineProperty(tx, 'oncomplete', {
+          set: () => {},
+          get: () => null,
+          configurable: true,
+        });
+      });
+
+      await expect(store.savePage('j1', makePage('p1'))).rejects.toThrow();
+    });
+  });
+
+  describe('idbDelete transaction onerror (L153-154)', () => {
+    it('rejects when IDB delete transaction errors', async () => {
+      const { store } = await getInitializedStore();
+
+      interceptNextTransaction((tx) => {
+        const origOS = tx.objectStore.bind(tx);
+        tx.objectStore = (name: string) => {
+          const os = origOS(name);
+          os.delete = () => {
+            queueMicrotask(() => {
+              Object.defineProperty(tx, 'error', {
+                value: new DOMException('Delete failed'),
+                configurable: true,
+              });
+              if (tx.onerror) tx.onerror(new Event('error'));
+            });
+            return { onsuccess: null, onerror: null } as unknown as IDBRequest;
+          };
+          return os;
+        };
+        Object.defineProperty(tx, 'oncomplete', {
+          set: () => {},
+          get: () => null,
+          configurable: true,
+        });
+      });
+
+      await expect(store.deleteAttachment('some/path')).rejects.toThrow();
+    });
+  });
+
+  describe('idbDelete transaction abort (L157-158)', () => {
+    it('rejects when IDB delete transaction is aborted', async () => {
+      const { store } = await getInitializedStore();
+
+      interceptNextTransaction((tx) => {
+        const origOS = tx.objectStore.bind(tx);
+        tx.objectStore = (name: string) => {
+          const os = origOS(name);
+          os.delete = () => {
+            queueMicrotask(() => {
+              try {
+                tx.abort();
+              } catch {
+                /* */
+              }
+            });
+            return { onsuccess: null, onerror: null } as unknown as IDBRequest;
+          };
+          return os;
+        };
+        Object.defineProperty(tx, 'oncomplete', {
+          set: () => {},
+          get: () => null,
+          configurable: true,
+        });
+      });
+
+      await expect(store.deleteAttachment('some/path')).rejects.toThrow();
+    });
+  });
+
+  describe('idbDeletePrefix transaction onerror (L187-188)', () => {
+    it('rejects when IDB deletePrefix transaction errors', async () => {
+      const { store } = await getInitializedStore();
+
+      interceptNextTransaction((tx) => {
+        const origOS = tx.objectStore.bind(tx);
+        tx.objectStore = (name: string) => {
+          const os = origOS(name);
+          os.openCursor = () => {
+            queueMicrotask(() => {
+              Object.defineProperty(tx, 'error', {
+                value: new DOMException('DeletePrefix failed'),
+                configurable: true,
+              });
+              if (tx.onerror) tx.onerror(new Event('error'));
+            });
+            return { onsuccess: null, onerror: null } as unknown as IDBRequest;
+          };
+          return os;
+        };
+        Object.defineProperty(tx, 'oncomplete', {
+          set: () => {},
+          get: () => null,
+          configurable: true,
+        });
+      });
+
+      await expect(store.deleteJournal('j1')).rejects.toThrow();
+    });
+  });
+
+  describe('idbDeletePrefix transaction abort (L191-192)', () => {
+    it('rejects when IDB deletePrefix transaction is aborted', async () => {
+      const { store } = await getInitializedStore();
+
+      interceptNextTransaction((tx) => {
+        const origOS = tx.objectStore.bind(tx);
+        tx.objectStore = (name: string) => {
+          const os = origOS(name);
+          os.openCursor = () => {
+            queueMicrotask(() => {
+              try {
+                tx.abort();
+              } catch {
+                /* */
+              }
+            });
+            return { onsuccess: null, onerror: null } as unknown as IDBRequest;
+          };
+          return os;
+        };
+        Object.defineProperty(tx, 'oncomplete', {
+          set: () => {},
+          get: () => null,
+          configurable: true,
+        });
+      });
+
+      await expect(store.deleteJournal('j1')).rejects.toThrow();
+    });
+  });
+});
+
 describe('encrypted operations (web/IndexedDB)', () => {
   it('saveAttachment with encrypted flag applies password encryption', async () => {
     const encryption = createMockEncryption();
@@ -535,8 +1050,6 @@ describe('encrypted operations (web/IndexedDB)', () => {
     const store = createLocalStore(encryption);
     await store.initialize();
 
-    // Write data directly — then read should fail gracefully
-    const journal = makeJournalContent('j1');
     // We can't save normally since encrypt works but decrypt fails,
     // so test getJournal on non-existent data
     const result = await store.getJournal('j1');

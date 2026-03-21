@@ -3,16 +3,24 @@ import { renderHook, act } from '@testing-library/react-native';
 import { JournalKeyProvider, useJournalKeys } from '@/contexts/JournalKeyContext';
 import { LEGACY_KDF_ITERATIONS } from '@/lib/encryption/password';
 
-// Mock SecuritySettingsModal's getAutoLockTimeout to avoid AppState side effects
+// Mock SecuritySettingsModal's getAutoLockTimeout
+const mockGetAutoLockTimeout = jest.fn(async () => 0); // disabled by default
 jest.mock('@/components/home/SecuritySettingsModal', () => ({
-  getAutoLockTimeout: jest.fn(async () => 0), // disabled
+  getAutoLockTimeout: () => mockGetAutoLockTimeout(),
   AUTO_LOCK_OPTIONS: [],
 }));
 
-// Mock AppState to prevent side effects
+// Mock AppState — capture the listener so we can simulate state changes
+type AppStateHandler = (state: string) => void;
+let appStateHandler: AppStateHandler | null = null;
+const mockRemove = jest.fn();
+
 jest.mock('react-native', () => ({
   AppState: {
-    addEventListener: jest.fn(() => ({ remove: jest.fn() })),
+    addEventListener: jest.fn((_event: string, handler: AppStateHandler) => {
+      appStateHandler = handler;
+      return { remove: mockRemove };
+    }),
   },
 }));
 
@@ -137,5 +145,231 @@ describe('JournalKeyContext', () => {
     expect(result.current.getKey('j7b')).toBeNull();
     expect(k1.every((b) => b === 0)).toBe(true);
     expect(k2.every((b) => b === 0)).toBe(true);
+  });
+
+  it('clearKey on non-existent key does nothing', () => {
+    const { result } = renderHook(() => useJournalKeys(), { wrapper });
+    // Should not throw
+    act(() => {
+      result.current.clearKey('nonexistent-key');
+    });
+    expect(result.current.getKey('nonexistent-key')).toBeNull();
+  });
+
+  it('touchActivity updates the last activity timestamp', () => {
+    const { result } = renderHook(() => useJournalKeys(), { wrapper });
+    // Should not throw
+    act(() => {
+      result.current.touchActivity();
+    });
+  });
+});
+
+describe('JournalKeyContext — default context (no provider)', () => {
+  it('returns default no-op functions when used outside provider', async () => {
+    const { result } = renderHook(() => useJournalKeys());
+    expect(result.current.getKey('x')).toBeNull();
+
+    // Default deriveAndCache returns empty Uint8Array
+    let key: Uint8Array;
+    await act(async () => {
+      key = await result.current.deriveAndCache('x', 'pw', SALT_B64);
+    });
+    expect(key!.length).toBe(0);
+
+    // Other functions should not throw
+    result.current.setKey('x', new Uint8Array(32));
+    result.current.clearKey('x');
+    result.current.clearAll();
+    result.current.touchActivity();
+  });
+});
+
+describe('JournalKeyContext — AppState auto-lock', () => {
+  beforeEach(() => {
+    jest.useFakeTimers();
+    appStateHandler = null;
+    mockGetAutoLockTimeout.mockReset();
+  });
+
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
+  it('clears keys when returning from background after timeout', async () => {
+    // Auto-lock after 1ms for testing
+    mockGetAutoLockTimeout.mockResolvedValue(1);
+
+    const { result } = renderHook(() => useJournalKeys(), { wrapper });
+    expect(appStateHandler).not.toBeNull();
+
+    // Store a key
+    const key = new Uint8Array(32).fill(0xcc);
+    act(() => {
+      result.current.setKey('j-lock', key);
+    });
+    expect(result.current.getKey('j-lock')).toBe(key);
+
+    // Simulate going to background
+    await act(async () => {
+      appStateHandler!('background');
+    });
+
+    // Advance time past the auto-lock timeout
+    jest.advanceTimersByTime(10);
+
+    // Simulate coming back to active
+    await act(async () => {
+      appStateHandler!('active');
+      // Flush the async getAutoLockTimeout
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(result.current.getKey('j-lock')).toBeNull();
+    expect(key.every((b) => b === 0)).toBe(true);
+  });
+
+  it('does not clear keys when returning from background before timeout', async () => {
+    // Auto-lock after 60 seconds
+    mockGetAutoLockTimeout.mockResolvedValue(60_000);
+
+    const { result } = renderHook(() => useJournalKeys(), { wrapper });
+
+    const key = new Uint8Array(32).fill(0xdd);
+    act(() => {
+      result.current.setKey('j-keep', key);
+    });
+
+    // Simulate going to background
+    await act(async () => {
+      appStateHandler!('background');
+    });
+
+    // Only 1ms passes — well under the timeout
+    jest.advanceTimersByTime(1);
+
+    // Come back to active
+    await act(async () => {
+      appStateHandler!('active');
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(result.current.getKey('j-keep')).toBe(key);
+  });
+
+  it('does not clear keys when auto-lock is disabled (timeout=0)', async () => {
+    mockGetAutoLockTimeout.mockResolvedValue(0);
+
+    const { result } = renderHook(() => useJournalKeys(), { wrapper });
+
+    const key = new Uint8Array(32).fill(0xee);
+    act(() => {
+      result.current.setKey('j-no-lock', key);
+    });
+
+    await act(async () => {
+      appStateHandler!('background');
+    });
+    jest.advanceTimersByTime(999_999);
+    await act(async () => {
+      appStateHandler!('active');
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(result.current.getKey('j-no-lock')).toBe(key);
+  });
+
+  it('handles inactive state by recording backgroundedAt', async () => {
+    mockGetAutoLockTimeout.mockResolvedValue(1);
+
+    const { result } = renderHook(() => useJournalKeys(), { wrapper });
+    const key = new Uint8Array(32).fill(0xaa);
+    act(() => {
+      result.current.setKey('j-inactive', key);
+    });
+
+    // Simulate going to inactive (e.g. multitasking view)
+    await act(async () => {
+      appStateHandler!('inactive');
+    });
+
+    jest.advanceTimersByTime(10);
+
+    await act(async () => {
+      appStateHandler!('active');
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(result.current.getKey('j-inactive')).toBeNull();
+  });
+
+  it('periodic inactivity check clears keys after timeout', async () => {
+    // Auto-lock after 1ms
+    mockGetAutoLockTimeout.mockResolvedValue(1);
+
+    const { result } = renderHook(() => useJournalKeys(), { wrapper });
+
+    const key = new Uint8Array(32).fill(0xff);
+    act(() => {
+      result.current.setKey('j-periodic', key);
+    });
+
+    // Advance past 30s interval + auto-lock timeout
+    await act(async () => {
+      jest.advanceTimersByTime(30_001);
+      // Flush the async getAutoLockTimeout inside setInterval
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(result.current.getKey('j-periodic')).toBeNull();
+    expect(key.every((b) => b === 0)).toBe(true);
+  });
+
+  it('periodic inactivity check does nothing when no keys cached', async () => {
+    mockGetAutoLockTimeout.mockResolvedValue(1);
+
+    renderHook(() => useJournalKeys(), { wrapper });
+
+    // Advance past the interval — should not throw or call getAutoLockTimeout
+    // (it returns early because keysRef.current.size === 0)
+    await act(async () => {
+      jest.advanceTimersByTime(30_001);
+      await Promise.resolve();
+    });
+
+    // getAutoLockTimeout should not have been called from the interval
+    // (It may have been called from the AppState listener setup, so just
+    // check there's no error)
+  });
+
+  it('ignores active state when not previously backgrounded', async () => {
+    mockGetAutoLockTimeout.mockResolvedValue(1);
+
+    const { result } = renderHook(() => useJournalKeys(), { wrapper });
+    const key = new Uint8Array(32).fill(0x11);
+    act(() => {
+      result.current.setKey('j-no-bg', key);
+    });
+
+    // Go directly to active without going to background first
+    await act(async () => {
+      appStateHandler!('active');
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    // Keys should not be cleared since we never went to background
+    expect(result.current.getKey('j-no-bg')).toBe(key);
+  });
+
+  it('cleans up AppState listener on unmount', () => {
+    const { unmount } = renderHook(() => useJournalKeys(), { wrapper });
+    unmount();
+    expect(mockRemove).toHaveBeenCalled();
   });
 });

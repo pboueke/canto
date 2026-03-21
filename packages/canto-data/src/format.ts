@@ -119,7 +119,8 @@ export function collectAttachmentEntries(pages: Page[]): AttachmentEntry[] {
       if (!att.path || seen.has(att.path)) continue;
       seen.add(att.path);
 
-      const ext = att.name.split('.').pop() ?? 'bin';
+      const parts = att.name.split('.');
+      const ext = parts.length > 1 ? parts.pop()! : 'bin';
       const zipFilename = `${att.type}-${att.id}.${ext}`;
 
       entries.push({

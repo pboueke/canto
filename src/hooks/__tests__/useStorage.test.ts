@@ -585,6 +585,15 @@ describe('useAttachment', () => {
   });
 });
 
+describe('useJournalTags – null journal', () => {
+  it('returns empty tags when journal is null', async () => {
+    mockStore.getJournal.mockResolvedValueOnce(null);
+    const { result } = renderHook(() => useJournalTags('j-null'));
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    expect(result.current.tags).toEqual([]);
+  });
+});
+
 describe('ensureInitialized concurrency', () => {
   it('concurrent getLocalStore calls return the same store instance', async () => {
     const results = await Promise.all([getLocalStore(), getLocalStore(), getLocalStore()]);
@@ -593,5 +602,39 @@ describe('ensureInitialized concurrency', () => {
     for (const result of results) {
       expect(result).toBe(results[0]);
     }
+  });
+});
+
+describe('ensureInitialized error recovery', () => {
+  beforeEach(() => {
+    // Reset module-level singletons so initPromise is null
+    jest.resetModules();
+    jest.doMock('@/lib/storage', () => ({
+      createLocalStore: jest.fn(() => ({
+        ...mockStore,
+        initialize: jest
+          .fn()
+          .mockRejectedValueOnce(new Error('init fail'))
+          .mockResolvedValue(undefined),
+      })),
+    }));
+    jest.doMock('@/lib/encryption', () => ({
+      createEncryptionService: jest.fn(() => mockEncryptionService),
+    }));
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  it('resets initPromise on initialize failure and retries', async () => {
+    const { getLocalStore: getLS } = require('../useStorage');
+
+    // First call should fail (initialize rejects)
+    await expect(getLS()).rejects.toThrow('init fail');
+
+    // After failure, initPromise is reset — next call should succeed
+    const store = await getLS();
+    expect(store.initialize).toHaveBeenCalledTimes(2);
   });
 });
