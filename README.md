@@ -18,7 +18,7 @@ A private, encrypted journaling app for Android, iOS, and Web.
 - **Data portability** — export journals as encrypted `.canto.zip` archives. Import them on another device. No lock-in.
 - **Google Drive sync** — optional cross-device sync via your own Google Drive account
 - **6 themes** — Light, Dark, Monokai, Solarized, Nord, and Dracula
-- **8 languages** — English, Portuguese, Spanish, German, French, Russian, Chinese, and Italian
+- **Multilingual** — 20 languages and counting
 - **Offline-first** — works without an internet connection. All data stored locally.
 - **Free and open source** — GPLv3. Read every line. Audit it yourself.
 

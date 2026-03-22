@@ -1,4 +1,4 @@
-import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useTheme } from '@/hooks/useTheme';
 import { useI18n } from '@/hooks/useI18n';
@@ -37,7 +37,7 @@ export function LanguagePickerModal({ visible, onClose }: LanguagePickerModalPro
             {t.settings.language}
           </Text>
 
-          <View style={styles.list}>
+          <ScrollView style={styles.list} showsVerticalScrollIndicator>
             {langCodes.map((code) => {
               const isActive = lang === code;
               return (
@@ -77,7 +77,7 @@ export function LanguagePickerModal({ visible, onClose }: LanguagePickerModalPro
                 </Pressable>
               );
             })}
-          </View>
+          </ScrollView>
 
           <Pressable
             onPress={onClose}
