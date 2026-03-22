@@ -1,9 +1,10 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import {
   ActivityIndicator,
   Dimensions,
   FlatList,
   Image,
+  type LayoutChangeEvent,
   Pressable,
   StyleSheet,
   Text,
@@ -16,10 +17,9 @@ import { useI18n } from '@/hooks/useI18n';
 import { useImageQueue } from '@/hooks/useImageQueue';
 import type { Attachment } from '@/data';
 
-const SCREEN_WIDTH = Dimensions.get('window').width;
 const HORIZONTAL_PADDING = 10;
-const IMAGE_WIDTH = SCREEN_WIDTH - HORIZONTAL_PADDING * 4;
 const IMAGE_HEIGHT = 250;
+const DEFAULT_WIDTH = Dimensions.get('window').width;
 
 interface ImageCarouselProps {
   images: Attachment[];
@@ -46,7 +46,15 @@ export function ImageCarousel({
   const { t } = useI18n();
   const [currentIndex, setCurrentIndex] = useState(0);
   const [viewerVisible, setViewerVisible] = useState(false);
+  const [containerWidth, setContainerWidth] = useState(DEFAULT_WIDTH);
   const { loadedImages, loadingImages, enqueue, cancelAll } = useImageQueue(loadImage);
+
+  const IMAGE_WIDTH = containerWidth - HORIZONTAL_PADDING * 4;
+
+  const onContainerLayout = useCallback((e: LayoutChangeEvent) => {
+    const w = e.nativeEvent.layout.width;
+    if (w > 0) setContainerWidth(w);
+  }, []);
 
   const activeImages = images.filter((img) => !img.deleted);
 
@@ -65,7 +73,7 @@ export function ImageCarousel({
     .map((img) => ({ uri: loadedImages[img.id] }));
 
   return (
-    <View style={styles.container}>
+    <View style={styles.container} onLayout={onContainerLayout}>
       {encrypted && (
         <View style={styles.lockBadge}>
           <Feather name="lock" size={14} color={theme.colors.text} />
@@ -135,11 +143,11 @@ export function ImageCarousel({
                 <View style={styles.downloadOverlay}>
                   <Pressable
                     onPress={() => onDownload(item)}
-                    style={[styles.editButton, { backgroundColor: theme.colors.surface }]}
+                    style={styles.downloadButton}
                     accessibilityLabel={t.a11y.downloadImage}
                     accessibilityRole="button"
                   >
-                    <Feather name="download" size={16} color={theme.colors.text} />
+                    <Feather name="download" size={18} color="#fff" />
                   </Pressable>
                 </View>
               )}
@@ -250,6 +258,14 @@ const styles = StyleSheet.create({
     right: 8,
     flexDirection: 'row',
     gap: 6,
+  },
+  downloadButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.4)',
   },
   editButton: {
     width: 30,

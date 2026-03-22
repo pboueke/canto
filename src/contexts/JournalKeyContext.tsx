@@ -21,6 +21,8 @@ interface JournalKeyContextValue {
   clearKey(journalId: string): void;
   clearAll(): void;
   touchActivity(): void;
+  /** Subscribe to auto-lock events. Returns unsubscribe function. */
+  onAutoLock(callback: () => void): () => void;
 }
 
 const JournalKeyContext = createContext<JournalKeyContextValue>({
@@ -30,6 +32,7 @@ const JournalKeyContext = createContext<JournalKeyContextValue>({
   clearKey: () => {},
   clearAll: () => {},
   touchActivity: () => {},
+  onAutoLock: () => () => {},
 });
 
 export function JournalKeyProvider({ children }: { children: ReactNode }) {
@@ -37,6 +40,7 @@ export function JournalKeyProvider({ children }: { children: ReactNode }) {
   const lastActivityRef = useRef(Date.now());
   const backgroundedAtRef = useRef<number | null>(null);
   const clearAllRef = useRef<() => void>(() => {});
+  const autoLockListenersRef = useRef(new Set<() => void>());
 
   const deriveAndCache = useCallback(
     async (journalId: string, password: string, saltBase64: string, iterations?: number) => {
@@ -82,8 +86,22 @@ export function JournalKeyProvider({ children }: { children: ReactNode }) {
     lastActivityRef.current = Date.now();
   }, []);
 
-  // Keep clearAllRef in sync so effects use the latest clearAll without re-registering
-  clearAllRef.current = clearAll;
+  const onAutoLock = useCallback((callback: () => void) => {
+    autoLockListenersRef.current.add(callback);
+    return () => {
+      autoLockListenersRef.current.delete(callback);
+    };
+  }, []);
+
+  const triggerAutoLock = useCallback(() => {
+    clearAll();
+    for (const listener of autoLockListenersRef.current) {
+      listener();
+    }
+  }, [clearAll]);
+
+  // Keep clearAllRef in sync so effects use the latest triggerAutoLock without re-registering
+  clearAllRef.current = triggerAutoLock;
 
   // Auto-lock: check on app foreground resume
   useEffect(() => {
@@ -116,7 +134,7 @@ export function JournalKeyProvider({ children }: { children: ReactNode }) {
 
   return (
     <JournalKeyContext.Provider
-      value={{ deriveAndCache, setKey, getKey, clearKey, clearAll, touchActivity }}
+      value={{ deriveAndCache, setKey, getKey, clearKey, clearAll, touchActivity, onAutoLock }}
     >
       {children}
     </JournalKeyContext.Provider>

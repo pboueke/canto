@@ -8,7 +8,8 @@ import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import { ThemeContext } from '@/hooks/useTheme';
 import { I18nContext } from '@/hooks/useI18n';
-import { JournalKeyProvider } from '@/contexts/JournalKeyContext';
+import { JournalKeyProvider, useJournalKeys } from '@/contexts/JournalKeyContext';
+import { AutoLockModal } from '@/components/common/AutoLockModal';
 import { GoogleAuthProvider } from '@/contexts/GoogleAuthContext';
 import { SyncManagerProvider } from '@/contexts/SyncManagerContext';
 import { type CantoTheme, type ThemeName, themes, lightTheme } from '@/styles/themes';
@@ -79,46 +80,58 @@ export default function RootLayout() {
         <GoogleAuthProvider>
           <JournalKeyProvider>
             <SyncManagerProvider>
-              <StatusBar style={isDark ? 'light' : 'dark'} />
-              <View
-                style={[layoutStyles.outer, { backgroundColor: isDark ? '#1a1a1a' : '#e8e8e8' }]}
-              >
-                <View
-                  style={[
-                    layoutStyles.inner,
-                    Platform.OS === 'web' && layoutStyles.innerWeb,
-                    { backgroundColor: theme.colors.background },
-                  ]}
-                >
-                  <Stack
-                    screenOptions={{
-                      headerStyle: { backgroundColor: theme.colors.headerBackground },
-                      headerTintColor: theme.colors.text,
-                      contentStyle: { backgroundColor: theme.colors.background },
-                    }}
-                  >
-                    <Stack.Screen name="onboarding" options={{ headerShown: false }} />
-                    <Stack.Screen name="index" options={{ headerShown: false }} />
-                    <Stack.Screen
-                      name="journal/[id]"
-                      options={{
-                        headerShown: false,
-                      }}
-                    />
-                    <Stack.Screen
-                      name="page/[id]"
-                      options={{
-                        headerShown: false,
-                      }}
-                    />
-                  </Stack>
-                </View>
-              </View>
+              <AppContent theme={theme} isDark={isDark} />
             </SyncManagerProvider>
           </JournalKeyProvider>
         </GoogleAuthProvider>
       </I18nContext.Provider>
     </ThemeContext.Provider>
+  );
+}
+
+function AppContent({ theme, isDark }: { theme: CantoTheme; isDark: boolean }) {
+  const { touchActivity } = useJournalKeys();
+
+  return (
+    <View
+      style={[layoutStyles.outer, { backgroundColor: isDark ? '#1a1a1a' : '#e8e8e8' }]}
+      onStartShouldSetResponderCapture={() => {
+        touchActivity();
+        return false;
+      }}
+    >
+      <View
+        style={[
+          layoutStyles.inner,
+          Platform.OS === 'web' && layoutStyles.innerWeb,
+          { backgroundColor: theme.colors.background },
+        ]}
+      >
+        <Stack
+          screenOptions={{
+            headerStyle: { backgroundColor: theme.colors.headerBackground },
+            headerTintColor: theme.colors.text,
+            contentStyle: { backgroundColor: theme.colors.background },
+          }}
+        >
+          <Stack.Screen name="onboarding" options={{ headerShown: false }} />
+          <Stack.Screen name="index" options={{ headerShown: false }} />
+          <Stack.Screen
+            name="journal/[id]"
+            options={{
+              headerShown: false,
+            }}
+          />
+          <Stack.Screen
+            name="page/[id]"
+            options={{
+              headerShown: false,
+            }}
+          />
+        </Stack>
+      </View>
+      <AutoLockModal />
+    </View>
   );
 }
 
