@@ -149,6 +149,7 @@ function makeJournal(id: string, overrides: Partial<JournalContent> = {}): Journ
     icon: 'book',
     date: '2026-01-01T00:00:00Z',
     secure: false,
+    salt: 'dGVzdHNhbHQ=',
     pages: [],
     settings: {
       use24h: false,
@@ -163,7 +164,7 @@ function makeJournal(id: string, overrides: Partial<JournalContent> = {}): Journ
     },
     version: 1,
     ...overrides,
-  };
+  } as JournalContent;
 }
 
 function makePage(id: string, overrides: Partial<Page> = {}): Page {

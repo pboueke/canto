@@ -12,7 +12,23 @@ import { createInMemoryLocalStore } from './helpers/in-memory-local-store';
 import { createMockEncryption } from './helpers/mock-encryption';
 
 jest.mock('../sync/gdrive/api');
+jest.mock('../encryption/utils', () => ({
+  ...jest.requireActual('../encryption/utils'),
+  aesGcmEncrypt: jest.fn((plaintext: string) => Promise.resolve(plaintext)),
+  aesGcmDecrypt: jest.fn((ciphertext: string) => Promise.resolve(ciphertext)),
+}));
 const mockedApi = api as jest.Mocked<typeof api>;
+
+const SYNC_KEY = new Uint8Array(32).fill(1);
+
+/** Helper to build a sync index JSON from pages for pre-populating remote state. */
+function buildIndexJson(pages: Array<{ id: string; modified: number; deleted?: boolean }>): string {
+  const index: Record<string, { modified: number; deleted?: boolean }> = {};
+  for (const p of pages) {
+    index[p.id] = { modified: p.modified, ...(p.deleted ? { deleted: true } : {}) };
+  }
+  return JSON.stringify(index);
+}
 
 describe('GDrive sync E2E (web platform)', () => {
   const drive = new InMemoryDrive(mockedApi);
@@ -37,7 +53,7 @@ describe('GDrive sync E2E (web platform)', () => {
     await local.saveJournal(journal);
 
     const engine = new SyncEngine(local, store);
-    const result = await engine.sync('j1');
+    const result = await engine.sync('j1', SYNC_KEY);
 
     expect(result.uploaded).toHaveLength(2);
     expect(result.uploaded).toContain('p1');
@@ -56,6 +72,7 @@ describe('GDrive sync E2E (web platform)', () => {
     const pagesFolderId = drive.putFolder('pages', jFolderId);
     drive.putFile('meta.json', jFolderId, JSON.stringify({ ...emptyJournal }));
     drive.putFile('p1.json', pagesFolderId, JSON.stringify(p1));
+    drive.putFile('index.json', jFolderId, buildIndexJson([p1]));
     drive.putFile(
       'canto-journals.json',
       'appData',
@@ -63,10 +80,10 @@ describe('GDrive sync E2E (web platform)', () => {
     );
 
     const engine = new SyncEngine(local, store);
-    const result = await engine.sync('j1');
+    const result = await engine.sync('j1', SYNC_KEY);
 
     expect(result.downloaded).toContain('p1');
-    const savedPage = await local.getPage('j1', 'p1');
+    const savedPage = await local.getPage('j1', 'p1', SYNC_KEY);
     expect(savedPage).not.toBeNull();
     expect(savedPage!.text).toBe(p1.text);
   });
@@ -83,6 +100,7 @@ describe('GDrive sync E2E (web platform)', () => {
     const pagesFolderId = drive.putFolder('pages', jFolderId);
     drive.putFile('meta.json', jFolderId, JSON.stringify({ ...journal }));
     drive.putFile('p1.json', pagesFolderId, JSON.stringify(remotePage));
+    drive.putFile('index.json', jFolderId, buildIndexJson([remotePage]));
     drive.putFile(
       'canto-journals.json',
       'appData',
@@ -90,7 +108,7 @@ describe('GDrive sync E2E (web platform)', () => {
     );
 
     const engine = new SyncEngine(local, store);
-    const result = await engine.sync('j1');
+    const result = await engine.sync('j1', SYNC_KEY);
 
     expect(result.uploaded).toContain('p1');
     expect(result.downloaded).toHaveLength(0);
@@ -108,6 +126,7 @@ describe('GDrive sync E2E (web platform)', () => {
     const pagesFolderId = drive.putFolder('pages', jFolderId);
     drive.putFile('meta.json', jFolderId, JSON.stringify({ ...journal }));
     drive.putFile('p1.json', pagesFolderId, JSON.stringify(remotePage));
+    drive.putFile('index.json', jFolderId, buildIndexJson([remotePage]));
     drive.putFile(
       'canto-journals.json',
       'appData',
@@ -115,11 +134,11 @@ describe('GDrive sync E2E (web platform)', () => {
     );
 
     const engine = new SyncEngine(local, store);
-    const result = await engine.sync('j1');
+    const result = await engine.sync('j1', SYNC_KEY);
 
     expect(result.downloaded).toContain('p1');
     expect(result.uploaded).toHaveLength(0);
-    const savedPage = await local.getPage('j1', 'p1');
+    const savedPage = await local.getPage('j1', 'p1', SYNC_KEY);
     expect(savedPage!.text).toBe('Remote edited text');
   });
 
@@ -134,6 +153,7 @@ describe('GDrive sync E2E (web platform)', () => {
     const pagesFolderId = drive.putFolder('pages', jFolderId);
     drive.putFile('meta.json', jFolderId, JSON.stringify({ ...journal }));
     drive.putFile('p1.json', pagesFolderId, JSON.stringify(page));
+    drive.putFile('index.json', jFolderId, buildIndexJson([page]));
     drive.putFile(
       'canto-journals.json',
       'appData',
@@ -141,7 +161,7 @@ describe('GDrive sync E2E (web platform)', () => {
     );
 
     const engine = new SyncEngine(local, store);
-    const result = await engine.sync('j1');
+    const result = await engine.sync('j1', SYNC_KEY);
 
     expect(result.uploaded).toHaveLength(0);
     expect(result.downloaded).toHaveLength(0);
@@ -159,6 +179,7 @@ describe('GDrive sync E2E (web platform)', () => {
     const pagesFolderId = drive.putFolder('pages', jFolderId);
     drive.putFile('meta.json', jFolderId, JSON.stringify({ ...journal }));
     const pageFileId = drive.putFile('p1.json', pagesFolderId, JSON.stringify(remotePage));
+    drive.putFile('index.json', jFolderId, buildIndexJson([remotePage]));
     drive.putFile(
       'canto-journals.json',
       'appData',
@@ -166,7 +187,7 @@ describe('GDrive sync E2E (web platform)', () => {
     );
 
     const engine = new SyncEngine(local, store);
-    const result = await engine.sync('j1');
+    const result = await engine.sync('j1', SYNC_KEY);
 
     expect(result.deleted).toContain('p1');
     expect(drive.isTrashed(pageFileId)).toBe(true);
@@ -184,6 +205,7 @@ describe('GDrive sync E2E (web platform)', () => {
     const pagesFolderId = drive.putFolder('pages', jFolderId);
     drive.putFile('meta.json', jFolderId, JSON.stringify({ ...journal }));
     drive.putFile('p1.json', pagesFolderId, JSON.stringify(remotePage));
+    drive.putFile('index.json', jFolderId, buildIndexJson([remotePage]));
     drive.putFile(
       'canto-journals.json',
       'appData',
@@ -191,10 +213,10 @@ describe('GDrive sync E2E (web platform)', () => {
     );
 
     const engine = new SyncEngine(local, store);
-    const result = await engine.sync('j1');
+    const result = await engine.sync('j1', SYNC_KEY);
 
     expect(result.deleted).toContain('p1');
-    const deletedPage = await local.getPage('j1', 'p1');
+    const deletedPage = await local.getPage('j1', 'p1', SYNC_KEY);
     expect(deletedPage!.deleted).toBe(true);
   });
 
@@ -210,7 +232,7 @@ describe('GDrive sync E2E (web platform)', () => {
     await local.savePage('j1', page, undefined, true);
 
     const engine = new SyncEngine(local, store);
-    const result = await engine.sync('j1');
+    const result = await engine.sync('j1', SYNC_KEY);
 
     expect(result.uploaded).toContain('p1');
     // Verify attachment was uploaded (octet-stream content type = attachment)
@@ -235,6 +257,7 @@ describe('GDrive sync E2E (web platform)', () => {
     const attFolderId = drive.putFolder('attachments', jFolderId);
     drive.putFile('meta.json', jFolderId, JSON.stringify(emptyJournal));
     drive.putFile('p1.json', pagesFolderId, JSON.stringify(remotePage));
+    drive.putFile('index.json', jFolderId, buildIndexJson([remotePage]));
     drive.putFile('img1.png', attFolderId, 'base64imagedata');
     drive.putFile(
       'canto-journals.json',
@@ -243,10 +266,10 @@ describe('GDrive sync E2E (web platform)', () => {
     );
 
     const engine = new SyncEngine(local, store);
-    const result = await engine.sync('j1');
+    const result = await engine.sync('j1', SYNC_KEY);
 
     expect(result.downloaded).toContain('p1');
-    const savedPage = await local.getPage('j1', 'p1');
+    const savedPage = await local.getPage('j1', 'p1', SYNC_KEY);
     expect(savedPage).not.toBeNull();
     // Attachment path should be a web-format path (not gdrive://)
     expect(savedPage!.images[0].path).toMatch(/^canto\//);
@@ -274,7 +297,7 @@ describe('GDrive sync E2E (web platform)', () => {
 
     const consoleSpy = jest.spyOn(console, 'warn').mockImplementation();
     const engine = new SyncEngine(local, store);
-    const result = await engine.sync('j1');
+    const result = await engine.sync('j1', SYNC_KEY);
 
     expect(result.uploaded).toContain('p1');
     expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('Missing local attachment'));
@@ -299,7 +322,7 @@ describe('GDrive sync E2E (web platform)', () => {
     await local.savePage('j1', p2, undefined, true);
 
     const engine = new SyncEngine(local, store);
-    const result = await engine.sync('j1');
+    const result = await engine.sync('j1', SYNC_KEY);
 
     expect(result.uploaded).toHaveLength(2);
   });
@@ -309,12 +332,21 @@ describe('GDrive sync E2E (web platform)', () => {
     const emptyJournal = makeJournal([]);
     await local.saveJournal(emptyJournal);
 
+    const p1 = makePage('p1', 1000);
     const rootId = drive.putFolder('Canto');
     const jFolderId = drive.putFolder('j1', rootId);
     const pagesFolderId = drive.putFolder('pages', jFolderId);
     drive.putFile('meta.json', jFolderId, JSON.stringify(emptyJournal));
-    drive.putFile('p1.json', pagesFolderId, JSON.stringify(makePage('p1', 1000)));
+    drive.putFile('p1.json', pagesFolderId, JSON.stringify(p1));
     drive.putFile('p2.json', pagesFolderId, 'NOT VALID JSON');
+    drive.putFile(
+      'index.json',
+      jFolderId,
+      buildIndexJson([
+        { id: 'p1', modified: 1000 },
+        { id: 'p2', modified: 2000 },
+      ]),
+    );
     drive.putFile(
       'canto-journals.json',
       'appData',
@@ -323,7 +355,7 @@ describe('GDrive sync E2E (web platform)', () => {
 
     const consoleSpy = jest.spyOn(console, 'warn').mockImplementation();
     const engine = new SyncEngine(local, store);
-    const result = await engine.sync('j1');
+    const result = await engine.sync('j1', SYNC_KEY);
 
     expect(result.downloaded).toContain('p1');
     consoleSpy.mockRestore();
@@ -336,23 +368,24 @@ describe('GDrive sync E2E (web platform)', () => {
     await local.saveJournal(journal);
 
     const engine = new SyncEngine(local, store);
-    const result1 = await engine.sync('j1');
+    const result1 = await engine.sync('j1', SYNC_KEY);
     expect(result1.uploaded).toContain('p1');
 
     // Simulate remote edit
     const updatedPage = makePage('p1', 5000, false, [], 'Updated remotely');
     const store2 = new GDriveRemoteStore();
     await store2.connect({ accessToken: 'test-token' });
-    await store2.uploadPage('j1', updatedPage);
+    await store2.uploadPage('j1', updatedPage.id, JSON.stringify(updatedPage));
+    await store2.uploadSyncIndex('j1', { p1: { modified: 5000 } });
 
     // Re-sync
     const store3 = new GDriveRemoteStore();
     await store3.connect({ accessToken: 'test-token' });
     const engine2 = new SyncEngine(local, store3);
-    const result2 = await engine2.sync('j1');
+    const result2 = await engine2.sync('j1', SYNC_KEY);
 
     expect(result2.downloaded).toContain('p1');
-    const savedPage = await local.getPage('j1', 'p1');
+    const savedPage = await local.getPage('j1', 'p1', SYNC_KEY);
     expect(savedPage!.text).toBe('Updated remotely');
   });
 
@@ -371,6 +404,7 @@ describe('GDrive sync E2E (web platform)', () => {
     const pagesFolderId = drive.putFolder('pages', jFolderId);
     drive.putFile('meta.json', jFolderId, JSON.stringify(emptyJournal));
     drive.putFile('p1.json', pagesFolderId, JSON.stringify(remotePage));
+    drive.putFile('index.json', jFolderId, buildIndexJson([remotePage]));
     drive.putFile(
       'canto-journals.json',
       'appData',
@@ -378,9 +412,9 @@ describe('GDrive sync E2E (web platform)', () => {
     );
 
     const engine = new SyncEngine(local, store);
-    await engine.sync('j1');
+    await engine.sync('j1', SYNC_KEY);
 
-    const savedPage = await local.getPage('j1', 'p1');
+    const savedPage = await local.getPage('j1', 'p1', SYNC_KEY);
     expect(savedPage!.modified).toBe(remoteTimestamp);
   });
 
@@ -395,6 +429,7 @@ describe('GDrive sync E2E (web platform)', () => {
     const pagesFolderId = drive.putFolder('pages', jFolderId);
     drive.putFile('meta.json', jFolderId, JSON.stringify(emptyJournal));
     drive.putFile('p1.json', pagesFolderId, JSON.stringify(remotePage));
+    drive.putFile('index.json', jFolderId, buildIndexJson([remotePage]));
     drive.putFile(
       'canto-journals.json',
       'appData',
@@ -402,14 +437,14 @@ describe('GDrive sync E2E (web platform)', () => {
     );
 
     const engine = new SyncEngine(local, store);
-    const result1 = await engine.sync('j1');
+    const result1 = await engine.sync('j1', SYNC_KEY);
     expect(result1.downloaded).toContain('p1');
 
-    // Re-sync — page should be in sync now, no uploads
+    // Re-sync — page should be in sync now via the index, no uploads
     const store2 = new GDriveRemoteStore();
     await store2.connect({ accessToken: 'test-token' });
     const engine2 = new SyncEngine(local, store2);
-    const result2 = await engine2.sync('j1');
+    const result2 = await engine2.sync('j1', SYNC_KEY);
 
     expect(result2.uploaded).toHaveLength(0);
     expect(result2.downloaded).toHaveLength(0);
@@ -436,16 +471,18 @@ describe('GDrive sync E2E (web platform)', () => {
     await local.saveJournal(journal);
 
     const engine = new SyncEngine(local, store);
-    await engine.sync('j1');
+    await engine.sync('j1', SYNC_KEY);
 
     // Verify metadata is on remote by downloading it via a fresh store
     const store2 = new GDriveRemoteStore();
     await store2.connect({ accessToken: 'test-token' });
-    const remoteResult = await store2.downloadJournalMeta('j1');
-    expect(remoteResult!.content.title).toBe('Custom Title');
-    expect(remoteResult!.content.icon).toBe('star');
-    expect(remoteResult!.content.settings.use24h).toBe(true);
-    expect(remoteResult!.content.settings.sort).toBe('ascending');
+    const remoteRaw = await store2.downloadJournalMeta('j1');
+    expect(remoteRaw).not.toBeNull();
+    const remoteMeta = JSON.parse(remoteRaw!);
+    expect(remoteMeta.title).toBe('Custom Title');
+    expect(remoteMeta.icon).toBe('star');
+    expect(remoteMeta.settings.use24h).toBe(true);
+    expect(remoteMeta.settings.sort).toBe('ascending');
   });
 
   it('soft-deleted pages not re-downloaded after sync', async () => {
@@ -456,7 +493,7 @@ describe('GDrive sync E2E (web platform)', () => {
 
     // First sync: upload page
     const engine = new SyncEngine(local, store);
-    await engine.sync('j1');
+    await engine.sync('j1', SYNC_KEY);
 
     // Delete locally — this marks as deleted with newer timestamp
     await local.deletePage('j1', 'p1');
@@ -465,7 +502,7 @@ describe('GDrive sync E2E (web platform)', () => {
     const store2 = new GDriveRemoteStore();
     await store2.connect({ accessToken: 'test-token' });
     const engine2 = new SyncEngine(local, store2);
-    const result = await engine2.sync('j1');
+    const result = await engine2.sync('j1', SYNC_KEY);
 
     expect(result.deleted).toContain('p1');
 
@@ -473,7 +510,7 @@ describe('GDrive sync E2E (web platform)', () => {
     const store3 = new GDriveRemoteStore();
     await store3.connect({ accessToken: 'test-token' });
     const engine3 = new SyncEngine(local, store3);
-    const result3 = await engine3.sync('j1');
+    const result3 = await engine3.sync('j1', SYNC_KEY);
 
     expect(result3.downloaded).toHaveLength(0);
   });
@@ -489,14 +526,14 @@ describe('GDrive sync E2E (web platform)', () => {
     await local.saveJournal(journal2, derivedKey);
 
     const engine = new SyncEngine(local, store);
-    const r1 = await engine.sync('j1');
+    const r1 = await engine.sync('j1', SYNC_KEY);
     const r2 = await engine.sync('j2', derivedKey);
 
     expect(r1.uploaded).toContain('p1');
     expect(r2.uploaded).toContain('p2');
 
     // Verify independent storage
-    const j1 = await local.getJournal('j1');
+    const j1 = await local.getJournal('j1', SYNC_KEY);
     const j2 = await local.getJournal('j2', derivedKey);
     expect(j1!.title).toBe('Journal 1');
     expect(j2!.title).toBe('Journal 2');
@@ -521,6 +558,7 @@ describe('GDrive sync E2E (web platform)', () => {
     drive.putFile('meta.json', jFolderId, JSON.stringify(emptyJournal));
     drive.putFile('p1.json', pagesFolderId, JSON.stringify(remotePage1));
     drive.putFile('p2.json', pagesFolderId, JSON.stringify(remotePage2));
+    drive.putFile('index.json', jFolderId, buildIndexJson([remotePage1, remotePage2]));
     drive.putFile(
       'canto-journals.json',
       'appData',
@@ -533,7 +571,7 @@ describe('GDrive sync E2E (web platform)', () => {
 
     // Now sync — pages should be in sync (same timestamps), no uploads
     const engine = new SyncEngine(local, store);
-    const result = await engine.sync('j1');
+    const result = await engine.sync('j1', SYNC_KEY);
 
     expect(result.uploaded).toHaveLength(0);
     expect(result.downloaded).toHaveLength(0);
@@ -551,6 +589,7 @@ describe('GDrive sync E2E (web platform)', () => {
     const pagesFolderId = drive.putFolder('pages', jFolderId);
     drive.putFile('meta.json', jFolderId, JSON.stringify(emptyJournal));
     drive.putFile('p1.json', pagesFolderId, JSON.stringify(remotePage));
+    drive.putFile('index.json', jFolderId, buildIndexJson([remotePage]));
     drive.putFile(
       'canto-journals.json',
       'appData',
@@ -561,7 +600,7 @@ describe('GDrive sync E2E (web platform)', () => {
     await local.savePage('j1', remotePage, undefined, false);
 
     const engine = new SyncEngine(local, store);
-    const result = await engine.sync('j1');
+    const result = await engine.sync('j1', SYNC_KEY);
 
     // The local page now has a newer timestamp than remote → triggers unnecessary upload
     expect(result.uploaded).toContain('p1');

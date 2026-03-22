@@ -26,6 +26,7 @@ const makeJournal = (pages: Page[]): JournalContent => ({
   icon: 'book',
   date: '2026-01-01T00:00:00Z',
   secure: false,
+  salt: 'dGVzdHNhbHQ=',
   pages,
   settings: {
     use24h: false,
@@ -123,6 +124,9 @@ describe('GDriveRemoteStore', () => {
     it('creates journal folder and meta file', async () => {
       await store.connect({ accessToken: TOKEN });
       const journal = makeJournal([]);
+      const { pages: _pages, ...metaWithoutPages } = journal;
+      const encryptedMeta = JSON.stringify(metaWithoutPages);
+      const registry = { title: journal.title, encrypted: journal.secure, salt: journal.salt };
 
       // getOrCreateFolder for Canto root
       mockedApi.listFiles.mockResolvedValueOnce([]);
@@ -162,7 +166,7 @@ describe('GDriveRemoteStore', () => {
         modifiedTime: '',
       });
 
-      await store.uploadJournalMeta(journal);
+      await store.uploadJournalMeta(journal.id, encryptedMeta, registry);
 
       // Verify meta.json was created
       expect(mockedApi.createFile).toHaveBeenCalledWith(
@@ -213,7 +217,7 @@ describe('GDriveRemoteStore', () => {
         modifiedTime: '',
       });
 
-      await store.uploadPage('journal-1', page);
+      await store.uploadPage('journal-1', page.id, JSON.stringify(page));
 
       expect(mockedApi.createFile).toHaveBeenCalledWith(
         TOKEN,
@@ -259,7 +263,7 @@ describe('GDriveRemoteStore', () => {
       mockedApi.getFileContent.mockResolvedValueOnce(JSON.stringify(page));
 
       const result = await store.downloadPage('journal-1', 'p1');
-      expect(result).toEqual(page);
+      expect(result).toBe(JSON.stringify(page));
     });
 
     it('returns null for missing page', async () => {
@@ -299,11 +303,8 @@ describe('GDriveRemoteStore', () => {
   });
 
   describe('downloadJournalMeta', () => {
-    it('returns failure details when a page download fails', async () => {
+    it('returns raw string content of meta.json', async () => {
       await store.connect({ accessToken: TOKEN });
-
-      const page1 = makePage('p1', 1000);
-      const page2 = makePage('p2', 2000);
 
       const folder = (id: string, name: string) => ({
         id,
@@ -311,27 +312,6 @@ describe('GDriveRemoteStore', () => {
         mimeType: 'application/vnd.google-apps.folder',
         modifiedTime: '',
       });
-      const file = (id: string, name: string) => ({
-        id,
-        name,
-        mimeType: 'application/json',
-        modifiedTime: '',
-      });
-
-      // Resolve root folder
-      mockedApi.listFiles.mockResolvedValueOnce([folder('root-id', 'Canto')]);
-      // Resolve journal folder
-      mockedApi.listFiles.mockResolvedValueOnce([folder('j-id', 'journal-1')]);
-      // findFile for meta.json
-      mockedApi.listFiles.mockResolvedValueOnce([file('meta-id', 'meta.json')]);
-      // Resolve pages folder (journal folder already cached, just pages subfolder)
-      mockedApi.listFiles.mockResolvedValueOnce([folder('pages-id', 'pages')]);
-      // List page files in pages folder — 3 files
-      mockedApi.listFiles.mockResolvedValueOnce([
-        file('pf1', 'p1.json'),
-        file('pf2', 'p2.json'),
-        file('pf3', 'p3.json'),
-      ]);
 
       const metaContent = JSON.stringify({
         id: 'journal-1',
@@ -339,6 +319,7 @@ describe('GDriveRemoteStore', () => {
         icon: 'book',
         date: '2026-01-01T00:00:00Z',
         secure: false,
+        salt: 'dGVzdHNhbHQ=',
         settings: {
           use24h: false,
           previewTags: true,
@@ -353,23 +334,24 @@ describe('GDriveRemoteStore', () => {
         version: 1,
       });
 
-      // getFileContent: first call is meta.json, then page downloads
-      mockedApi.getFileContent
-        .mockResolvedValueOnce(metaContent) // meta.json
-        .mockResolvedValueOnce(JSON.stringify(page1)) // p1.json — success
-        .mockRejectedValueOnce(new Error('Network timeout')) // p2.json — failure
-        .mockResolvedValueOnce(JSON.stringify(page2)); // p3.json — success
+      // Resolve root folder
+      mockedApi.listFiles.mockResolvedValueOnce([folder('root-id', 'Canto')]);
+      // Resolve journal folder
+      mockedApi.listFiles.mockResolvedValueOnce([folder('j-id', 'journal-1')]);
+      // findFile for meta.json
+      mockedApi.listFiles.mockResolvedValueOnce([
+        { id: 'meta-id', name: 'meta.json', mimeType: 'application/json', modifiedTime: '' },
+      ]);
+      // getFileContent
+      mockedApi.getFileContent.mockResolvedValueOnce(metaContent);
 
       const result = await store.downloadJournalMeta('journal-1');
 
       expect(result).not.toBeNull();
-      expect(result!.content.pages).toHaveLength(2);
-      expect(result!.content.pages).toEqual(expect.arrayContaining([page1, page2]));
-      expect(result!.failures).toHaveLength(1);
-      expect(result!.failures![0]).toEqual({
-        name: 'p2.json',
-        reason: 'Network timeout',
-      });
+      expect(result).toBe(metaContent);
+      // Caller can parse it
+      const parsed = JSON.parse(result!);
+      expect(parsed.title).toBe('Test Journal');
     });
   });
 
@@ -451,7 +433,7 @@ describe('GDriveRemoteStore', () => {
         modifiedTime: '',
       });
 
-      await store.uploadPage('journal-1', makePage('p1', 1000));
+      await store.uploadPage('journal-1', 'p1', JSON.stringify(makePage('p1', 1000)));
 
       // Second call: folders should be cached, only findFile + create
       mockedApi.listFiles.mockResolvedValueOnce([]); // findFile
@@ -462,7 +444,7 @@ describe('GDriveRemoteStore', () => {
         modifiedTime: '',
       });
 
-      await store.uploadPage('journal-1', makePage('p2', 2000));
+      await store.uploadPage('journal-1', 'p2', JSON.stringify(makePage('p2', 2000)));
 
       // 3 folder lookups for first call + 1 findFile, then just 1 findFile for second call = 5 total listFiles calls
       expect(mockedApi.listFiles).toHaveBeenCalledTimes(5);
@@ -503,7 +485,7 @@ describe('GDriveRemoteStore', () => {
       // Verify the raw content is NOT in the error
     });
 
-    it('throws descriptive error when page content is invalid JSON', async () => {
+    it('downloadPage returns raw string even for invalid JSON', async () => {
       const rootFolder = {
         id: 'root-id',
         name: 'Canto',
@@ -537,9 +519,9 @@ describe('GDriveRemoteStore', () => {
 
       mockedApi.getFileContent.mockResolvedValueOnce('corrupted data');
 
-      await expect(store.downloadPage('journal-1', 'p1')).rejects.toThrow(
-        'Invalid JSON in page:p1',
-      );
+      // downloadPage now returns raw string without parsing
+      const result = await store.downloadPage('journal-1', 'p1');
+      expect(result).toBe('corrupted data');
     });
   });
 
@@ -731,7 +713,7 @@ describe('GDriveRemoteStore', () => {
       });
 
       const page = makePage('p1', 1000);
-      await store.uploadPage('journal-1', page);
+      await store.uploadPage('journal-1', page.id, JSON.stringify(page));
 
       // Second upload: the file is now cached, findFile returns the cached ID
       mockedApi.updateFile.mockResolvedValueOnce({
@@ -742,7 +724,7 @@ describe('GDriveRemoteStore', () => {
       });
 
       const updatedPage = makePage('p1', 2000);
-      await store.uploadPage('journal-1', updatedPage);
+      await store.uploadPage('journal-1', updatedPage.id, JSON.stringify(updatedPage));
 
       expect(mockedApi.updateFile).toHaveBeenCalledWith(
         TOKEN,
@@ -765,6 +747,9 @@ describe('GDriveRemoteStore', () => {
       });
 
       const journal = makeJournal([]);
+      const { pages: _pages, ...metaWithoutPages } = journal;
+      const encryptedMeta = JSON.stringify(metaWithoutPages);
+      const registry = { title: journal.title, encrypted: journal.secure, salt: journal.salt };
 
       // getOrCreateFolder root
       mockedApi.listFiles.mockResolvedValueOnce([folder('root-id', 'Canto')]);
@@ -798,7 +783,7 @@ describe('GDriveRemoteStore', () => {
         modifiedTime: '',
       });
 
-      await store.uploadJournalMeta(journal);
+      await store.uploadJournalMeta(journal.id, encryptedMeta, registry);
 
       // Verify updateFile was called for registry
       const updateCalls = mockedApi.updateFile.mock.calls.filter(
@@ -835,7 +820,7 @@ describe('GDriveRemoteStore', () => {
         modifiedTime: '',
       });
 
-      await store.uploadPage('journal-1', makePage('p1', 1000));
+      await store.uploadPage('journal-1', 'p1', JSON.stringify(makePage('p1', 1000)));
 
       // Now delete — the journal folder should be cached
       mockedApi.deleteFile.mockResolvedValueOnce(undefined);
@@ -892,7 +877,7 @@ describe('GDriveRemoteStore', () => {
         modifiedTime: '',
       });
 
-      await freshStore.uploadPage('journal-1', makePage('p1', 1000));
+      await freshStore.uploadPage('journal-1', 'p1', JSON.stringify(makePage('p1', 1000)));
 
       // Now delete the journal — folder ID should be cached
       mockedApi.deleteFile.mockResolvedValueOnce(undefined);
@@ -1051,8 +1036,8 @@ describe('GDriveRemoteStore', () => {
 
       // Fire concurrently — folder resolution should be shared
       await Promise.all([
-        freshStore.uploadPage('journal-1', page1),
-        freshStore.uploadPage('journal-1', page2),
+        freshStore.uploadPage('journal-1', page1.id, JSON.stringify(page1)),
+        freshStore.uploadPage('journal-1', page2.id, JSON.stringify(page2)),
       ]);
 
       // Both pages uploaded successfully — the inflight dedup worked
@@ -1087,6 +1072,89 @@ describe('GDriveRemoteStore', () => {
 
       const callsAfterSecond = mockedApi.listFiles.mock.calls.length - callCountAfterFirst;
       expect(callsAfterSecond).toBe(1); // Only registry lookup
+    });
+  });
+
+  describe('uploadSyncIndex / downloadSyncIndex', () => {
+    beforeEach(() => {
+      store = new GDriveRemoteStore();
+      mockedApi.listFiles.mockReset();
+      mockedApi.createFile.mockReset();
+      mockedApi.updateFile.mockReset();
+      mockedApi.getFileContent.mockReset();
+      mockedApi.deleteFile.mockReset();
+    });
+
+    it('uploads a sync index', async () => {
+      await store.connect({ accessToken: TOKEN });
+
+      const folder = (id: string, name: string) => ({
+        id,
+        name,
+        mimeType: 'application/vnd.google-apps.folder',
+        modifiedTime: '',
+      });
+
+      mockedApi.listFiles.mockResolvedValueOnce([folder('root-id', 'Canto')]);
+      mockedApi.listFiles.mockResolvedValueOnce([folder('j-id', 'journal-1')]);
+      // findFile for index.json — not found
+      mockedApi.listFiles.mockResolvedValueOnce([]);
+      mockedApi.createFile.mockResolvedValueOnce({
+        id: 'idx-id',
+        name: 'index.json',
+        mimeType: 'application/json',
+        modifiedTime: '',
+      });
+
+      const index = { p1: { modified: 1000 }, p2: { modified: 2000, deleted: true } };
+      await store.uploadSyncIndex('journal-1', index);
+
+      expect(mockedApi.createFile).toHaveBeenCalledWith(
+        TOKEN,
+        expect.objectContaining({ name: 'index.json' }),
+        JSON.stringify(index),
+      );
+    });
+
+    it('downloads a sync index', async () => {
+      await store.connect({ accessToken: TOKEN });
+
+      const folder = (id: string, name: string) => ({
+        id,
+        name,
+        mimeType: 'application/vnd.google-apps.folder',
+        modifiedTime: '',
+      });
+
+      mockedApi.listFiles.mockResolvedValueOnce([folder('root-id', 'Canto')]);
+      mockedApi.listFiles.mockResolvedValueOnce([folder('j-id', 'journal-1')]);
+      mockedApi.listFiles.mockResolvedValueOnce([
+        { id: 'idx-id', name: 'index.json', mimeType: 'application/json', modifiedTime: '' },
+      ]);
+
+      const index = { p1: { modified: 1000 }, p2: { modified: 2000 } };
+      mockedApi.getFileContent.mockResolvedValueOnce(JSON.stringify(index));
+
+      const result = await store.downloadSyncIndex('journal-1');
+      expect(result).toEqual(index);
+    });
+
+    it('returns null when no sync index exists', async () => {
+      await store.connect({ accessToken: TOKEN });
+
+      const folder = (id: string, name: string) => ({
+        id,
+        name,
+        mimeType: 'application/vnd.google-apps.folder',
+        modifiedTime: '',
+      });
+
+      mockedApi.listFiles.mockResolvedValueOnce([folder('root-id', 'Canto')]);
+      mockedApi.listFiles.mockResolvedValueOnce([folder('j-id', 'journal-1')]);
+      mockedApi.listFiles.mockResolvedValueOnce([]); // index.json not found
+
+      const result = await store.downloadSyncIndex('journal-1');
+      expect(result).toBeNull();
     });
   });
 });

@@ -3,6 +3,19 @@ import type { LocalStore } from '../storage/types';
 import type { RemoteStore } from '../sync/types';
 import type { Page, JournalContent } from '@/data';
 
+// Mock encryption as passthrough
+jest.mock('../encryption/utils', () => ({
+  ...jest.requireActual('../encryption/utils'),
+  aesGcmEncrypt: jest.fn((plaintext: string) => Promise.resolve(plaintext)),
+  aesGcmDecrypt: jest.fn((ciphertext: string) => Promise.resolve(ciphertext)),
+}));
+
+// Mock password key derivation as passthrough (returns a fixed 32-byte key)
+jest.mock('../encryption/password', () => ({
+  ...jest.requireActual('../encryption/password'),
+  deriveKey: jest.fn(() => Promise.resolve(new Uint8Array(32).fill(0xab))),
+}));
+
 // Mock AsyncStorage
 const asyncStore: Record<string, string> = {};
 jest.mock('@react-native-async-storage/async-storage', () => ({
@@ -29,6 +42,8 @@ function createMockRemoteStore(): RemoteStore {
     uploadPage: jest.fn(),
     downloadPage: jest.fn().mockResolvedValue(null),
     deletePage: jest.fn(),
+    uploadSyncIndex: jest.fn(),
+    downloadSyncIndex: jest.fn().mockResolvedValue(null),
     uploadAttachment: jest.fn(),
     downloadAttachment: jest.fn(),
     deleteAttachment: jest.fn(),
@@ -54,6 +69,7 @@ const makeJournal = (pages: Page[]): JournalContent => ({
   icon: 'book',
   date: '2026-01-01T00:00:00Z',
   secure: false,
+  salt: 'dGVzdHNhbHQ=',
   pages,
   settings: {
     use24h: false,
@@ -143,8 +159,8 @@ describe('SyncManager', () => {
     });
 
     it('transitions to error on failure', async () => {
-      const local = createMockLocalStore(null);
-      // getJournal returns null → engine returns empty result, but let's make connect throw
+      const journal = makeJournal([]);
+      const local = createMockLocalStore(journal);
       (local.getJournal as jest.Mock).mockRejectedValueOnce(new Error('read failure'));
       const manager = new SyncManager(local, createMockRemoteStore());
       const states: SyncState[] = [];
@@ -217,6 +233,7 @@ describe('SyncManager', () => {
       const j1 = makeJournal([makePage('p1', 1000)]);
       const j2 = { ...makeJournal([makePage('p2', 2000)]), id: 'j2' };
       const local = createMockLocalStore(j1);
+      (local.listJournals as jest.Mock).mockResolvedValue([j1, j2]);
       (local.getJournal as jest.Mock).mockImplementation((id: string) => {
         if (id === 'j1') return Promise.resolve(j1);
         if (id === 'j2') return Promise.resolve(j2);
@@ -285,11 +302,11 @@ describe('SyncManager', () => {
       const manager = new SyncManager(local, remote);
       const key = new Uint8Array(32);
 
-      // Make the remote store return a page to download
-      (remote.downloadJournalMeta as jest.Mock).mockResolvedValueOnce({
-        content: makeJournal([remotePage]),
+      // Make the remote store return a page to download via sync index
+      (remote.downloadSyncIndex as jest.Mock).mockResolvedValueOnce({
+        p1: { modified: 1000 },
       });
-      (remote.downloadPage as jest.Mock).mockResolvedValueOnce(remotePage);
+      (remote.downloadPage as jest.Mock).mockResolvedValueOnce(JSON.stringify(remotePage));
 
       await manager.syncJournal('j1', 'token', key);
 
@@ -350,7 +367,7 @@ describe('SyncManager', () => {
     });
 
     it('error message is captured in state', async () => {
-      const local = createMockLocalStore(null);
+      const local = createMockLocalStore(makeJournal([]));
       (local.getJournal as jest.Mock).mockRejectedValueOnce(new Error('Drive API error (401)'));
       const manager = new SyncManager(local, createMockRemoteStore());
 
@@ -360,7 +377,7 @@ describe('SyncManager', () => {
     });
 
     it('non-Error throws are captured as strings', async () => {
-      const local = createMockLocalStore(null);
+      const local = createMockLocalStore(makeJournal([]));
       (local.getJournal as jest.Mock).mockRejectedValueOnce('string error');
       const manager = new SyncManager(local, createMockRemoteStore());
 
@@ -370,7 +387,7 @@ describe('SyncManager', () => {
     });
 
     it('captures errorStack from Error objects', async () => {
-      const local = createMockLocalStore(null);
+      const local = createMockLocalStore(makeJournal([]));
       (local.getJournal as jest.Mock).mockRejectedValueOnce(new Error('stack test'));
       const manager = new SyncManager(local, createMockRemoteStore());
 
@@ -381,7 +398,7 @@ describe('SyncManager', () => {
     });
 
     it('errorStack is undefined for non-Error throws', async () => {
-      const local = createMockLocalStore(null);
+      const local = createMockLocalStore(makeJournal([]));
       (local.getJournal as jest.Mock).mockRejectedValueOnce('plain string');
       const manager = new SyncManager(local, createMockRemoteStore());
 
@@ -442,16 +459,19 @@ describe('SyncManager', () => {
       jest.advanceTimersByTime(1000);
 
       // Flush the promise queue so the async sync completes
-      await Promise.resolve();
-      await Promise.resolve();
-      await Promise.resolve();
+      // Switch to real timers to await the full async chain
+      jest.useRealTimers();
+      await new Promise((r) => setTimeout(r, 50));
+      jest.useFakeTimers();
 
-      // getJournal should be called once (from the single sync that fires)
-      expect(local.getJournal).toHaveBeenCalledTimes(1);
+      // getJournal called twice per sync: once by engine for content, once for sync index update
+      expect(local.getJournal).toHaveBeenCalledTimes(2);
+      // listJournals called once to resolve sync key from salt
+      expect(local.listJournals).toHaveBeenCalledTimes(1);
     });
 
     it('debounced sync errors are captured in state (not unhandled)', async () => {
-      const local = createMockLocalStore(null);
+      const local = createMockLocalStore(makeJournal([]));
       (local.getJournal as jest.Mock).mockRejectedValue(new Error('debounce fail'));
       const remote = createMockRemoteStore();
       const manager = new SyncManager(local, remote);

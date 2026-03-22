@@ -2,6 +2,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { SyncEngine } from './engine';
 import type { LocalStore } from '@/lib/storage/types';
 import type { RemoteStore, SyncResult } from './types';
+import { deriveKey, DEFAULT_KDF_ITERATIONS } from '@/lib/encryption/password';
+import { base64ToUint8 } from '@/lib/encryption/utils';
 
 const LAST_SYNC_PREFIX = 'canto:lastSync:';
 
@@ -74,7 +76,24 @@ export class SyncManager {
     try {
       await this.connectWithToken(accessToken);
       const engine = new SyncEngine(this.local, this.store);
-      const result = await engine.sync(journalId, derivedKey, (current, total) => {
+
+      // Ensure we always have a sync key. For password-protected journals the
+      // caller provides derivedKey. For non-secure journals we derive a key
+      // from the journal's salt with an empty password — this protects data
+      // on GDrive against passive scraping.
+      let syncKey = derivedKey;
+      if (!syncKey) {
+        const journals = await this.local.listJournals();
+        const journal = journals.find((j) => j.id === journalId);
+        if (journal?.salt) {
+          const saltBytes = base64ToUint8(journal.salt);
+          syncKey = await deriveKey('', saltBytes, journal.kdfIterations ?? DEFAULT_KDF_ITERATIONS);
+        } else {
+          throw new Error(`[Sync] Journal ${journalId} has no salt — cannot derive sync key`);
+        }
+      }
+
+      const result = await engine.sync(journalId, syncKey, (current, total) => {
         this.setState(journalId, {
           status: 'syncing',
           lastSynced,

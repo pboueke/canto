@@ -17,7 +17,14 @@ import { createInMemoryLocalStore, type Platform } from './helpers/in-memory-loc
 import { createMockEncryption } from './helpers/mock-encryption';
 
 jest.mock('../sync/gdrive/api');
+jest.mock('../encryption/utils', () => ({
+  ...jest.requireActual('../encryption/utils'),
+  aesGcmEncrypt: jest.fn((plaintext: string) => Promise.resolve(plaintext)),
+  aesGcmDecrypt: jest.fn((ciphertext: string) => Promise.resolve(ciphertext)),
+}));
 const mockedApi = api as jest.Mocked<typeof api>;
+
+const SYNC_KEY = new Uint8Array(32).fill(1);
 
 function createSyncPair(drive: InMemoryDrive, platform: Platform) {
   const encryption = createMockEncryption();
@@ -51,16 +58,16 @@ describe('Cross-platform sync E2E', () => {
       // Native sync up
       await connectStore(native.remote);
       const nativeEngine = new SyncEngine(native.local, native.remote);
-      await nativeEngine.sync('j1');
+      await nativeEngine.sync('j1', SYNC_KEY);
 
       // Web sync down
       await connectStore(web.remote);
       await web.local.saveJournal(makeJournal([]));
       const webEngine = new SyncEngine(web.local, web.remote);
-      const result = await webEngine.sync('j1');
+      const result = await webEngine.sync('j1', SYNC_KEY);
 
       expect(result.downloaded).toContain('p1');
-      const webPage = await web.local.getPage('j1', 'p1');
+      const webPage = await web.local.getPage('j1', 'p1', SYNC_KEY);
       expect(webPage!.text).toBe('Hello from native');
       expect(webPage!.modified).toBe(1000);
     });
@@ -82,15 +89,15 @@ describe('Cross-platform sync E2E', () => {
       // Native sync up
       await connectStore(native.remote);
       const nativeEngine = new SyncEngine(native.local, native.remote);
-      await nativeEngine.sync('j1');
+      await nativeEngine.sync('j1', SYNC_KEY);
 
       // Web sync down
       await connectStore(web.remote);
       await web.local.saveJournal(makeJournal([]));
       const webEngine = new SyncEngine(web.local, web.remote);
-      await webEngine.sync('j1');
+      await webEngine.sync('j1', SYNC_KEY);
 
-      const webPage = await web.local.getPage('j1', 'p1');
+      const webPage = await web.local.getPage('j1', 'p1', SYNC_KEY);
       expect(webPage).not.toBeNull();
       // Web should have a web-format path, not native file URI
       expect(webPage!.images[0].path).toMatch(/^canto\//);
@@ -111,12 +118,12 @@ describe('Cross-platform sync E2E', () => {
 
       await connectStore(native.remote);
       const nativeEngine = new SyncEngine(native.local, native.remote);
-      await nativeEngine.sync('j1');
+      await nativeEngine.sync('j1', SYNC_KEY);
 
       await connectStore(web.remote);
       await web.local.saveJournal(makeJournal([]));
       const webEngine = new SyncEngine(web.local, web.remote);
-      const result = await webEngine.sync('j1');
+      const result = await webEngine.sync('j1', SYNC_KEY);
 
       expect(result.downloaded).toContain('p1');
       expect(result.downloaded).toContain('p2');
@@ -147,17 +154,19 @@ describe('Cross-platform sync E2E', () => {
 
       await connectStore(native.remote);
       const nativeEngine = new SyncEngine(native.local, native.remote);
-      await nativeEngine.sync('j1');
+      await nativeEngine.sync('j1', SYNC_KEY);
 
       // Verify remote has the metadata
       const remoteStore = new GDriveRemoteStore();
       await connectStore(remoteStore);
       const remoteResult = await remoteStore.downloadJournalMeta('j1');
-      expect(remoteResult!.content.title).toBe('Travel Diary');
-      expect(remoteResult!.content.icon).toBe('plane');
-      expect(remoteResult!.content.settings.use24h).toBe(true);
-      expect(remoteResult!.content.settings.sort).toBe('ascending');
-      expect(remoteResult!.content.settings.autoLocation).toBe(true);
+      // downloadJournalMeta now returns string | null; mock encryption is identity
+      const meta = JSON.parse(remoteResult!);
+      expect(meta.title).toBe('Travel Diary');
+      expect(meta.icon).toBe('plane');
+      expect(meta.settings.use24h).toBe(true);
+      expect(meta.settings.sort).toBe('ascending');
+      expect(meta.settings.autoLocation).toBe(true);
     });
 
     it('encrypted journal round-trip', async () => {
@@ -191,7 +200,7 @@ describe('Cross-platform sync E2E', () => {
       await native.local.saveJournal(makeJournal([p1]));
       await connectStore(native.remote);
       const ne1 = new SyncEngine(native.local, native.remote);
-      await ne1.sync('j1');
+      await ne1.sync('j1', SYNC_KEY);
 
       // Edit on native
       const p1v2 = makePage('p1', 5000, false, [], 'Version 2');
@@ -199,15 +208,15 @@ describe('Cross-platform sync E2E', () => {
       const ne2Store = new GDriveRemoteStore();
       await connectStore(ne2Store);
       const ne2 = new SyncEngine(native.local, ne2Store);
-      await ne2.sync('j1');
+      await ne2.sync('j1', SYNC_KEY);
 
       // Web syncs
       await connectStore(web.remote);
       await web.local.saveJournal(makeJournal([]));
       const we = new SyncEngine(web.local, web.remote);
-      await we.sync('j1');
+      await we.sync('j1', SYNC_KEY);
 
-      const webPage = await web.local.getPage('j1', 'p1');
+      const webPage = await web.local.getPage('j1', 'p1', SYNC_KEY);
       expect(webPage!.text).toBe('Version 2');
       expect(webPage!.modified).toBe(5000);
     });
@@ -225,15 +234,15 @@ describe('Cross-platform sync E2E', () => {
 
       await connectStore(web.remote);
       const webEngine = new SyncEngine(web.local, web.remote);
-      await webEngine.sync('j1');
+      await webEngine.sync('j1', SYNC_KEY);
 
       await connectStore(native.remote);
       await native.local.saveJournal(makeJournal([]));
       const nativeEngine = new SyncEngine(native.local, native.remote);
-      const result = await nativeEngine.sync('j1');
+      const result = await nativeEngine.sync('j1', SYNC_KEY);
 
       expect(result.downloaded).toContain('p1');
-      const nativePage = await native.local.getPage('j1', 'p1');
+      const nativePage = await native.local.getPage('j1', 'p1', SYNC_KEY);
       expect(nativePage!.text).toBe('Hello from web');
     });
 
@@ -251,14 +260,14 @@ describe('Cross-platform sync E2E', () => {
 
       await connectStore(web.remote);
       const webEngine = new SyncEngine(web.local, web.remote);
-      await webEngine.sync('j1');
+      await webEngine.sync('j1', SYNC_KEY);
 
       await connectStore(native.remote);
       await native.local.saveJournal(makeJournal([]));
       const nativeEngine = new SyncEngine(native.local, native.remote);
-      await nativeEngine.sync('j1');
+      await nativeEngine.sync('j1', SYNC_KEY);
 
-      const nativePage = await native.local.getPage('j1', 'p1');
+      const nativePage = await native.local.getPage('j1', 'p1', SYNC_KEY);
       expect(nativePage).not.toBeNull();
       // Native should have native-format path
       expect(nativePage!.images[0].path).toMatch(/^file:\/\//);
@@ -296,14 +305,14 @@ describe('Cross-platform sync E2E', () => {
       await web.local.saveJournal(makeJournal([page]));
       await connectStore(web.remote);
       const we1 = new SyncEngine(web.local, web.remote);
-      await we1.sync('j1');
+      await we1.sync('j1', SYNC_KEY);
 
       // Native syncs down
       await connectStore(native.remote);
       await native.local.saveJournal(makeJournal([]));
       const ne1 = new SyncEngine(native.local, native.remote);
-      await ne1.sync('j1');
-      expect(await native.local.getPage('j1', 'p1')).not.toBeNull();
+      await ne1.sync('j1', SYNC_KEY);
+      expect(await native.local.getPage('j1', 'p1', SYNC_KEY)).not.toBeNull();
 
       // Web soft-deletes: mark page as deleted with newer timestamp and sync
       // The engine sees localPage.deleted=true → calls remote.deletePage (trashes remote file)
@@ -312,21 +321,18 @@ describe('Cross-platform sync E2E', () => {
       const we2Store = new GDriveRemoteStore();
       await connectStore(we2Store);
       const we2 = new SyncEngine(web.local, we2Store);
-      const webResult = await we2.sync('j1');
+      const webResult = await we2.sync('j1', SYNC_KEY);
       expect(webResult.deleted).toContain('p1');
 
-      // Native syncs again — remote page file is now trashed (invisible).
-      // Engine sees local has p1 but remote doesn't → treats as local-only.
-      // Since the local page is NOT deleted on native, it gets re-uploaded.
-      // This is a known limitation: deletion propagation requires the deleted page
-      // to remain visible on remote (soft-delete via content, not file trashing).
+      // Native syncs again — sync index now records p1 as deleted,
+      // so the engine propagates the deletion to native's local store.
       const ne2Store = new GDriveRemoteStore();
       await connectStore(ne2Store);
       const ne2 = new SyncEngine(native.local, ne2Store);
-      const result = await ne2.sync('j1');
+      const result = await ne2.sync('j1', SYNC_KEY);
 
-      // Known behavior: native re-uploads the page since remote file was trashed
-      expect(result.uploaded).toContain('p1');
+      // With the sync index, deletion is properly propagated across platforms
+      expect(result.deleted).toContain('p1');
     });
   });
 
@@ -352,12 +358,12 @@ describe('Cross-platform sync E2E', () => {
       // Native syncs (uploads A)
       await connectStore(native.remote);
       const ne = new SyncEngine(native.local, native.remote);
-      await ne.sync('j1');
+      await ne.sync('j1', SYNC_KEY);
 
       // Web syncs (uploads B, downloads A)
       await connectStore(web.remote);
       const we = new SyncEngine(web.local, web.remote);
-      const webResult = await we.sync('j1');
+      const webResult = await we.sync('j1', SYNC_KEY);
       expect(webResult.uploaded).toContain('pB');
       expect(webResult.downloaded).toContain('pA');
 
@@ -365,14 +371,14 @@ describe('Cross-platform sync E2E', () => {
       const ne2Store = new GDriveRemoteStore();
       await connectStore(ne2Store);
       const ne2 = new SyncEngine(native.local, ne2Store);
-      const nativeResult = await ne2.sync('j1');
+      const nativeResult = await ne2.sync('j1', SYNC_KEY);
       expect(nativeResult.downloaded).toContain('pB');
 
       // Both have both pages
-      const nativeA = await native.local.getPage('j1', 'pA');
-      const nativeB = await native.local.getPage('j1', 'pB');
-      const webA = await web.local.getPage('j1', 'pA');
-      const webB = await web.local.getPage('j1', 'pB');
+      const nativeA = await native.local.getPage('j1', 'pA', SYNC_KEY);
+      const nativeB = await native.local.getPage('j1', 'pB', SYNC_KEY);
+      const webA = await web.local.getPage('j1', 'pA', SYNC_KEY);
+      const webB = await web.local.getPage('j1', 'pB', SYNC_KEY);
 
       expect(nativeA!.text).toBe('From native');
       expect(nativeB!.text).toBe('From web');
@@ -392,7 +398,7 @@ describe('Cross-platform sync E2E', () => {
       // Sync initial state
       await connectStore(native.remote);
       const ne1 = new SyncEngine(native.local, native.remote);
-      await ne1.sync('j1');
+      await ne1.sync('j1', SYNC_KEY);
 
       // Native edits (newer)
       const nativeEdit = makePage('p1', 5000, false, [], 'Native edit');
@@ -406,15 +412,15 @@ describe('Cross-platform sync E2E', () => {
       const ne2Store = new GDriveRemoteStore();
       await connectStore(ne2Store);
       const ne2 = new SyncEngine(native.local, ne2Store);
-      await ne2.sync('j1');
+      await ne2.sync('j1', SYNC_KEY);
 
       // Web syncs (should download native's version since it's newer)
       await connectStore(web.remote);
       const we = new SyncEngine(web.local, web.remote);
-      const webResult = await we.sync('j1');
+      const webResult = await we.sync('j1', SYNC_KEY);
 
       expect(webResult.downloaded).toContain('p1');
-      const webPage = await web.local.getPage('j1', 'p1');
+      const webPage = await web.local.getPage('j1', 'p1', SYNC_KEY);
       expect(webPage!.text).toBe('Native edit');
       expect(webPage!.modified).toBe(5000);
     });
@@ -430,7 +436,7 @@ describe('Cross-platform sync E2E', () => {
       // Sync initial state
       await connectStore(native.remote);
       const ne1 = new SyncEngine(native.local, native.remote);
-      await ne1.sync('j1');
+      await ne1.sync('j1', SYNC_KEY);
 
       // Web edits (newer)
       const webEdit = makePage('p1', 8000, false, [], 'Web wins');
@@ -443,16 +449,16 @@ describe('Cross-platform sync E2E', () => {
       // Web syncs first (uploads newer)
       await connectStore(web.remote);
       const we = new SyncEngine(web.local, web.remote);
-      await we.sync('j1');
+      await we.sync('j1', SYNC_KEY);
 
       // Native syncs (should download web's version)
       const ne2Store = new GDriveRemoteStore();
       await connectStore(ne2Store);
       const ne2 = new SyncEngine(native.local, ne2Store);
-      const nativeResult = await ne2.sync('j1');
+      const nativeResult = await ne2.sync('j1', SYNC_KEY);
 
       expect(nativeResult.downloaded).toContain('p1');
-      const nativePage = await native.local.getPage('j1', 'p1');
+      const nativePage = await native.local.getPage('j1', 'p1', SYNC_KEY);
       expect(nativePage!.text).toBe('Web wins');
     });
 
@@ -467,14 +473,14 @@ describe('Cross-platform sync E2E', () => {
       // Native syncs up
       await connectStore(native.remote);
       const ne1 = new SyncEngine(native.local, native.remote);
-      await ne1.sync('j1');
+      await ne1.sync('j1', SYNC_KEY);
 
       // Web syncs down
       await connectStore(web.remote);
       await web.local.saveJournal(makeJournal([]));
       const we1 = new SyncEngine(web.local, web.remote);
-      await we1.sync('j1');
-      expect((await web.local.getPage('j1', 'p1'))!.text).toBe('v1');
+      await we1.sync('j1', SYNC_KEY);
+      expect((await web.local.getPage('j1', 'p1', SYNC_KEY))!.text).toBe('v1');
 
       // Web edits
       const p1v2 = makePage('p1', 5000, false, [], 'v2-web');
@@ -484,15 +490,15 @@ describe('Cross-platform sync E2E', () => {
       const we2Store = new GDriveRemoteStore();
       await connectStore(we2Store);
       const we2 = new SyncEngine(web.local, we2Store);
-      await we2.sync('j1');
+      await we2.sync('j1', SYNC_KEY);
 
       // Native syncs down
       const ne2Store = new GDriveRemoteStore();
       await connectStore(ne2Store);
       const ne2 = new SyncEngine(native.local, ne2Store);
-      await ne2.sync('j1');
+      await ne2.sync('j1', SYNC_KEY);
 
-      const nativePage = await native.local.getPage('j1', 'p1');
+      const nativePage = await native.local.getPage('j1', 'p1', SYNC_KEY);
       expect(nativePage!.text).toBe('v2-web');
       expect(nativePage!.modified).toBe(5000);
     });
@@ -509,7 +515,7 @@ describe('Cross-platform sync E2E', () => {
       // Sync initial state
       await connectStore(native.remote);
       const ne1 = new SyncEngine(native.local, native.remote);
-      await ne1.sync('j1');
+      await ne1.sync('j1', SYNC_KEY);
 
       // Native deletes (timestamp T1=2000 via deletePage's Date.now mock)
       const deletedPage = makePage('p1', 2000, true);
@@ -523,18 +529,17 @@ describe('Cross-platform sync E2E', () => {
       const ne2Store = new GDriveRemoteStore();
       await connectStore(ne2Store);
       const ne2 = new SyncEngine(native.local, ne2Store);
-      await ne2.sync('j1');
+      await ne2.sync('j1', SYNC_KEY);
 
-      // Web syncs — web's edit is newer than native's deletion
-      // Since web has modified=5000 and remote has deleted=true with modified=2000,
-      // web's version (newer, not deleted) should win
+      // Web syncs — remote index has p1 deleted=true.
+      // Deletion propagates: remote deletion wins regardless of timestamp.
       const we1Store = new GDriveRemoteStore();
       await connectStore(we1Store);
       const we = new SyncEngine(web.local, we1Store);
-      const webResult = await we.sync('j1');
+      const webResult = await we.sync('j1', SYNC_KEY);
 
-      // Web's edit should have been uploaded since it's newer
-      expect(webResult.uploaded).toContain('p1');
+      // Deletion propagated from native to web
+      expect(webResult.deleted).toContain('p1');
     });
 
     it('attachment survives text-only edit across platforms', async () => {
@@ -552,16 +557,16 @@ describe('Cross-platform sync E2E', () => {
       // Native syncs
       await connectStore(native.remote);
       const ne1 = new SyncEngine(native.local, native.remote);
-      await ne1.sync('j1');
+      await ne1.sync('j1', SYNC_KEY);
 
       // Web syncs down
       await connectStore(web.remote);
       await web.local.saveJournal(makeJournal([]));
       const we1 = new SyncEngine(web.local, web.remote);
-      await we1.sync('j1');
+      await we1.sync('j1', SYNC_KEY);
 
       // Web edits text only (keeps attachment, bumps timestamp)
-      const webPage = await web.local.getPage('j1', 'p1');
+      const webPage = await web.local.getPage('j1', 'p1', SYNC_KEY);
       const edited = { ...webPage!, text: 'Updated text', modified: 5000 };
       await web.local.savePage('j1', edited, undefined, true);
 
@@ -569,15 +574,15 @@ describe('Cross-platform sync E2E', () => {
       const we2Store = new GDriveRemoteStore();
       await connectStore(we2Store);
       const we2 = new SyncEngine(web.local, we2Store);
-      await we2.sync('j1');
+      await we2.sync('j1', SYNC_KEY);
 
       // Native syncs down
       const ne2Store = new GDriveRemoteStore();
       await connectStore(ne2Store);
       const ne2 = new SyncEngine(native.local, ne2Store);
-      await ne2.sync('j1');
+      await ne2.sync('j1', SYNC_KEY);
 
-      const finalNative = await native.local.getPage('j1', 'p1');
+      const finalNative = await native.local.getPage('j1', 'p1', SYNC_KEY);
       expect(finalNative!.text).toBe('Updated text');
       expect(finalNative!.images).toHaveLength(1);
     });
@@ -604,7 +609,7 @@ describe('Cross-platform sync E2E', () => {
       // Sync both
       await connectStore(native.remote);
       const ne = new SyncEngine(native.local, native.remote);
-      await ne.sync('j1');
+      await ne.sync('j1', SYNC_KEY);
 
       await connectStore(web.remote);
       const we = new SyncEngine(web.local, web.remote);
@@ -615,7 +620,7 @@ describe('Cross-platform sync E2E', () => {
       const we2Store = new GDriveRemoteStore();
       await connectStore(we2Store);
       const we2 = new SyncEngine(web.local, we2Store);
-      await we2.sync('j1');
+      await we2.sync('j1', SYNC_KEY);
 
       await native.local.saveJournal(
         makeJournal([], true, 'salt==', { id: 'j2', pages: [] }),
@@ -627,7 +632,7 @@ describe('Cross-platform sync E2E', () => {
       await ne2.sync('j2', derivedKey);
 
       // Verify
-      const webJ1Page = await web.local.getPage('j1', 'p1');
+      const webJ1Page = await web.local.getPage('j1', 'p1', SYNC_KEY);
       expect(webJ1Page!.text).toBe('Plain text');
 
       const nativeJ2Page = await native.local.getPage('j2', 'p2', derivedKey);
@@ -645,16 +650,16 @@ describe('Cross-platform sync E2E', () => {
       await native.local.saveJournal(makeJournal([]));
       await connectStore(native.remote);
       const ne = new SyncEngine(native.local, native.remote);
-      await ne.sync('j1');
+      await ne.sync('j1', SYNC_KEY);
 
       await connectStore(web.remote);
       await web.local.saveJournal(makeJournal([]));
       const we = new SyncEngine(web.local, web.remote);
-      const result = await we.sync('j1');
+      const result = await we.sync('j1', SYNC_KEY);
 
       expect(result.uploaded).toHaveLength(0);
       expect(result.downloaded).toHaveLength(0);
-      const webJournal = await web.local.getJournal('j1');
+      const webJournal = await web.local.getJournal('j1', SYNC_KEY);
       expect(webJournal).not.toBeNull();
     });
 
@@ -667,14 +672,14 @@ describe('Cross-platform sync E2E', () => {
 
       await connectStore(native.remote);
       const ne = new SyncEngine(native.local, native.remote);
-      await ne.sync('j1');
+      await ne.sync('j1', SYNC_KEY);
 
       await connectStore(web.remote);
       await web.local.saveJournal(makeJournal([]));
       const we = new SyncEngine(web.local, web.remote);
-      await we.sync('j1');
+      await we.sync('j1', SYNC_KEY);
 
-      const webPage = await web.local.getPage('j1', 'p1');
+      const webPage = await web.local.getPage('j1', 'p1', SYNC_KEY);
       expect(webPage!.text).toBe('');
     });
 
@@ -688,14 +693,14 @@ describe('Cross-platform sync E2E', () => {
 
       await connectStore(native.remote);
       const ne = new SyncEngine(native.local, native.remote);
-      await ne.sync('j1');
+      await ne.sync('j1', SYNC_KEY);
 
       await connectStore(web.remote);
       await web.local.saveJournal(makeJournal([]));
       const we = new SyncEngine(web.local, web.remote);
-      await we.sync('j1');
+      await we.sync('j1', SYNC_KEY);
 
-      const webPage = await web.local.getPage('j1', 'p1');
+      const webPage = await web.local.getPage('j1', 'p1', SYNC_KEY);
       expect(webPage!.text).toBe(unicodeText);
     });
 
@@ -709,14 +714,14 @@ describe('Cross-platform sync E2E', () => {
 
       await connectStore(native.remote);
       const ne = new SyncEngine(native.local, native.remote);
-      await ne.sync('j1');
+      await ne.sync('j1', SYNC_KEY);
 
       await connectStore(web.remote);
       await web.local.saveJournal(makeJournal([]));
       const we = new SyncEngine(web.local, web.remote);
-      await we.sync('j1');
+      await we.sync('j1', SYNC_KEY);
 
-      const webPage = await web.local.getPage('j1', 'p1');
+      const webPage = await web.local.getPage('j1', 'p1', SYNC_KEY);
       expect(webPage!.text.length).toBe(50_000);
     });
 
@@ -728,14 +733,14 @@ describe('Cross-platform sync E2E', () => {
 
       await connectStore(native.remote);
       const ne1 = new SyncEngine(native.local, native.remote);
-      const r1 = await ne1.sync('j1');
+      const r1 = await ne1.sync('j1', SYNC_KEY);
       expect(r1.uploaded).toContain('p1');
 
       // Second sync — no changes
       const s2 = new GDriveRemoteStore();
       await connectStore(s2);
       const ne2 = new SyncEngine(native.local, s2);
-      const r2 = await ne2.sync('j1');
+      const r2 = await ne2.sync('j1', SYNC_KEY);
       expect(r2.uploaded).toHaveLength(0);
       expect(r2.downloaded).toHaveLength(0);
 
@@ -743,7 +748,7 @@ describe('Cross-platform sync E2E', () => {
       const s3 = new GDriveRemoteStore();
       await connectStore(s3);
       const ne3 = new SyncEngine(native.local, s3);
-      const r3 = await ne3.sync('j1');
+      const r3 = await ne3.sync('j1', SYNC_KEY);
       expect(r3.uploaded).toHaveLength(0);
       expect(r3.downloaded).toHaveLength(0);
     });
@@ -757,7 +762,7 @@ describe('Cross-platform sync E2E', () => {
       // Initial sync
       await connectStore(native.remote);
       const ne1 = new SyncEngine(native.local, native.remote);
-      await ne1.sync('j1');
+      await ne1.sync('j1', SYNC_KEY);
 
       // Native changes settings and re-syncs
       const updatedJournal = makeJournal([makePage('p1', 1000)], false, undefined, {
@@ -771,14 +776,16 @@ describe('Cross-platform sync E2E', () => {
       const ne2Store = new GDriveRemoteStore();
       await connectStore(ne2Store);
       const ne2 = new SyncEngine(native.local, ne2Store);
-      await ne2.sync('j1');
+      await ne2.sync('j1', SYNC_KEY);
 
       // Verify remote has updated settings
       const remoteStore = new GDriveRemoteStore();
       await connectStore(remoteStore);
       const remoteResult2 = await remoteStore.downloadJournalMeta('j1');
-      expect(remoteResult2!.content.settings.use24h).toBe(true);
-      expect(remoteResult2!.content.settings.sort).toBe('ascending');
+      // downloadJournalMeta now returns string | null; mock encryption is identity
+      const meta = JSON.parse(remoteResult2!);
+      expect(meta.settings.use24h).toBe(true);
+      expect(meta.settings.sort).toBe('ascending');
     });
   });
 });

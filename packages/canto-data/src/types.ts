@@ -71,7 +71,7 @@ export interface Journal {
   icon: string;
   date: string; // ISO 8601 creation date
   secure: boolean;
-  salt?: string; // base64-encoded salt, present when secure === true
+  salt: string; // base64-encoded salt, always present (used for sync encryption key derivation)
   biometric?: boolean; // require biometric auth to open
   kdfIterations?: number; // PBKDF2 iteration count, defaults to 20_000 for legacy
   themeOverride?: string; // theme name override, synced from settings

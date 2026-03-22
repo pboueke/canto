@@ -4,7 +4,8 @@ export type {
   RemoteJournalMeta,
   SyncResult,
   SyncConflict,
-  DownloadResult,
+  SyncIndex,
+  RegistryInfo,
   DownloadFailure,
 } from './types';
 export { SyncEngine } from './engine';

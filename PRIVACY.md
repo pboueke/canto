@@ -51,8 +51,11 @@ If you choose to enable Google Drive sync:
 - Canto authenticates with your Google account using the standard Google Sign-In flow
 - Your journal data is stored in your own Google Drive account, in an app-specific folder
 - Canto can only access its own folder — it cannot read your other Google Drive files
-- Device-level encryption is stripped before upload (the device key is unique to your device and cannot be used on another). **If your journal is password-protected**, the password-layer encryption is preserved — the data on Google Drive remains encrypted and unreadable without your password. **If your journal has no password**, the data is stored unencrypted on Google Drive.
+- **All journal content (pages, metadata, attachments) is encrypted with AES-256-GCM before upload** — no plain-text journal content is stored on Google Drive, regardless of whether the journal is password-protected or not
+- A small amount of non-content metadata remains unencrypted for sync coordination: journal titles, page IDs (UUIDs), and modification timestamps. These are stored in Google Drive's hidden app-private space or as structural metadata
 - You can disable sync and delete the remote copy at any time
+
+For full technical details on sync encryption, see [SECURITY.md](SECURITY.md#google-drive-sync).
 
 ### No Other Network Activity
 
