@@ -1,6 +1,6 @@
 import { GDriveRemoteStore } from '../sync/gdrive/store';
 import * as api from '../sync/gdrive/api';
-import type { JournalContent, Page } from '@/data';
+import type { JournalContent, Page } from 'canto-data';
 
 jest.mock('../sync/gdrive/api');
 

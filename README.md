@@ -4,7 +4,7 @@ A private, encrypted journaling app for Android, iOS, and Web.
 
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
 ![Version](https://img.shields.io/badge/version-0.17.8-green)
-![Tests](https://img.shields.io/badge/tests-975%2F975%20passed-brightgreen)
+![Tests](https://img.shields.io/badge/tests-820%2F820%20passed-brightgreen)
 ![Coverage](https://img.shields.io/badge/coverage-99%25-brightgreen)
 ![Platforms](https://img.shields.io/badge/platforms-Android%20%7C%20Web-lightgrey)
 
@@ -46,9 +46,9 @@ Canto encrypts all journal data at rest using two-tier AES-256-GCM encryption. Y
 
 ## Data Portability
 
-Canto journals are yours. The journal data model is extracted into [`canto-data`](packages/canto-data/), an MIT-licensed TypeScript library with zero dependencies. Use it to build your own tools that read, validate, or manipulate Canto journals — no copyleft obligations.
+Canto journals are yours. The journal data model is extracted into [`canto-data`](https://github.com/pboueke/canto-data), an MIT-licensed TypeScript library with zero dependencies. Use it to build your own tools that read, validate, or manipulate Canto journals — no copyleft obligations.
 
-See **[DATA.md](DATA.md)** for the full data model reference, export format specification, and usage examples.
+See the [canto-data repository](https://github.com/pboueke/canto-data) for the full data model reference, export format specification, and usage examples.
 
 ## Platform Support
 
@@ -62,4 +62,4 @@ See **[DATA.md](DATA.md)** for the full data model reference, export format spec
 
 The Canto app is GPLv3 — see [LICENSE](LICENSE).
 
-The [`canto-data`](packages/canto-data/) library is MIT — see [packages/canto-data/LICENSE](packages/canto-data/LICENSE).
+The [`canto-data`](https://github.com/pboueke/canto-data) library is MIT-licensed separately.

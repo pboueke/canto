@@ -29,7 +29,7 @@ import { inspectBackup, importJournal, hasNameConflict, resolveNameConflict } fr
 import type { AttachmentError } from '@/lib/backup/import';
 import { useGoogleAuth } from '@/contexts/GoogleAuthContext';
 import { useSyncManager } from '@/contexts/SyncManagerContext';
-import type { JournalContent, Page } from '@/data';
+import type { JournalContent, Page } from 'canto-data';
 import type { RemoteJournalMeta, DownloadFailure } from '@/lib/sync';
 import { safeJsonParse } from '@/lib/utils/json';
 import { DataIntegrityWarningModal } from '@/components/common/DataIntegrityWarningModal';

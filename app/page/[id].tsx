@@ -38,7 +38,7 @@ import { CommentModal } from '@/components/page/CommentModal';
 import { AddAttachmentPopup } from '@/components/page/AddAttachmentPopup';
 import { FloatingActionButton } from '@/components/common/FloatingActionButton';
 import { generateUUID } from '@/lib/encryption/utils';
-import type { Attachment, Comment, GeoLocation, Page } from '@/data';
+import type { Attachment, Comment, GeoLocation, Page } from 'canto-data';
 
 export default function PageScreen() {
   const { id, journalId, edit, themeOverride } = useLocalSearchParams<{

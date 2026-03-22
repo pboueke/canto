@@ -21,6 +21,7 @@
   },
   "dependencies": {
     "@expo/vector-icons": "^15.1.1",
+    "canto-data": "file:../canto-data",
     "@noble/hashes": "^2.0.1",
     "@react-native-async-storage/async-storage": "2.2.0",
     "@react-native-community/datetimepicker": "8.6.0",
@@ -89,8 +90,5 @@
       "prettier --write"
     ]
   },
-  "private": true,
-  "workspaces": [
-    "packages/*"
-  ]
+  "private": true
 }

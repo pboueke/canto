@@ -1,7 +1,7 @@
 /**
  * Shared test helpers for sync e2e tests.
  */
-import type { Page, Attachment, JournalContent } from '@/data';
+import type { Page, Attachment, JournalContent } from 'canto-data';
 import type { LocalStore } from '../../storage/types';
 
 // ---------- factories ----------

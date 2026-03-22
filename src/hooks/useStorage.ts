@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
-import type { Journal, JournalContent, Page, Attachment } from '@/data';
-import { DEFAULT_JOURNAL_SETTINGS, SCHEMA_VERSION } from '@/data';
+import type { Journal, JournalContent, Page, Attachment } from 'canto-data';
+import { DEFAULT_JOURNAL_SETTINGS, SCHEMA_VERSION } from 'canto-data';
 import { createEncryptionService } from '@/lib/encryption';
 import { createLocalStore } from '@/lib/storage';
 import type { LocalStore } from '@/lib/storage';

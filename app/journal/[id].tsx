@@ -18,7 +18,7 @@ import { SyncModal } from '@/components/journal/SyncModal';
 import { FloatingActionButton } from '@/components/common/FloatingActionButton';
 import { useGoogleAuth } from '@/contexts/GoogleAuthContext';
 import { useSyncManager, useSyncState } from '@/contexts/SyncManagerContext';
-import { pageToPreview } from '@/data';
+import { pageToPreview } from 'canto-data';
 import { type ThemeName, themes } from '@/styles/themes';
 
 export default function JournalScreen() {

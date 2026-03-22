@@ -1,6 +1,6 @@
 import { renderHook, act } from '@testing-library/react-native';
 import { useFilter } from '../useFilter';
-import type { PagePreview } from '@/data';
+import type { PagePreview } from 'canto-data';
 
 function makePreview(overrides: Partial<PagePreview> = {}): PagePreview {
   const previewText = overrides.previewText ?? 'Hello world';

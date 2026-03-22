@@ -6,7 +6,7 @@ import { useI18n } from '@/hooks/useI18n';
 import { useGoogleAuth } from '@/contexts/GoogleAuthContext';
 import { useSyncManager, useSyncState } from '@/contexts/SyncManagerContext';
 import { useSaveJournal } from '@/hooks/useStorage';
-import type { JournalContent, JournalSettings } from '@/data';
+import type { JournalContent, JournalSettings } from 'canto-data';
 import { webModalContent } from '@/styles/web';
 
 interface SyncModalProps {

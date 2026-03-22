@@ -1,7 +1,7 @@
 import { getLocalStore, getEncryptionService } from '@/hooks/useStorage';
 import { generateUUID, uint8ToBase64 } from '@/lib/encryption/utils';
-import { DEFAULT_JOURNAL_SETTINGS, SCHEMA_VERSION } from '@/data';
-import type { JournalContent, Page, Attachment } from '@/data';
+import { DEFAULT_JOURNAL_SETTINGS, SCHEMA_VERSION } from 'canto-data';
+import type { JournalContent, Page, Attachment } from 'canto-data';
 
 /**
  * Duplicate a journal N times (deep copy with new IDs, including pages and attachments).

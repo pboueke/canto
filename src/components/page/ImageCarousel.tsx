@@ -15,7 +15,7 @@ import { Feather } from '@expo/vector-icons';
 import { useTheme } from '@/hooks/useTheme';
 import { useI18n } from '@/hooks/useI18n';
 import { useImageQueue } from '@/hooks/useImageQueue';
-import type { Attachment } from '@/data';
+import type { Attachment } from 'canto-data';
 
 const HORIZONTAL_PADDING = 10;
 const IMAGE_HEIGHT = 250;

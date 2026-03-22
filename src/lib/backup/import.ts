@@ -1,7 +1,7 @@
 import JSZip from 'jszip';
 import { File } from 'expo-file-system';
-import type { JournalContent, JournalSettings, Page, Attachment } from '@/data';
-import { DEFAULT_JOURNAL_SETTINGS } from '@/data';
+import type { JournalContent, JournalSettings, Page, Attachment } from 'canto-data';
+import { DEFAULT_JOURNAL_SETTINGS } from 'canto-data';
 import { getLocalStore } from '@/hooks/useStorage';
 import {
   aesGcmDecryptBytes,
@@ -11,10 +11,10 @@ import {
   uint8ToBase64,
 } from '@/lib/encryption/utils';
 import { deriveKey, LEGACY_KDF_ITERATIONS } from '@/lib/encryption/password';
-import type { ExportManifest } from '@/data/format';
-import { parseManifest } from '@/data/format';
-import { validateJournal } from '@/data';
-import { SCHEMA_VERSION } from '@/data/version';
+import type { ExportManifest } from 'canto-data/format';
+import { parseManifest } from 'canto-data/format';
+import { validateJournal } from 'canto-data';
+import { SCHEMA_VERSION } from 'canto-data/version';
 import { safeJsonParse } from '@/lib/utils/json';
 
 export interface AttachmentError {

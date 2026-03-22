@@ -1,4 +1,4 @@
-import type { Page, Attachment, JournalContent } from '@/data';
+import type { Page, Attachment, JournalContent } from 'canto-data';
 import type { LocalStore } from '@/lib/storage/types';
 import type { RemoteStore, SyncResult, SyncIndex } from './types';
 import { aesGcmEncrypt, aesGcmDecrypt } from '@/lib/encryption/utils';

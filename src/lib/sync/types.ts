@@ -1,4 +1,4 @@
-import type { SyncProvider } from '@/data';
+import type { SyncProvider } from 'canto-data';
 
 export type { SyncProvider };
 

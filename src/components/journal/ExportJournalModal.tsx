@@ -4,7 +4,7 @@ import { Feather } from '@expo/vector-icons';
 import { useTheme } from '@/hooks/useTheme';
 import { useI18n } from '@/hooks/useI18n';
 import { exportJournal, type ExportProgress } from '@/lib/backup';
-import type { JournalContent } from '@/data';
+import type { JournalContent } from 'canto-data';
 import { webModalContent } from '@/styles/web';
 
 function ProgressBar({ current, total }: { current: number; total: number }) {

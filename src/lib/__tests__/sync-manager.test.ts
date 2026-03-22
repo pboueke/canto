@@ -1,7 +1,7 @@
 import { SyncManager, type SyncState } from '../sync/manager';
 import type { LocalStore } from '../storage/types';
 import type { RemoteStore } from '../sync/types';
-import type { Page, JournalContent } from '@/data';
+import type { Page, JournalContent } from 'canto-data';
 
 // Mock encryption as passthrough
 jest.mock('../encryption/utils', () => ({

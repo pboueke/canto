@@ -54,7 +54,7 @@ jest.mock('react-native-safe-area-context', () => ({
 }));
 
 import { PageListItem } from '../PageListItem';
-import type { PagePreview } from '@/data';
+import type { PagePreview } from 'canto-data';
 
 function makePagePreview(overrides?: Partial<PagePreview>): PagePreview {
   return {

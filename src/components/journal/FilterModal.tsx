@@ -3,7 +3,7 @@ import { Feather } from '@expo/vector-icons';
 import { useTheme } from '@/hooks/useTheme';
 import { useI18n } from '@/hooks/useI18n';
 import { Tag } from '@/components/common/Tag';
-import type { Filter } from '@/data';
+import type { Filter } from 'canto-data';
 
 interface FilterModalProps {
   visible: boolean;

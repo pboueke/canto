@@ -3,7 +3,7 @@
  * Executes real storage logic (encryption, path generation, timestamp handling)
  * backed by an in-memory Map instead of filesystem/IndexedDB.
  */
-import type { Journal, JournalContent, Page, Attachment } from '@/data';
+import type { Journal, JournalContent, Page, Attachment } from 'canto-data';
 import type { EncryptionService } from '@/lib/encryption';
 import type { LocalStore } from '../../storage/types';
 

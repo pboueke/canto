@@ -4,7 +4,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
 import { useTheme } from '@/hooks/useTheme';
 import { BackButton } from '@/components/common/BackButton';
-import type { Journal } from '@/data';
+import type { Journal } from 'canto-data';
 import type { SyncStatus } from '@/lib/sync/manager';
 
 interface JournalHeaderProps {

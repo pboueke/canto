@@ -1,7 +1,7 @@
 import React from 'react';
 import { render, fireEvent } from '@testing-library/react-native';
 import { ImageCarousel } from '../ImageCarousel';
-import type { Attachment } from '@/data';
+import type { Attachment } from 'canto-data';
 
 jest.mock('@/hooks/useImageQueue', () => ({
   useImageQueue: () => ({

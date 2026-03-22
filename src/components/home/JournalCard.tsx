@@ -4,7 +4,7 @@ import { Feather } from '@expo/vector-icons';
 import { Card } from '@/components/common/Card';
 import { ThemeContext, useTheme } from '@/hooks/useTheme';
 import { type ThemeName, themes } from '@/styles/themes';
-import type { Journal } from '@/data';
+import type { Journal } from 'canto-data';
 
 interface JournalCardProps {
   journal: Journal;

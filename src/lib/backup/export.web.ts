@@ -1,14 +1,14 @@
 import JSZip from 'jszip';
-import type { JournalContent } from '@/data';
+import type { JournalContent } from 'canto-data';
 import {
   buildExportManifest,
   collectAttachmentEntries,
   rewriteAttachmentPaths,
-} from '@/data/format';
+} from 'canto-data/format';
 import { getLocalStore } from '@/hooks/useStorage';
 import { aesGcmEncryptBytes } from '@/lib/encryption/utils';
 
-export type { ExportManifest } from '@/data/format';
+export type { ExportManifest } from 'canto-data/format';
 
 export interface ExportProgress {
   current: number;

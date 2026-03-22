@@ -50,7 +50,7 @@ jest.mock('../FilterModal', () => ({
 }));
 
 import { FilterBar } from '../FilterBar';
-import type { Filter } from '@/data';
+import type { Filter } from 'canto-data';
 
 function makeFilter(overrides?: Partial<Filter>): Filter {
   return {

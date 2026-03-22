@@ -1,4 +1,4 @@
-import type { Journal, JournalContent, Page, Attachment } from '@/data';
+import type { Journal, JournalContent, Page, Attachment } from 'canto-data';
 
 export interface LocalStore {
   /** Initialize storage directories. Must be called before other operations. */

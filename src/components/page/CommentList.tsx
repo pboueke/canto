@@ -2,7 +2,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useTheme } from '@/hooks/useTheme';
 import { useI18n } from '@/hooks/useI18n';
-import type { Comment } from '@/data';
+import type { Comment } from 'canto-data';
 
 interface CommentListProps {
   comments: Comment[];

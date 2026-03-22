@@ -3,8 +3,8 @@ const config = {
   preset: 'jest-expo',
   setupFiles: ['./jest.setup.ts'],
   moduleNameMapper: {
-    '^canto-data/(.*)$': '<rootDir>/packages/canto-data/src/$1',
-    '^canto-data$': '<rootDir>/packages/canto-data/src/index.ts',
+    '^canto-data$': '<rootDir>/../canto-data/dist/index.js',
+    '^canto-data/(.*)$': '<rootDir>/../canto-data/dist/$1',
     '^@/(.*)$': '<rootDir>/src/$1',
     '^@noble/ciphers/(.*)\\.js$': '<rootDir>/node_modules/@noble/ciphers/$1.js',
     '^@noble/hashes/(.*)\\.js$': '<rootDir>/node_modules/@noble/hashes/$1.js',
@@ -16,14 +16,13 @@ const config = {
   testPathIgnorePatterns: ['/node_modules/', '/__tests__/helpers/'],
   transformIgnorePatterns: [
     'node_modules/(?!((jest-)?react-native|@react-native(-community)?)|expo(nent)?|@expo(nent)?/.*|@expo-google-fonts/.*|react-navigation|@react-navigation/.*|@sentry/react-native|native-base|react-native-svg|@noble/ciphers|@noble/hashes|expo-crypto)',
+    '/canto-data/dist/',
   ],
   collectCoverageFrom: [
     'src/**/*.{ts,tsx}',
-    'packages/canto-data/src/**/*.ts',
     '!**/*.d.ts',
     '!src/components/**',
     '!app/**',
-    '!src/data/**',
     '!src/lib/encryption/types.ts',
     '!src/lib/storage/types.ts',
     '!src/lib/sync/types.ts',

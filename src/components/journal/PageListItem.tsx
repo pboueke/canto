@@ -9,7 +9,7 @@ import { useI18n } from '@/hooks/useI18n';
 import { useAttachment } from '@/hooks/useStorage';
 import { enqueueThumbnail } from '@/hooks/useImageQueue';
 import { useJournalKeys } from '@/contexts/JournalKeyContext';
-import type { PagePreview, JournalSettings } from '@/data';
+import type { PagePreview, JournalSettings } from 'canto-data';
 
 interface PageListItemProps {
   page: PagePreview;

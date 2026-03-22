@@ -1,4 +1,4 @@
-import type { Journal, JournalContent, Page, Attachment } from '@/data';
+import type { Journal, JournalContent, Page, Attachment } from 'canto-data';
 import type { EncryptionService } from '@/lib/encryption';
 import { aesGcmEncrypt, aesGcmDecrypt } from '@/lib/encryption/utils';
 import { safeJsonParse } from '@/lib/utils/json';

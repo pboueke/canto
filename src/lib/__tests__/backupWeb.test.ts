@@ -12,7 +12,7 @@ import { exportJournal } from '../backup/export.web';
 import type { ExportManifest } from '../backup/export.web';
 import { inspectBackup, importJournal } from '../backup/import.web';
 import type { EncryptionService } from '../encryption';
-import type { JournalContent, Page, Attachment } from '@/data';
+import type { JournalContent, Page, Attachment } from 'canto-data';
 import { aesGcmEncryptBytes, aesGcmDecryptBytes } from '../encryption/utils';
 
 // ---------------------------------------------------------------------------
