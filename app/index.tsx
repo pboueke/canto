@@ -24,7 +24,7 @@ import { NewJournalModal } from '@/components/home/NewJournalModal';
 import { JournalAccessModal } from '@/components/home/JournalAccessModal';
 import { AccountButton } from '@/components/home/AccountButton';
 import { authenticateBiometric } from '@/lib/biometric';
-import { ONBOARDING_KEY } from './onboarding';
+import { ONBOARDING_KEY, isOnboardingDone, markOnboardingDone } from './onboarding';
 import type { Journal } from '@/data';
 
 export default function HomeScreen() {
@@ -40,11 +40,29 @@ export default function HomeScreen() {
 
   // Check onboarding status on mount
   useEffect(() => {
+    // Check in-memory flag first (survives storage failures within a session)
+    if (isOnboardingDone()) {
+      setOnboardingChecked(true);
+      return;
+    }
+    // On web, also check localStorage directly as a fallback
+    if (Platform.OS === 'web') {
+      try {
+        if (localStorage.getItem(ONBOARDING_KEY) === 'true') {
+          markOnboardingDone();
+          setOnboardingChecked(true);
+          return;
+        }
+      } catch {
+        // localStorage unavailable; continue to AsyncStorage check
+      }
+    }
     AsyncStorage.getItem(ONBOARDING_KEY)
       .then((value) => {
         if (value !== 'true') {
           router.replace('/onboarding');
         } else {
+          markOnboardingDone();
           setOnboardingChecked(true);
         }
       })

@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.17.6 - UI fixes, i18n expansion, onboarding and auto-lock improvements
+
+- fix: carousel images now centered on web — uses container width instead of viewport width
+- fix: download button now visible on web — dark semi-transparent background with white icon
+- fix: Portuguese, Spanish, French, and German translations restored proper diacritics/accents
+- fix: onboarding redirect loop on web — in-memory fallback prevents infinite redirect when storage fails
+- fix: auto-lock now tracks actual user inactivity via touch events, default changed from 5m to 15m
+- feat: auto-lock warning modal — explains session was locked due to inactivity before redirecting home
+- feat: added 12 new languages — Japanese, Korean, Arabic, Hindi, Turkish, Dutch, Polish, Swedish, Vietnamese, Thai, Indonesian, Ukrainian (total: 20)
+
 ## v0.17.5 - Test coverage, doc favicon, carousel centering fix
 
 - test: expanded coverage across 20+ test suites, added 5 new test files

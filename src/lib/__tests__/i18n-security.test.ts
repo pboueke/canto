@@ -4,8 +4,8 @@ const ALL_LANGS = Object.keys(dictionaries) as LangCode[];
 const EN_SECURITY = dictionaries.en.security;
 
 describe('i18n — security section', () => {
-  it('all 8 languages have security section', () => {
-    expect(ALL_LANGS).toHaveLength(8);
+  it('all languages have security section', () => {
+    expect(ALL_LANGS.length).toBeGreaterThanOrEqual(8);
     for (const lang of ALL_LANGS) {
       expect(dictionaries[lang].security).toBeDefined();
     }

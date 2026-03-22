@@ -1,5 +1,5 @@
 import { useCallback, useRef, useState } from 'react';
-import { Animated, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Animated, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Feather } from '@expo/vector-icons';
@@ -9,6 +9,17 @@ import { useI18n } from '@/hooks/useI18n';
 import { Logo } from '@/components/common/Logo';
 
 export const ONBOARDING_KEY = 'canto:onboardingDone';
+
+// In-memory fallback for when persistent storage fails (e.g. web private mode)
+let onboardingDoneInMemory = false;
+
+export function isOnboardingDone(): boolean {
+  return onboardingDoneInMemory;
+}
+
+export function markOnboardingDone(): void {
+  onboardingDoneInMemory = true;
+}
 
 interface OnboardingStep {
   icon?: React.ComponentProps<typeof Feather>['name'];
@@ -44,10 +55,18 @@ export default function OnboardingScreen() {
   const slideAnim = useRef(new Animated.Value(0)).current;
 
   const completeOnboarding = useCallback(async () => {
+    markOnboardingDone();
     try {
       await AsyncStorage.setItem(ONBOARDING_KEY, 'true');
     } catch {
-      // If write fails, user may see onboarding again — acceptable
+      // AsyncStorage may fail on web (private mode); in-memory flag prevents redirect loop
+    }
+    if (Platform.OS === 'web') {
+      try {
+        localStorage.setItem(ONBOARDING_KEY, 'true');
+      } catch {
+        // localStorage may be unavailable; in-memory flag is the last resort
+      }
     }
     router.replace('/?fromOnboarding=true');
   }, [router]);

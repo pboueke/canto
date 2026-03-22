@@ -9,8 +9,8 @@ describe('getAutoLockTimeout', () => {
     (globalThis as any).__asyncStoreClear();
   });
 
-  it('returns default 300_000 when no stored value', async () => {
-    expect(await getAutoLockTimeout()).toBe(300_000);
+  it('returns default 900_000 when no stored value', async () => {
+    expect(await getAutoLockTimeout()).toBe(900_000);
   });
 
   it('reads stored value', async () => {
@@ -20,7 +20,7 @@ describe('getAutoLockTimeout', () => {
 
   it('returns default when NaN stored', async () => {
     await AsyncStorage.setItem(AUTO_LOCK_KEY, 'not-a-number');
-    expect(await getAutoLockTimeout()).toBe(300_000);
+    expect(await getAutoLockTimeout()).toBe(900_000);
   });
 
   it('returns 0 when disabled', async () => {

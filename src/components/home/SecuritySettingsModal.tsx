@@ -18,7 +18,7 @@ export const AUTO_LOCK_OPTIONS = [
   { label: 'autoLockOff' as const, value: 0 },
 ];
 
-const DEFAULT_AUTO_LOCK = 300_000; // 5 minutes
+const DEFAULT_AUTO_LOCK = 900_000; // 15 minutes
 
 export async function getAutoLockTimeout(): Promise<number> {
   const raw = await AsyncStorage.getItem(AUTO_LOCK_KEY);
