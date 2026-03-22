@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.17.7 - Language picker, multilingual landing page, README update
+
+- fix: language picker modal now scrollable for 20 languages
+- fix: landing page now supports all 20 languages with a language selector button
+- docs: README updated to say "Multilingual" instead of listing specific languages
+
 ## v0.17.6 - UI fixes, i18n expansion, onboarding and auto-lock improvements
 
 - fix: carousel images now centered on web — uses container width instead of viewport width
@@ -9,9 +15,6 @@
 - fix: auto-lock now tracks actual user inactivity via touch events, default changed from 5m to 15m
 - feat: auto-lock warning modal — explains session was locked due to inactivity before redirecting home
 - feat: added 12 new languages — Japanese, Korean, Arabic, Hindi, Turkish, Dutch, Polish, Swedish, Vietnamese, Thai, Indonesian, Ukrainian (total: 20)
-- fix: language picker modal now scrollable for 20 languages
-- fix: landing page now supports all 20 languages with a language selector button
-- docs: README updated to say "Multilingual" instead of listing specific languages
 
 ## v0.17.5 - Test coverage, doc favicon, carousel centering fix
 
