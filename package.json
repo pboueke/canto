@@ -1,6 +1,6 @@
 {
   "name": "canto",
-  "version": "0.17.8",
+  "version": "0.18.2",
   "main": "expo-router/entry",
   "scripts": {
     "start": "expo start",
@@ -16,16 +16,17 @@
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage",
     "test:ci": "jest --coverage --ci",
+    "generate:deps": "node scripts/generate-dep-manifest.js",
     "audit": "npm audit --production",
     "prepare": "husky"
   },
   "dependencies": {
     "@expo/vector-icons": "^15.1.1",
-    "canto-data": "^1.0.0",
     "@noble/hashes": "^2.0.1",
     "@react-native-async-storage/async-storage": "2.2.0",
     "@react-native-community/datetimepicker": "8.6.0",
     "@react-native-google-signin/google-signin": "^16.1.2",
+    "canto-data": "^1.0.3",
     "expo": "^55.0.0",
     "expo-auth-session": "~55.0.9",
     "expo-clipboard": "~55.0.9",

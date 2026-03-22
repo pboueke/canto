@@ -7,6 +7,13 @@ jest.mock('@/lib/changelog', () => ({
   parseVersionFromChangelog: jest.fn().mockReturnValue('0.16.0'),
 }));
 
+jest.mock('@/lib/dependencies', () => ({
+  loadDependencies: jest.fn().mockReturnValue([
+    { name: 'react', version: '19.2.0', license: 'MIT' },
+    { name: 'expo', version: '55.0.0', license: 'MIT' },
+  ]),
+}));
+
 jest.mock('@/components/home/ThemePickerModal', () => ({
   ThemePickerModal: () => null,
 }));
@@ -99,5 +106,45 @@ describe('InfoBox - Help button', () => {
     const linkButton = getByText(tDict.help.linkText);
     fireEvent.press(linkButton);
     expect(Linking.openURL).toHaveBeenCalledWith('https://github.com/pboueke/canto/issues');
+  });
+});
+
+describe('InfoBox - Changelog modal tabs', () => {
+  it('opens changelog modal on Changelog tab by default', async () => {
+    const { getByText } = renderInfoBox();
+
+    await waitFor(() => {
+      expect(getByText('v0.16.0')).toBeTruthy();
+    });
+
+    fireEvent.press(getByText('v0.16.0'));
+
+    await waitFor(() => {
+      expect(getByText(tDict.changelog.title)).toBeTruthy();
+      expect(getByText(tDict.changelog.dependenciesTab)).toBeTruthy();
+      // Changelog content should be visible
+      expect(getByText('## 0.16.0\n- stuff')).toBeTruthy();
+    });
+  });
+
+  it('switches to Dependencies tab and shows dependency list', async () => {
+    const { getByText } = renderInfoBox();
+
+    await waitFor(() => {
+      expect(getByText('v0.16.0')).toBeTruthy();
+    });
+
+    fireEvent.press(getByText('v0.16.0'));
+
+    await waitFor(() => {
+      expect(getByText(tDict.changelog.dependenciesTab)).toBeTruthy();
+    });
+
+    fireEvent.press(getByText(tDict.changelog.dependenciesTab));
+
+    await waitFor(() => {
+      expect(getByText('19.2.0')).toBeTruthy();
+      expect(getByText('55.0.0')).toBeTruthy();
+    });
   });
 });

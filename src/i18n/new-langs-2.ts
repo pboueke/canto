@@ -259,6 +259,10 @@ export const pl: Dictionary = {
     body: 'Jeśli potrzebujesz pomocy lub chcesz zgłosić błąd, odwiedź stronę projektu Canto na GitHubie.',
     linkText: 'Otwórz zgłoszenia na GitHubie',
   },
+  changelog: {
+    title: 'Dziennik zmian',
+    dependenciesTab: 'Zależności',
+  },
   dataIntegrity: {
     syncWarningTitle: 'Ostrzeżenie synchronizacji',
     syncWarningDesc: 'Nie udało się pobrać {failed} z {total} stron.',
@@ -533,6 +537,10 @@ export const sv: Dictionary = {
     title: 'Hjälp',
     body: 'Om du behöver hjälp eller vill rapportera en bugg, besök Cantos projektsida på GitHub.',
     linkText: 'Öppna GitHub Issues',
+  },
+  changelog: {
+    title: 'Ändringslogg',
+    dependenciesTab: 'Beroenden',
   },
   dataIntegrity: {
     syncWarningTitle: 'Synkroniseringsvarning',
@@ -809,6 +817,10 @@ export const vi: Dictionary = {
     body: 'Nếu bạn cần trợ giúp hoặc muốn báo lỗi, vui lòng truy cập trang dự án Canto trên GitHub.',
     linkText: 'Mở GitHub Issues',
   },
+  changelog: {
+    title: 'Nhật ký thay đổi',
+    dependenciesTab: 'Phụ thuộc',
+  },
   dataIntegrity: {
     syncWarningTitle: 'Cảnh báo đồng bộ',
     syncWarningDesc: 'Không thể tải xuống {failed} / {total} trang.',
@@ -1080,6 +1092,10 @@ export const th: Dictionary = {
     title: 'ช่วยเหลือ',
     body: 'หากคุณต้องการความช่วยเหลือหรือต้องการรายงานข้อผิดพลาด กรุณาเยี่ยมชมหน้าโครงการ Canto บน GitHub',
     linkText: 'เปิด GitHub Issues',
+  },
+  changelog: {
+    title: 'บันทึกการเปลี่ยนแปลง',
+    dependenciesTab: 'การพึ่งพา',
   },
   dataIntegrity: {
     syncWarningTitle: 'คำเตือนการซิงค์',
@@ -1355,6 +1371,10 @@ export const id: Dictionary = {
     body: 'Jika Anda membutuhkan bantuan atau ingin melaporkan bug, silakan kunjungi halaman proyek Canto di GitHub.',
     linkText: 'Buka GitHub Issues',
   },
+  changelog: {
+    title: 'Catatan Perubahan',
+    dependenciesTab: 'Dependensi',
+  },
   dataIntegrity: {
     syncWarningTitle: 'Peringatan Sinkronisasi',
     syncWarningDesc: '{failed} dari {total} halaman tidak dapat diunduh.',
@@ -1629,6 +1649,10 @@ export const uk: Dictionary = {
     title: 'Довідка',
     body: 'Якщо вам потрібна допомога або ви хочете повідомити про помилку, відвідайте сторінку проєкту Canto на GitHub.',
     linkText: 'Відкрити GitHub Issues',
+  },
+  changelog: {
+    title: 'Журнал змін',
+    dependenciesTab: 'Залежності',
   },
   dataIntegrity: {
     syncWarningTitle: 'Попередження синхронізації',

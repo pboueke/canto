@@ -1105,6 +1105,99 @@ describe('importJournal (web)', () => {
 });
 
 // ---------------------------------------------------------------------------
+// Import settings validation (web)
+// ---------------------------------------------------------------------------
+
+describe('importJournal settings validation (web)', () => {
+  it('imports backup with valid settings unchanged', async () => {
+    const validSettings = {
+      use24h: true,
+      previewTags: false,
+      previewThumbnail: true,
+      previewIcons: true,
+      filterBar: false,
+      sort: 'ascending',
+      autoLocation: true,
+      remoteSync: false,
+      autoSync: false,
+    };
+
+    const zip = new JSZip();
+    zip.file(
+      'manifest.json',
+      JSON.stringify({
+        version: 1,
+        appVersion: '0.14.0',
+        exportDate: '2026-01-01',
+        encrypted: false,
+        journalTitle: 'Valid Settings',
+      }),
+    );
+    zip.file(
+      'journal.json',
+      JSON.stringify({
+        id: 'j1',
+        title: 'Valid Settings',
+        icon: 'book',
+        date: '2026-01-01',
+        secure: false,
+      }),
+    );
+    zip.file('settings.json', JSON.stringify(validSettings));
+    zip.file('pages/p1.json', JSON.stringify(makePage('p1', 'test')));
+    fetchResponse = await zip.generateAsync({ type: 'arraybuffer' });
+
+    const result = await importJournal('blob:mock', 'Valid Settings');
+    const loaded = await mockTestStore.getJournal(result.journalId);
+    expect(loaded).not.toBeNull();
+    expect(loaded!.settings.use24h).toBe(true);
+    expect(loaded!.settings.sort).toBe('ascending');
+    expect(loaded!.settings.filterBar).toBe(false);
+  });
+
+  it('rejects backup with invalid settings', async () => {
+    const invalidSettings = {
+      use24h: false,
+      previewTags: true,
+      previewThumbnail: true,
+      previewIcons: true,
+      filterBar: true,
+      sort: 'invalid', // not a valid sort value
+      autoLocation: false,
+      remoteSync: false,
+      autoSync: false,
+    };
+
+    const zip = new JSZip();
+    zip.file(
+      'manifest.json',
+      JSON.stringify({
+        version: 1,
+        appVersion: '0.14.0',
+        exportDate: '2026-01-01',
+        encrypted: false,
+        journalTitle: 'Bad Settings',
+      }),
+    );
+    zip.file(
+      'journal.json',
+      JSON.stringify({
+        id: 'j1',
+        title: 'Bad Settings',
+        icon: 'book',
+        date: '2026-01-01',
+        secure: false,
+      }),
+    );
+    zip.file('settings.json', JSON.stringify(invalidSettings));
+    zip.file('pages/p1.json', JSON.stringify(makePage('p1', 'test')));
+    fetchResponse = await zip.generateAsync({ type: 'arraybuffer' });
+
+    await expect(importJournal('blob:mock', 'Bad Settings')).rejects.toThrow();
+  });
+});
+
+// ---------------------------------------------------------------------------
 // Round-trip: export then import on web
 // ---------------------------------------------------------------------------
 

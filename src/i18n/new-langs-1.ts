@@ -259,6 +259,10 @@ export const ja: Dictionary = {
     body: 'ヘルプが必要な場合やバグを報告したい場合は、GitHubのCantoプロジェクトページをご覧ください。',
     linkText: 'GitHub Issuesを開く',
   },
+  changelog: {
+    title: '変更履歴',
+    dependenciesTab: '依存関係',
+  },
   dataIntegrity: {
     syncWarningTitle: '同期の警告',
     syncWarningDesc: '{total}ページ中{failed}ページをダウンロードできませんでした。',
@@ -533,6 +537,10 @@ export const ko: Dictionary = {
     body: '도움이 필요하거나 버그를 신고하려면 GitHub의 Canto 프로젝트 페이지를 방문해 주세요.',
     linkText: 'GitHub Issues 열기',
   },
+  changelog: {
+    title: '변경 이력',
+    dependenciesTab: '의존성',
+  },
   dataIntegrity: {
     syncWarningTitle: '동기화 경고',
     syncWarningDesc: '{total}개 페이지 중 {failed}개를 다운로드할 수 없었습니다.',
@@ -805,6 +813,10 @@ export const ar: Dictionary = {
     title: 'المساعدة',
     body: 'إذا كنت بحاجة إلى مساعدة أو تريد الإبلاغ عن خطأ، يرجى زيارة صفحة مشروع Canto على GitHub.',
     linkText: 'فتح GitHub Issues',
+  },
+  changelog: {
+    title: 'سجل التغييرات',
+    dependenciesTab: 'التبعيات',
   },
   dataIntegrity: {
     syncWarningTitle: 'تحذير المزامنة',
@@ -1081,6 +1093,10 @@ export const hi: Dictionary = {
     body: 'यदि आपको सहायता चाहिए या कोई बग रिपोर्ट करना है, तो कृपया GitHub पर Canto प्रोजेक्ट पेज पर जाएँ।',
     linkText: 'GitHub Issues खोलें',
   },
+  changelog: {
+    title: 'परिवर्तन लॉग',
+    dependenciesTab: 'निर्भरताएँ',
+  },
   dataIntegrity: {
     syncWarningTitle: 'सिंक चेतावनी',
     syncWarningDesc: '{total} में से {failed} पृष्ठ डाउनलोड नहीं हो सके।',
@@ -1356,6 +1372,10 @@ export const tr: Dictionary = {
     body: "Yardıma ihtiyacınız varsa veya bir hata bildirmek istiyorsanız, lütfen GitHub'daki Canto proje sayfasını ziyaret edin.",
     linkText: "GitHub Issues'ı Aç",
   },
+  changelog: {
+    title: 'Değişiklik Günlüğü',
+    dependenciesTab: 'Bağımlılıklar',
+  },
   dataIntegrity: {
     syncWarningTitle: 'Senkronizasyon Uyarısı',
     syncWarningDesc: '{total} sayfadan {failed} tanesi indirilemedi.',
@@ -1630,6 +1650,10 @@ export const nl: Dictionary = {
     title: 'Help',
     body: 'Als u hulp nodig heeft of een bug wilt melden, bezoek dan de Canto-projectpagina op GitHub.',
     linkText: 'GitHub Issues openen',
+  },
+  changelog: {
+    title: 'Changelog',
+    dependenciesTab: 'Afhankelijkheden',
   },
   dataIntegrity: {
     syncWarningTitle: 'Synchronisatiewaarschuwing',
