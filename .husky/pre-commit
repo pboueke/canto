@@ -1,0 +1,81 @@
+#!/bin/sh
+
+# Sync version from CHANGELOG.md to package.json, app.json, build.gradle, and README.md
+VERSION=$(grep -m1 '^## v' CHANGELOG.md | sed 's/^## v\([^ ]*\).*/\1/')
+if [ -n "$VERSION" ]; then
+  CHANGED=0
+
+  # Sync package.json
+  PKG_VERSION=$(node -p "require('./package.json').version")
+  if [ "$VERSION" != "$PKG_VERSION" ]; then
+    sed -i "s/\"version\": \"$PKG_VERSION\"/\"version\": \"$VERSION\"/" package.json
+    CHANGED=1
+  fi
+
+  # Sync app.json (read its own version, not package.json's)
+  APP_VERSION=$(node -p "require('./app.json').expo.version")
+  if [ "$VERSION" != "$APP_VERSION" ]; then
+    sed -i "s/\"version\": \"$APP_VERSION\"/\"version\": \"$VERSION\"/" app.json
+    CHANGED=1
+  fi
+
+  # Sync build.gradle versionName and auto-increment versionCode
+  GRADLE_FILE="android/app/build.gradle"
+  if [ -f "$GRADLE_FILE" ]; then
+    GRADLE_VERSION=$(grep -oP 'versionName "\K[^"]+' "$GRADLE_FILE")
+    if [ "$VERSION" != "$GRADLE_VERSION" ]; then
+      sed -i "s/versionName \"$GRADLE_VERSION\"/versionName \"$VERSION\"/" "$GRADLE_FILE"
+      OLD_CODE=$(grep -oP 'versionCode \K[0-9]+' "$GRADLE_FILE")
+      NEW_CODE=$((OLD_CODE + 1))
+      sed -i "s/versionCode $OLD_CODE/versionCode $NEW_CODE/" "$GRADLE_FILE"
+      CHANGED=1
+    fi
+  fi
+
+  # Sync canto-data package.json
+  CANTO_DATA_PKG="packages/canto-data/package.json"
+  if [ -f "$CANTO_DATA_PKG" ]; then
+    DATA_VERSION=$(node -p "require('./$CANTO_DATA_PKG').version")
+    if [ "$VERSION" != "$DATA_VERSION" ]; then
+      sed -i "s/\"version\": \"$DATA_VERSION\"/\"version\": \"$VERSION\"/" "$CANTO_DATA_PKG"
+      CHANGED=1
+    fi
+  fi
+
+  # Sync README badge
+  if ! grep -q "version-$VERSION-" README.md; then
+    sed -i "s/version-[0-9.]*-/version-$VERSION-/" README.md
+    CHANGED=1
+  fi
+
+  if [ "$CHANGED" = 1 ]; then
+    git add package.json app.json README.md
+    [ -f "$CANTO_DATA_PKG" ] && git add "$CANTO_DATA_PKG"
+    [ -f "$GRADLE_FILE" ] && git add -f "$GRADLE_FILE"
+  fi
+fi
+
+# Sync test count and coverage badges in README.md
+TEST_OUTPUT=$(npx jest --coverage --coverageReporters=text-summary 2>&1)
+TESTS_PASSED=$(echo "$TEST_OUTPUT" | grep -oP 'Tests:\s+\K[0-9]+(?= passed)')
+TESTS_TOTAL=$(echo "$TEST_OUTPUT" | grep -oP 'Tests:\s+[0-9]+ passed,\s+\K[0-9]+(?= total)')
+COVERAGE=$(echo "$TEST_OUTPUT" | grep 'Statements' | grep -oP ':\s+\K[0-9.]+(?=%)')
+if [ -n "$TESTS_PASSED" ] && [ -n "$TESTS_TOTAL" ]; then
+  sed -i "s/tests-[0-9]*%2F[0-9]*%20passed/tests-${TESTS_PASSED}%2F${TESTS_TOTAL}%20passed/" README.md
+  git add README.md
+fi
+if [ -n "$COVERAGE" ]; then
+  # Round to integer
+  COV_INT=$(printf "%.0f" "$COVERAGE")
+  if [ "$COV_INT" -ge 90 ]; then
+    COV_COLOR="brightgreen"
+  elif [ "$COV_INT" -ge 70 ]; then
+    COV_COLOR="yellow"
+  else
+    COV_COLOR="red"
+  fi
+  sed -i "s/coverage-[0-9]*%25-[a-z]*/coverage-${COV_INT}%25-${COV_COLOR}/" README.md
+  git add README.md
+fi
+
+npx lint-staged

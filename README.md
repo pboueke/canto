@@ -1,111 +1,65 @@
-<p align="center"><img height="" src="./src/assets/images/canto_banner_v1.png"></p>
+# Canto
 
-&nbsp;
+A private, encrypted journaling app for Android, iOS, and Web.
 
-## **WIP:** See the road map on this readme file
+[![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
+![Version](https://img.shields.io/badge/version-0.17.8-green)
+![Tests](https://img.shields.io/badge/tests-820%2F820%20passed-brightgreen)
+![Coverage](https://img.shields.io/badge/coverage-99%25-brightgreen)
+![Platforms](https://img.shields.io/badge/platforms-Android%20%7C%20Web-lightgrey)
 
-&nbsp;
+## Features
 
-# About
+- **Encrypted at rest** — all data is AES-256-GCM encrypted on your device before it touches the file system. Your entries are unreadable without your key.
+- **Not AI training data** — no analytics, no trackers, no crash reporting, no third-party SDKs. Your journal never leaves your device unless you choose to export or sync it.
+- **Multiple journals** — organize your writing across separate journals, each with its own optional password and biometric unlock
+- **Markdown editor** — write entries in markdown with live preview
+- **Rich entries** — attach images, files, GPS locations, tags, and comments to any entry, with optional per-attachment encryption
+- **Data portability** — export journals as encrypted `.canto.zip` archives. Import them on another device. No lock-in.
+- **Google Drive sync** — optional cross-device sync via your own Google Drive account, encrypted end-to-end with AES-256-GCM
+- **6 themes** — Light, Dark, Monokai, Solarized, Nord, and Dracula
+- **Multilingual** — 20 languages and counting
+- **Offline-first** — works without an internet connection. All data stored locally.
+- **Free and open source** — GPLv3. Read every line. Audit it yourself.
 
-Canto is am entirely free, simple journaling app for Android. 
-It's built with `react-native` and may one day be ported to *ioPs*. 
-It's meant to resolve frustrations with the current *journaling mobile app*
-ecosystem - pointless features, insane charges and 'DiaryAsAService'-bs.
+## Screenshots
 
-Features:
+<!-- TODO: Add screenshots -->
 
-* Completely **free and open source**.
-* Management of **multiple journals**.
-* **Encryption**. Always. Everywhere.
-* **Automated backups** with Google Drive.
-* Add **images, files, GPS data, tags and comments** to your entries.
-* Format using **markdown**.
-* **Optionally use a password** to lock your data.
-* **Filter and query** your previous entries.
+## Getting Started
 
-
-&nbsp;
-
-
-# Contributing
-
-## BUG REPORT
-
-Please [create an issue](https://github.com/pboueke/canto/issues) tagged as `bug`. Include the platform, a description of the problem and how to reproduce it. 
-
-&nbsp;
-
-## Fixes, improvements, features
-
-Please [create an issue](https://github.com/pboueke/canto/issues) for discussing the changes. If all is well, your PR will be merged once reviwed.
-
-&nbsp;
-
-## Localization
-
-Create a PR that adds your language to `.src/Dictionary/index.js`. 
-
-&nbsp;
-
-# Roadmap
-
-First release:
-
-* (being worked at) Finish Google Drive Integration for automated backups.
-   * Fix uploaded image download/upload (currently receiving empty data array from API)
-   * Check for bugs
-
-* Add option to create readable exports of a journal (doc or markdown file)
-* Add option to generate local exports that can be used as backups
-* Add option to load local exports
-* Add loading spin in areas it's needed
-* General compatibility test on other android API levels and devices
-
-Long term support:
-* Tests, none currently exists.
-* Migrate to TypeScript. 
-
-
-&nbsp;
-
-# Development
-
-1. Connect your phone or emulator using Android Studio
-
-2. Run JS Server on a terminal 
-
-*Console #1*
-```
-> yarn start 
+```bash
+git clone https://github.com/pboueke/canto.git
+cd canto
+make install    # npm install + Gradle patch
+make web        # or: make android / make ios
 ```
 
-3. Compile and install Canto
+See [CONTRIBUTING.md](CONTRIBUTING.md) for prerequisites, setup details, and development workflow.
 
-*Console #2*
-```
-> yarn android
-```
+## Security & Privacy
 
-&nbsp;
+Canto encrypts all journal data at rest using two-tier AES-256-GCM encryption. Your data never leaves your device unless you explicitly export or sync it.
 
+- **[Security Model](SECURITY.md)** — Threat model, encryption layers, key management, cryptographic dependencies
+- **[Privacy Policy](PRIVACY.md)** — What data Canto collects (none), how your data is stored, and your rights
 
-# Google Drive Integration
+## Data Portability
 
-Install [react-native-google-signin](https://github.com/react-native-google-signin/google-signin) and [react-native-google-drive-api-wrapper](https://github.com/RobinBobin/react-native-google-drive-api-wrapper/tree/master/src#list_query_builder). Make sure your app SHA1 fingerprint is properly setup. 
+Canto journals are yours. The journal data model is extracted into [`canto-data`](https://github.com/pboueke/canto-data), an MIT-licensed TypeScript library with zero dependencies. Use it to build your own tools that read, validate, or manipulate Canto journals — no copyleft obligations.
 
-Create a project at Google's API console, adding an OAuth 2.0 **web** credential. Save it to a `gdriveCredentials.js` file at this project root directory. Just export the credential json: `export default {/* json credentials data */}`.
+See the [canto-data repository](https://github.com/pboueke/canto-data) for the full data model reference, export format specification, and usage examples.
 
-Remember to enable access to the [Google Drive API](https://developers.google.com/drive/api/v3/enable-drive-api).
+## Platform Support
 
-&nbsp;
+| Platform | Status    |
+| -------- | --------- |
+| Android  | Supported |
+| Web      | Supported |
+| iOS      | Pending   |
 
-# Build
+## License
 
-## Android
+The Canto app is GPLv3 — see [LICENSE](LICENSE).
 
-### Issues derived from `mmkv-storage` 
-
-This project uses [react-native-mmkv-storage](https://github.com/ammarahm-ed/react-native-mmkv-storage). If the  project wont build after following the [installation instrunctions](https://rnmmkv.vercel.app/#/gettingstarted), check the [related issue](https://github.com/pboueke/canto/issues/1).
-
-&nbsp;
+The [`canto-data`](https://github.com/pboueke/canto-data) library is MIT-licensed separately.

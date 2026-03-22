@@ -1,67 +1,55 @@
-# OSX
-#
-.DS_Store
+# Learn more https://docs.github.com/en/get-started/getting-started-with-git/ignoring-files
 
-# Xcode
-#
-build/
-*.pbxuser
-!default.pbxuser
-*.mode1v3
-!default.mode1v3
-*.mode2v3
-!default.mode2v3
-*.perspectivev3
-!default.perspectivev3
-xcuserdata
-*.xccheckout
-*.moved-aside
-DerivedData
-*.hmap
-*.ipa
-*.xcuserstate
-
-# Android/IntelliJ
-#
-build/
-.idea
-.gradle
-local.properties
-*.iml
-/android/app/google-services.json
-
-# node.js
-#
+# dependencies
 node_modules/
-npm-debug.log
-yarn-error.log
 
-# BUCK
-buck-out/
-\.buckd/
+# Secrets
+play-store-key.json
 *.keystore
-!debug.keystore
+!android/app/debug.keystore
 
-# fastlane
-#
-# It is recommended to not store the screenshots in the git repo. Instead, use fastlane to re-generate the
-# screenshots whenever they are needed.
-# For more information about the recommended setup visit:
-# https://docs.fastlane.tools/best-practices/source-control/
+# Expo
+.expo/
+dist/
+web-build/
+expo-env.d.ts
 
-*/fastlane/report.xml
-*/fastlane/Preview.html
-*/fastlane/screenshots
+# Native
+.kotlin/
+*.orig.*
+*.jks
+*.p8
+*.p12
+*.key
+*.mobileprovision
 
-# Bundle artifact
-*.jsbundle
+# Metro
+.metro-health-check*
 
-# CocoaPods
-/ios/Pods/
+# debug
+npm-debug.*
+yarn-debug.*
+yarn-error.*
 
-*.aab
+# macOS
+.DS_Store
+*.pem
 
-# Keys
-gdriveWebCliendId.js
-gdriveCredentials.js
+# local env files
+.env*.local
 
+# Google OAuth credentials
+google-credentials.ts
+*googleusercontent.com.json
+*googleusercontent.com.plist
+
+# test coverage
+coverage/
+
+# typescript
+*.tsbuildinfo
+
+# generated native folders
+/ios
+/android
+.gstack/

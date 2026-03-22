@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Privacy Policy — Canto</title>
+  <link rel="icon" type="image/png" href="favicon.png">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      color: #1a1a1a;
+      background: #f5f5f5;
+      line-height: 1.7;
+    }
+    main {
+      max-width: 700px;
+      margin: 0 auto;
+      padding: 48px 24px;
+      background: #fff;
+      min-height: 100vh;
+    }
+    h1 { font-size: 28px; margin-bottom: 8px; color: rgb(1, 85, 92); }
+    h2 { font-size: 20px; margin-top: 32px; margin-bottom: 12px; color: rgb(1, 85, 92); }
+    p { margin-bottom: 16px; font-size: 15px; }
+    ul { margin: 0 0 16px 24px; font-size: 15px; }
+    li { margin-bottom: 6px; }
+    a { color: rgb(1, 85, 92); }
+    .meta { font-size: 14px; color: #666; margin-bottom: 32px; }
+    .back { display: inline-block; margin-bottom: 24px; font-size: 14px; }
+  </style>
+</head>
+<body>
+  <main>
+    <a class="back" href="/">&larr; Back to Canto</a>
+    <h1>Privacy Policy</h1>
+    <p class="meta">Effective date: 2026-03-20 &middot; App: Canto &mdash; Private Journal</p>
+
+    <h2>Summary</h2>
+    <p>Canto does not collect, store, transmit, or sell any personal data. Your journal entries are encrypted on your device and never leave it unless you explicitly choose to export or sync them.</p>
+
+    <h2>Data Storage</h2>
+    <p>All journal data (entries, attachments, metadata) is stored locally on your device using the device file system (Android/iOS) or IndexedDB (web), encrypted with AES-256-GCM.</p>
+    <p>Your data is not stored on any server operated by Canto or its developer.</p>
+
+    <h2>Encryption</h2>
+    <p>Canto encrypts all data at rest using AES-256-GCM encryption. A device-level encryption key is generated on first launch and stored in your device's secure store (Android Keystore / iOS Keychain). Journals can be further protected with a user-chosen password via PBKDF2-SHA256 key derivation.</p>
+    <p>For full technical details, see the <a href="https://github.com/pboueke/canto/blob/main/SECURITY.md">Security Model</a>.</p>
+
+    <h2>Data Collection</h2>
+    <p>Canto collects <strong>none</strong> of the following:</p>
+    <ul>
+      <li>Personal information (name, email, phone number)</li>
+      <li>Usage analytics or telemetry</li>
+      <li>Crash reports</li>
+      <li>Device identifiers</li>
+      <li>Location data (GPS is only used locally for journal entry tagging, if you enable it)</li>
+      <li>Advertising identifiers</li>
+    </ul>
+    <p><strong>Canto contains no ads, no trackers, and no third-party analytics SDKs.</strong></p>
+
+    <h2>Network Access</h2>
+    <p>Canto makes network requests <strong>only</strong> when you explicitly initiate them.</p>
+
+    <h2>Google Drive Sync (optional)</h2>
+    <p>If you choose to enable Google Drive sync:</p>
+    <ul>
+      <li>Canto authenticates with your Google account using the standard Google Sign-In flow</li>
+      <li>Your journal data is stored in your own Google Drive account, in an app-specific folder</li>
+      <li>Canto can only access its own folder &mdash; it cannot read your other Google Drive files</li>
+      <li>Device-level encryption is stripped before upload (the device key is unique to your device). If your journal is password-protected, the password-layer encryption is preserved &mdash; the data on Google Drive remains encrypted. If your journal has no password, the data is stored unencrypted on Google Drive.</li>
+      <li>You can disable sync and delete the remote copy at any time</li>
+    </ul>
+
+    <h2>Biometric Data</h2>
+    <p>If you enable biometric unlock, Canto uses the device's biometric API to verify your identity. Biometric data is processed entirely by the operating system. Canto never accesses, stores, or transmits biometric data.</p>
+
+    <h2>Data Portability</h2>
+    <p>You can export all your data at any time as an encrypted <code>.canto.zip</code> archive. The exported file belongs to you &mdash; store it wherever you want, import it on another device, or use it as a backup.</p>
+
+    <h2>Data Deletion</h2>
+    <p>Delete individual entries, pages, or entire journals from within the app. Uninstalling the app removes all local data. If you used Google Drive sync, you can delete the remote copy from within the app or directly from Google Drive.</p>
+
+    <h2>Children's Privacy</h2>
+    <p>Canto does not knowingly collect any data from children under 13, because Canto does not collect any data from anyone.</p>
+
+    <h2>Third-Party Services</h2>
+    <p>The only third-party service Canto integrates with is Google Drive (optional sync). Google's privacy policy applies to data stored in your Google Drive account: <a href="https://policies.google.com/privacy">policies.google.com/privacy</a></p>
+
+    <h2>Open Source</h2>
+    <p>Canto is open source under the GPLv3 license. You can verify every claim in this privacy policy by reading the source code: <a href="https://github.com/pboueke/canto">github.com/pboueke/canto</a></p>
+
+    <h2>Changes to This Policy</h2>
+    <p>If this privacy policy changes, the updated version will be published in the GitHub repository and included in the app's next release.</p>
+
+    <h2>Contact</h2>
+    <p>For questions about this privacy policy, open an issue on the <a href="https://github.com/pboueke/canto/issues">GitHub repository</a>.</p>
+  </main>
+</body>
+</html>
