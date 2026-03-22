@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.18.3 - Sync KDF iteration mismatch fix, auto-sync improvement
+
+- fix: sync failed on web with "Invalid JSON" — KDF iteration count mismatch between `JournalKeyContext` (20,000 legacy fallback) and `SyncManager` (50,000 default) caused different PBKDF2 keys for the same journal, making local data unreadable during sync
+- fix: auto-sync on journal screen no longer triggers redundantly on every re-focus — now compares page modification timestamps and only syncs when data has actually changed
+- test: 2 new sync manager KDF iteration tests (default fallback, explicit iterations)
+
 ## v0.18.2 - Dependency manifest, changelog tabs, button fix
 
 - feat: changelog modal now tabbed — default tab shows changelog, secondary tab shows all production npm dependencies with their licenses

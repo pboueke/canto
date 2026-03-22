@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, FlatList, StyleSheet, Text, View } from 'react-native';
 import { usePagination } from '@/hooks/usePagination';
 import { useLocalSearchParams, router, useFocusEffect } from 'expo-router';
@@ -39,11 +39,17 @@ export default function JournalScreen() {
   const [showExportModal, setShowExportModal] = useState(false);
   const [showSyncModal, setShowSyncModal] = useState(false);
 
+  const lastSyncedModified = useRef<number | null>(null);
+
   useFocusEffect(
     useCallback(() => {
       refresh();
-      // Auto-sync on focus if configured
-      if (journal?.settings.autoSync && journal.settings.remoteSync && isSignedIn) {
+      if (!journal?.settings.autoSync || !journal.settings.remoteSync || !isSignedIn) return;
+
+      // Sync on first focus, or when any page has been modified since last sync
+      const latestModified = journal.pages.reduce((max, p) => Math.max(max, p.modified), 0);
+      if (lastSyncedModified.current === null || latestModified > lastSyncedModified.current) {
+        lastSyncedModified.current = latestModified;
         syncJournal(journal.id, derivedKey ?? undefined);
       }
     }, [
@@ -52,6 +58,7 @@ export default function JournalScreen() {
       journal?.settings.remoteSync,
       isSignedIn,
       journal?.id,
+      journal?.pages,
       derivedKey,
       syncJournal,
     ]),
