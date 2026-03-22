@@ -1,7 +1,15 @@
 import { SyncEngine } from '../sync/engine';
 import type { LocalStore } from '../storage/types';
-import type { RemoteStore } from '../sync/types';
+import type { RemoteStore, SyncIndex } from '../sync/types';
 import type { Page, JournalContent, Attachment } from '@/data';
+
+// Mock encryption to be passthrough so mock stores work with plain strings
+jest.mock('../encryption/utils', () => ({
+  aesGcmEncrypt: jest.fn((plaintext: string) => Promise.resolve(plaintext)),
+  aesGcmDecrypt: jest.fn((ciphertext: string) => Promise.resolve(ciphertext)),
+}));
+
+const SYNC_KEY = new Uint8Array(32).fill(1);
 
 const makePage = (
   id: string,
@@ -35,6 +43,7 @@ const makeJournal = (pages: Page[]): JournalContent => ({
   icon: 'book',
   date: '2026-01-01T00:00:00Z',
   secure: false,
+  salt: 'dGVzdHNhbHQ=',
   pages,
   settings: {
     use24h: false,
@@ -75,6 +84,15 @@ function createMockLocalStore(journal: JournalContent | null): LocalStore {
   };
 }
 
+/** Build a SyncIndex from pages. */
+function buildSyncIndex(pages: Page[]): SyncIndex {
+  const index: SyncIndex = {};
+  for (const p of pages) {
+    index[p.id] = { modified: p.modified, ...(p.deleted ? { deleted: true } : {}) };
+  }
+  return index;
+}
+
 /**
  * Creates a mock RemoteStore with a custom provider prefix.
  * This proves SyncEngine is provider-agnostic — it uses isRemotePath/buildRemotePath
@@ -84,6 +102,8 @@ function createMockRemoteStore(
   journal: JournalContent | null,
   providerPrefix = 'mockprovider',
 ): RemoteStore {
+  const remotePages = journal?.pages ?? [];
+
   return {
     provider: 'gdrive', // type-level constraint, but behavior uses custom prefix
     connect: jest.fn(),
@@ -100,13 +120,17 @@ function createMockRemoteStore(
         journal ? [{ id: journal.id, title: journal.title, lastModified: 0 }] : [],
       ),
     uploadJournalMeta: jest.fn(),
-    downloadJournalMeta: jest.fn().mockResolvedValue(journal ? { content: journal } : null),
+    downloadJournalMeta: jest.fn().mockResolvedValue(journal ? JSON.stringify(journal) : null),
     uploadPage: jest.fn(),
     downloadPage: jest.fn().mockImplementation((_jId: string, pId: string) => {
-      const page = journal?.pages.find((p) => p.id === pId);
-      return Promise.resolve(page ?? null);
+      const page = remotePages.find((p) => p.id === pId);
+      return Promise.resolve(page ? JSON.stringify(page) : null);
     }),
     deletePage: jest.fn(),
+    uploadSyncIndex: jest.fn(),
+    downloadSyncIndex: jest
+      .fn()
+      .mockResolvedValue(remotePages.length > 0 ? buildSyncIndex(remotePages) : null),
     uploadAttachment: jest
       .fn()
       .mockImplementation((_jId: string, localPath: string) =>
@@ -120,25 +144,29 @@ function createMockRemoteStore(
 
 describe('SyncEngine — provider-agnostic interface', () => {
   describe('RemoteStore contract', () => {
-    it('calls uploadJournalMeta with local journal', async () => {
+    it('calls uploadJournalMeta with encrypted meta and registry', async () => {
       const journal = makeJournal([]);
       const local = createMockLocalStore(journal);
       const remote = createMockRemoteStore(makeJournal([]));
 
       const engine = new SyncEngine(local, remote);
-      await engine.sync('journal-1');
+      await engine.sync('journal-1', SYNC_KEY);
 
-      expect(remote.uploadJournalMeta).toHaveBeenCalledWith(journal);
+      expect(remote.uploadJournalMeta).toHaveBeenCalledWith(
+        'journal-1',
+        expect.any(String),
+        expect.objectContaining({ title: 'Test Journal', encrypted: false }),
+      );
     });
 
-    it('calls downloadJournalMeta to get remote pages', async () => {
+    it('calls downloadSyncIndex to get remote page timestamps', async () => {
       const local = createMockLocalStore(makeJournal([]));
       const remote = createMockRemoteStore(makeJournal([]));
 
       const engine = new SyncEngine(local, remote);
-      await engine.sync('journal-1');
+      await engine.sync('journal-1', SYNC_KEY);
 
-      expect(remote.downloadJournalMeta).toHaveBeenCalledWith('journal-1');
+      expect(remote.downloadSyncIndex).toHaveBeenCalledWith('journal-1');
     });
 
     it('calls connect/disconnect are not called by SyncEngine directly', async () => {
@@ -146,7 +174,7 @@ describe('SyncEngine — provider-agnostic interface', () => {
       const remote = createMockRemoteStore(makeJournal([]));
 
       const engine = new SyncEngine(local, remote);
-      await engine.sync('journal-1');
+      await engine.sync('journal-1', SYNC_KEY);
 
       // SyncEngine should not manage connection — that is SyncManager's job
       expect(remote.connect).not.toHaveBeenCalled();
@@ -162,7 +190,7 @@ describe('SyncEngine — provider-agnostic interface', () => {
       const remote = createMockRemoteStore(makeJournal([]));
 
       const engine = new SyncEngine(local, remote);
-      await engine.sync('journal-1');
+      await engine.sync('journal-1', SYNC_KEY);
 
       // isRemotePath should have been called to check the attachment path
       expect(remote.isRemotePath).toHaveBeenCalledWith(
@@ -179,13 +207,13 @@ describe('SyncEngine — provider-agnostic interface', () => {
       const remote = createMockRemoteStore(makeJournal([]));
 
       const engine = new SyncEngine(local, remote);
-      await engine.sync('journal-1');
+      await engine.sync('journal-1', SYNC_KEY);
 
       expect(remote.isRemotePath).toHaveBeenCalledWith('/local/path/img1.png');
       expect(remote.uploadAttachment).toHaveBeenCalledWith(
         'journal-1',
         '/local/path/img1.png',
-        'base64data',
+        expect.any(String), // encrypted data (passthrough in mock)
       );
     });
   });
@@ -198,7 +226,7 @@ describe('SyncEngine — provider-agnostic interface', () => {
       const remote = createMockRemoteStore(makeJournal([remotePage]));
 
       const engine = new SyncEngine(local, remote);
-      await engine.sync('journal-1');
+      await engine.sync('journal-1', SYNC_KEY);
 
       expect(remote.buildRemotePath).toHaveBeenCalledWith('journal-1', 'img1.png');
       expect(remote.downloadAttachment).toHaveBeenCalledWith(
@@ -214,10 +242,10 @@ describe('SyncEngine — provider-agnostic interface', () => {
       const remote = createMockRemoteStore(makeJournal([]));
 
       const engine = new SyncEngine(local, remote);
-      const result = await engine.sync('journal-1');
+      const result = await engine.sync('journal-1', SYNC_KEY);
 
       expect(result.uploaded).toContain('p1');
-      expect(remote.uploadPage).toHaveBeenCalledWith('journal-1', page);
+      expect(remote.uploadPage).toHaveBeenCalledWith('journal-1', 'p1', expect.any(String));
     });
 
     it('downloads remote-only pages', async () => {
@@ -226,10 +254,10 @@ describe('SyncEngine — provider-agnostic interface', () => {
       const remote = createMockRemoteStore(makeJournal([page]));
 
       const engine = new SyncEngine(local, remote);
-      const result = await engine.sync('journal-1');
+      const result = await engine.sync('journal-1', SYNC_KEY);
 
       expect(result.downloaded).toContain('p2');
-      expect(local.savePage).toHaveBeenCalledWith('journal-1', page, undefined, true);
+      expect(local.savePage).toHaveBeenCalledWith('journal-1', page, SYNC_KEY, true);
     });
 
     it('resolves conflicts with last-write-wins', async () => {
@@ -239,10 +267,10 @@ describe('SyncEngine — provider-agnostic interface', () => {
       const remote = createMockRemoteStore(makeJournal([remotePage]));
 
       const engine = new SyncEngine(local, remote);
-      const result = await engine.sync('journal-1');
+      const result = await engine.sync('journal-1', SYNC_KEY);
 
       expect(result.uploaded).toContain('p1');
-      expect(remote.uploadPage).toHaveBeenCalledWith('journal-1', localPage);
+      expect(remote.uploadPage).toHaveBeenCalledWith('journal-1', 'p1', expect.any(String));
     });
 
     it('propagates local deletion to remote', async () => {
@@ -252,7 +280,7 @@ describe('SyncEngine — provider-agnostic interface', () => {
       const remote = createMockRemoteStore(makeJournal([remotePage]));
 
       const engine = new SyncEngine(local, remote);
-      const result = await engine.sync('journal-1');
+      const result = await engine.sync('journal-1', SYNC_KEY);
 
       expect(result.deleted).toContain('p1');
       expect(remote.deletePage).toHaveBeenCalledWith('journal-1', 'p1');
@@ -265,10 +293,10 @@ describe('SyncEngine — provider-agnostic interface', () => {
       const remote = createMockRemoteStore(makeJournal([remotePage]));
 
       const engine = new SyncEngine(local, remote);
-      const result = await engine.sync('journal-1');
+      const result = await engine.sync('journal-1', SYNC_KEY);
 
       expect(result.deleted).toContain('p1');
-      expect(local.deletePage).toHaveBeenCalledWith('journal-1', 'p1', undefined);
+      expect(local.deletePage).toHaveBeenCalledWith('journal-1', 'p1', SYNC_KEY);
     });
   });
 });

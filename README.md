@@ -3,8 +3,8 @@
 A private, encrypted journaling app for Android, iOS, and Web.
 
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
-![Version](https://img.shields.io/badge/version-0.17.7-green)
-![Tests](https://img.shields.io/badge/tests-961%2F961%20passed-brightgreen)
+![Version](https://img.shields.io/badge/version-0.17.8-green)
+![Tests](https://img.shields.io/badge/tests-975%2F975%20passed-brightgreen)
 ![Coverage](https://img.shields.io/badge/coverage-99%25-brightgreen)
 ![Platforms](https://img.shields.io/badge/platforms-Android%20%7C%20Web-lightgrey)
 
@@ -16,7 +16,7 @@ A private, encrypted journaling app for Android, iOS, and Web.
 - **Markdown editor** — write entries in markdown with live preview
 - **Rich entries** — attach images, files, GPS locations, tags, and comments to any entry, with optional per-attachment encryption
 - **Data portability** — export journals as encrypted `.canto.zip` archives. Import them on another device. No lock-in.
-- **Google Drive sync** — optional cross-device sync via your own Google Drive account
+- **Google Drive sync** — optional cross-device sync via your own Google Drive account, encrypted end-to-end with AES-256-GCM
 - **6 themes** — Light, Dark, Monokai, Solarized, Nord, and Dracula
 - **Multilingual** — 20 languages and counting
 - **Offline-first** — works without an internet connection. All data stored locally.

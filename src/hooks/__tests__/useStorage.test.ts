@@ -63,7 +63,14 @@ beforeEach(() => {
 // Helpers
 // ---------------------------------------------------------------------------
 function makeJournal(id = 'j1'): Journal {
-  return { id, title: 'Test', icon: '📖', date: '2026-01-01T00:00:00Z', secure: false };
+  return {
+    id,
+    title: 'Test',
+    icon: '📖',
+    date: '2026-01-01T00:00:00Z',
+    secure: false,
+    salt: 'dGVzdHNhbHQ=',
+  };
 }
 
 function makeJournalContent(id = 'j1'): JournalContent {

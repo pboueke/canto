@@ -154,7 +154,7 @@ JournalContent
 ├── icon: string (emoji)
 ├── date: string (ISO 8601, creation date)
 ├── secure: boolean
-├── salt?: string (base64, present when secure=true)
+├── salt: string (base64, always present — used for sync encryption key derivation)
 ├── biometric?: boolean
 ├── kdfIterations?: number (PBKDF2, default 50000)
 ├── themeOverride?: string
@@ -280,14 +280,17 @@ Virtual paths mirror native layout:
 
 ### Google Drive
 
+All journal content on Google Drive is **AES-256-GCM encrypted** before upload. Only the registry and sync index are stored unencrypted (see [SECURITY.md](SECURITY.md#google-drive-sync)).
+
 ```
 My Drive/Canto/
 ├── {journalId}/
-│   ├── metadata.json
-│   ├── pages/{pageId}.json
-│   └── attachments/{filename}
+│   ├── meta.json                          # Encrypted journal metadata + settings
+│   ├── index.json                         # Sync index (unencrypted): page timestamps for sync
+│   ├── pages/{pageId}.json                # Encrypted page content
+│   └── attachments/{filename}             # Encrypted attachments
 App Data (hidden):
-└── canto-journals.json                    # Registry of synced journals
+└── canto-journals.json                    # Registry: journal IDs, titles, salts (unencrypted)
 ```
 
 ## License

@@ -1,5 +1,22 @@
 # Changelog
 
+## v0.17.8 - Critical: GDrive sync encryption
+
+- **security: all journal content now encrypted (AES-256-GCM) before upload to Google Drive** — previously stored as plain text
+- security: non-password journals encrypted with salt-derived key (PBKDF2 with empty password) for passive scraping protection
+- security: SyncManager now derives sync key from journal salt when no password key is available — fixes zero-key fallback
+- feat: sync index (`index.json`) for O(1) timestamp comparison — eliminates eagerly fetching all remote pages per sync
+- refactor: RemoteStore interface updated to accept/return opaque encrypted strings
+- refactor: `Journal.salt` is now required on all journals (was optional, only for secure)
+- fix: cloud import (from GDrive) rewritten to decrypt data using salt-derived key
+- fix: per-page download errors in sync are now caught gracefully (logged and skipped) instead of aborting the entire sync
+- docs: SECURITY.md updated with new "Google Drive Sync" section detailing encryption model
+- docs: PRIVACY.md corrected — no longer claims non-password journals are unencrypted on GDrive
+- docs: DATA.md updated with current GDrive filesystem structure and required salt field
+- test: 12 new encryption-focused sync tests (encrypted upload verification, wrong key rejection, round-trip, attachment encryption, sync index accuracy)
+- test: all existing sync tests updated for encrypted sync API
+- fix: file attachment row — tapping remove button no longer also triggers file open (separated Pressable from container View)
+
 ## v0.17.7 - Language picker, multilingual landing page, README update
 
 - fix: language picker modal now scrollable for 20 languages

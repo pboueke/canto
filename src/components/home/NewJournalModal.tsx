@@ -23,13 +23,15 @@ import { ThemePickerModal } from '@/components/home/ThemePickerModal';
 import { isBiometricAvailable } from '@/lib/biometric';
 import { DEFAULT_KDF_ITERATIONS, LEGACY_KDF_ITERATIONS } from '@/lib/encryption/password';
 import { deriveKey } from '@/lib/encryption/password';
-import { base64ToUint8 } from '@/lib/encryption/utils';
+import { aesGcmDecrypt, base64ToUint8 } from '@/lib/encryption/utils';
 import { type ThemeName, themes } from '@/styles/themes';
 import { inspectBackup, importJournal, hasNameConflict, resolveNameConflict } from '@/lib/backup';
 import type { AttachmentError } from '@/lib/backup/import';
 import { useGoogleAuth } from '@/contexts/GoogleAuthContext';
 import { useSyncManager } from '@/contexts/SyncManagerContext';
+import type { JournalContent, Page } from '@/data';
 import type { RemoteJournalMeta, DownloadFailure } from '@/lib/sync';
+import { safeJsonParse } from '@/lib/utils/json';
 import { DataIntegrityWarningModal } from '@/components/common/DataIntegrityWarningModal';
 
 interface NewJournalModalProps {
@@ -189,55 +191,88 @@ export function NewJournalModal({
     try {
       await manager.connectWithToken(accessToken);
       const store = manager.getRemoteStore();
-      const downloadResult = await store.downloadJournalMeta(remote.id);
-      if (!downloadResult) throw new Error('Journal not found on remote');
 
-      // Check for page download failures
-      if (downloadResult.failures && downloadResult.failures.length > 0) {
-        setImporting(false);
-        setIntegrityWarning({
-          type: 'sync',
-          details: downloadResult.failures.map((f) => f.name),
-          syncFailures: downloadResult.failures,
-          retryRemote: remote,
-        });
-        return;
-      }
+      // Derive sync key from salt (empty password for cloud import of non-secure journals)
+      if (!remote.salt) throw new Error('Journal has no salt — cannot decrypt');
+      const saltBytes = base64ToUint8(remote.salt);
+      // TODO: if the journal is encrypted (password-protected), prompt for password
+      const syncKey = await deriveKey('', saltBytes, DEFAULT_KDF_ITERATIONS);
 
-      const journal = downloadResult.content;
-      const activePages = journal.pages.filter((p: { deleted: boolean }) => !p.deleted);
-      const total = activePages.length;
+      // Download and decrypt journal metadata
+      const encryptedMeta = await store.downloadJournalMeta(remote.id);
+      if (!encryptedMeta) throw new Error('Journal not found on remote');
+      const metaJson = await aesGcmDecrypt(encryptedMeta, syncKey);
+      const meta = safeJsonParse<JournalContent>(metaJson, 'cloud-import-meta');
+      const journal: JournalContent = { ...meta, pages: [] };
+
+      // Download sync index to know which pages exist
+      const syncIndex = await store.downloadSyncIndex(remote.id);
+      const pageIds = syncIndex
+        ? Object.keys(syncIndex).filter((id) => !syncIndex[id].deleted)
+        : [];
+      const total = pageIds.length;
       let current = 0;
 
-      // Download attachments and save locally
+      // Download and decrypt each page
       const { getLocalStore } = await import('@/hooks/useStorage');
       const localStore = await getLocalStore();
       const importWarnings: string[] = [];
-      for (const page of journal.pages) {
-        const attachments = [...(page.images ?? []), ...(page.files ?? [])].filter(
-          (a) => !a.deleted && a.path,
-        );
-        const results = await Promise.allSettled(
-          attachments.map(async (att) => {
-            const filename = att.path.split('/').pop() ?? att.path;
-            const remotePath = `gdrive://${journal.id}/attachments/${filename}`;
-            const data = await store.downloadAttachment(remotePath);
-            if (data) {
-              const localPath = await localStore.saveAttachment(journal.id, page.id, att, data);
-              att.path = localPath;
-            }
-          }),
-        );
-        const failures = results.filter((r) => r.status === 'rejected');
-        if (failures.length > 0) {
-          importWarnings.push(
-            `${failures.length} attachment(s) failed to download for page ${page.id}`,
+      const downloadFailures: DownloadFailure[] = [];
+
+      for (const pageId of pageIds) {
+        try {
+          const encryptedPage = await store.downloadPage(remote.id, pageId);
+          if (!encryptedPage) {
+            downloadFailures.push({ name: `${pageId}.json`, reason: 'Not found on remote' });
+            continue;
+          }
+          const pageJson = await aesGcmDecrypt(encryptedPage, syncKey);
+          const page = safeJsonParse<Page>(pageJson, `page:${pageId}`);
+
+          // Download and decrypt attachments
+          const attachments = [...(page.images ?? []), ...(page.files ?? [])].filter(
+            (a) => !a.deleted && a.path,
           );
+          const results = await Promise.allSettled(
+            attachments.map(async (att) => {
+              const filename = att.path.split('/').pop() ?? att.path;
+              const remotePath = `gdrive://${remote.id}/attachments/${filename}`;
+              const encrypted = await store.downloadAttachment(remotePath);
+              if (encrypted) {
+                const data = await aesGcmDecrypt(encrypted, syncKey);
+                const localPath = await localStore.saveAttachment(remote.id, page.id, att, data);
+                att.path = localPath;
+              }
+            }),
+          );
+          const failures = results.filter((r) => r.status === 'rejected');
+          if (failures.length > 0) {
+            importWarnings.push(
+              `${failures.length} attachment(s) failed to download for page ${page.id}`,
+            );
+          }
+
+          journal.pages.push(page);
+        } catch (err) {
+          downloadFailures.push({
+            name: `${pageId}.json`,
+            reason: err instanceof Error ? err.message : String(err),
+          });
         }
-        if (!page.deleted) {
-          current++;
-          setImportProgress({ current, total });
-        }
+        current++;
+        setImportProgress({ current, total });
+      }
+
+      // Show integrity warning if some pages failed
+      if (downloadFailures.length > 0) {
+        setImporting(false);
+        setIntegrityWarning({
+          type: 'sync',
+          details: downloadFailures.map((f) => f.name),
+          syncFailures: downloadFailures,
+          retryRemote: remote,
+        });
+        return;
       }
 
       await localStore.saveJournal(journal);

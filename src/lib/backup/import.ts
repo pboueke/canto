@@ -3,7 +3,13 @@ import { File } from 'expo-file-system';
 import type { JournalContent, JournalSettings, Page, Attachment } from '@/data';
 import { DEFAULT_JOURNAL_SETTINGS } from '@/data';
 import { getLocalStore } from '@/hooks/useStorage';
-import { aesGcmDecryptBytes, base64ToUint8, generateUUID } from '@/lib/encryption/utils';
+import {
+  aesGcmDecryptBytes,
+  base64ToUint8,
+  generateUUID,
+  generateSalt,
+  uint8ToBase64,
+} from '@/lib/encryption/utils';
 import { deriveKey, LEGACY_KDF_ITERATIONS } from '@/lib/encryption/password';
 import type { ExportManifest } from '@/data/format';
 import { parseManifest } from '@/data/format';
@@ -284,7 +290,7 @@ export async function importJournal(
     icon: journalData.icon,
     date: new Date().toISOString(),
     secure: preservePassword,
-    ...(preserveSalt && journalData.salt ? { salt: journalData.salt } : {}),
+    salt: preserveSalt && journalData.salt ? journalData.salt : uint8ToBase64(generateSalt(16)),
     ...(preserveSalt ? { kdfIterations: journalData.kdfIterations ?? LEGACY_KDF_ITERATIONS } : {}),
     pages: finalPages,
     settings,

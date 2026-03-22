@@ -1,5 +1,4 @@
-import type { JournalContent, Page } from '@/data';
-import type { RemoteStore, RemoteJournalMeta, DownloadResult } from '../types';
+import type { RemoteStore, RemoteJournalMeta, RegistryInfo, SyncIndex } from '../types';
 import { safeJsonParse } from '@/lib/utils/json';
 import * as api from './api';
 
@@ -220,85 +219,50 @@ export class GDriveRemoteStore implements RemoteStore {
     }));
   }
 
-  async uploadJournalMeta(journal: JournalContent): Promise<void> {
-    const journalFolderId = await this.getJournalFolderId(journal.id);
+  async uploadJournalMeta(
+    journalId: string,
+    encryptedMeta: string,
+    registry: RegistryInfo,
+  ): Promise<void> {
+    const journalFolderId = await this.getJournalFolderId(journalId);
 
-    // Write meta.json (journal content minus pages)
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    const { pages: _pages, ...metaWithoutPages } = journal;
-    await this.upsertFile('meta.json', journalFolderId, JSON.stringify(metaWithoutPages));
+    // Write encrypted meta.json
+    await this.upsertFile('meta.json', journalFolderId, encryptedMeta);
 
-    // Update registry
-    const registry = await this.readRegistry();
-    const existing = registry.findIndex((e) => e.id === journal.id);
+    // Update registry with plain metadata
+    const entries = await this.readRegistry();
+    const existing = entries.findIndex((e) => e.id === journalId);
     const entry: RegistryEntry = {
-      id: journal.id,
-      title: journal.title,
-      encrypted: journal.secure,
-      salt: journal.salt,
+      id: journalId,
+      title: registry.title,
+      encrypted: registry.encrypted,
+      salt: registry.salt,
     };
     if (existing >= 0) {
-      registry[existing] = entry;
+      entries[existing] = entry;
     } else {
-      registry.push(entry);
+      entries.push(entry);
     }
-    await this.writeRegistry(registry);
+    await this.writeRegistry(entries);
   }
 
-  async downloadJournalMeta(journalId: string): Promise<DownloadResult | null> {
+  async downloadJournalMeta(journalId: string): Promise<string | null> {
     const journalFolderId = await this.getJournalFolderId(journalId);
     const metaFileId = await this.findFile('meta.json', journalFolderId);
     if (!metaFileId) return null;
-
-    const content = await api.getFileContent(this.token(), metaFileId);
-    const meta = safeJsonParse<Omit<JournalContent, 'pages'>>(content, 'journal-meta');
-
-    // List pages from pages folder
-    const pagesFolderId = await this.getPagesFolderId(journalId);
-    const pageFiles = await api.listFiles(
-      this.token(),
-      `'${escapeQuery(pagesFolderId)}' in parents and trashed = false`,
-    );
-
-    const token = this.token();
-    const results = await Promise.allSettled(
-      pageFiles.map(async (pf) => {
-        const pageContent = await api.getFileContent(token, pf.id);
-        return safeJsonParse<Page>(pageContent, `page:${pf.name}`);
-      }),
-    );
-
-    const pages: Page[] = [];
-    const failures: Array<{ name: string; reason: string }> = [];
-    for (let i = 0; i < results.length; i++) {
-      const r = results[i];
-      if (r.status === 'fulfilled') {
-        pages.push(r.value);
-      } else {
-        failures.push({
-          name: pageFiles[i].name,
-          reason: r.reason instanceof Error ? r.reason.message : String(r.reason),
-        });
-      }
-    }
-
-    return {
-      content: { ...meta, pages } as JournalContent,
-      failures: failures.length > 0 ? failures : undefined,
-    };
+    return api.getFileContent(this.token(), metaFileId);
   }
 
-  async uploadPage(journalId: string, page: Page): Promise<void> {
+  async uploadPage(journalId: string, pageId: string, encryptedContent: string): Promise<void> {
     const pagesFolderId = await this.getPagesFolderId(journalId);
-    await this.upsertFile(`${page.id}.json`, pagesFolderId, JSON.stringify(page));
+    await this.upsertFile(`${pageId}.json`, pagesFolderId, encryptedContent);
   }
 
-  async downloadPage(journalId: string, pageId: string): Promise<Page | null> {
+  async downloadPage(journalId: string, pageId: string): Promise<string | null> {
     const pagesFolderId = await this.getPagesFolderId(journalId);
     const fileId = await this.findFile(`${pageId}.json`, pagesFolderId);
     if (!fileId) return null;
-    const content = await api.getFileContent(this.token(), fileId);
-    return safeJsonParse<Page>(content, `page:${pageId}`);
+    return api.getFileContent(this.token(), fileId);
   }
 
   async deletePage(journalId: string, pageId: string): Promise<void> {
@@ -308,6 +272,19 @@ export class GDriveRemoteStore implements RemoteStore {
       await api.deleteFile(this.token(), fileId);
       this.fileIdCache.delete(`file:${pagesFolderId}/${pageId}.json`);
     }
+  }
+
+  async uploadSyncIndex(journalId: string, index: SyncIndex): Promise<void> {
+    const journalFolderId = await this.getJournalFolderId(journalId);
+    await this.upsertFile('index.json', journalFolderId, JSON.stringify(index));
+  }
+
+  async downloadSyncIndex(journalId: string): Promise<SyncIndex | null> {
+    const journalFolderId = await this.getJournalFolderId(journalId);
+    const fileId = await this.findFile('index.json', journalFolderId);
+    if (!fileId) return null;
+    const content = await api.getFileContent(this.token(), fileId);
+    return safeJsonParse<SyncIndex>(content, 'sync-index');
   }
 
   async uploadAttachment(journalId: string, localPath: string, data: string): Promise<string> {

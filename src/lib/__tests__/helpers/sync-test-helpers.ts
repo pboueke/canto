@@ -44,7 +44,7 @@ export const makeJournal = (
   icon: 'book',
   date: '2026-01-01T00:00:00Z',
   secure,
-  salt,
+  salt: salt ?? 'dGVzdHNhbHQ=',
   pages,
   settings: {
     use24h: false,

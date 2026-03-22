@@ -1,4 +1,4 @@
-import type { JournalContent, Page, SyncProvider } from '@/data';
+import type { SyncProvider } from '@/data';
 
 export type { SyncProvider };
 
@@ -7,6 +7,18 @@ export interface RemoteJournalMeta {
   title: string;
   lastModified: number; // unix timestamp ms
   salt?: string; // base64 encoded salt for encrypted journals
+}
+
+/** Lightweight sync index — stored unencrypted on remote for O(1) timestamp comparison. */
+export interface SyncIndex {
+  [pageId: string]: { modified: number; deleted?: boolean };
+}
+
+/** Registry metadata passed alongside encrypted journal content. */
+export interface RegistryInfo {
+  title: string;
+  encrypted: boolean;
+  salt?: string;
 }
 
 export interface RemoteStore {
@@ -31,20 +43,30 @@ export interface RemoteStore {
   /** List all journals available on the remote. */
   listRemoteJournals(): Promise<RemoteJournalMeta[]>;
 
-  /** Upload journal metadata (not pages). */
-  uploadJournalMeta(journal: JournalContent): Promise<void>;
+  /** Upload encrypted journal metadata + update registry. */
+  uploadJournalMeta(
+    journalId: string,
+    encryptedMeta: string,
+    registry: RegistryInfo,
+  ): Promise<void>;
 
-  /** Download journal metadata from remote. */
-  downloadJournalMeta(journalId: string): Promise<DownloadResult | null>;
+  /** Download raw (encrypted) journal metadata string from remote. */
+  downloadJournalMeta(journalId: string): Promise<string | null>;
 
-  /** Upload a single page. Data should already be encrypted. */
-  uploadPage(journalId: string, page: Page): Promise<void>;
+  /** Upload an encrypted page blob. */
+  uploadPage(journalId: string, pageId: string, encryptedContent: string): Promise<void>;
 
-  /** Download a single page from remote. */
-  downloadPage(journalId: string, pageId: string): Promise<Page | null>;
+  /** Download raw (encrypted) page content from remote. */
+  downloadPage(journalId: string, pageId: string): Promise<string | null>;
 
   /** Delete a page on the remote. */
   deletePage(journalId: string, pageId: string): Promise<void>;
+
+  /** Upload the sync timestamp index for a journal. */
+  uploadSyncIndex(journalId: string, index: SyncIndex): Promise<void>;
+
+  /** Download the sync timestamp index for a journal. */
+  downloadSyncIndex(journalId: string): Promise<SyncIndex | null>;
 
   /** Upload an attachment. Returns the remote path/identifier. */
   uploadAttachment(journalId: string, localPath: string, data: string): Promise<string>;
@@ -62,11 +84,6 @@ export interface RemoteStore {
 export interface DownloadFailure {
   name: string;
   reason: string;
-}
-
-export interface DownloadResult {
-  content: JournalContent;
-  failures?: DownloadFailure[];
 }
 
 export interface SyncConflict {

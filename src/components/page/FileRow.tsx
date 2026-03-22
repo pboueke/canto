@@ -32,7 +32,7 @@ export function FileRow({ files, editable, onRemove, onOpen }: FileRowProps) {
         const sizeStr = formatSize(file.size);
 
         return (
-          <Pressable
+          <View
             key={file.id}
             style={[
               styles.fileItem,
@@ -42,45 +42,49 @@ export function FileRow({ files, editable, onRemove, onOpen }: FileRowProps) {
                 borderWidth: theme.borderWidth,
               },
             ]}
-            onPress={() => onOpen?.(file)}
-            accessibilityLabel={`${file.name} ${sizeStr}`}
-            accessibilityRole="button"
           >
-            <View style={styles.fileIcon}>
-              <Feather name="paperclip" size={20} color={theme.colors.textSecondary} />
-              {file.encrypted && (
-                <Feather
-                  name="lock"
-                  size={10}
-                  color={theme.colors.primary}
-                  style={styles.lockIcon}
-                />
-              )}
-            </View>
-            {ext ? (
-              <View style={[styles.extBadge, { backgroundColor: theme.colors.primary }]}>
-                <Text style={[styles.extText, { fontFamily: theme.fonts.bold }]}>{ext}</Text>
-              </View>
-            ) : null}
-            <Text
-              style={[
-                styles.fileName,
-                { color: theme.colors.text, fontFamily: theme.fonts.regular },
-              ]}
-              numberOfLines={2}
+            <Pressable
+              onPress={() => onOpen?.(file)}
+              style={styles.fileContent}
+              accessibilityLabel={`${file.name} ${sizeStr}`}
+              accessibilityRole="button"
             >
-              {file.name}
-            </Text>
-            {sizeStr ? (
+              <View style={styles.fileIcon}>
+                <Feather name="paperclip" size={20} color={theme.colors.textSecondary} />
+                {file.encrypted && (
+                  <Feather
+                    name="lock"
+                    size={10}
+                    color={theme.colors.primary}
+                    style={styles.lockIcon}
+                  />
+                )}
+              </View>
+              {ext ? (
+                <View style={[styles.extBadge, { backgroundColor: theme.colors.primary }]}>
+                  <Text style={[styles.extText, { fontFamily: theme.fonts.bold }]}>{ext}</Text>
+                </View>
+              ) : null}
               <Text
                 style={[
-                  styles.fileSize,
-                  { color: theme.colors.textSecondary, fontFamily: theme.fonts.light },
+                  styles.fileName,
+                  { color: theme.colors.text, fontFamily: theme.fonts.regular },
                 ]}
+                numberOfLines={2}
               >
-                {sizeStr}
+                {file.name}
               </Text>
-            ) : null}
+              {sizeStr ? (
+                <Text
+                  style={[
+                    styles.fileSize,
+                    { color: theme.colors.textSecondary, fontFamily: theme.fonts.light },
+                  ]}
+                >
+                  {sizeStr}
+                </Text>
+              ) : null}
+            </Pressable>
 
             {editable && (
               <Pressable
@@ -92,7 +96,7 @@ export function FileRow({ files, editable, onRemove, onOpen }: FileRowProps) {
                 <Feather name="x" size={12} color="#fff" />
               </Pressable>
             )}
-          </Pressable>
+          </View>
         );
       })}
     </View>
@@ -110,10 +114,13 @@ const styles = StyleSheet.create({
     width: 100,
     height: 100,
     borderRadius: 8,
+    position: 'relative',
+  },
+  fileContent: {
+    flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
     padding: 8,
-    position: 'relative',
   },
   fileIcon: {
     marginBottom: 4,

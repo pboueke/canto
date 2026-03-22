@@ -158,7 +158,7 @@ export function JournalSettings({
       const encryption = getEncryptionService();
       const store = await getLocalStore();
       let newKey: Uint8Array | undefined;
-      let newSalt: string | undefined;
+      let newSalt: string = journal.salt;
 
       // Step 1: Verify current password via trial decryption
       // (PBKDF2 always succeeds regardless of password — must actually try to decrypt)

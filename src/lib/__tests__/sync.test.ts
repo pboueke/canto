@@ -1,7 +1,15 @@
 import { SyncEngine } from '../sync/engine';
 import type { LocalStore } from '../storage/types';
-import type { RemoteStore } from '../sync/types';
+import type { RemoteStore, SyncIndex } from '../sync/types';
 import type { Page, JournalContent } from '@/data';
+
+// Mock encryption to be passthrough so mock stores work with plain strings
+jest.mock('../encryption/utils', () => ({
+  aesGcmEncrypt: jest.fn((plaintext: string) => Promise.resolve(plaintext)),
+  aesGcmDecrypt: jest.fn((ciphertext: string) => Promise.resolve(ciphertext)),
+}));
+
+const SYNC_KEY = new Uint8Array(32).fill(1);
 
 const makePage = (id: string, modified: number, deleted = false): Page => ({
   id,
@@ -21,6 +29,7 @@ const makeJournal = (pages: Page[]): JournalContent => ({
   icon: 'book',
   date: '2026-01-01T00:00:00Z',
   secure: false,
+  salt: 'dGVzdHNhbHQ=',
   pages,
   settings: {
     use24h: false,
@@ -58,7 +67,20 @@ function createMockLocalStore(journal: JournalContent | null): LocalStore {
   };
 }
 
+/** Build a SyncIndex from pages (mirrors what the engine does). */
+function buildSyncIndex(pages: Page[]): SyncIndex {
+  const index: SyncIndex = {};
+  for (const p of pages) {
+    index[p.id] = { modified: p.modified, ...(p.deleted ? { deleted: true } : {}) };
+  }
+  return index;
+}
+
 function createMockRemoteStore(journal: JournalContent | null): RemoteStore {
+  // Store uploaded pages and sync index so they can be downloaded later
+  const uploadedPages = new Map<string, string>();
+  const remotePages = journal?.pages ?? [];
+
   return {
     provider: 'gdrive',
     connect: jest.fn(),
@@ -74,15 +96,28 @@ function createMockRemoteStore(journal: JournalContent | null): RemoteStore {
         journal ? [{ id: journal.id, title: journal.title, lastModified: 0 }] : [],
       ),
     uploadJournalMeta: jest.fn(),
-    downloadJournalMeta: jest.fn().mockResolvedValue(journal ? { content: journal } : null),
-    uploadPage: jest.fn(),
+    downloadJournalMeta: jest.fn().mockResolvedValue(journal ? JSON.stringify(journal) : null),
+    uploadPage: jest.fn().mockImplementation((_jId: string, pageId: string, content: string) => {
+      uploadedPages.set(pageId, content);
+      return Promise.resolve();
+    }),
     downloadPage: jest.fn().mockImplementation((_jId: string, pId: string) => {
-      const page = journal?.pages.find((p) => p.id === pId);
-      return Promise.resolve(page ?? null);
+      // Check uploaded pages first (for round-trip tests), then remote pages
+      if (uploadedPages.has(pId)) return Promise.resolve(uploadedPages.get(pId)!);
+      const page = remotePages.find((p) => p.id === pId);
+      return Promise.resolve(page ? JSON.stringify(page) : null);
     }),
     deletePage: jest.fn(),
-    uploadAttachment: jest.fn(),
-    downloadAttachment: jest.fn(),
+    uploadSyncIndex: jest.fn(),
+    downloadSyncIndex: jest
+      .fn()
+      .mockResolvedValue(journal && remotePages.length > 0 ? buildSyncIndex(remotePages) : null),
+    uploadAttachment: jest
+      .fn()
+      .mockImplementation((_jId: string, localPath: string) =>
+        Promise.resolve(`gdrive://journal-1/attachments/${localPath.split('/').pop()}`),
+      ),
+    downloadAttachment: jest.fn().mockResolvedValue('base64data'),
     deleteAttachment: jest.fn(),
     deleteJournal: jest.fn(),
   };
@@ -95,10 +130,10 @@ describe('SyncEngine', () => {
     const remote = createMockRemoteStore(makeJournal([]));
 
     const engine = new SyncEngine(local, remote);
-    const result = await engine.sync('journal-1');
+    const result = await engine.sync('journal-1', SYNC_KEY);
 
     expect(result.uploaded).toContain('p1');
-    expect(remote.uploadPage).toHaveBeenCalledWith('journal-1', localPage);
+    expect(remote.uploadPage).toHaveBeenCalledWith('journal-1', 'p1', expect.any(String));
   });
 
   it('downloads remote-only pages', async () => {
@@ -107,10 +142,10 @@ describe('SyncEngine', () => {
     const remote = createMockRemoteStore(makeJournal([remotePage]));
 
     const engine = new SyncEngine(local, remote);
-    const result = await engine.sync('journal-1');
+    const result = await engine.sync('journal-1', SYNC_KEY);
 
     expect(result.downloaded).toContain('p2');
-    expect(local.savePage).toHaveBeenCalledWith('journal-1', remotePage, undefined, true);
+    expect(local.savePage).toHaveBeenCalledWith('journal-1', remotePage, SYNC_KEY, true);
   });
 
   it('uploads locally newer pages', async () => {
@@ -120,10 +155,10 @@ describe('SyncEngine', () => {
     const remote = createMockRemoteStore(makeJournal([remotePage]));
 
     const engine = new SyncEngine(local, remote);
-    const result = await engine.sync('journal-1');
+    const result = await engine.sync('journal-1', SYNC_KEY);
 
     expect(result.uploaded).toContain('p1');
-    expect(remote.uploadPage).toHaveBeenCalledWith('journal-1', localPage);
+    expect(remote.uploadPage).toHaveBeenCalledWith('journal-1', 'p1', expect.any(String));
   });
 
   it('downloads remotely newer pages', async () => {
@@ -133,7 +168,7 @@ describe('SyncEngine', () => {
     const remote = createMockRemoteStore(makeJournal([remotePage]));
 
     const engine = new SyncEngine(local, remote);
-    const result = await engine.sync('journal-1');
+    const result = await engine.sync('journal-1', SYNC_KEY);
 
     expect(result.downloaded).toContain('p1');
   });
@@ -144,7 +179,7 @@ describe('SyncEngine', () => {
     const remote = createMockRemoteStore(makeJournal([page]));
 
     const engine = new SyncEngine(local, remote);
-    const result = await engine.sync('journal-1');
+    const result = await engine.sync('journal-1', SYNC_KEY);
 
     expect(result.uploaded).toHaveLength(0);
     expect(result.downloaded).toHaveLength(0);
@@ -158,7 +193,7 @@ describe('SyncEngine', () => {
     const remote = createMockRemoteStore(makeJournal([remotePage]));
 
     const engine = new SyncEngine(local, remote);
-    const result = await engine.sync('journal-1');
+    const result = await engine.sync('journal-1', SYNC_KEY);
 
     expect(result.deleted).toContain('p1');
     expect(remote.deletePage).toHaveBeenCalledWith('journal-1', 'p1');
@@ -171,10 +206,10 @@ describe('SyncEngine', () => {
     const remote = createMockRemoteStore(makeJournal([remotePage]));
 
     const engine = new SyncEngine(local, remote);
-    const result = await engine.sync('journal-1');
+    const result = await engine.sync('journal-1', SYNC_KEY);
 
     expect(result.deleted).toContain('p1');
-    expect(local.deletePage).toHaveBeenCalledWith('journal-1', 'p1', undefined);
+    expect(local.deletePage).toHaveBeenCalledWith('journal-1', 'p1', SYNC_KEY);
   });
 
   it('does not upload deleted local-only pages', async () => {
@@ -183,7 +218,7 @@ describe('SyncEngine', () => {
     const remote = createMockRemoteStore(makeJournal([]));
 
     const engine = new SyncEngine(local, remote);
-    const result = await engine.sync('journal-1');
+    const result = await engine.sync('journal-1', SYNC_KEY);
 
     expect(result.uploaded).toHaveLength(0);
     expect(remote.uploadPage).not.toHaveBeenCalled();
@@ -194,7 +229,7 @@ describe('SyncEngine', () => {
     const remote = createMockRemoteStore(null);
 
     const engine = new SyncEngine(local, remote);
-    const result = await engine.sync('nonexistent');
+    const result = await engine.sync('nonexistent', SYNC_KEY);
 
     expect(result.uploaded).toHaveLength(0);
     expect(result.downloaded).toHaveLength(0);
@@ -208,7 +243,7 @@ describe('SyncEngine', () => {
     const remote = createMockRemoteStore(makeJournal([]));
 
     const engine = new SyncEngine(local, remote);
-    const results = await engine.syncAll();
+    const results = await engine.syncAll(() => SYNC_KEY);
 
     expect(results).toHaveLength(1);
     expect(results[0].uploaded).toContain('p1');
@@ -267,26 +302,18 @@ describe('SyncEngine', () => {
       expect(local.getJournal).toHaveBeenCalledWith('journal-1', key);
     });
 
-    it('passes undefined when getKey returns undefined', async () => {
+    it('skips journals when getKey returns undefined', async () => {
       const journal = makeJournal([]);
       const local = createMockLocalStore(journal);
       const remote = createMockRemoteStore(makeJournal([]));
+      const consoleSpy = jest.spyOn(console, 'warn').mockImplementation();
 
       const engine = new SyncEngine(local, remote);
-      await engine.syncAll(() => undefined);
+      const results = await engine.syncAll(() => undefined);
 
-      expect(local.getJournal).toHaveBeenCalledWith('journal-1', undefined);
-    });
-
-    it('passes undefined when getKey is omitted', async () => {
-      const journal = makeJournal([]);
-      const local = createMockLocalStore(journal);
-      const remote = createMockRemoteStore(makeJournal([]));
-
-      const engine = new SyncEngine(local, remote);
-      await engine.syncAll();
-
-      expect(local.getJournal).toHaveBeenCalledWith('journal-1', undefined);
+      // Journal is skipped when no key is available
+      expect(results).toHaveLength(0);
+      consoleSpy.mockRestore();
     });
   });
 
@@ -298,27 +325,43 @@ describe('SyncEngine', () => {
       (remote.uploadPage as jest.Mock).mockRejectedValueOnce(new Error('Upload failed'));
 
       const engine = new SyncEngine(local, remote);
-      await expect(engine.sync('journal-1')).rejects.toThrow('Upload failed');
+      await expect(engine.sync('journal-1', SYNC_KEY)).rejects.toThrow('Upload failed');
     });
 
-    it('propagates remote download errors', async () => {
+    it('gracefully handles remote download errors (warns and continues)', async () => {
       const remotePage = makePage('p1', 1000);
       const local = createMockLocalStore(makeJournal([]));
       const remote = createMockRemoteStore(makeJournal([remotePage]));
       (remote.downloadPage as jest.Mock).mockRejectedValueOnce(new Error('Download failed'));
 
+      const consoleSpy = jest.spyOn(console, 'warn').mockImplementation();
       const engine = new SyncEngine(local, remote);
-      await expect(engine.sync('journal-1')).rejects.toThrow('Download failed');
+      const result = await engine.sync('journal-1', SYNC_KEY);
+
+      expect(result.downloaded).toHaveLength(0);
+      expect(consoleSpy).toHaveBeenCalledWith(
+        expect.stringContaining('Failed to download page p1'),
+        expect.any(Error),
+      );
+      consoleSpy.mockRestore();
     });
 
-    it('propagates local save errors', async () => {
+    it('gracefully handles local save errors during download (warns and continues)', async () => {
       const remotePage = makePage('p1', 1000);
       const local = createMockLocalStore(makeJournal([]));
       const remote = createMockRemoteStore(makeJournal([remotePage]));
       (local.savePage as jest.Mock).mockRejectedValueOnce(new Error('Disk full'));
 
+      const consoleSpy = jest.spyOn(console, 'warn').mockImplementation();
       const engine = new SyncEngine(local, remote);
-      await expect(engine.sync('journal-1')).rejects.toThrow('Disk full');
+      const result = await engine.sync('journal-1', SYNC_KEY);
+
+      expect(result.downloaded).toHaveLength(0);
+      expect(consoleSpy).toHaveBeenCalledWith(
+        expect.stringContaining('Failed to download page p1'),
+        expect.any(Error),
+      );
+      consoleSpy.mockRestore();
     });
 
     it('propagates getJournal errors', async () => {
@@ -327,7 +370,7 @@ describe('SyncEngine', () => {
       (local.getJournal as jest.Mock).mockRejectedValueOnce(new Error('Decrypt failed'));
 
       const engine = new SyncEngine(local, remote);
-      await expect(engine.sync('journal-1')).rejects.toThrow('Decrypt failed');
+      await expect(engine.sync('journal-1', SYNC_KEY)).rejects.toThrow('Decrypt failed');
     });
   });
 
@@ -349,13 +392,13 @@ describe('SyncEngine', () => {
       (local.getAttachment as jest.Mock).mockResolvedValue('base64data');
 
       const engine = new SyncEngine(local, remote);
-      await engine.sync('journal-1');
+      await engine.sync('journal-1', SYNC_KEY);
 
       expect(local.getAttachment).toHaveBeenCalledWith('/local/img1.png');
       expect(remote.uploadAttachment).toHaveBeenCalledWith(
         'journal-1',
         '/local/img1.png',
-        'base64data',
+        expect.any(String), // encrypted attachment data
       );
     });
 
@@ -366,7 +409,7 @@ describe('SyncEngine', () => {
       const remote = createMockRemoteStore(makeJournal([]));
 
       const engine = new SyncEngine(local, remote);
-      await engine.sync('journal-1');
+      await engine.sync('journal-1', SYNC_KEY);
 
       expect(local.getAttachment).not.toHaveBeenCalled();
       expect(remote.uploadAttachment).not.toHaveBeenCalled();
@@ -381,7 +424,7 @@ describe('SyncEngine', () => {
 
       const consoleSpy = jest.spyOn(console, 'warn').mockImplementation();
       const engine = new SyncEngine(local, remote);
-      const result = await engine.sync('journal-1');
+      const result = await engine.sync('journal-1', SYNC_KEY);
 
       expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('Missing local attachment'));
       expect(remote.uploadAttachment).not.toHaveBeenCalled();
@@ -398,7 +441,7 @@ describe('SyncEngine', () => {
       (local.saveAttachment as jest.Mock).mockResolvedValue('/local/saved/img1.png');
 
       const engine = new SyncEngine(local, remote);
-      const result = await engine.sync('journal-1');
+      const result = await engine.sync('journal-1', SYNC_KEY);
 
       expect(result.downloaded).toContain('p1');
       expect(remote.downloadAttachment).toHaveBeenCalled();
@@ -412,7 +455,7 @@ describe('SyncEngine', () => {
       const remote = createMockRemoteStore(makeJournal([]));
 
       const engine = new SyncEngine(local, remote);
-      await engine.sync('journal-1');
+      await engine.sync('journal-1', SYNC_KEY);
 
       expect(local.getAttachment).not.toHaveBeenCalled();
     });
@@ -424,7 +467,7 @@ describe('SyncEngine', () => {
     const remote = createMockRemoteStore(makeJournal([remotePage]));
 
     const engine = new SyncEngine(local, remote);
-    const result = await engine.sync('journal-1');
+    const result = await engine.sync('journal-1', SYNC_KEY);
 
     expect(result.downloaded).toHaveLength(0);
     expect(result.deleted).toHaveLength(0);
@@ -438,7 +481,7 @@ describe('SyncEngine', () => {
     const remote = createMockRemoteStore(makeJournal([remotePage]));
 
     const engine = new SyncEngine(local, remote);
-    const result = await engine.sync('journal-1');
+    const result = await engine.sync('journal-1', SYNC_KEY);
 
     expect(result.deleted).toContain('p1');
     // Should not call deletePage on either side (both already deleted)
@@ -446,7 +489,7 @@ describe('SyncEngine', () => {
     expect(local.deletePage).not.toHaveBeenCalled();
   });
 
-  it('throws when remote attachment is missing during download (L61)', async () => {
+  it('warns when remote attachment is missing during download (L61)', async () => {
     const att = {
       id: 'img1',
       path: '/remote/img1.png',
@@ -460,8 +503,17 @@ describe('SyncEngine', () => {
     const remote = createMockRemoteStore(makeJournal([remotePage]));
     (remote.downloadAttachment as jest.Mock).mockResolvedValue(null);
 
+    const consoleSpy = jest.spyOn(console, 'warn').mockImplementation();
     const engine = new SyncEngine(local, remote);
-    await expect(engine.sync('journal-1')).rejects.toThrow('Attachment not found on remote');
+    const result = await engine.sync('journal-1', SYNC_KEY);
+
+    // Page download fails gracefully — attachment error caught by per-page try-catch
+    expect(result.downloaded).toHaveLength(0);
+    expect(consoleSpy).toHaveBeenCalledWith(
+      expect.stringContaining('Failed to download page p1'),
+      expect.any(Error),
+    );
+    consoleSpy.mockRestore();
   });
 
   describe('progress callback', () => {
@@ -472,7 +524,7 @@ describe('SyncEngine', () => {
       const onProgress = jest.fn();
 
       const engine = new SyncEngine(local, remote);
-      await engine.sync('journal-1', undefined, onProgress);
+      await engine.sync('journal-1', SYNC_KEY, onProgress);
 
       expect(onProgress).toHaveBeenCalledTimes(3);
       expect(onProgress).toHaveBeenCalledWith(1, 3);
@@ -486,7 +538,7 @@ describe('SyncEngine', () => {
       const onProgress = jest.fn();
 
       const engine = new SyncEngine(local, remote);
-      await engine.sync('journal-1', undefined, onProgress);
+      await engine.sync('journal-1', SYNC_KEY, onProgress);
 
       expect(onProgress).not.toHaveBeenCalled();
     });
@@ -499,7 +551,7 @@ describe('SyncEngine', () => {
       const onProgress = jest.fn();
 
       const engine = new SyncEngine(local, remote);
-      await engine.sync('journal-1', undefined, onProgress);
+      await engine.sync('journal-1', SYNC_KEY, onProgress);
 
       expect(onProgress).toHaveBeenCalledTimes(2);
       expect(onProgress).toHaveBeenCalledWith(1, 2);
@@ -513,7 +565,7 @@ describe('SyncEngine', () => {
       const onProgress = jest.fn();
 
       const engine = new SyncEngine(local, remote);
-      await engine.sync('journal-1', undefined, onProgress);
+      await engine.sync('journal-1', SYNC_KEY, onProgress);
 
       // Same page exists locally and remotely — should count as 1
       expect(onProgress).toHaveBeenCalledTimes(1);
@@ -526,7 +578,7 @@ describe('SyncEngine', () => {
 
       const engine = new SyncEngine(local, remote);
       // Should not throw when onProgress is undefined
-      const result = await engine.sync('journal-1');
+      const result = await engine.sync('journal-1', SYNC_KEY);
       expect(result.uploaded).toContain('p1');
     });
   });

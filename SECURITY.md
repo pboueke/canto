@@ -84,20 +84,6 @@ Failed password attempts trigger exponential backoff:
 
 Rate limit state is stored in memory and resets on app restart.
 
-## Backup Encryption
-
-Exported `.canto.zip` archives are independently encrypted:
-
-1. User provides an export password
-2. A key is derived via PBKDF2-SHA256 (same configurable iterations)
-3. Journal metadata, pages, and attachments are encrypted with AES-256-GCM
-4. The archive is self-contained — it can be imported on any device with the correct password
-
-On import, the password is verified in two phases:
-
-1. Metadata decryption (fast verification that the password is correct)
-2. Full content decryption (pages + attachments)
-
 ## Storage
 
 Local storage uses `expo-file-system` (native) or IndexedDB (web) with a structured virtual path layout:
@@ -118,8 +104,45 @@ Canto collects **no data**:
 
 Your journal data never leaves your device unless you explicitly choose to:
 
-1. Export a backup (`.canto.zip` file you control)
-2. Sync via Google Drive (device encryption is stripped before upload; password-encrypted journals remain encrypted on Google Drive, but journals without a password are stored unencrypted)
+1. Export a backup (`.canto.zip` file you control — encrypted or unencrypted, depending on the export password you choose)
+2. Sync via Google Drive (all journal content is encrypted with AES-256-GCM before upload — see [Google Drive Sync](#google-drive-sync) below)
+
+## Google Drive Sync
+
+When you enable Google Drive sync, all journal content is encrypted **before** it leaves your device using AES-256-GCM. No plain-text journal data is ever stored on Google Drive.
+
+### Sync Encryption Key
+
+Every journal has a **sync key** derived from its salt:
+
+- **Password-protected journals**: The sync key is derived from your password + salt via PBKDF2-SHA256 (same key used for local password encryption)
+- **Non-password journals**: The sync key is derived from the salt alone (empty password + salt via PBKDF2-SHA256). This protects against passive scraping of Google Drive data — someone with access to your Drive would need to understand the key derivation scheme and extract the salt to decrypt.
+
+### What is encrypted on Google Drive
+
+| Data              | Encrypted? | Notes                                                                                                        |
+| ----------------- | ---------- | ------------------------------------------------------------------------------------------------------------ |
+| Journal metadata  | Yes        | Title, icon, settings — all AES-256-GCM encrypted                                                            |
+| Page content      | Yes        | Markdown text, tags, comments, dates — all encrypted                                                         |
+| Attachments       | Yes        | Images and files — encrypted before upload                                                                   |
+| Journal registry  | No         | Journal ID, title, and salt stored in app-private `appDataFolder` for sync discovery                         |
+| Sync index        | No         | Page IDs, modification timestamps, and deleted flags — used for efficient sync without decrypting every page |
+| File/folder names | No         | Page IDs as filenames, journal IDs as folder names (UUIDs, no semantic content)                              |
+
+The journal registry is stored in Google Drive's `appDataFolder` (a hidden, app-private space not visible in the user's Drive UI). The sync index leaks page count and access patterns but not content.
+
+### Encryption Flow
+
+```
+Upload: local plaintext → AES-256-GCM encrypt (sync key) → upload ciphertext to GDrive
+Download: download ciphertext from GDrive → AES-256-GCM decrypt (sync key) → local plaintext
+```
+
+Encryption and decryption happen in the sync engine before data reaches the network layer. The Google Drive store only handles opaque ciphertext blobs.
+
+## Backup Encryption
+
+Exported `.canto.zip` archives can be encrypted or exported in plain text — you choose when you create the export. If you provide an export password, all content (metadata, pages, attachments) is AES-256-GCM encrypted. If you export without a password, the data is unencrypted. **This is the only way journal data can exist in plain text outside your device.**
 
 ## Cryptographic Dependencies
 
