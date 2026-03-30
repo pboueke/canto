@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.18.4 - Localized Google Play Store listings
+
+- feat: add Google Play Store listing translations for all 19 supported languages (pt, es, de, fr, ru, zh, it, ja, ko, ar, hi, tr, nl, pl, sv, vi, th, id, uk)
+- feat: localize app name ("Canto — Private Journal") into each language
+
 ## v0.18.3 - Sync KDF iteration mismatch fix, auto-sync improvement
 
 - fix: sync failed on web with "Invalid JSON" — KDF iteration count mismatch between `JournalKeyContext` (20,000 legacy fallback) and `SyncManager` (50,000 default) caused different PBKDF2 keys for the same journal, making local data unreadable during sync
