@@ -1,5 +1,30 @@
 # Changelog
 
+## v0.18.3 - Sync KDF iteration mismatch fix, auto-sync improvement
+
+- fix: sync failed on web with "Invalid JSON" — KDF iteration count mismatch between `JournalKeyContext` (20,000 legacy fallback) and `SyncManager` (50,000 default) caused different PBKDF2 keys for the same journal, making local data unreadable during sync
+- fix: auto-sync on journal screen no longer triggers redundantly on every re-focus — now compares page modification timestamps and only syncs when data has actually changed
+- test: 2 new sync manager KDF iteration tests (default fallback, explicit iterations)
+- ci: adds carranca ci config and automated pr review
+
+## v0.18.2 - Dependency manifest, changelog tabs, button fix
+
+- feat: changelog modal now tabbed — default tab shows changelog, secondary tab shows all production npm dependencies with their licenses
+- feat: build-time dependency manifest script (`npm run generate:deps`) extracts name, version, and license from all production dependencies
+- fix: version button and help button in InfoBox no longer share the same underline style — version is plain text, help remains underlined
+- test: 5 manifest generation tests (valid output, no empty fields, known deps, no devDeps, fails on missing package)
+- test: 3 dependency loader tests, 2 changelog tab tests
+
+## v0.18.1 - Import settings validation
+
+- feat: import pipeline now validates journal settings with `validateJournalSettings()` after parsing `settings.json` from backup (native + web)
+- test: 6 new import settings validation tests (valid settings, invalid values, missing settings)
+
+## v0.18.0 - Split canto-data into separate repository
+
+- refactor: split canto-data from monorepo workspace (`packages/canto-data/`) into standalone repository
+- chore: switch canto-data dependency from workspace link to npm registry package (`canto-data@^1.0.3`)
+
 ## v0.17.8 - Critical: GDrive sync encryption
 
 - **security: all journal content now encrypted (AES-256-GCM) before upload to Google Drive** — previously stored as plain text

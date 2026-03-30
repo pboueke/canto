@@ -1324,6 +1324,74 @@ describe('importJournal', () => {
 });
 
 // ===================================================================
+// IMPORT SETTINGS VALIDATION
+// ===================================================================
+describe('importJournal settings validation', () => {
+  it('imports backup with valid settings unchanged', async () => {
+    const validSettings = {
+      use24h: true,
+      previewTags: false,
+      previewThumbnail: true,
+      previewIcons: true,
+      filterBar: false,
+      sort: 'ascending',
+      autoLocation: true,
+      remoteSync: false,
+      autoSync: false,
+    };
+
+    const uri = await buildZip({
+      manifest: {
+        version: 1,
+        appVersion: '0.9.0',
+        exportDate: '2026-03-13T00:00:00Z',
+        encrypted: false,
+        journalTitle: 'Valid Settings',
+      },
+      journalJson: JSON.stringify(makeJournal('j1')),
+      settingsJson: JSON.stringify(validSettings),
+      pages: [{ id: 'p1', json: JSON.stringify(makePage('p1')) }],
+    });
+
+    const result = await importJournal(uri, 'Valid Settings');
+    const loaded = await mockStore.getJournal(result.journalId);
+    expect(loaded).not.toBeNull();
+    expect(loaded!.settings.use24h).toBe(true);
+    expect(loaded!.settings.sort).toBe('ascending');
+    expect(loaded!.settings.filterBar).toBe(false);
+  });
+
+  it('rejects backup with invalid settings', async () => {
+    const invalidSettings = {
+      use24h: false,
+      previewTags: true,
+      previewThumbnail: true,
+      previewIcons: true,
+      filterBar: true,
+      sort: 'invalid', // not a valid sort value
+      autoLocation: false,
+      remoteSync: false,
+      autoSync: false,
+    };
+
+    const uri = await buildZip({
+      manifest: {
+        version: 1,
+        appVersion: '0.9.0',
+        exportDate: '2026-03-13T00:00:00Z',
+        encrypted: false,
+        journalTitle: 'Bad Settings',
+      },
+      journalJson: JSON.stringify(makeJournal('j1')),
+      settingsJson: JSON.stringify(invalidSettings),
+      pages: [{ id: 'p1', json: JSON.stringify(makePage('p1')) }],
+    });
+
+    await expect(importJournal(uri, 'Bad Settings')).rejects.toThrow();
+  });
+});
+
+// ===================================================================
 // EXPORT → IMPORT ROUND-TRIP
 // ===================================================================
 describe('export → import round-trip', () => {

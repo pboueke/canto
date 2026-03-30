@@ -1,0 +1,202 @@
+[
+  {
+    "name": "@expo/vector-icons",
+    "version": "15.1.1",
+    "license": "MIT"
+  },
+  {
+    "name": "@noble/hashes",
+    "version": "2.0.1",
+    "license": "MIT"
+  },
+  {
+    "name": "@react-native-async-storage/async-storage",
+    "version": "2.2.0",
+    "license": "MIT"
+  },
+  {
+    "name": "@react-native-community/datetimepicker",
+    "version": "8.6.0",
+    "license": "MIT"
+  },
+  {
+    "name": "@react-native-google-signin/google-signin",
+    "version": "16.1.2",
+    "license": "MIT"
+  },
+  {
+    "name": "canto-data",
+    "version": "1.0.3",
+    "license": "MIT"
+  },
+  {
+    "name": "expo",
+    "version": "55.0.6",
+    "license": "MIT"
+  },
+  {
+    "name": "expo-auth-session",
+    "version": "55.0.9",
+    "license": "MIT"
+  },
+  {
+    "name": "expo-clipboard",
+    "version": "55.0.9",
+    "license": "MIT"
+  },
+  {
+    "name": "expo-constants",
+    "version": "55.0.9",
+    "license": "MIT"
+  },
+  {
+    "name": "expo-crypto",
+    "version": "55.0.10",
+    "license": "MIT"
+  },
+  {
+    "name": "expo-document-picker",
+    "version": "55.0.9",
+    "license": "MIT"
+  },
+  {
+    "name": "expo-file-system",
+    "version": "55.0.11",
+    "license": "MIT"
+  },
+  {
+    "name": "expo-font",
+    "version": "55.0.4",
+    "license": "MIT"
+  },
+  {
+    "name": "expo-image-manipulator",
+    "version": "55.0.11",
+    "license": "MIT"
+  },
+  {
+    "name": "expo-image-picker",
+    "version": "55.0.13",
+    "license": "MIT"
+  },
+  {
+    "name": "expo-linking",
+    "version": "55.0.8",
+    "license": "MIT"
+  },
+  {
+    "name": "expo-local-authentication",
+    "version": "55.0.9",
+    "license": "MIT"
+  },
+  {
+    "name": "expo-localization",
+    "version": "55.0.9",
+    "license": "MIT"
+  },
+  {
+    "name": "expo-location",
+    "version": "55.1.4",
+    "license": "MIT"
+  },
+  {
+    "name": "expo-router",
+    "version": "55.0.7",
+    "license": "MIT"
+  },
+  {
+    "name": "expo-secure-store",
+    "version": "55.0.9",
+    "license": "MIT"
+  },
+  {
+    "name": "expo-sharing",
+    "version": "55.0.14",
+    "license": "MIT"
+  },
+  {
+    "name": "expo-splash-screen",
+    "version": "55.0.12",
+    "license": "MIT"
+  },
+  {
+    "name": "expo-status-bar",
+    "version": "55.0.4",
+    "license": "MIT"
+  },
+  {
+    "name": "expo-system-ui",
+    "version": "55.0.10",
+    "license": "MIT"
+  },
+  {
+    "name": "expo-web-browser",
+    "version": "55.0.10",
+    "license": "MIT"
+  },
+  {
+    "name": "jest-expo",
+    "version": "55.0.11",
+    "license": "MIT"
+  },
+  {
+    "name": "jszip",
+    "version": "3.10.1",
+    "license": "(MIT OR GPL-3.0-or-later)"
+  },
+  {
+    "name": "react",
+    "version": "19.2.0",
+    "license": "MIT"
+  },
+  {
+    "name": "react-dom",
+    "version": "19.2.0",
+    "license": "MIT"
+  },
+  {
+    "name": "react-native",
+    "version": "0.83.2",
+    "license": "MIT"
+  },
+  {
+    "name": "react-native-gesture-handler",
+    "version": "2.30.0",
+    "license": "MIT"
+  },
+  {
+    "name": "react-native-get-random-values",
+    "version": "1.11.0",
+    "license": "MIT"
+  },
+  {
+    "name": "react-native-image-viewing",
+    "version": "0.2.2",
+    "license": "MIT"
+  },
+  {
+    "name": "react-native-markdown-display",
+    "version": "7.0.2",
+    "license": "MIT"
+  },
+  {
+    "name": "react-native-safe-area-context",
+    "version": "5.6.2",
+    "license": "MIT"
+  },
+  {
+    "name": "react-native-screens",
+    "version": "4.23.0",
+    "license": "MIT"
+  },
+  {
+    "name": "react-native-web",
+    "version": "0.21.2",
+    "license": "MIT"
+  },
+  {
+    "name": "uuid",
+    "version": "13.0.0",
+    "license": "MIT"
+  }
+]

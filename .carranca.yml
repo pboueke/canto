@@ -1,0 +1,32 @@
+agents:
+  - name: claude
+    adapter: claude
+    command: claude
+
+# Container runtime settings
+runtime:
+  engine: auto
+  network: true
+  # Fine-grained network policy (replaces boolean; requires yq):
+  # network:
+  #   default: deny
+  #   allow:
+  #     - "*.anthropic.com:443"
+  #     - "registry.npmjs.org:443"
+  # Extra container runtime flags for the agent container (e.g. --gpus all)
+  # extra_flags: --gpus all
+  # Extra container runtime flags for the logger container
+  # logger_extra_flags:
+  # seccomp_profile: default         # "default" (carranca built-in), "unconfined", or absolute path
+  # apparmor_profile:                # AppArmor profile name (must be loaded); "unconfined" to disable
+  # cap_drop_all: true              # Drop all Linux capabilities (--cap-drop ALL)
+  # read_only: true                 # Read-only root filesystem (--read-only + tmpfs)
+  # Linux capabilities for the agent container (allowlist after cap_drop_all)
+  # cap_add:
+  #   - SYS_PTRACE
+
+# Persistent volumes for the agent container
+volumes:
+  cache: true                     # Cache agent memory, config, session across runs
+  # extra:                        # Custom volume mounts (host:container[:mode])
+  #   - ~/docs:/reference:ro

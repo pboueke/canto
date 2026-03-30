@@ -3,7 +3,7 @@ import type { ReactNode } from 'react';
 import { AppState } from 'react-native';
 import { pbkdf2Async } from '@noble/hashes/pbkdf2.js';
 import { sha256 } from '@noble/hashes/sha2.js';
-import { LEGACY_KDF_ITERATIONS } from '@/lib/encryption/password';
+import { DEFAULT_KDF_ITERATIONS } from '@/lib/encryption/password';
 import { base64ToUint8 } from '@/lib/encryption/utils';
 import { getAutoLockTimeout } from '@/components/home/SecuritySettingsModal';
 
@@ -50,7 +50,7 @@ export function JournalKeyProvider({ children }: { children: ReactNode }) {
       // This is an inherent platform limitation — keys in JS memory cannot
       // be reliably zeroed. See OWASP guidance on client-side key handling.
       const key = await pbkdf2Async(sha256, encoder.encode(password), salt, {
-        c: iterations ?? LEGACY_KDF_ITERATIONS,
+        c: iterations ?? DEFAULT_KDF_ITERATIONS,
         dkLen: KEY_LENGTH,
       });
       keysRef.current.set(journalId, key);

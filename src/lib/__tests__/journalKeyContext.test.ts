@@ -1,7 +1,7 @@
 import React from 'react';
 import { renderHook, act } from '@testing-library/react-native';
 import { JournalKeyProvider, useJournalKeys } from '@/contexts/JournalKeyContext';
-import { LEGACY_KDF_ITERATIONS } from '@/lib/encryption/password';
+import { DEFAULT_KDF_ITERATIONS } from '@/lib/encryption/password';
 
 // Mock SecuritySettingsModal's getAutoLockTimeout
 const mockGetAutoLockTimeout = jest.fn(async () => 0); // disabled by default
@@ -55,7 +55,7 @@ describe('JournalKeyContext', () => {
     expect(cached).toBe(derived!);
   });
 
-  it('deriveAndCache defaults to LEGACY_KDF_ITERATIONS', async () => {
+  it('deriveAndCache defaults to DEFAULT_KDF_ITERATIONS', async () => {
     const { result } = renderHook(() => useJournalKeys(), { wrapper });
 
     let keyDefault: Uint8Array;
@@ -68,7 +68,7 @@ describe('JournalKeyContext', () => {
         'j3b',
         'password',
         SALT_B64,
-        LEGACY_KDF_ITERATIONS,
+        DEFAULT_KDF_ITERATIONS,
       );
     });
 

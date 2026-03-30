@@ -4,6 +4,7 @@ import { useTheme } from '@/hooks/useTheme';
 import { useI18n } from '@/hooks/useI18n';
 import { langNativeNames } from '@/i18n/dictionaries';
 import { loadChangelog, parseVersionFromChangelog } from '@/lib/changelog';
+import { loadDependencies, type DependencyInfo } from '@/lib/dependencies';
 import { ThemePickerModal } from '@/components/home/ThemePickerModal';
 import { LanguagePickerModal } from '@/components/home/LanguagePickerModal';
 import { SecuritySettingsModal } from '@/components/home/SecuritySettingsModal';
@@ -21,6 +22,8 @@ const THEME_DISPLAY_NAMES: Record<string, string> = {
   dracula: 'Dracula',
 };
 
+type ChangelogTab = 'changelog' | 'dependencies';
+
 interface InfoBoxProps {
   devUnlocked?: boolean;
 }
@@ -34,8 +37,10 @@ export function InfoBox({ devUnlocked }: InfoBoxProps) {
   const [showSecurity, setShowSecurity] = useState(false);
   const [showDevMenu, setShowDevMenu] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
+  const [activeTab, setActiveTab] = useState<ChangelogTab>('changelog');
   const [changelog, setChangelog] = useState<string | null>(null);
   const [version, setVersion] = useState('...');
+  const [dependencies] = useState<DependencyInfo[]>(() => loadDependencies());
 
   useEffect(() => {
     loadChangelog()
@@ -48,6 +53,11 @@ export function InfoBox({ devUnlocked }: InfoBoxProps) {
         setChangelog('Failed to load changelog');
       });
   }, []);
+
+  const openChangelog = () => {
+    setActiveTab('changelog');
+    setShowChangelog(true);
+  };
 
   return (
     <View
@@ -103,7 +113,7 @@ export function InfoBox({ devUnlocked }: InfoBoxProps) {
       </Pressable>
 
       <View style={styles.bottomRow}>
-        <Pressable onPress={() => setShowChangelog(true)} accessibilityRole="button">
+        <Pressable onPress={openChangelog} accessibilityRole="button">
           <Text
             style={[
               styles.version,
@@ -154,24 +164,103 @@ export function InfoBox({ devUnlocked }: InfoBoxProps) {
               },
             ]}
           >
-            <Text
-              style={[
-                styles.modalTitle,
-                { color: theme.colors.text, fontFamily: theme.fonts.bold },
-              ]}
-            >
-              Changelog
-            </Text>
-            <ScrollView style={styles.modalScroll}>
-              <Text
+            <View style={[styles.tabRow, { borderBottomColor: theme.colors.border }]}>
+              <Pressable
+                onPress={() => setActiveTab('changelog')}
                 style={[
-                  styles.modalText,
-                  { color: theme.colors.text, fontFamily: theme.fonts.regular },
+                  styles.tab,
+                  activeTab === 'changelog' && {
+                    borderBottomColor: theme.colors.primary,
+                    borderBottomWidth: 2,
+                  },
                 ]}
               >
-                {changelog ?? 'Loading...'}
-              </Text>
-            </ScrollView>
+                <Text
+                  style={[
+                    styles.tabText,
+                    {
+                      color:
+                        activeTab === 'changelog' ? theme.colors.text : theme.colors.textSecondary,
+                      fontFamily:
+                        activeTab === 'changelog' ? theme.fonts.bold : theme.fonts.regular,
+                    },
+                  ]}
+                >
+                  {t.changelog.title}
+                </Text>
+              </Pressable>
+              <Pressable
+                onPress={() => setActiveTab('dependencies')}
+                style={[
+                  styles.tab,
+                  activeTab === 'dependencies' && {
+                    borderBottomColor: theme.colors.primary,
+                    borderBottomWidth: 2,
+                  },
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.tabText,
+                    {
+                      color:
+                        activeTab === 'dependencies'
+                          ? theme.colors.text
+                          : theme.colors.textSecondary,
+                      fontFamily:
+                        activeTab === 'dependencies' ? theme.fonts.bold : theme.fonts.regular,
+                    },
+                  ]}
+                >
+                  {t.changelog.dependenciesTab}
+                </Text>
+              </Pressable>
+            </View>
+
+            {activeTab === 'changelog' ? (
+              <ScrollView style={styles.modalScroll}>
+                <Text
+                  style={[
+                    styles.modalText,
+                    { color: theme.colors.text, fontFamily: theme.fonts.regular },
+                  ]}
+                >
+                  {changelog ?? 'Loading...'}
+                </Text>
+              </ScrollView>
+            ) : (
+              <ScrollView style={styles.modalScroll}>
+                {dependencies.map((dep) => (
+                  <View
+                    key={dep.name}
+                    style={[styles.depRow, { borderBottomColor: theme.colors.border }]}
+                  >
+                    <Text
+                      style={[
+                        styles.depName,
+                        { color: theme.colors.text, fontFamily: theme.fonts.regular },
+                      ]}
+                    >
+                      {dep.name}{' '}
+                      <Text
+                        style={{ fontFamily: theme.fonts.light, color: theme.colors.textSecondary }}
+                      >
+                        {dep.version}
+                      </Text>
+                    </Text>
+                    <Text
+                      style={[
+                        styles.depLicense,
+                        { color: theme.colors.textSecondary, fontFamily: theme.fonts.light },
+                      ]}
+                    >
+                      {dep.license}
+                    </Text>
+                  </View>
+                ))}
+              </ScrollView>
+            )}
+
             {devUnlocked && (
               <Pressable
                 onPress={() => {
@@ -301,12 +390,44 @@ const styles = StyleSheet.create({
   },
   version: {
     fontSize: 12,
-    textDecorationLine: 'underline',
   },
   bottomRow: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingVertical: 4,
+  },
+  tabRow: {
+    flexDirection: 'row',
+    borderBottomWidth: 1,
+    marginBottom: 15,
+  },
+  tab: {
+    flex: 1,
+    alignItems: 'center',
+    paddingVertical: 8,
+    borderBottomWidth: 2,
+    borderBottomColor: 'transparent',
+    marginBottom: -1,
+  },
+  tabText: {
+    fontSize: 16,
+  },
+  depRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 6,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+  depName: {
+    fontSize: 13,
+    flex: 1,
+  },
+  depLicense: {
+    fontSize: 12,
+    marginLeft: 8,
+    textAlign: 'left',
+    minWidth: 60,
   },
   modalOverlay: {
     flex: 1,

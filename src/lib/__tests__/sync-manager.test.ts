@@ -314,6 +314,34 @@ describe('SyncManager', () => {
     });
   });
 
+  describe('syncKey derivation iterations', () => {
+    it('uses DEFAULT_KDF_ITERATIONS when journal.kdfIterations is undefined', async () => {
+      const { deriveKey } = require('../encryption/password');
+      const { DEFAULT_KDF_ITERATIONS } = jest.requireActual('../encryption/password');
+      const journal = makeJournal([]);
+      // kdfIterations is undefined on this journal
+      expect(journal.kdfIterations).toBeUndefined();
+
+      const local = createMockLocalStore(journal);
+      const manager = new SyncManager(local, createMockRemoteStore());
+
+      await manager.syncJournal('j1', 'token');
+
+      expect(deriveKey).toHaveBeenCalledWith('', expect.any(Uint8Array), DEFAULT_KDF_ITERATIONS);
+    });
+
+    it('uses journal.kdfIterations when present', async () => {
+      const { deriveKey } = require('../encryption/password');
+      const journal = { ...makeJournal([]), kdfIterations: 100_000 };
+      const local = createMockLocalStore(journal);
+      const manager = new SyncManager(local, createMockRemoteStore());
+
+      await manager.syncJournal('j1', 'token');
+
+      expect(deriveKey).toHaveBeenCalledWith('', expect.any(Uint8Array), 100_000);
+    });
+  });
+
   describe('token management', () => {
     it('connects with token before each sync', async () => {
       const journal = makeJournal([]);

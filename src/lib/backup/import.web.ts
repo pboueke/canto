@@ -12,7 +12,7 @@ import {
 import { deriveKey, LEGACY_KDF_ITERATIONS } from '@/lib/encryption/password';
 import type { ExportManifest } from 'canto-data/format';
 import { parseManifest } from 'canto-data/format';
-import { validateJournal } from 'canto-data';
+import { validateJournal, validateJournalSettings } from 'canto-data';
 import { SCHEMA_VERSION } from 'canto-data/version';
 import { safeJsonParse } from '@/lib/utils/json';
 
@@ -124,6 +124,7 @@ export async function importJournal(
       await readEntry(settingsFile, 'settings'),
       'settings',
     );
+    validateJournalSettings(settings);
   }
 
   const hasUserProvidedKey = !!providedKey;

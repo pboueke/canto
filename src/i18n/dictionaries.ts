@@ -270,6 +270,10 @@ export interface Dictionary {
     body: string;
     linkText: string;
   };
+  changelog: {
+    title: string;
+    dependenciesTab: string;
+  };
   dataIntegrity: {
     syncWarningTitle: string;
     syncWarningDesc: string;
@@ -542,6 +546,10 @@ const en: Dictionary = {
     title: 'Help',
     body: 'If you need help or want to report a bug, please visit the Canto project page on GitHub.',
     linkText: 'Open GitHub Issues',
+  },
+  changelog: {
+    title: 'Changelog',
+    dependenciesTab: 'Dependencies',
   },
   dataIntegrity: {
     syncWarningTitle: 'Sync Warning',
@@ -818,6 +826,10 @@ const pt: Dictionary = {
     body: 'Se você precisa de ajuda ou deseja relatar um erro, visite a página do projeto Canto no GitHub.',
     linkText: 'Abrir GitHub Issues',
   },
+  changelog: {
+    title: 'Changelog',
+    dependenciesTab: 'Dependências',
+  },
   dataIntegrity: {
     syncWarningTitle: 'Aviso de Sincronização',
     syncWarningDesc: '{failed} de {total} páginas não puderam ser baixadas.',
@@ -1092,6 +1104,10 @@ const es: Dictionary = {
     title: 'Ayuda',
     body: 'Si necesitas ayuda o deseas reportar un error, visita la página del proyecto Canto en GitHub.',
     linkText: 'Abrir GitHub Issues',
+  },
+  changelog: {
+    title: 'Changelog',
+    dependenciesTab: 'Dependencias',
   },
   dataIntegrity: {
     syncWarningTitle: 'Advertencia de sincronización',
@@ -1369,6 +1385,10 @@ const de: Dictionary = {
     body: 'Wenn Sie Hilfe benötigen oder einen Fehler melden möchten, besuchen Sie die Canto-Projektseite auf GitHub.',
     linkText: 'GitHub Issues öffnen',
   },
+  changelog: {
+    title: 'Changelog',
+    dependenciesTab: 'Abhängigkeiten',
+  },
   dataIntegrity: {
     syncWarningTitle: 'Sync-Warnung',
     syncWarningDesc: '{failed} von {total} Seiten konnten nicht heruntergeladen werden.',
@@ -1643,6 +1663,10 @@ const fr: Dictionary = {
     title: 'Aide',
     body: "Si vous avez besoin d'aide ou souhaitez signaler un bug, visitez la page du projet Canto sur GitHub.",
     linkText: 'Ouvrir GitHub Issues',
+  },
+  changelog: {
+    title: 'Changelog',
+    dependenciesTab: 'Dépendances',
   },
   dataIntegrity: {
     syncWarningTitle: 'Avertissement de synchronisation',
@@ -1920,6 +1944,10 @@ const ru: Dictionary = {
     body: 'Если вам нужна помощь или вы хотите сообщить об ошибке, посетите страницу проекта Canto на GitHub.',
     linkText: 'Открыть GitHub Issues',
   },
+  changelog: {
+    title: 'Changelog',
+    dependenciesTab: 'Зависимости',
+  },
   dataIntegrity: {
     syncWarningTitle: 'Предупреждение синхронизации',
     syncWarningDesc: '{failed} из {total} страниц не удалось загрузить.',
@@ -2190,6 +2218,10 @@ const zh: Dictionary = {
     title: '帮助',
     body: '如果您需要帮助或想要报告错误，请访问 GitHub 上的 Canto 项目页面。',
     linkText: '打开 GitHub Issues',
+  },
+  changelog: {
+    title: '更新日志',
+    dependenciesTab: '依赖项',
   },
   dataIntegrity: {
     syncWarningTitle: '同步警告',
@@ -2463,6 +2495,10 @@ const it: Dictionary = {
     title: 'Aiuto',
     body: 'Se hai bisogno di aiuto o vuoi segnalare un bug, visita la pagina del progetto Canto su GitHub.',
     linkText: 'Apri GitHub Issues',
+  },
+  changelog: {
+    title: 'Changelog',
+    dependenciesTab: 'Dipendenze',
   },
   dataIntegrity: {
     syncWarningTitle: 'Avviso di sincronizzazione',
