@@ -27,8 +27,13 @@ RUN mkdir -p /home/carranca && chmod 0777 /home/carranca
 # ──────────────────────────────────────────────
 # Add your agent and project dependencies below:
 # Claude Code
-RUN apk add --no-cache nodejs npm && \
+RUN apk add --no-cache nodejs npm python3 && \
     npm install -g @anthropic-ai/claude-code
+# OpenCode CLI (used by carranca CI reviewer)
+RUN curl -fsSL https://opencode.ai/install | bash -s -- --no-modify-path && \
+    mv /root/.opencode/bin/opencode /usr/local/bin/opencode && \
+    chmod 0755 /usr/local/bin/opencode && \
+    rm -rf /root/.opencode
 # ──────────────────────────────────────────────
 
 
