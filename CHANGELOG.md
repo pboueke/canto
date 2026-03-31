@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.18.6 - GDrive delete fix, dependency upgrades
+
+- fix: deleting a Google Drive journal showed a JSON parsing error in the remote journals modal — `handleResponse` now handles empty response bodies gracefully
+- test: edge case test for empty Drive API response body
+- chore: upgrade Expo SDK packages to latest compatible versions (expo 55.0.9, react-native 0.83.4, expo-router 55.0.8, and 6 other expo packages)
+
 ## v0.18.5 - Cross-platform cloud import fix, new themes
 
 - **fix: cloud import of password-protected journals from Google Drive** — encrypted journals now prompt for the password instead of silently failing with a wrong key

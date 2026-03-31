@@ -243,6 +243,17 @@ describe('Google Drive API helper', () => {
       }
     });
 
+    it('handles empty response body gracefully (e.g. 204-like)', async () => {
+      (global.fetch as jest.Mock).mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        text: () => Promise.resolve(''),
+      });
+
+      const result = await updateFile(TOKEN, 'f1', { name: 'test.json' }, '[]');
+      expect(result).toEqual({});
+    });
+
     it('throws diagnostic error when response is OK but not valid JSON', async () => {
       (global.fetch as jest.Mock).mockResolvedValueOnce({
         ok: true,
