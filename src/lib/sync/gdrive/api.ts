@@ -46,6 +46,7 @@ async function handleResponse<T>(response: Response): Promise<T> {
   if (!response.ok) {
     throw new Error(`Drive API error (${response.status})`);
   }
+  if (!text) return {} as T;
   try {
     return JSON.parse(text) as T;
   } catch {
