@@ -108,6 +108,8 @@ export function PageListItem({ page, journalId, settings }: PageListItemProps) {
             </Text>
           </View>
 
+          <View style={[styles.separator, { backgroundColor: theme.colors.border }]} />
+
           {showTags && page.tags.length > 0 && (
             <View style={styles.tagsRow}>
               {page.tags.map((tag) => (
@@ -172,14 +174,18 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     marginBottom: 4,
   },
+  separator: {
+    height: StyleSheet.hairlineWidth,
+    marginBottom: 6,
+  },
   preview: {
     fontSize: 13,
     lineHeight: 18,
     opacity: 0.7,
   },
   thumbnail: {
-    width: 120,
-    height: 120,
+    width: 84,
+    height: 84,
     borderRadius: 8,
     marginLeft: 10,
   },

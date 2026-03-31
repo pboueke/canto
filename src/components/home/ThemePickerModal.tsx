@@ -20,6 +20,10 @@ const THEME_DISPLAY_NAMES: Record<ThemeName, string> = {
   solarized: 'Solarized',
   nord: 'Nord',
   dracula: 'Dracula',
+  everforest: 'Everforest',
+  rosepine: 'Rosé Pine',
+  onecyan: 'One Cyan',
+  gruvbox: 'Gruvbox',
 };
 
 function ThemePreview({ name, isActive }: { name: ThemeName; isActive: boolean }) {

@@ -1,5 +1,21 @@
 # Changelog
 
+## v0.18.5 - Cross-platform cloud import fix, new themes
+
+- **fix: cloud import of password-protected journals from Google Drive** — encrypted journals now prompt for the password instead of silently failing with a wrong key
+- fix: centralize PBKDF2 key derivation — `JournalKeyContext` now uses the shared `deriveKey` from `password.ts` instead of its own inline `pbkdf2Async` call, preventing key divergence across code paths
+- fix: thread `kdfIterations` and `encrypted` through GDrive registry so the cloud import derives the correct sync key and knows when to prompt for a password
+- fix: React Native Web "Unexpected text node" error in NewJournalModal — changed `{stringOrNull && JSX}` patterns to ternary expressions and added empty-string guards on error setters
+- feat: 4 new themes — Everforest, Rosé Pine, One Cyan, Gruvbox
+- ui: page list item separator line and smaller thumbnails (120px → 84px)
+- test: 13 new PBKDF2 cross-platform tests (RFC 2898 reference vectors, cloud import encrypt/decrypt simulation, wrong password/iterations rejection)
+- test: regression guard ensuring `JournalKeyContext.deriveAndCache` produces the same key as `deriveKey` from `password.ts`
+
+## v0.18.4 - Localized Google Play Store listings
+
+- feat: add Google Play Store listing translations for all 19 supported languages (pt, es, de, fr, ru, zh, it, ja, ko, ar, hi, tr, nl, pl, sv, vi, th, id, uk)
+- feat: localize app name ("Canto — Private Journal") into each language
+
 ## v0.18.3 - Sync KDF iteration mismatch fix, auto-sync improvement
 
 - fix: sync failed on web with "Invalid JSON" — KDF iteration count mismatch between `JournalKeyContext` (20,000 legacy fallback) and `SyncManager` (50,000 default) caused different PBKDF2 keys for the same journal, making local data unreadable during sync

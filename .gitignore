@@ -6,7 +6,6 @@ node_modules/
 # Secrets
 play-store-key.json
 *.keystore
-!android/app/debug.keystore
 
 # Expo
 .expo/

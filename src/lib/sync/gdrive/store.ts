@@ -15,6 +15,7 @@ interface RegistryEntry {
   title: string;
   encrypted: boolean;
   salt?: string;
+  kdfIterations?: number;
 }
 
 export class GDriveRemoteStore implements RemoteStore {
@@ -216,6 +217,8 @@ export class GDriveRemoteStore implements RemoteStore {
       title: entry.title,
       lastModified: 0,
       salt: entry.salt,
+      kdfIterations: entry.kdfIterations,
+      encrypted: entry.encrypted,
     }));
   }
 
@@ -237,6 +240,7 @@ export class GDriveRemoteStore implements RemoteStore {
       title: registry.title,
       encrypted: registry.encrypted,
       salt: registry.salt,
+      kdfIterations: registry.kdfIterations,
     };
     if (existing >= 0) {
       entries[existing] = entry;
