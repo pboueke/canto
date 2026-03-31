@@ -1,4 +1,14 @@
-export type ThemeName = 'light' | 'dark' | 'monokai' | 'solarized' | 'nord' | 'dracula';
+export type ThemeName =
+  | 'light'
+  | 'dark'
+  | 'monokai'
+  | 'solarized'
+  | 'nord'
+  | 'dracula'
+  | 'everforest'
+  | 'rosepine'
+  | 'onecyan'
+  | 'gruvbox';
 
 export interface CantoTheme {
   name: ThemeName;
@@ -448,6 +458,266 @@ export const draculaTheme: CantoTheme = {
   },
 };
 
+// Everforest — inspired by sainnhe/everforest (dark green, soft contrast)
+export const everforestTheme: CantoTheme = {
+  name: 'everforest',
+  isDark: true,
+  colors: {
+    background: 'rgb(39, 46, 34)',
+    surface: 'rgb(52, 63, 46)',
+    foreground: 'rgb(45, 55, 39)',
+    text: 'rgb(211, 198, 170)',
+    textSecondary: 'rgb(147, 144, 129)',
+    primary: 'rgb(167, 192, 128)',
+    accent: 'rgb(131, 192, 159)',
+    border: 'rgb(73, 83, 65)',
+    error: 'rgb(230, 126, 128)',
+    success: 'rgb(167, 192, 128)',
+    buttonSubmit: 'rgb(211, 198, 170)',
+    buttonCancel: 'rgb(230, 126, 128)',
+    buttonDisabled: 'rgb(52, 63, 46)',
+    cardBackground: 'rgb(45, 55, 39)',
+    highlight: 'rgb(52, 63, 46)',
+    editBar: 'rgb(219, 188, 127)',
+    deleteAction: 'rgb(230, 126, 128)',
+    headerBackground: 'rgb(39, 46, 34)',
+    filterRow: 'rgb(48, 58, 42)',
+    newJournal: {
+      text: 'rgb(211, 198, 170)',
+      icon: 'rgb(219, 188, 127)',
+      background: 'rgb(52, 63, 46)',
+      border: 'rgb(167, 192, 128)',
+    },
+    popAction: {
+      save: { background: 'rgb(167, 192, 128)', text: 'rgb(39, 46, 34)' },
+      edit: { background: 'rgb(52, 63, 46)', text: 'rgb(211, 198, 170)' },
+      new: { background: 'rgb(219, 188, 127)', text: 'rgb(39, 46, 34)' },
+      delete: { background: 'rgb(230, 126, 128)', text: 'rgb(211, 198, 170)' },
+    },
+    tag: {
+      default: 'rgb(52, 63, 46)',
+      active: 'rgb(62, 73, 56)',
+      text: 'rgb(211, 198, 170)',
+      add: 'rgb(219, 188, 127)',
+      remove: 'rgb(131, 192, 159)',
+    },
+    markdown: {
+      text: 'rgb(211, 198, 170)',
+      background: 'rgb(39, 46, 34)',
+      codeBackground: 'rgb(45, 55, 39)',
+      quote: 'rgb(52, 63, 46)',
+    },
+    location: {
+      text: 'rgb(211, 198, 170)',
+      background: 'rgb(52, 63, 46)',
+    },
+  },
+  borderWidth: 1,
+  fonts: {
+    regular: 'Lato-Regular',
+    bold: 'Lato-Bold',
+    light: 'Lato-Light',
+    italic: 'Lato-Italic',
+    serif: 'Merriweather-Regular',
+    serifBold: 'Merriweather-Bold',
+  },
+};
+
+// Rosé Pine — inspired by rose-pine/rose-pine-theme (muted pink, elegant)
+export const rosepineTheme: CantoTheme = {
+  name: 'rosepine',
+  isDark: true,
+  colors: {
+    background: 'rgb(25, 23, 36)',
+    surface: 'rgb(38, 35, 53)',
+    foreground: 'rgb(31, 29, 46)',
+    text: 'rgb(224, 222, 244)',
+    textSecondary: 'rgb(144, 140, 170)',
+    primary: 'rgb(235, 188, 186)',
+    accent: 'rgb(196, 167, 231)',
+    border: 'rgb(57, 53, 82)',
+    error: 'rgb(235, 111, 146)',
+    success: 'rgb(156, 207, 216)',
+    buttonSubmit: 'rgb(224, 222, 244)',
+    buttonCancel: 'rgb(235, 111, 146)',
+    buttonDisabled: 'rgb(38, 35, 53)',
+    cardBackground: 'rgb(31, 29, 46)',
+    highlight: 'rgb(38, 35, 53)',
+    editBar: 'rgb(246, 193, 119)',
+    deleteAction: 'rgb(235, 111, 146)',
+    headerBackground: 'rgb(25, 23, 36)',
+    filterRow: 'rgb(33, 31, 48)',
+    newJournal: {
+      text: 'rgb(224, 222, 244)',
+      icon: 'rgb(246, 193, 119)',
+      background: 'rgb(38, 35, 53)',
+      border: 'rgb(235, 188, 186)',
+    },
+    popAction: {
+      save: { background: 'rgb(156, 207, 216)', text: 'rgb(25, 23, 36)' },
+      edit: { background: 'rgb(38, 35, 53)', text: 'rgb(224, 222, 244)' },
+      new: { background: 'rgb(246, 193, 119)', text: 'rgb(25, 23, 36)' },
+      delete: { background: 'rgb(235, 111, 146)', text: 'rgb(224, 222, 244)' },
+    },
+    tag: {
+      default: 'rgb(38, 35, 53)',
+      active: 'rgb(48, 45, 63)',
+      text: 'rgb(224, 222, 244)',
+      add: 'rgb(246, 193, 119)',
+      remove: 'rgb(196, 167, 231)',
+    },
+    markdown: {
+      text: 'rgb(224, 222, 244)',
+      background: 'rgb(25, 23, 36)',
+      codeBackground: 'rgb(31, 29, 46)',
+      quote: 'rgb(38, 35, 53)',
+    },
+    location: {
+      text: 'rgb(224, 222, 244)',
+      background: 'rgb(38, 35, 53)',
+    },
+  },
+  borderWidth: 1,
+  fonts: {
+    regular: 'Lato-Regular',
+    bold: 'Lato-Bold',
+    light: 'Lato-Light',
+    italic: 'Lato-Italic',
+    serif: 'Merriweather-Regular',
+    serifBold: 'Merriweather-Bold',
+  },
+};
+
+// One Cyan — inspired by Atom One Dark with cyan accent
+export const onecyanTheme: CantoTheme = {
+  name: 'onecyan',
+  isDark: true,
+  colors: {
+    background: 'rgb(40, 44, 52)',
+    surface: 'rgb(55, 59, 69)',
+    foreground: 'rgb(49, 53, 63)',
+    text: 'rgb(171, 178, 191)',
+    textSecondary: 'rgb(92, 99, 112)',
+    primary: 'rgb(86, 182, 194)',
+    accent: 'rgb(97, 175, 239)',
+    border: 'rgb(67, 72, 83)',
+    error: 'rgb(224, 108, 117)',
+    success: 'rgb(152, 195, 121)',
+    buttonSubmit: 'rgb(171, 178, 191)',
+    buttonCancel: 'rgb(224, 108, 117)',
+    buttonDisabled: 'rgb(55, 59, 69)',
+    cardBackground: 'rgb(49, 53, 63)',
+    highlight: 'rgb(55, 59, 69)',
+    editBar: 'rgb(229, 192, 123)',
+    deleteAction: 'rgb(224, 108, 117)',
+    headerBackground: 'rgb(40, 44, 52)',
+    filterRow: 'rgb(50, 54, 64)',
+    newJournal: {
+      text: 'rgb(171, 178, 191)',
+      icon: 'rgb(229, 192, 123)',
+      background: 'rgb(55, 59, 69)',
+      border: 'rgb(86, 182, 194)',
+    },
+    popAction: {
+      save: { background: 'rgb(152, 195, 121)', text: 'rgb(40, 44, 52)' },
+      edit: { background: 'rgb(55, 59, 69)', text: 'rgb(171, 178, 191)' },
+      new: { background: 'rgb(229, 192, 123)', text: 'rgb(40, 44, 52)' },
+      delete: { background: 'rgb(224, 108, 117)', text: 'rgb(171, 178, 191)' },
+    },
+    tag: {
+      default: 'rgb(55, 59, 69)',
+      active: 'rgb(65, 69, 79)',
+      text: 'rgb(171, 178, 191)',
+      add: 'rgb(229, 192, 123)',
+      remove: 'rgb(86, 182, 194)',
+    },
+    markdown: {
+      text: 'rgb(171, 178, 191)',
+      background: 'rgb(40, 44, 52)',
+      codeBackground: 'rgb(49, 53, 63)',
+      quote: 'rgb(55, 59, 69)',
+    },
+    location: {
+      text: 'rgb(171, 178, 191)',
+      background: 'rgb(55, 59, 69)',
+    },
+  },
+  borderWidth: 1,
+  fonts: {
+    regular: 'Lato-Regular',
+    bold: 'Lato-Bold',
+    light: 'Lato-Light',
+    italic: 'Lato-Italic',
+    serif: 'Merriweather-Regular',
+    serifBold: 'Merriweather-Bold',
+  },
+};
+
+// Gruvbox — inspired by morhetz/gruvbox (warm dark red / wine tones)
+export const gruvboxTheme: CantoTheme = {
+  name: 'gruvbox',
+  isDark: true,
+  colors: {
+    background: 'rgb(40, 40, 40)',
+    surface: 'rgb(60, 56, 54)',
+    foreground: 'rgb(50, 48, 47)',
+    text: 'rgb(235, 219, 178)',
+    textSecondary: 'rgb(168, 153, 132)',
+    primary: 'rgb(204, 36, 29)',
+    accent: 'rgb(215, 153, 33)',
+    border: 'rgb(80, 73, 69)',
+    error: 'rgb(251, 73, 52)',
+    success: 'rgb(184, 187, 38)',
+    buttonSubmit: 'rgb(235, 219, 178)',
+    buttonCancel: 'rgb(251, 73, 52)',
+    buttonDisabled: 'rgb(60, 56, 54)',
+    cardBackground: 'rgb(50, 48, 47)',
+    highlight: 'rgb(60, 56, 54)',
+    editBar: 'rgb(250, 189, 47)',
+    deleteAction: 'rgb(251, 73, 52)',
+    headerBackground: 'rgb(40, 40, 40)',
+    filterRow: 'rgb(50, 48, 47)',
+    newJournal: {
+      text: 'rgb(235, 219, 178)',
+      icon: 'rgb(250, 189, 47)',
+      background: 'rgb(60, 56, 54)',
+      border: 'rgb(204, 36, 29)',
+    },
+    popAction: {
+      save: { background: 'rgb(184, 187, 38)', text: 'rgb(40, 40, 40)' },
+      edit: { background: 'rgb(60, 56, 54)', text: 'rgb(235, 219, 178)' },
+      new: { background: 'rgb(250, 189, 47)', text: 'rgb(40, 40, 40)' },
+      delete: { background: 'rgb(251, 73, 52)', text: 'rgb(235, 219, 178)' },
+    },
+    tag: {
+      default: 'rgb(60, 56, 54)',
+      active: 'rgb(70, 66, 64)',
+      text: 'rgb(235, 219, 178)',
+      add: 'rgb(250, 189, 47)',
+      remove: 'rgb(215, 153, 33)',
+    },
+    markdown: {
+      text: 'rgb(235, 219, 178)',
+      background: 'rgb(40, 40, 40)',
+      codeBackground: 'rgb(50, 48, 47)',
+      quote: 'rgb(60, 56, 54)',
+    },
+    location: {
+      text: 'rgb(235, 219, 178)',
+      background: 'rgb(60, 56, 54)',
+    },
+  },
+  borderWidth: 1,
+  fonts: {
+    regular: 'Lato-Regular',
+    bold: 'Lato-Bold',
+    light: 'Lato-Light',
+    italic: 'Lato-Italic',
+    serif: 'Merriweather-Regular',
+    serifBold: 'Merriweather-Bold',
+  },
+};
+
 export const themes: Record<ThemeName, CantoTheme> = {
   light: lightTheme,
   dark: darkTheme,
@@ -455,6 +725,21 @@ export const themes: Record<ThemeName, CantoTheme> = {
   solarized: solarizedTheme,
   nord: nordTheme,
   dracula: draculaTheme,
+  everforest: everforestTheme,
+  rosepine: rosepineTheme,
+  onecyan: onecyanTheme,
+  gruvbox: gruvboxTheme,
 };
 
-export const themeNames: ThemeName[] = ['light', 'dark', 'monokai', 'solarized', 'nord', 'dracula'];
+export const themeNames: ThemeName[] = [
+  'light',
+  'dark',
+  'monokai',
+  'solarized',
+  'nord',
+  'dracula',
+  'everforest',
+  'rosepine',
+  'onecyan',
+  'gruvbox',
+];

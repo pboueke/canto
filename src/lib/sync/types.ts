@@ -7,6 +7,8 @@ export interface RemoteJournalMeta {
   title: string;
   lastModified: number; // unix timestamp ms
   salt?: string; // base64 encoded salt for encrypted journals
+  kdfIterations?: number; // PBKDF2 iterations used to derive the sync key
+  encrypted?: boolean; // true if the journal is password-protected
 }
 
 /** Lightweight sync index — stored unencrypted on remote for O(1) timestamp comparison. */
@@ -19,6 +21,7 @@ export interface RegistryInfo {
   title: string;
   encrypted: boolean;
   salt?: string;
+  kdfIterations?: number;
 }
 
 export interface RemoteStore {

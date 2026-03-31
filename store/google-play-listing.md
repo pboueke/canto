@@ -12,42 +12,43 @@ Encrypted journaling app. Open source. No tracking, no ads, no data collection.
 
 Your journal is the most private thing you write. Canto keeps it that way.
 
-Canto encrypts your journal entries on your device using AES-256-GCM encryption — the same standard used by banks and governments. Your data is unreadable without your key. No one can access your entries — not Canto, not your cloud provider, not anyone.
+Everything you write is encrypted on your device before it's saved. No one can read your entries — not us, not your cloud provider, not anyone. Only you hold the key.
 
-Unlike other journaling apps, Canto is fully open source (GPLv3). Every line of code is publicly auditable. You don't have to trust our claims — you can verify them yourself.
+Canto is fully open source. Every line of code is public, so you don't have to take our word for it — you can check for yourself.
 
-ENCRYPTED AT REST
-All journal data is encrypted on your device before it touches the file system. A device-level encryption key is stored in Android Keystore (hardware-backed on supported devices). Optionally, add a password for an extra layer of AES-256 encryption with PBKDF2 key derivation.
+ENCRYPTED BY DEFAULT
+Your journal is encrypted on your device using the same standard trusted by banks and governments (AES-256). A device key is stored securely in Android Keystore. You can also add a password for an extra layer of protection, with biometric unlock for convenience.
 
-YOUR THOUGHTS ARE NOT AI TRAINING DATA
-Canto contains no analytics, no trackers, no crash reporting, no advertising SDKs. Your journal never leaves your device unless you explicitly choose to export or sync it. Your inner thoughts stay yours — never scraped, never sold, never fed to AI models.
+NOT AI TRAINING DATA
+Canto has no analytics, no trackers, no ads, and no crash reporting. Your journal never leaves your device unless you choose to export or sync it. Your thoughts are yours — never collected, never sold, never used to train AI.
 
-DATA PORTABILITY
-Export everything, anytime. Canto backups are encrypted .canto.zip archives that you control. Import them on another device or keep them as backups. No lock-in, no proprietary formats.
+TAKE YOUR DATA ANYWHERE
+Export your journal anytime as an encrypted backup file. Import it on another device or keep it for safekeeping. No lock-in.
 
 OPEN SOURCE
-Canto is licensed under GPLv3. Read the code, audit the encryption, contribute improvements. The security model is fully documented at github.com/pboueke/canto.
+Licensed under GPLv3. Read the code, audit the security, or contribute. Full documentation at github.com/pboueke/canto.
 
 FEATURES
-• AES-256-GCM encryption with PBKDF2 key derivation
-• Multiple journals with optional password and biometric unlock
-• Markdown editor with live preview
-• Image and file attachments with optional per-file encryption
-• GPS location, tags, and comments per entry
-• 6 themes: Light, Dark, Monokai, Solarized, Nord, Dracula
-• 8 languages: English, Portuguese, Spanish, German, French, Russian, Chinese, Italian
-• Google Drive sync (optional — password-protected journals stay encrypted)
+• Strong encryption on every entry, with optional password protection
+• Multiple journals, each with its own settings and password
+• Biometric unlock (fingerprint, face)
+• Markdown writing with preview
+• Image and file attachments, with optional per-file encryption
+• Location, tags, and comments on each entry
+• 10 themes including Light, Dark, Nord, Dracula, Gruvbox, and more
+• 20 languages including English, Portuguese, Spanish, French, German, Japanese, Korean, Arabic, and more
+• Google Drive sync (encrypted journals stay encrypted in the cloud)
 • Encrypted backup export and import
-• Auto-lock with configurable timeout
-• Rate limiting against brute-force password attempts
-• Device key rotation
+• Auto-lock with adjustable timeout
+• Brute-force protection with progressive lockout
+• Device key rotation for added security
 
-FREE FOREVER
-Core journaling features are free and always will be. No subscription required. No features locked behind a paywall.
+FREE AND OPEN SOURCE
+Canto is free to use. No subscription, no ads.
 
-PRIVACY POLICY
-Canto collects no data. Full privacy policy: github.com/pboueke/canto/blob/main/PRIVACY.md
-Security model: github.com/pboueke/canto/blob/main/SECURITY.md
+PRIVACY
+Canto collects no data. Privacy policy: github.com/pboueke/canto/blob/main/PRIVACY.md
+Security details: github.com/pboueke/canto/blob/main/SECURITY.md
 
 ## Category
 

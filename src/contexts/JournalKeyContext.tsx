@@ -1,13 +1,9 @@
 import { createContext, useContext, useCallback, useRef, useEffect } from 'react';
 import type { ReactNode } from 'react';
 import { AppState } from 'react-native';
-import { pbkdf2Async } from '@noble/hashes/pbkdf2.js';
-import { sha256 } from '@noble/hashes/sha2.js';
-import { DEFAULT_KDF_ITERATIONS } from '@/lib/encryption/password';
+import { deriveKey, DEFAULT_KDF_ITERATIONS } from '@/lib/encryption/password';
 import { base64ToUint8 } from '@/lib/encryption/utils';
 import { getAutoLockTimeout } from '@/components/home/SecuritySettingsModal';
-
-const KEY_LENGTH = 32;
 
 interface JournalKeyContextValue {
   deriveAndCache(
@@ -45,14 +41,7 @@ export function JournalKeyProvider({ children }: { children: ReactNode }) {
   const deriveAndCache = useCallback(
     async (journalId: string, password: string, saltBase64: string, iterations?: number) => {
       const salt = base64ToUint8(saltBase64);
-      const encoder = new TextEncoder();
-      // NOTE: JS GC may copy Uint8Array contents before fill(0) runs.
-      // This is an inherent platform limitation — keys in JS memory cannot
-      // be reliably zeroed. See OWASP guidance on client-side key handling.
-      const key = await pbkdf2Async(sha256, encoder.encode(password), salt, {
-        c: iterations ?? DEFAULT_KDF_ITERATIONS,
-        dkLen: KEY_LENGTH,
-      });
+      const key = await deriveKey(password, salt, iterations ?? DEFAULT_KDF_ITERATIONS);
       keysRef.current.set(journalId, key);
       return key;
     },

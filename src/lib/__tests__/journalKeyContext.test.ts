@@ -1,7 +1,7 @@
 import React from 'react';
 import { renderHook, act } from '@testing-library/react-native';
 import { JournalKeyProvider, useJournalKeys } from '@/contexts/JournalKeyContext';
-import { DEFAULT_KDF_ITERATIONS } from '@/lib/encryption/password';
+import { deriveKey, DEFAULT_KDF_ITERATIONS } from '@/lib/encryption/password';
 
 // Mock SecuritySettingsModal's getAutoLockTimeout
 const mockGetAutoLockTimeout = jest.fn(async () => 0); // disabled by default
@@ -162,6 +162,23 @@ describe('JournalKeyContext', () => {
     act(() => {
       result.current.touchActivity();
     });
+  });
+
+  it('deriveAndCache produces the same key as deriveKey from password.ts', async () => {
+    // This is the critical cross-platform regression guard.
+    // JournalKeyContext must use the centralized deriveKey — if it drifts
+    // (e.g. uses its own pbkdf2 call), sync keys will diverge across platforms.
+    const { result } = renderHook(() => useJournalKeys(), { wrapper });
+
+    let contextKey: Uint8Array;
+    await act(async () => {
+      contextKey = await result.current.deriveAndCache('jRegression', 'pw', SALT_B64, 1000);
+    });
+
+    const salt = Uint8Array.from(atob(SALT_B64), (c) => c.charCodeAt(0));
+    const directKey = await deriveKey('pw', salt, 1000);
+
+    expect(Buffer.from(contextKey!).toString('hex')).toBe(Buffer.from(directKey).toString('hex'));
   });
 });
 

@@ -103,6 +103,7 @@ export function NewJournalModal({
   const [cloudLocalIds, setCloudLocalIds] = useState<Set<string>>(new Set());
   const [cloudLoading, setCloudLoading] = useState(false);
   const [cloudError, setCloudError] = useState<string | null>(null);
+  const [pendingCloudRemote, setPendingCloudRemote] = useState<RemoteJournalMeta | null>(null);
   const [importProgress, setImportProgress] = useState<{ current: number; total: number } | null>(
     null,
   );
@@ -140,7 +141,7 @@ export function NewJournalModal({
       resetForm();
     } catch (err) {
       console.error('[Canto] Journal creation failed:', err);
-      setError(err instanceof Error ? err.message : String(err));
+      setError((err instanceof Error ? err.message : String(err)) || 'Unknown error');
     } finally {
       setBusy(false);
     }
@@ -162,6 +163,7 @@ export function NewJournalModal({
     setThemeOverride(undefined);
     setError(null);
     setImportError(null);
+    setPendingCloudRemote(null);
     resetImportState();
   }
 
@@ -177,7 +179,7 @@ export function NewJournalModal({
       setCloudJournals(remoteJournals);
       setShowCloudImport(true);
     } catch (err) {
-      setCloudError(err instanceof Error ? err.message : String(err));
+      setCloudError((err instanceof Error ? err.message : String(err)) || 'Unknown error');
     } finally {
       setCloudLoading(false);
     }
@@ -186,17 +188,30 @@ export function NewJournalModal({
   async function handleCloudJournalSelect(remote: RemoteJournalMeta) {
     if (!manager || !accessToken) return;
     setShowCloudImport(false);
+
+    // If the journal is password-protected, prompt for the password first
+    if (remote.encrypted) {
+      setPendingCloudRemote(remote);
+      setImportPassword('');
+      setImportNeedsPassword(true);
+      return;
+    }
+
+    await executeCloudImport(remote, '');
+  }
+
+  async function executeCloudImport(remote: RemoteJournalMeta, password: string) {
     setImporting(true);
     setImportProgress(null);
     try {
-      await manager.connectWithToken(accessToken);
-      const store = manager.getRemoteStore();
+      await manager!.connectWithToken(accessToken!);
+      const store = manager!.getRemoteStore();
 
-      // Derive sync key from salt (empty password for cloud import of non-secure journals)
+      // Derive sync key from salt
       if (!remote.salt) throw new Error('Journal has no salt — cannot decrypt');
       const saltBytes = base64ToUint8(remote.salt);
-      // TODO: if the journal is encrypted (password-protected), prompt for password
-      const syncKey = await deriveKey('', saltBytes, DEFAULT_KDF_ITERATIONS);
+      const iterations = remote.kdfIterations ?? DEFAULT_KDF_ITERATIONS;
+      const syncKey = await deriveKey(password, saltBytes, iterations);
 
       // Download and decrypt journal metadata
       const encryptedMeta = await store.downloadJournalMeta(remote.id);
@@ -288,7 +303,8 @@ export function NewJournalModal({
       onClose();
       onImportComplete?.(journal.id);
     } catch (err) {
-      setImportError(err instanceof Error ? err.message : String(err));
+      console.error('[Canto] Cloud import failed:', err);
+      setImportError((err instanceof Error ? err.message : String(err)) || 'Unknown error');
     } finally {
       setImporting(false);
       setImportProgress(null);
@@ -346,7 +362,7 @@ export function NewJournalModal({
       await finishImport(fileUri, info.manifest.journalTitle);
     } catch (err) {
       console.error('[Canto] Import failed:', err);
-      setImportError(err instanceof Error ? err.message : String(err));
+      setImportError((err instanceof Error ? err.message : String(err)) || 'Unknown error');
       setImporting(false);
     }
   }
@@ -369,15 +385,25 @@ export function NewJournalModal({
       await finishImport(importFileUri, importOriginalTitle);
     } catch (err) {
       console.error('[Canto] Import failed:', err);
-      setImportError(err instanceof Error ? err.message : String(err));
+      setImportError((err instanceof Error ? err.message : String(err)) || 'Unknown error');
       setImporting(false);
     }
   }
 
   async function handleImportPasswordSubmit() {
-    if (!importFileUri || !importPassword) return;
-    setImporting(true);
+    if (!importPassword) return;
     setImportNeedsPassword(false);
+
+    // Cloud import path: resume with the password
+    if (pendingCloudRemote) {
+      const remote = pendingCloudRemote;
+      setPendingCloudRemote(null);
+      await executeCloudImport(remote, importPassword);
+      return;
+    }
+
+    if (!importFileUri) return;
+    setImporting(true);
     await new Promise((r) => setTimeout(r, 100));
 
     try {
@@ -401,7 +427,7 @@ export function NewJournalModal({
       await finishImport(importFileUri, importOriginalTitle, key);
     } catch (err) {
       console.error('[Canto] Import failed:', err);
-      setImportError(err instanceof Error ? err.message : String(err));
+      setImportError((err instanceof Error ? err.message : String(err)) || 'Unknown error');
       setImporting(false);
     }
   }
@@ -423,7 +449,7 @@ export function NewJournalModal({
       await finishImport(importFileUri, importNewTitle.trim(), key);
     } catch (err) {
       console.error('[Canto] Import failed:', err);
-      setImportError(err instanceof Error ? err.message : String(err));
+      setImportError((err instanceof Error ? err.message : String(err)) || 'Unknown error');
       setImporting(false);
     }
   }
@@ -449,7 +475,7 @@ export function NewJournalModal({
       }
     } catch (err) {
       console.error('[Canto] Import failed:', err);
-      setImportError(err instanceof Error ? err.message : String(err));
+      setImportError((err instanceof Error ? err.message : String(err)) || 'Unknown error');
     } finally {
       setImporting(false);
     }
@@ -512,7 +538,7 @@ export function NewJournalModal({
             )}
           </View>
         ) : (
-          <>
+          <View style={{ flex: 1 }}>
             <ScrollView
               style={styles.body}
               contentContainerStyle={styles.bodyContent}
@@ -685,7 +711,7 @@ export function NewJournalModal({
                 </View>
               )}
 
-              {error && (
+              {error ? (
                 <View style={[styles.errorBox, { borderColor: theme.colors.error }]}>
                   <Feather name="alert-circle" size={14} color={theme.colors.error} />
                   <Text
@@ -697,7 +723,7 @@ export function NewJournalModal({
                     {error}
                   </Text>
                 </View>
-              )}
+              ) : null}
 
               {/* Import from backup */}
               <View style={styles.dividerRow}>
@@ -756,7 +782,7 @@ export function NewJournalModal({
                 </Pressable>
               )}
 
-              {cloudError && (
+              {cloudError ? (
                 <View style={[styles.errorBox, { borderColor: theme.colors.error }]}>
                   <Feather name="alert-circle" size={14} color={theme.colors.error} />
                   <Text
@@ -768,9 +794,9 @@ export function NewJournalModal({
                     {cloudError}
                   </Text>
                 </View>
-              )}
+              ) : null}
 
-              {importError && (
+              {importError ? (
                 <View style={[styles.errorBox, { borderColor: theme.colors.error }]}>
                   <Feather name="alert-circle" size={14} color={theme.colors.error} />
                   <Text
@@ -782,7 +808,7 @@ export function NewJournalModal({
                     {importError}
                   </Text>
                 </View>
-              )}
+              ) : null}
 
               <View style={{ height: 20 }} />
             </ScrollView>
@@ -830,7 +856,7 @@ export function NewJournalModal({
                 </Text>
               </Pressable>
             </View>
-          </>
+          </View>
         )}
       </View>
 
@@ -889,6 +915,7 @@ export function NewJournalModal({
         animationType="fade"
         onRequestClose={() => {
           setImportNeedsPassword(false);
+          setPendingCloudRemote(null);
           resetImportState();
         }}
       >
@@ -942,6 +969,7 @@ export function NewJournalModal({
               <Pressable
                 onPress={() => {
                   setImportNeedsPassword(false);
+                  setPendingCloudRemote(null);
                   resetImportState();
                 }}
                 style={[styles.button, { backgroundColor: theme.colors.highlight }]}

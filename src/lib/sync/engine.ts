@@ -118,6 +118,7 @@ export class SyncEngine {
       title: localJournal.title,
       encrypted: localJournal.secure,
       salt: localJournal.salt,
+      kdfIterations: localJournal.kdfIterations,
     });
 
     // Build local page map
