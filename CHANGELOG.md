@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.18.7 - Web deployment to Cloudflare Pages
+
+- feat: web deployment infrastructure under `web/` — `build.sh`, `deploy.sh`, `_headers`, `_redirects`, and step-by-step Cloudflare Pages guide in `web/README.md`
+- chore: switch web bundler `output` to `single` (SPA mode) in `app.json`
+- fix: build script renames `dist/assets/node_modules` → `dist/assets/_modules` and rewrites references in the JS bundle, working around Cloudflare Pages silently excluding `node_modules` directories from uploads (which dropped all `@expo/vector-icons` fonts and broke icon rendering in production)
+- fix: `_redirects` orders explicit `/assets/*` and `/_expo/*` no-op rewrites before the `/*` SPA fallback so hashed asset requests are not intercepted and parsed as HTML
+- docs: README banner image, centered header/tagline/badges, and grayed italic tagline
+
 ## v0.18.6 - GDrive delete fix, dependency upgrades
 
 - fix: deleting a Google Drive journal showed a JSON parsing error in the remote journals modal — `handleResponse` now handles empty response bodies gracefully
