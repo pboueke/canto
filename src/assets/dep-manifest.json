@@ -26,117 +26,117 @@
   },
   {
     "name": "canto-data",
-    "version": "1.0.3",
+    "version": "1.0.4",
     "license": "MIT"
   },
   {
     "name": "expo",
-    "version": "55.0.6",
-    "license": "MIT"
-  },
-  {
-    "name": "expo-auth-session",
-    "version": "55.0.9",
-    "license": "MIT"
-  },
-  {
-    "name": "expo-clipboard",
-    "version": "55.0.9",
-    "license": "MIT"
-  },
-  {
-    "name": "expo-constants",
-    "version": "55.0.9",
-    "license": "MIT"
-  },
-  {
-    "name": "expo-crypto",
-    "version": "55.0.10",
-    "license": "MIT"
-  },
-  {
-    "name": "expo-document-picker",
-    "version": "55.0.9",
-    "license": "MIT"
-  },
-  {
-    "name": "expo-file-system",
-    "version": "55.0.11",
-    "license": "MIT"
-  },
-  {
-    "name": "expo-font",
-    "version": "55.0.4",
-    "license": "MIT"
-  },
-  {
-    "name": "expo-image-manipulator",
-    "version": "55.0.11",
-    "license": "MIT"
-  },
-  {
-    "name": "expo-image-picker",
     "version": "55.0.13",
     "license": "MIT"
   },
   {
-    "name": "expo-linking",
-    "version": "55.0.8",
+    "name": "expo-auth-session",
+    "version": "55.0.13",
     "license": "MIT"
   },
   {
-    "name": "expo-local-authentication",
-    "version": "55.0.9",
+    "name": "expo-clipboard",
+    "version": "55.0.13",
     "license": "MIT"
   },
   {
-    "name": "expo-localization",
-    "version": "55.0.9",
+    "name": "expo-constants",
+    "version": "55.0.13",
     "license": "MIT"
   },
   {
-    "name": "expo-location",
-    "version": "55.1.4",
-    "license": "MIT"
-  },
-  {
-    "name": "expo-router",
-    "version": "55.0.7",
-    "license": "MIT"
-  },
-  {
-    "name": "expo-secure-store",
-    "version": "55.0.9",
-    "license": "MIT"
-  },
-  {
-    "name": "expo-sharing",
+    "name": "expo-crypto",
     "version": "55.0.14",
     "license": "MIT"
   },
   {
-    "name": "expo-splash-screen",
+    "name": "expo-document-picker",
+    "version": "55.0.13",
+    "license": "MIT"
+  },
+  {
+    "name": "expo-file-system",
+    "version": "55.0.16",
+    "license": "MIT"
+  },
+  {
+    "name": "expo-font",
+    "version": "55.0.6",
+    "license": "MIT"
+  },
+  {
+    "name": "expo-image-manipulator",
+    "version": "55.0.15",
+    "license": "MIT"
+  },
+  {
+    "name": "expo-image-picker",
+    "version": "55.0.18",
+    "license": "MIT"
+  },
+  {
+    "name": "expo-linking",
     "version": "55.0.12",
     "license": "MIT"
   },
   {
+    "name": "expo-local-authentication",
+    "version": "55.0.13",
+    "license": "MIT"
+  },
+  {
+    "name": "expo-localization",
+    "version": "55.0.13",
+    "license": "MIT"
+  },
+  {
+    "name": "expo-location",
+    "version": "55.1.8",
+    "license": "MIT"
+  },
+  {
+    "name": "expo-router",
+    "version": "55.0.11",
+    "license": "MIT"
+  },
+  {
+    "name": "expo-secure-store",
+    "version": "55.0.13",
+    "license": "MIT"
+  },
+  {
+    "name": "expo-sharing",
+    "version": "55.0.18",
+    "license": "MIT"
+  },
+  {
+    "name": "expo-splash-screen",
+    "version": "55.0.17",
+    "license": "MIT"
+  },
+  {
     "name": "expo-status-bar",
-    "version": "55.0.4",
+    "version": "55.0.5",
     "license": "MIT"
   },
   {
     "name": "expo-system-ui",
-    "version": "55.0.10",
+    "version": "55.0.15",
     "license": "MIT"
   },
   {
     "name": "expo-web-browser",
-    "version": "55.0.10",
+    "version": "55.0.14",
     "license": "MIT"
   },
   {
     "name": "jest-expo",
-    "version": "55.0.11",
+    "version": "55.0.15",
     "license": "MIT"
   },
   {
@@ -156,7 +156,7 @@
   },
   {
     "name": "react-native",
-    "version": "0.83.2",
+    "version": "0.83.4",
     "license": "MIT"
   },
   {

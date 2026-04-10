@@ -12,10 +12,13 @@ if [ -n "$VERSION" ]; then
     CHANGED=1
   fi
 
-  # Sync app.json (read its own version, not package.json's)
+  # Sync app.json version and versionCode
   APP_VERSION=$(node -p "require('./app.json').expo.version")
   if [ "$VERSION" != "$APP_VERSION" ]; then
     sed -i "s/\"version\": \"$APP_VERSION\"/\"version\": \"$VERSION\"/" app.json
+    OLD_APP_CODE=$(node -p "require('./app.json').expo.android.versionCode")
+    NEW_APP_CODE=$((OLD_APP_CODE + 1))
+    sed -i "s/\"versionCode\": $OLD_APP_CODE/\"versionCode\": $NEW_APP_CODE/" app.json
     CHANGED=1
   fi
 
