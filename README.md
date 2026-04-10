@@ -1,12 +1,26 @@
-# Canto
+<p align="center">
+  <img src="src/assets/images/banner.jpg" alt="Canto" width="800" />
+</p>
 
-A private, encrypted journaling app for Android, iOS, and Web.
+<p align="center" width="800">
+  <font color="gray">
+    <i>"um <b>Canto</b> para sua alma"</i>
+    <br>
+    (from portuguese: <i>"a song/corner for your soul"</i>)
+  </font>
+</p>
 
-[![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
-![Version](https://img.shields.io/badge/version-0.18.6-green)
-![Tests](https://img.shields.io/badge/tests-851%2F851%20passed-brightgreen)
-![Coverage](https://img.shields.io/badge/coverage-99%25-brightgreen)
-![Platforms](https://img.shields.io/badge/platforms-Android%20%7C%20Web-lightgrey)
+<p align="center">
+  A private, encrypted journaling app for Android, iOS*, and Web.
+</p>
+
+<p align="center">
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-GPLv3-blue.svg" alt="License: GPL v3" /></a>
+  <img src="https://img.shields.io/badge/version-0.18.7-green" alt="Version" />
+  <img src="https://img.shields.io/badge/tests-851%2F851%20passed-brightgreen" alt="Tests" />
+  <img src="https://img.shields.io/badge/coverage-99%25-brightgreen" alt="Coverage" />
+  <img src="https://img.shields.io/badge/platforms-Android%20%7C%20Web-lightgrey" alt="Platforms" />
+</p>
 
 ## Features
 
@@ -52,11 +66,11 @@ See the [canto-data repository](https://github.com/pboueke/canto-data) for the f
 
 ## Platform Support
 
-| Platform | Status    |
-| -------- | --------- |
-| Android  | Supported |
-| Web      | Supported |
-| iOS      | Pending   |
+| Platform | Status          |
+| -------- | --------------- |
+| Android  | Supported       |
+| Web      | Supported       |
+| iOS      | Pending support |
 
 ## License
 
