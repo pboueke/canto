@@ -14,10 +14,11 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.canto.app"
+      "bundleIdentifier": "com.boueke.canto"
     },
     "android": {
-      "package": "com.canto.app",
+      "package": "com.boueke.canto",
+      "versionCode": 17,
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
         "foregroundImage": "./assets/android-icon-foreground.png",

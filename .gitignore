@@ -36,6 +36,7 @@ yarn-error.*
 
 # local env files
 .env*.local
+.build_android.sh
 
 # Google OAuth credentials
 google-credentials.ts
