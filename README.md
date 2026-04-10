@@ -36,10 +36,6 @@
 - **Offline-first** — works without an internet connection. All data stored locally.
 - **Free and open source** — GPLv3. Read every line. Audit it yourself.
 
-## Screenshots
-
-<!-- TODO: Add screenshots -->
-
 ## Getting Started
 
 ```bash
