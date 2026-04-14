@@ -12,7 +12,6 @@ import { JournalHeader } from '@/components/journal/JournalHeader';
 import { PageListItem } from '@/components/journal/PageListItem';
 import { FilterBar } from '@/components/journal/FilterBar';
 import { JournalSettings } from '@/components/journal/JournalSettings';
-// ExportMenu removed — header button opens ExportJournalModal directly
 import { ExportJournalModal } from '@/components/journal/ExportJournalModal';
 import { SyncModal } from '@/components/journal/SyncModal';
 import { FloatingActionButton } from '@/components/common/FloatingActionButton';
@@ -20,13 +19,27 @@ import { useGoogleAuth } from '@/contexts/GoogleAuthContext';
 import { useSyncManager, useSyncState } from '@/contexts/SyncManagerContext';
 import { pageToPreview } from 'canto-data';
 import { type ThemeName, themes } from '@/styles/themes';
+import { getAnniversaryPages } from '@/lib/calendar';
 
 export default function JournalScreen() {
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const params = useLocalSearchParams<{
+    id: string;
+    anniversary?: string;
+    dateStart?: string;
+    dateEnd?: string;
+  }>();
+  const { id } = params;
   const { theme: globalTheme, setThemeName } = useTheme();
   const { t } = useI18n();
   const { getKey, deriveAndCache } = useJournalKeys();
   const insets = useSafeAreaInsets();
+
+  // URL params are read once on mount to seed the filter.
+  const initialFilter = useRef({
+    anniversary: params.anniversary === '1',
+    dateStart: params.dateStart,
+    dateEnd: params.dateEnd,
+  }).current;
 
   const derivedKey = id ? getKey(id) : null;
   const { journal, loading, refresh } = useJournal(id, derivedKey);
@@ -35,7 +48,6 @@ export default function JournalScreen() {
   const { syncJournal } = useSyncManager();
   const syncState = useSyncState(id ?? '');
   const [showSettings, setShowSettings] = useState(false);
-  // showExportMenu removed — header opens modal directly
   const [showExportModal, setShowExportModal] = useState(false);
   const [showSyncModal, setShowSyncModal] = useState(false);
 
@@ -46,7 +58,6 @@ export default function JournalScreen() {
       refresh();
       if (!journal?.settings.autoSync || !journal.settings.remoteSync || !isSignedIn) return;
 
-      // Sync on first focus, or when any page has been modified since last sync
       const latestModified = journal.pages.reduce((max, p) => Math.max(max, p.modified), 0);
       if (lastSyncedModified.current === null || latestModified > lastSyncedModified.current) {
         lastSyncedModified.current = latestModified;
@@ -64,14 +75,12 @@ export default function JournalScreen() {
     ]),
   );
 
-  // Safety net: auto-derive key for non-secure journals that have salt
   useEffect(() => {
     if (journal && journal.salt && !journal.secure && !getKey(journal.id)) {
       deriveAndCache(journal.id, '', journal.salt, journal.kdfIterations);
     }
   }, [journal, getKey, deriveAndCache]);
 
-  // Redirect to home if journal not found
   useEffect(() => {
     if (!loading && !journal) {
       router.replace('/');
@@ -100,7 +109,11 @@ export default function JournalScreen() {
     return sorted;
   }, [journal]);
 
-  // Collect all tags from journal for filter
+  const hasAnniversaries = useMemo(
+    () => getAnniversaryPages(pages, new Date()).length > 0,
+    [pages],
+  );
+
   const availableTags = useMemo(() => {
     if (!journal) return [];
     const tagSet = new Set<string>();
@@ -116,6 +129,7 @@ export default function JournalScreen() {
 
   const {
     filter,
+    anniversary,
     filteredPages,
     isActive: filterIsActive,
     setQuery,
@@ -124,7 +138,7 @@ export default function JournalScreen() {
     toggleProperty,
     toggleTag,
     clearFilters,
-  } = useFilter(pages);
+  } = useFilter(pages, initialFilter);
 
   const { visiblePages, loadMore, hasMore } = usePagination(filteredPages, 15);
 
@@ -183,6 +197,7 @@ export default function JournalScreen() {
       <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
         <JournalHeader
           journal={journal}
+          onPressCalendar={() => router.push(`/journal/${journal.id}/calendar`)}
           onPressSettings={() => setShowSettings(true)}
           onPressExport={() => setShowExportModal(true)}
           onPressSync={() => setShowSyncModal(true)}
@@ -192,6 +207,7 @@ export default function JournalScreen() {
             syncState.lastSynced == null ||
             journal.pages.some((p) => p.modified > syncState.lastSynced!)
           }
+          hasAnniversaries={hasAnniversaries}
         />
 
         {journal.settings.filterBar && (
@@ -206,6 +222,14 @@ export default function JournalScreen() {
             onToggleTag={toggleTag}
             onClearFilters={clearFilters}
           />
+        )}
+
+        {anniversary && (
+          <View style={[styles.anniversaryBanner, { backgroundColor: theme.colors.primary }]}>
+            <Text style={[styles.anniversaryText, { fontFamily: theme.fonts.bold }]}>
+              {t.journal.anniversary}
+            </Text>
+          </View>
         )}
 
         {filteredPages.length === 0 ? (
@@ -291,5 +315,14 @@ const styles = StyleSheet.create({
   },
   loadingMore: {
     paddingVertical: 20,
+  },
+  anniversaryBanner: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    alignItems: 'center',
+  },
+  anniversaryText: {
+    color: '#fff',
+    fontSize: 13,
   },
 });

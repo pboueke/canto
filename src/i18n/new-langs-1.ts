@@ -49,6 +49,14 @@ export const ja: Dictionary = {
     noPages: 'まだページがありません。最初のエントリーを作成しましょう！',
     filter: 'フィルター',
     sort: '並べ替え',
+    anniversary: '記念日',
+  },
+  calendar: {
+    titleSuffix: 'カレンダー',
+    anniversaryRow: '今日は {count} 件のページが記念日を迎えています',
+    anniversaryRowOne: '今日は1件のページが記念日を迎えています',
+    anniversaryRowZero: '今日の記念日はありません',
+    noPages: 'まだページがありません',
   },
   page: {
     title: 'ページ',
@@ -74,6 +82,9 @@ export const ja: Dictionary = {
     deleteMessage: 'このエントリーは完全に削除されます。',
     locationCopied: '座標をコピーしました',
     decrypting: '復号中...',
+    takePhoto: '写真を撮る',
+    takeEncryptedPhoto: '暗号化写真',
+    cameraPermissionDenied: 'カメラの許可が拒否されました',
   },
   settings: {
     theme: 'テーマ',
@@ -328,6 +339,14 @@ export const ko: Dictionary = {
     noPages: '아직 페이지가 없습니다. 첫 번째 항목을 작성하세요!',
     filter: '필터',
     sort: '정렬',
+    anniversary: '기념일',
+  },
+  calendar: {
+    titleSuffix: '달력',
+    anniversaryRow: '오늘 기념일을 맞은 {count}개의 페이지',
+    anniversaryRowOne: '오늘 기념일을 맞은 1개의 페이지',
+    anniversaryRowZero: '오늘 기념일이 없습니다',
+    noPages: '아직 페이지가 없습니다',
   },
   page: {
     title: '페이지',
@@ -353,6 +372,9 @@ export const ko: Dictionary = {
     deleteMessage: '이 항목은 영구적으로 삭제됩니다.',
     locationCopied: '좌표가 복사되었습니다',
     decrypting: '복호화 중...',
+    takePhoto: '사진 찍기',
+    takeEncryptedPhoto: '암호화된 사진',
+    cameraPermissionDenied: '카메라 권한이 거부되었습니다',
   },
   settings: {
     theme: '테마',
@@ -606,6 +628,14 @@ export const ar: Dictionary = {
     noPages: 'لا توجد صفحات بعد. أنشئ أول إدخال لك!',
     filter: 'تصفية',
     sort: 'ترتيب',
+    anniversary: 'ذكرى سنوية',
+  },
+  calendar: {
+    titleSuffix: 'تقويم',
+    anniversaryRow: '{count} صفحات تحتفل بذكرى سنوية اليوم',
+    anniversaryRowOne: 'صفحة واحدة تحتفل بذكرى سنوية اليوم',
+    anniversaryRowZero: 'لا توجد ذكريات اليوم',
+    noPages: 'لا توجد صفحات بعد',
   },
   page: {
     title: 'صفحة',
@@ -631,6 +661,9 @@ export const ar: Dictionary = {
     deleteMessage: 'سيتم حذف هذا الإدخال نهائياً.',
     locationCopied: 'تم نسخ الإحداثيات',
     decrypting: 'جارٍ فك التشفير...',
+    takePhoto: 'التقط صورة',
+    takeEncryptedPhoto: 'صورة مشفّرة',
+    cameraPermissionDenied: 'تم رفض إذن الكاميرا',
   },
   settings: {
     theme: 'المظهر',
@@ -883,6 +916,14 @@ export const hi: Dictionary = {
     noPages: 'अभी तक कोई पृष्ठ नहीं है। अपनी पहली प्रविष्टि बनाएँ!',
     filter: 'फ़िल्टर',
     sort: 'क्रमबद्ध करें',
+    anniversary: 'वर्षगांठ',
+  },
+  calendar: {
+    titleSuffix: 'कैलेंडर',
+    anniversaryRow: 'आज {count} पृष्ठ वर्षगांठ मना रहे हैं',
+    anniversaryRowOne: 'आज 1 पृष्ठ वर्षगांठ मना रहा है',
+    anniversaryRowZero: 'आज कोई वर्षगांठ नहीं',
+    noPages: 'अभी तक कोई पृष्ठ नहीं',
   },
   page: {
     title: 'पृष्ठ',
@@ -908,6 +949,9 @@ export const hi: Dictionary = {
     deleteMessage: 'यह प्रविष्टि स्थायी रूप से हटा दी जाएगी।',
     locationCopied: 'निर्देशांक कॉपी किए गए',
     decrypting: 'डिक्रिप्ट हो रहा है...',
+    takePhoto: 'फ़ोटो लें',
+    takeEncryptedPhoto: 'एन्क्रिप्टेड फ़ोटो',
+    cameraPermissionDenied: 'कैमरा अनुमति अस्वीकृत',
   },
   settings: {
     theme: 'थीम',
@@ -1162,6 +1206,14 @@ export const tr: Dictionary = {
     noPages: 'Henüz sayfa yok. İlk giridinizi oluşturun!',
     filter: 'Filtrele',
     sort: 'Sırala',
+    anniversary: 'Yıl Dönümü',
+  },
+  calendar: {
+    titleSuffix: 'Takvim',
+    anniversaryRow: 'Bugün yıl dönümünü kutlayan {count} sayfa',
+    anniversaryRowOne: 'Bugün yıl dönümünü kutlayan 1 sayfa',
+    anniversaryRowZero: 'Bugün yıl dönümü yok',
+    noPages: 'Henüz sayfa yok',
   },
   page: {
     title: 'Sayfa',
@@ -1187,6 +1239,9 @@ export const tr: Dictionary = {
     deleteMessage: 'Bu girdi kalıcı olarak silinecektir.',
     locationCopied: 'Koordinatlar kopyalandı',
     decrypting: 'Şifre çözülüyor...',
+    takePhoto: 'Fotoğraf Çek',
+    takeEncryptedPhoto: 'Şifreli Fotoğraf',
+    cameraPermissionDenied: 'Kamera izni reddedildi',
   },
   settings: {
     theme: 'Tema',
@@ -1441,6 +1496,14 @@ export const nl: Dictionary = {
     noPages: "Nog geen pagina's. Maak uw eerste vermelding aan!",
     filter: 'Filteren',
     sort: 'Sorteren',
+    anniversary: 'Jubileum',
+  },
+  calendar: {
+    titleSuffix: 'Kalender',
+    anniversaryRow: "{count} pagina's vieren vandaag een jubileum",
+    anniversaryRowOne: '1 pagina viert vandaag een jubileum',
+    anniversaryRowZero: 'Geen jubilea vandaag',
+    noPages: "Nog geen pagina's",
   },
   page: {
     title: 'Pagina',
@@ -1466,6 +1529,9 @@ export const nl: Dictionary = {
     deleteMessage: 'Deze vermelding wordt permanent verwijderd.',
     locationCopied: 'Coördinaten gekopieerd',
     decrypting: 'Ontsleutelen...',
+    takePhoto: 'Foto maken',
+    takeEncryptedPhoto: 'Versleutelde foto',
+    cameraPermissionDenied: 'Cameratoegang geweigerd',
   },
   settings: {
     theme: 'Thema',

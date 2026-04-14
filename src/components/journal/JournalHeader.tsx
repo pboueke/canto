@@ -9,12 +9,14 @@ import type { SyncStatus } from '@/lib/sync/manager';
 
 interface JournalHeaderProps {
   journal: Journal;
+  onPressCalendar?: () => void;
   onPressSettings?: () => void;
   onPressExport?: () => void;
   onPressSync?: () => void;
   syncStatus?: SyncStatus;
   isSyncEnabled?: boolean;
   hasUnsyncedChanges?: boolean;
+  hasAnniversaries?: boolean;
 }
 
 const UNSYNCED_COLOR = '#F59E0B'; // amber/orange
@@ -86,12 +88,14 @@ function SyncDot({
 
 export function JournalHeader({
   journal,
+  onPressCalendar,
   onPressSettings,
   onPressExport,
   onPressSync,
   syncStatus = 'idle',
   isSyncEnabled = false,
   hasUnsyncedChanges = false,
+  hasAnniversaries = false,
 }: JournalHeaderProps) {
   const { theme } = useTheme();
   const insets = useSafeAreaInsets();
@@ -121,6 +125,16 @@ export function JournalHeader({
         {journal.title}
       </Text>
       <View style={styles.actions}>
+        {onPressCalendar && (
+          <Pressable onPress={onPressCalendar} style={styles.actionButton}>
+            <View>
+              <Feather name="calendar" size={20} color={theme.colors.text} />
+              {hasAnniversaries && (
+                <View style={[styles.dot, { backgroundColor: theme.colors.primary }]} />
+              )}
+            </View>
+          </Pressable>
+        )}
         <Pressable onPress={onPressSync} style={styles.actionButton}>
           <View>
             <Feather

@@ -1,5 +1,14 @@
 # Changelog
 
+## v0.19.0 - Per-journal Calendar page + anniversary filter
+
+- **feat: per-journal Calendar page** — new calendar button in `JournalHeader` (left of sync) opens `/journal/{id}/calendar`. Page shows a journal-titled header, an anniversary row ("N pages celebrating an anniversary today" with 0/1/n copy variants), and a vertical scroll of month cards with days-with-pages highlighted. Tapping a month filters the journal to that month's date range; tapping the anniversary row activates the new anniversary filter.
+- feat: anniversary filter — `useFilter` gains an `anniversary` boolean that keeps only pages whose UTC month+day matches today from strictly prior years. Feb-29 pages only surface on leap Feb-29s. Activated via URL param `?anniversary=1` from the calendar page and cleared via the existing FilterBar clear button.
+- feat: scroll preservation — session-scoped `CalendarScrollContext` stores per-journal scroll offset in a ref map; restored on remount (calendar ↔ journal ↔ page navigation). Not persisted across app restarts.
+- chore: route restructure — `app/journal/[id].tsx` → `app/journal/[id]/index.tsx` + new sibling `app/journal/[id]/calendar.tsx`. URL resolution unchanged for `/journal/{id}`.
+- i18n: new `calendar` namespace and `journal.anniversary` string across all 20 supported locales.
+- test: 37 new tests — 20 for `src/lib/calendar.ts` helpers, 6 new `useFilter` anniversary cases, 6 for `CalendarScrollContext`, 5 for `AnniversaryRow`, 6 for `MonthPreview`.
+
 ## v0.18.9 - Cross-device password sync fixes
 
 - **fix: prevent sync corruption when password changed on another device** — engine now tracks `lastKnownRemoteSalt` per journal to distinguish "I changed the password locally" (push) from "another device changed it" (abort with a clear error). Previously the engine would blindly overwrite the remote with stale data, obliterating the new-device's password change.

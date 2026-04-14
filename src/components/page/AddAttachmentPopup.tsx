@@ -1,4 +1,4 @@
-import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Modal, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useTheme } from '@/hooks/useTheme';
 import { useI18n } from '@/hooks/useI18n';
@@ -9,6 +9,8 @@ interface AddAttachmentPopupProps {
   onClose: () => void;
   onAddImage: () => void;
   onAddEncryptedImage: () => void;
+  onTakePhoto: () => void;
+  onTakeEncryptedPhoto: () => void;
   onAddFile: () => void;
   onAddEncryptedFile: () => void;
   onAddLocation: () => void;
@@ -62,6 +64,8 @@ export function AddAttachmentPopup({
   onClose,
   onAddImage,
   onAddEncryptedImage,
+  onTakePhoto,
+  onTakeEncryptedPhoto,
   onAddFile,
   onAddEncryptedFile,
   onAddLocation,
@@ -105,6 +109,21 @@ export function AddAttachmentPopup({
               onPress={() => handlePress(onAddEncryptedImage)}
               showLock
             />
+            {Platform.OS !== 'web' && (
+              <>
+                <Option
+                  icon="camera"
+                  label={t.page.takePhoto}
+                  onPress={() => handlePress(onTakePhoto)}
+                />
+                <Option
+                  icon="camera"
+                  label={t.page.takeEncryptedPhoto}
+                  onPress={() => handlePress(onTakeEncryptedPhoto)}
+                  showLock
+                />
+              </>
+            )}
             <Option
               icon="paperclip"
               label={t.page.addFile}
