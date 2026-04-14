@@ -498,7 +498,7 @@ export function AccountButton() {
                 ]}
               >
                 {deleting ? (
-                  <ActivityIndicator size="small" color={getContrastText(theme.colors.error)} />
+                  <ActivityIndicator size="small" color={getContrastText(theme.colors.highlight)} />
                 ) : (
                   <Text
                     style={[

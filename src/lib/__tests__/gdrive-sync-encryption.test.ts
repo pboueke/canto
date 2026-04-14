@@ -343,6 +343,69 @@ describe('GDrive sync encryption', () => {
     expect(registry[0].salt).toBe('bmV3c2FsdA==');
   });
 
+  it('interrupted sync after key change recovers on retry (registry updated last)', async () => {
+    // Verify partial-sync recovery: if sync is interrupted between page
+    // re-uploads and the registry update, the next sync should detect the
+    // key change again and complete the re-upload.
+    const p1 = makePage('p1', 1000, false, [], 'Page 1');
+    const p2 = makePage('p2', 2000, false, [], 'Page 2');
+    const journal = makeJournal([p1, p2], true, 'b2xkc2FsdA==');
+    const local = createMockLocalStore(journal);
+
+    // Initial sync with old key
+    const OLD_KEY = new Uint8Array(32).fill(10);
+    const engine1 = new SyncEngine(local, store);
+    await engine1.sync('j1', OLD_KEY);
+
+    // Password change
+    const NEW_KEY = new Uint8Array(32).fill(20);
+    const updatedJournal = makeJournal([p1, p2], true, 'bmV3c2FsdA==');
+    const localAfterChange = createMockLocalStore(updatedJournal);
+
+    // Simulate interrupted sync: spy on uploadPage to throw on the second page
+    let uploadCount = 0;
+    const uploadSpy = jest
+      .spyOn(store, 'uploadPage')
+      .mockImplementation(async (jId, pId, content) => {
+        uploadCount++;
+        if (uploadCount === 2) throw new Error('simulated network failure');
+        // Use the original implementation for successful uploads
+        const originalUpload =
+          jest.requireActual('../sync/gdrive/store').GDriveRemoteStore.prototype.uploadPage;
+        return originalUpload.call(store, jId, pId, content);
+      });
+
+    const engine2 = new SyncEngine(localAfterChange, store);
+    await expect(engine2.sync('j1', NEW_KEY)).rejects.toThrow('simulated network failure');
+
+    // After interruption: registry MUST still have old salt (updated last)
+    let registryFiles = drive.dump().filter((f) => f.name === 'canto-journals.json');
+    let registry = JSON.parse(registryFiles[0].content);
+    expect(registry[0].salt).toBe('b2xkc2FsdA==');
+
+    // Restore upload behavior
+    uploadSpy.mockRestore();
+
+    // Retry sync — should detect key change again and complete
+    const engine3 = new SyncEngine(localAfterChange, store);
+    const result = await engine3.sync('j1', NEW_KEY);
+    expect(result.uploaded).toContain('p1');
+    expect(result.uploaded).toContain('p2');
+
+    // After successful retry: registry has new salt and pages are with new key
+    registryFiles = drive.dump().filter((f) => f.name === 'canto-journals.json');
+    registry = JSON.parse(registryFiles[0].content);
+    expect(registry[0].salt).toBe('bmV3c2FsdA==');
+
+    const newKeyTag = Array.from(NEW_KEY.slice(0, 4), (b: number) =>
+      b.toString(16).padStart(2, '0'),
+    ).join('');
+    const pageFiles = drive.dump().filter((f) => f.name === 'p1.json' || f.name === 'p2.json');
+    for (const f of pageFiles) {
+      expect(f.content).toMatch(new RegExp(`^ENC:${newKeyTag}:`));
+    }
+  });
+
   it('cloud import succeeds after password change and re-sync', async () => {
     const p1 = makePage('p1', 1000, false, [], 'Secret diary');
     const journal = makeJournal([p1], true, 'b2xkc2FsdA==');

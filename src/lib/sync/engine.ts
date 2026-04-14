@@ -123,16 +123,6 @@ export class SyncEngine {
       localJournal.salt != null &&
       remoteJournal.salt !== localJournal.salt;
 
-    // Upload encrypted journal metadata
-    const { pages: _pages, ...metaWithoutPages } = localJournal;
-    const encryptedMeta = await aesGcmEncrypt(JSON.stringify(metaWithoutPages), syncKey);
-    await this.remote.uploadJournalMeta(journalId, encryptedMeta, {
-      title: localJournal.title,
-      encrypted: localJournal.secure,
-      salt: localJournal.salt,
-      kdfIterations: localJournal.kdfIterations,
-    });
-
     // Build local page map
     const localPages = new Map(localJournal.pages.map((p) => [p.id, p]));
 
@@ -216,9 +206,24 @@ export class SyncEngine {
       }
     }
 
-    // Upload sync index with current state of all pages (local + downloaded)
+    // Upload encrypted journal metadata + registry LAST. Doing this after
+    // page re-uploads ensures atomic-ish key rotation: if the sync is
+    // interrupted mid-upload, the remote registry still has the old salt and
+    // the next sync will re-detect the key change and retry. Updating the
+    // registry first would leave the remote in a corrupted state (registry
+    // says "use new key" but pages are still encrypted with the old key).
     const updatedJournal = await this.local.getJournal(journalId, syncKey);
     if (updatedJournal) {
+      const { pages: _pages, ...metaWithoutPages } = updatedJournal;
+      const encryptedMeta = await aesGcmEncrypt(JSON.stringify(metaWithoutPages), syncKey);
+      await this.remote.uploadJournalMeta(journalId, encryptedMeta, {
+        title: updatedJournal.title,
+        encrypted: updatedJournal.secure,
+        salt: updatedJournal.salt,
+        kdfIterations: updatedJournal.kdfIterations,
+      });
+
+      // Upload sync index with current state of all pages (local + downloaded)
       await this.remote.uploadSyncIndex(journalId, buildSyncIndex(updatedJournal.pages));
     }
 

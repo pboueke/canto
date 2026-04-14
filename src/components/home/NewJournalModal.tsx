@@ -289,9 +289,21 @@ export function NewJournalModal({
       }
 
       const importKey = remote.encrypted && password ? syncKey : undefined;
-      await localStore.saveJournal(journal, importKey);
-      for (const page of journal.pages) {
-        await localStore.savePage(journal.id, page, importKey, true);
+      // Save journal + pages with rollback on failure: if any save throws after
+      // some data has been written, remove the partial journal so the user
+      // doesn't end up with corrupt/half-imported data.
+      try {
+        await localStore.saveJournal(journal, importKey);
+        for (const page of journal.pages) {
+          await localStore.savePage(journal.id, page, importKey, true);
+        }
+      } catch (saveErr) {
+        try {
+          await localStore.deleteJournal(journal.id);
+        } catch (cleanupErr) {
+          console.warn('[Canto] Cleanup of partial cloud import failed:', cleanupErr);
+        }
+        throw saveErr;
       }
 
       if (importWarnings.length > 0) {

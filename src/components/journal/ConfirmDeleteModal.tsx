@@ -115,7 +115,12 @@ export function ConfirmDeleteModal({
               <Text
                 style={[
                   styles.btnText,
-                  { color: getContrastText(theme.colors.error), fontFamily: theme.fonts.bold },
+                  {
+                    color: getContrastText(
+                      canConfirm ? theme.colors.error : theme.colors.buttonDisabled,
+                    ),
+                    fontFamily: theme.fonts.bold,
+                  },
                 ]}
               >
                 {t.common.delete}
