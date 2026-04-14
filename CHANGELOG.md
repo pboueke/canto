@@ -1,5 +1,14 @@
 # Changelog
 
+## v0.18.8 - Sync after password change, UI polish
+
+- **fix: cloud import failed after password change** — sync engine now compares local salt with remote registry salt and force re-uploads all pages with the new key when they differ. Previously the timestamp-equality check skipped re-upload, leaving GDrive pages encrypted with the old key
+- fix: cloud import of password-protected journals now passes the derived key to `saveJournal`/`savePage`, preserving password encryption locally (was saving as device-encrypted only)
+- fix: NewJournalModal restyled to match dev menu — transparent fade modal with semi-transparent overlay, floating centered container with `webModalContent` (1000px max on web), themed background and border (was full-screen slide-up with white background, no width constraint on web)
+- fix: danger zone confirmation buttons (`ConfirmDeleteModal`, `AccountButton`, `FilterBar`) now use a contrast-aware text color via new `getContrastText` utility — all 10 themes meet WCAG AA on error-colored buttons (Nord, Everforest, Rosé Pine, One Cyan previously failed)
+- fix: splash icon and Android adaptive icon (foreground + monochrome) regenerated with proper padding — logo no longer cropped by Android's safe-zone mask
+- test: 4 new sync encryption tests (re-upload on key change, cloud import after password change, password removal re-upload, full `executeCloudImport`-style flow), 1 new web cloud import test, 3 new contrast utility tests
+
 ## v0.18.7 - Web deployment to Cloudflare Pages
 
 - feat: web deployment infrastructure under `web/` — `build.sh`, `deploy.sh`, `_headers`, `_redirects`, and step-by-step Cloudflare Pages guide in `web/README.md`

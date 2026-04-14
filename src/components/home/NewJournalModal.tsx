@@ -8,11 +8,9 @@ import {
   Switch,
   Text,
   TextInput,
-  Platform,
   View,
 } from 'react-native';
 import { Feather } from '@expo/vector-icons';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as DocumentPicker from 'expo-document-picker';
 import { useTheme } from '@/hooks/useTheme';
 import { useI18n } from '@/hooks/useI18n';
@@ -25,6 +23,7 @@ import { DEFAULT_KDF_ITERATIONS, LEGACY_KDF_ITERATIONS } from '@/lib/encryption/
 import { deriveKey } from '@/lib/encryption/password';
 import { aesGcmDecrypt, base64ToUint8 } from '@/lib/encryption/utils';
 import { type ThemeName, themes } from '@/styles/themes';
+import { webModalContent } from '@/styles/web';
 import { inspectBackup, importJournal, hasNameConflict, resolveNameConflict } from '@/lib/backup';
 import type { AttachmentError } from '@/lib/backup/import';
 import { useGoogleAuth } from '@/contexts/GoogleAuthContext';
@@ -69,7 +68,6 @@ export function NewJournalModal({
 }: NewJournalModalProps) {
   const { theme } = useTheme();
   const { t } = useI18n();
-  const insets = useSafeAreaInsets();
   const { isSignedIn, accessToken } = useGoogleAuth();
   const { manager } = useSyncManager();
 
@@ -290,9 +288,10 @@ export function NewJournalModal({
         return;
       }
 
-      await localStore.saveJournal(journal);
+      const importKey = remote.encrypted && password ? syncKey : undefined;
+      await localStore.saveJournal(journal, importKey);
       for (const page of journal.pages) {
-        await localStore.savePage(journal.id, page, undefined, true);
+        await localStore.savePage(journal.id, page, importKey, true);
       }
 
       if (importWarnings.length > 0) {
@@ -482,382 +481,391 @@ export function NewJournalModal({
   }
 
   return (
-    <Modal visible={visible} animationType="slide" onRequestClose={handleClose}>
-      <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
-        {/* Header */}
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={handleClose}>
+      <View style={styles.overlay}>
         <View
           style={[
-            styles.header,
-            { borderBottomColor: theme.colors.border, paddingTop: insets.top + 12 },
+            styles.container,
+            webModalContent,
+            {
+              backgroundColor: theme.colors.foreground,
+              borderColor: theme.colors.border,
+              borderWidth: theme.borderWidth,
+            },
           ]}
         >
-          <Pressable onPress={handleClose} style={styles.backBtn}>
-            <Feather name="x" size={22} color={theme.colors.text} />
-          </Pressable>
-          <Text
-            style={[styles.headerTitle, { color: theme.colors.text, fontFamily: theme.fonts.bold }]}
-          >
-            {t.home.newJournal}
-          </Text>
-          <View style={{ width: 30 }} />
-        </View>
-
-        {busy || importing ? (
-          <View style={styles.busyContainer}>
-            <ActivityIndicator size="large" color={theme.colors.primary} />
+          {/* Header */}
+          <View style={[styles.header, { borderBottomColor: theme.colors.border }]}>
+            <Pressable onPress={handleClose} style={styles.backBtn}>
+              <Feather name="x" size={22} color={theme.colors.text} />
+            </Pressable>
             <Text
               style={[
-                styles.busyText,
-                { color: theme.colors.textSecondary, fontFamily: theme.fonts.regular },
+                styles.headerTitle,
+                { color: theme.colors.text, fontFamily: theme.fonts.bold },
               ]}
             >
-              {importing ? t.backup.importing : t.common.loading}
+              {t.home.newJournal}
             </Text>
-            {importProgress && (
-              <>
-                <View style={[styles.progressTrack, { backgroundColor: theme.colors.border }]}>
-                  <View
-                    style={[
-                      styles.progressFill,
-                      {
-                        backgroundColor: theme.colors.primary,
-                        width: `${Math.round((importProgress.current / importProgress.total) * 100)}%`,
-                      },
-                    ]}
-                  />
-                </View>
-                <Text
-                  style={[
-                    styles.progressText,
-                    { color: theme.colors.textSecondary, fontFamily: theme.fonts.regular },
-                  ]}
-                >
-                  {importProgress.current} / {importProgress.total}
-                </Text>
-              </>
-            )}
+            <View style={{ width: 30 }} />
           </View>
-        ) : (
-          <View style={{ flex: 1 }}>
-            <ScrollView
-              style={styles.body}
-              contentContainerStyle={styles.bodyContent}
-              showsVerticalScrollIndicator={false}
-            >
-              <TextInput
-                style={[
-                  styles.input,
-                  {
-                    color: theme.colors.text,
-                    borderColor: theme.colors.border,
-                    borderWidth: theme.borderWidth || 1,
-                    backgroundColor: theme.colors.surface,
-                    fontFamily: theme.fonts.regular,
-                  },
-                ]}
-                placeholder={t.home.journalName}
-                placeholderTextColor={theme.colors.textSecondary}
-                value={title}
-                onChangeText={setTitle}
-                autoFocus
-              />
 
-              {/* Icon picker */}
+          {busy || importing ? (
+            <View style={styles.busyContainer}>
+              <ActivityIndicator size="large" color={theme.colors.primary} />
               <Text
                 style={[
-                  styles.sectionLabel,
-                  { color: theme.colors.textSecondary, fontFamily: theme.fonts.bold },
+                  styles.busyText,
+                  { color: theme.colors.textSecondary, fontFamily: theme.fonts.regular },
                 ]}
               >
-                {t.home.selectIcon}
+                {importing ? t.backup.importing : t.common.loading}
               </Text>
-              <View
-                style={[
-                  styles.card,
-                  { backgroundColor: theme.colors.surface, borderColor: theme.colors.border },
-                ]}
+              {importProgress && (
+                <>
+                  <View style={[styles.progressTrack, { backgroundColor: theme.colors.border }]}>
+                    <View
+                      style={[
+                        styles.progressFill,
+                        {
+                          backgroundColor: theme.colors.primary,
+                          width: `${Math.round((importProgress.current / importProgress.total) * 100)}%`,
+                        },
+                      ]}
+                    />
+                  </View>
+                  <Text
+                    style={[
+                      styles.progressText,
+                      { color: theme.colors.textSecondary, fontFamily: theme.fonts.regular },
+                    ]}
+                  >
+                    {importProgress.current} / {importProgress.total}
+                  </Text>
+                </>
+              )}
+            </View>
+          ) : (
+            <View style={{ flex: 1 }}>
+              <ScrollView
+                style={styles.body}
+                contentContainerStyle={styles.bodyContent}
+                showsVerticalScrollIndicator={false}
               >
-                <IconPicker selected={icon} onSelect={setIcon} />
-              </View>
-
-              {/* Theme */}
-              <Text
-                style={[
-                  styles.sectionLabel,
-                  { color: theme.colors.textSecondary, fontFamily: theme.fonts.bold },
-                ]}
-              >
-                {t.journalSettings.themeOverride}
-              </Text>
-              <Pressable
-                style={[
-                  styles.themeRow,
-                  { backgroundColor: theme.colors.surface, borderColor: theme.colors.border },
-                ]}
-                onPress={() => setShowThemePicker(true)}
-              >
-                <Text
+                <TextInput
                   style={[
-                    styles.themeLabel,
-                    { color: theme.colors.text, fontFamily: theme.fonts.regular },
+                    styles.input,
+                    {
+                      color: theme.colors.text,
+                      borderColor: theme.colors.border,
+                      borderWidth: theme.borderWidth || 1,
+                      backgroundColor: theme.colors.surface,
+                      fontFamily: theme.fonts.regular,
+                    },
                   ]}
-                >
-                  {themeOverride && themeOverride in themes
-                    ? (THEME_DISPLAY_NAMES[themeOverride] ?? themeOverride)
-                    : t.journalSettings.useGlobalTheme}
-                </Text>
-                <Feather name="chevron-right" size={18} color={theme.colors.textSecondary} />
-              </Pressable>
+                  placeholder={t.home.journalName}
+                  placeholderTextColor={theme.colors.textSecondary}
+                  value={title}
+                  onChangeText={setTitle}
+                  autoFocus
+                />
 
-              {/* Password */}
-              <View style={styles.passwordLabelRow}>
+                {/* Icon picker */}
                 <Text
                   style={[
                     styles.sectionLabel,
-                    { color: theme.colors.textSecondary, fontFamily: theme.fonts.bold, margin: 0 },
+                    { color: theme.colors.textSecondary, fontFamily: theme.fonts.bold },
                   ]}
                 >
-                  {t.home.passwordOptional}
+                  {t.home.selectIcon}
+                </Text>
+                <View
+                  style={[
+                    styles.card,
+                    { backgroundColor: theme.colors.surface, borderColor: theme.colors.border },
+                  ]}
+                >
+                  <IconPicker selected={icon} onSelect={setIcon} />
+                </View>
+
+                {/* Theme */}
+                <Text
+                  style={[
+                    styles.sectionLabel,
+                    { color: theme.colors.textSecondary, fontFamily: theme.fonts.bold },
+                  ]}
+                >
+                  {t.journalSettings.themeOverride}
                 </Text>
                 <Pressable
-                  style={[styles.helpButton, { backgroundColor: theme.colors.primary }]}
-                  onPress={() => setShowPasswordExplain(true)}
-                  hitSlop={8}
+                  style={[
+                    styles.themeRow,
+                    { backgroundColor: theme.colors.surface, borderColor: theme.colors.border },
+                  ]}
+                  onPress={() => setShowThemePicker(true)}
                 >
-                  <Feather name="help-circle" size={14} color={theme.colors.foreground} />
-                </Pressable>
-              </View>
-              <TextInput
-                style={[
-                  styles.input,
-                  {
-                    color: theme.colors.text,
-                    borderColor: theme.colors.border,
-                    borderWidth: theme.borderWidth || 1,
-                    backgroundColor: theme.colors.surface,
-                    fontFamily: theme.fonts.regular,
-                  },
-                ]}
-                placeholder={t.home.password}
-                placeholderTextColor={theme.colors.textSecondary}
-                value={password}
-                onChangeText={setPassword}
-                secureTextEntry
-              />
-
-              <PasswordStrengthMeter password={password} />
-
-              {password.length > 0 && (
-                <>
-                  <TextInput
+                  <Text
                     style={[
-                      styles.input,
+                      styles.themeLabel,
+                      { color: theme.colors.text, fontFamily: theme.fonts.regular },
+                    ]}
+                  >
+                    {themeOverride && themeOverride in themes
+                      ? (THEME_DISPLAY_NAMES[themeOverride] ?? themeOverride)
+                      : t.journalSettings.useGlobalTheme}
+                  </Text>
+                  <Feather name="chevron-right" size={18} color={theme.colors.textSecondary} />
+                </Pressable>
+
+                {/* Password */}
+                <View style={styles.passwordLabelRow}>
+                  <Text
+                    style={[
+                      styles.sectionLabel,
                       {
-                        color: theme.colors.text,
-                        borderColor: !passwordsMatch ? theme.colors.error : theme.colors.border,
-                        borderWidth: theme.borderWidth || 1,
-                        backgroundColor: theme.colors.surface,
-                        fontFamily: theme.fonts.regular,
+                        color: theme.colors.textSecondary,
+                        fontFamily: theme.fonts.bold,
+                        margin: 0,
                       },
                     ]}
-                    placeholder={t.home.confirmPassword}
-                    placeholderTextColor={theme.colors.textSecondary}
-                    value={confirmPassword}
-                    onChangeText={setConfirmPassword}
-                    secureTextEntry
-                  />
-                  {!passwordsMatch && confirmPassword.length > 0 && (
-                    <Text style={[styles.errorText, { color: theme.colors.error }]}>
-                      {t.home.passwordMismatch}
-                    </Text>
-                  )}
-                </>
-              )}
-
-              {password.length > 0 && (
-                <KdfIterationPicker value={kdfIterations} onChange={setKdfIterations} />
-              )}
-
-              {password.length > 0 && (
-                <View style={styles.warningRow}>
-                  <Feather name="alert-triangle" size={14} color={theme.colors.error} />
-                  <Text
-                    style={[
-                      styles.warningText,
-                      { color: theme.colors.error, fontFamily: theme.fonts.regular },
-                    ]}
                   >
-                    {t.home.passwordWarning}
+                    {t.home.passwordOptional}
                   </Text>
-                </View>
-              )}
-
-              {biometricSupported && (
-                <View style={styles.biometricRow}>
-                  <Feather name="smartphone" size={16} color={theme.colors.text} />
-                  <Text
-                    style={[
-                      styles.biometricLabel,
-                      { color: theme.colors.text, fontFamily: theme.fonts.regular },
-                    ]}
+                  <Pressable
+                    style={[styles.helpButton, { backgroundColor: theme.colors.primary }]}
+                    onPress={() => setShowPasswordExplain(true)}
+                    hitSlop={8}
                   >
-                    {t.home.biometricLock}
-                  </Text>
-                  <Switch
-                    value={biometric}
-                    onValueChange={setBiometric}
-                    trackColor={{ false: theme.colors.border, true: theme.colors.primary }}
-                  />
+                    <Feather name="help-circle" size={14} color={theme.colors.foreground} />
+                  </Pressable>
                 </View>
-              )}
-
-              {error ? (
-                <View style={[styles.errorBox, { borderColor: theme.colors.error }]}>
-                  <Feather name="alert-circle" size={14} color={theme.colors.error} />
-                  <Text
-                    style={[
-                      styles.errorBoxText,
-                      { color: theme.colors.text, fontFamily: theme.fonts.regular },
-                    ]}
-                  >
-                    {error}
-                  </Text>
-                </View>
-              ) : null}
-
-              {/* Import from backup */}
-              <View style={styles.dividerRow}>
-                <View style={[styles.dividerLine, { backgroundColor: theme.colors.border }]} />
-                <Text
+                <TextInput
                   style={[
-                    styles.dividerText,
-                    { color: theme.colors.textSecondary, fontFamily: theme.fonts.regular },
-                  ]}
-                >
-                  {t.backup.or}
-                </Text>
-                <View style={[styles.dividerLine, { backgroundColor: theme.colors.border }]} />
-              </View>
-
-              <Pressable
-                onPress={handleImport}
-                style={[
-                  styles.importButton,
-                  { borderColor: theme.colors.border, backgroundColor: theme.colors.surface },
-                ]}
-              >
-                <Feather name="upload" size={18} color={theme.colors.primary} />
-                <Text
-                  style={[
-                    styles.importText,
-                    { color: theme.colors.primary, fontFamily: theme.fonts.regular },
-                  ]}
-                >
-                  {t.backup.importFromBackup}
-                </Text>
-              </Pressable>
-
-              {isSignedIn && (
-                <Pressable
-                  onPress={handleCloudImport}
-                  disabled={cloudLoading}
-                  style={[
-                    styles.importButton,
+                    styles.input,
                     {
+                      color: theme.colors.text,
                       borderColor: theme.colors.border,
+                      borderWidth: theme.borderWidth || 1,
                       backgroundColor: theme.colors.surface,
-                      opacity: cloudLoading ? 0.5 : 1,
+                      fontFamily: theme.fonts.regular,
                     },
                   ]}
+                  placeholder={t.home.password}
+                  placeholderTextColor={theme.colors.textSecondary}
+                  value={password}
+                  onChangeText={setPassword}
+                  secureTextEntry
+                />
+
+                <PasswordStrengthMeter password={password} />
+
+                {password.length > 0 && (
+                  <>
+                    <TextInput
+                      style={[
+                        styles.input,
+                        {
+                          color: theme.colors.text,
+                          borderColor: !passwordsMatch ? theme.colors.error : theme.colors.border,
+                          borderWidth: theme.borderWidth || 1,
+                          backgroundColor: theme.colors.surface,
+                          fontFamily: theme.fonts.regular,
+                        },
+                      ]}
+                      placeholder={t.home.confirmPassword}
+                      placeholderTextColor={theme.colors.textSecondary}
+                      value={confirmPassword}
+                      onChangeText={setConfirmPassword}
+                      secureTextEntry
+                    />
+                    {!passwordsMatch && confirmPassword.length > 0 && (
+                      <Text style={[styles.errorText, { color: theme.colors.error }]}>
+                        {t.home.passwordMismatch}
+                      </Text>
+                    )}
+                  </>
+                )}
+
+                {password.length > 0 && (
+                  <KdfIterationPicker value={kdfIterations} onChange={setKdfIterations} />
+                )}
+
+                {password.length > 0 && (
+                  <View style={styles.warningRow}>
+                    <Feather name="alert-triangle" size={14} color={theme.colors.error} />
+                    <Text
+                      style={[
+                        styles.warningText,
+                        { color: theme.colors.error, fontFamily: theme.fonts.regular },
+                      ]}
+                    >
+                      {t.home.passwordWarning}
+                    </Text>
+                  </View>
+                )}
+
+                {biometricSupported && (
+                  <View style={styles.biometricRow}>
+                    <Feather name="smartphone" size={16} color={theme.colors.text} />
+                    <Text
+                      style={[
+                        styles.biometricLabel,
+                        { color: theme.colors.text, fontFamily: theme.fonts.regular },
+                      ]}
+                    >
+                      {t.home.biometricLock}
+                    </Text>
+                    <Switch
+                      value={biometric}
+                      onValueChange={setBiometric}
+                      trackColor={{ false: theme.colors.border, true: theme.colors.primary }}
+                    />
+                  </View>
+                )}
+
+                {error ? (
+                  <View style={[styles.errorBox, { borderColor: theme.colors.error }]}>
+                    <Feather name="alert-circle" size={14} color={theme.colors.error} />
+                    <Text
+                      style={[
+                        styles.errorBoxText,
+                        { color: theme.colors.text, fontFamily: theme.fonts.regular },
+                      ]}
+                    >
+                      {error}
+                    </Text>
+                  </View>
+                ) : null}
+
+                {/* Import from backup */}
+                <View style={styles.dividerRow}>
+                  <View style={[styles.dividerLine, { backgroundColor: theme.colors.border }]} />
+                  <Text
+                    style={[
+                      styles.dividerText,
+                      { color: theme.colors.textSecondary, fontFamily: theme.fonts.regular },
+                    ]}
+                  >
+                    {t.backup.or}
+                  </Text>
+                  <View style={[styles.dividerLine, { backgroundColor: theme.colors.border }]} />
+                </View>
+
+                <Pressable
+                  onPress={handleImport}
+                  style={[
+                    styles.importButton,
+                    { borderColor: theme.colors.border, backgroundColor: theme.colors.surface },
+                  ]}
                 >
-                  <Feather name="cloud" size={18} color={theme.colors.primary} />
+                  <Feather name="upload" size={18} color={theme.colors.primary} />
                   <Text
                     style={[
                       styles.importText,
                       { color: theme.colors.primary, fontFamily: theme.fonts.regular },
                     ]}
                   >
-                    {t.sync.importFromCloud}
+                    {t.backup.importFromBackup}
                   </Text>
                 </Pressable>
-              )}
 
-              {cloudError ? (
-                <View style={[styles.errorBox, { borderColor: theme.colors.error }]}>
-                  <Feather name="alert-circle" size={14} color={theme.colors.error} />
-                  <Text
+                {isSignedIn && (
+                  <Pressable
+                    onPress={handleCloudImport}
+                    disabled={cloudLoading}
                     style={[
-                      styles.errorBoxText,
-                      { color: theme.colors.text, fontFamily: theme.fonts.regular },
+                      styles.importButton,
+                      {
+                        borderColor: theme.colors.border,
+                        backgroundColor: theme.colors.surface,
+                        opacity: cloudLoading ? 0.5 : 1,
+                      },
                     ]}
                   >
-                    {cloudError}
-                  </Text>
-                </View>
-              ) : null}
+                    <Feather name="cloud" size={18} color={theme.colors.primary} />
+                    <Text
+                      style={[
+                        styles.importText,
+                        { color: theme.colors.primary, fontFamily: theme.fonts.regular },
+                      ]}
+                    >
+                      {t.sync.importFromCloud}
+                    </Text>
+                  </Pressable>
+                )}
 
-              {importError ? (
-                <View style={[styles.errorBox, { borderColor: theme.colors.error }]}>
-                  <Feather name="alert-circle" size={14} color={theme.colors.error} />
-                  <Text
-                    style={[
-                      styles.errorBoxText,
-                      { color: theme.colors.text, fontFamily: theme.fonts.regular },
-                    ]}
-                  >
-                    {importError}
-                  </Text>
-                </View>
-              ) : null}
+                {cloudError ? (
+                  <View style={[styles.errorBox, { borderColor: theme.colors.error }]}>
+                    <Feather name="alert-circle" size={14} color={theme.colors.error} />
+                    <Text
+                      style={[
+                        styles.errorBoxText,
+                        { color: theme.colors.text, fontFamily: theme.fonts.regular },
+                      ]}
+                    >
+                      {cloudError}
+                    </Text>
+                  </View>
+                ) : null}
 
-              <View style={{ height: 20 }} />
-            </ScrollView>
+                {importError ? (
+                  <View style={[styles.errorBox, { borderColor: theme.colors.error }]}>
+                    <Feather name="alert-circle" size={14} color={theme.colors.error} />
+                    <Text
+                      style={[
+                        styles.errorBoxText,
+                        { color: theme.colors.text, fontFamily: theme.fonts.regular },
+                      ]}
+                    >
+                      {importError}
+                    </Text>
+                  </View>
+                ) : null}
 
-            <View
-              style={[
-                styles.footer,
-                { borderTopColor: theme.colors.border, paddingBottom: insets.bottom + 12 },
-              ]}
-            >
-              <Pressable
-                onPress={handleClose}
-                style={[styles.button, { backgroundColor: theme.colors.highlight }]}
-              >
-                <Text
-                  style={[
-                    styles.buttonText,
-                    { color: theme.colors.text, fontFamily: theme.fonts.regular },
-                  ]}
+                <View style={{ height: 20 }} />
+              </ScrollView>
+
+              <View style={[styles.footer, { borderTopColor: theme.colors.border }]}>
+                <Pressable
+                  onPress={handleClose}
+                  style={[styles.button, { backgroundColor: theme.colors.highlight }]}
                 >
-                  {t.common.cancel}
-                </Text>
-              </Pressable>
-              <Pressable
-                onPress={handleCreate}
-                disabled={!canCreate}
-                style={[
-                  styles.button,
-                  {
-                    backgroundColor: canCreate ? theme.colors.primary : theme.colors.highlight,
-                    opacity: canCreate ? 1 : 0.5,
-                  },
-                ]}
-              >
-                <Text
+                  <Text
+                    style={[
+                      styles.buttonText,
+                      { color: theme.colors.text, fontFamily: theme.fonts.regular },
+                    ]}
+                  >
+                    {t.common.cancel}
+                  </Text>
+                </Pressable>
+                <Pressable
+                  onPress={handleCreate}
+                  disabled={!canCreate}
                   style={[
-                    styles.buttonText,
+                    styles.button,
                     {
-                      color: canCreate ? theme.colors.foreground : theme.colors.textSecondary,
-                      fontFamily: theme.fonts.bold,
+                      backgroundColor: canCreate ? theme.colors.primary : theme.colors.highlight,
+                      opacity: canCreate ? 1 : 0.5,
                     },
                   ]}
                 >
-                  {t.common.create}
-                </Text>
-              </Pressable>
+                  <Text
+                    style={[
+                      styles.buttonText,
+                      {
+                        color: canCreate ? theme.colors.foreground : theme.colors.textSecondary,
+                        fontFamily: theme.fonts.bold,
+                      },
+                    ]}
+                  >
+                    {t.common.create}
+                  </Text>
+                </Pressable>
+              </View>
             </View>
-          </View>
-        )}
+          )}
+        </View>
       </View>
 
       <Modal
@@ -1310,8 +1318,18 @@ export function NewJournalModal({
 }
 
 const styles = StyleSheet.create({
-  container: {
+  overlay: {
     flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 30,
+  },
+  container: {
+    borderRadius: 5,
+    maxHeight: '90%',
+    width: '100%',
+    overflow: 'hidden',
   },
   header: {
     flexDirection: 'row',

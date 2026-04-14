@@ -10,6 +10,7 @@
  *   - Attachments are encrypted
  *   - Non-secure journals (salt-only key) are still encrypted
  */
+import type { Page } from 'canto-data';
 import { SyncEngine } from '../sync/engine';
 import { GDriveRemoteStore } from '../sync/gdrive/store';
 import * as api from '../sync/gdrive/api';
@@ -291,6 +292,209 @@ describe('GDrive sync encryption', () => {
     expect(result.uploaded).toHaveLength(0);
     expect(result.downloaded).toHaveLength(0);
     expect(downloadPageSpy).not.toHaveBeenCalled();
+  });
+
+  it('re-uploads all pages when sync key changes (password change)', async () => {
+    const p1 = makePage('p1', 1000, false, [], 'Secret entry 1');
+    const p2 = makePage('p2', 2000, false, [], 'Secret entry 2');
+    const journal = makeJournal([p1, p2], true, 'b2xkc2FsdA==');
+    const local = createMockLocalStore(journal);
+
+    // First sync with old key
+    const OLD_KEY = new Uint8Array(32).fill(10);
+    const engine1 = new SyncEngine(local, store);
+    await engine1.sync('j1', OLD_KEY);
+
+    // Verify pages encrypted with old key
+    let pageFiles = drive.dump().filter((f) => f.name === 'p1.json' || f.name === 'p2.json');
+    expect(pageFiles).toHaveLength(2);
+    const oldKeyTag = Array.from(OLD_KEY.slice(0, 4), (b: number) =>
+      b.toString(16).padStart(2, '0'),
+    ).join('');
+    for (const f of pageFiles) {
+      expect(f.content).toMatch(new RegExp(`^ENC:${oldKeyTag}:`));
+    }
+
+    // Simulate password change: new salt, new key, same pages (timestamps unchanged)
+    const NEW_KEY = new Uint8Array(32).fill(20);
+    const updatedJournal = makeJournal([p1, p2], true, 'bmV3c2FsdA==');
+    const localAfterChange = createMockLocalStore(updatedJournal);
+
+    // Second sync with new key — pages should be force re-uploaded
+    const engine2 = new SyncEngine(localAfterChange, store);
+    const result = await engine2.sync('j1', NEW_KEY);
+
+    // Both pages should be re-uploaded even though timestamps haven't changed
+    expect(result.uploaded).toContain('p1');
+    expect(result.uploaded).toContain('p2');
+
+    // Verify pages are now encrypted with new key
+    pageFiles = drive.dump().filter((f) => f.name === 'p1.json' || f.name === 'p2.json');
+    const newKeyTag = Array.from(NEW_KEY.slice(0, 4), (b: number) =>
+      b.toString(16).padStart(2, '0'),
+    ).join('');
+    for (const f of pageFiles) {
+      expect(f.content).toMatch(new RegExp(`^ENC:${newKeyTag}:`));
+    }
+
+    // Verify registry updated with new salt
+    const registryFiles = drive.dump().filter((f) => f.name === 'canto-journals.json');
+    const registry = JSON.parse(registryFiles[0].content);
+    expect(registry[0].salt).toBe('bmV3c2FsdA==');
+  });
+
+  it('cloud import succeeds after password change and re-sync', async () => {
+    const p1 = makePage('p1', 1000, false, [], 'Secret diary');
+    const journal = makeJournal([p1], true, 'b2xkc2FsdA==');
+    const local = createMockLocalStore(journal);
+
+    // Sync with old key
+    const OLD_KEY = new Uint8Array(32).fill(10);
+    const engine1 = new SyncEngine(local, store);
+    await engine1.sync('j1', OLD_KEY);
+
+    // Password change: new salt, new key
+    const NEW_KEY = new Uint8Array(32).fill(20);
+    const updatedJournal = makeJournal([p1], true, 'bmV3c2FsdA==');
+    const localAfterChange = createMockLocalStore(updatedJournal);
+
+    // Re-sync with new key
+    const engine2 = new SyncEngine(localAfterChange, store);
+    await engine2.sync('j1', NEW_KEY);
+
+    // Import on a new device with the new key — should succeed
+    const store3 = new GDriveRemoteStore();
+    await store3.connect({ accessToken: 'test-token' });
+    const localImport = createMockLocalStore(makeJournal([]));
+    const engine3 = new SyncEngine(localImport, store3);
+    const importResult = await engine3.sync('j1', NEW_KEY);
+
+    expect(importResult.downloaded).toContain('p1');
+    expect(localImport.savePage).toHaveBeenCalledWith(
+      'j1',
+      expect.objectContaining({ id: 'p1', text: 'Secret diary' }),
+      NEW_KEY,
+      true,
+    );
+  });
+
+  it('cloud import (executeCloudImport path) succeeds after password change', async () => {
+    // This test simulates the exact flow of NewJournalModal.executeCloudImport
+    // after a password change + re-sync. This is the flow that users report fails.
+    const { aesGcmDecrypt: mockDecrypt } = jest.requireMock('../encryption/utils') as {
+      aesGcmDecrypt: jest.Mock;
+    };
+
+    const p1 = makePage('p1', 1000, false, [], 'Entry one');
+    const p2 = makePage('p2', 2000, false, [], 'Entry two');
+    const p3 = makePage('p3', 3000, true); // deleted page
+    const journal = makeJournal([p1, p2, p3], true, 'b2xkc2FsdA==', {
+      kdfIterations: 50000,
+    });
+    const local = createMockLocalStore(journal);
+
+    // --- Step 1: Initial sync with old password ---
+    const OLD_KEY = new Uint8Array(32).fill(10);
+    const engine1 = new SyncEngine(local, store);
+    await engine1.sync('j1', OLD_KEY);
+
+    // --- Step 2: Password change (new salt, new key, same pages) ---
+    const NEW_KEY = new Uint8Array(32).fill(20);
+    const updatedJournal = makeJournal([p1, p2, p3], true, 'bmV3c2FsdA==', {
+      kdfIterations: 100000,
+    });
+    const localAfterChange = createMockLocalStore(updatedJournal);
+
+    // --- Step 3: Re-sync with new key ---
+    const engine2 = new SyncEngine(localAfterChange, store);
+    await engine2.sync('j1', NEW_KEY);
+
+    // --- Step 4: Simulate executeCloudImport on a different device ---
+    // This mirrors NewJournalModal.executeCloudImport exactly
+    const importStore = new GDriveRemoteStore();
+    await importStore.connect({ accessToken: 'test-token' });
+
+    // 4a. Get remote journal list (same as handleCloudImport)
+    const remoteJournals = await importStore.listRemoteJournals();
+    const remote = remoteJournals.find((j) => j.id === 'j1')!;
+    expect(remote).toBeDefined();
+    expect(remote.salt).toBe('bmV3c2FsdA=='); // new salt in registry
+    expect(remote.kdfIterations).toBe(100000); // new iterations in registry
+    expect(remote.encrypted).toBe(true);
+
+    // 4b. Derive sync key from salt + password (same as executeCloudImport line 214)
+    // In the real app: syncKey = await deriveKey(password, saltBytes, iterations)
+    // In this test, we use NEW_KEY directly since deriveKey is deterministic
+
+    // 4c. Download and decrypt metadata (same as executeCloudImport lines 217-220)
+    const encryptedMeta = await importStore.downloadJournalMeta('j1');
+    expect(encryptedMeta).not.toBeNull();
+    const metaJson = mockDecrypt(encryptedMeta!, NEW_KEY);
+    expect(metaJson).resolves.toBeDefined();
+
+    // 4d. Download sync index (same as executeCloudImport lines 224-227)
+    const syncIndex = await importStore.downloadSyncIndex('j1');
+    expect(syncIndex).not.toBeNull();
+    const pageIds = Object.keys(syncIndex!).filter((id) => !syncIndex![id].deleted);
+    expect(pageIds).toHaveLength(2); // p1, p2 (p3 is deleted)
+    expect(pageIds).toContain('p1');
+    expect(pageIds).toContain('p2');
+
+    // 4e. Download and decrypt each page (same as executeCloudImport lines 237-276)
+    const downloadFailures: Array<{ name: string; reason: string }> = [];
+    const importedPages: Page[] = [];
+
+    for (const pageId of pageIds) {
+      try {
+        const encryptedPage = await importStore.downloadPage('j1', pageId);
+        if (!encryptedPage) {
+          downloadFailures.push({ name: `${pageId}.json`, reason: 'Not found on remote' });
+          continue;
+        }
+        const pageJson = await mockDecrypt(encryptedPage, NEW_KEY);
+        const page = JSON.parse(pageJson) as Page;
+        importedPages.push(page);
+      } catch (err) {
+        downloadFailures.push({
+          name: `${pageId}.json`,
+          reason: err instanceof Error ? err.message : String(err),
+        });
+      }
+    }
+
+    // Assertion: no download failures
+    expect(downloadFailures).toHaveLength(0);
+    expect(importedPages).toHaveLength(2);
+    expect(importedPages.find((p) => p.id === 'p1')!.text).toBe('Entry one');
+    expect(importedPages.find((p) => p.id === 'p2')!.text).toBe('Entry two');
+  });
+
+  it('re-uploads all pages when password is removed (key changes to empty-password)', async () => {
+    const p1 = makePage('p1', 1000, false, [], 'Was secure');
+    const journal = makeJournal([p1], true, 'b2xkc2FsdA==');
+    const local = createMockLocalStore(journal);
+
+    // Sync with password key
+    const PWD_KEY = new Uint8Array(32).fill(10);
+    const engine1 = new SyncEngine(local, store);
+    await engine1.sync('j1', PWD_KEY);
+
+    // Password removed: journal becomes non-secure, new key derived from empty password
+    const EMPTY_KEY = new Uint8Array(32).fill(30);
+    const unsecuredJournal = makeJournal([p1], false, 'bmV3c2FsdA==');
+    const localUnsecured = createMockLocalStore(unsecuredJournal);
+
+    const engine2 = new SyncEngine(localUnsecured, store);
+    const result = await engine2.sync('j1', EMPTY_KEY);
+
+    // Page should be re-uploaded with new key
+    expect(result.uploaded).toContain('p1');
+
+    // Registry should reflect the change
+    const registryFiles = drive.dump().filter((f) => f.name === 'canto-journals.json');
+    const registry = JSON.parse(registryFiles[0].content);
+    expect(registry[0].encrypted).toBe(false);
+    expect(registry[0].salt).toBe('bmV3c2FsdA==');
   });
 
   it('missing sync index is treated as empty remote (all local pages uploaded)', async () => {

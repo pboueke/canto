@@ -111,6 +111,18 @@ export class SyncEngine {
     const localJournal = await this.local.getJournal(journalId, syncKey);
     if (!localJournal) return result;
 
+    // Detect encryption key change by comparing local salt with remote registry salt.
+    // When the password is changed, a new salt is generated and local data is re-encrypted,
+    // but page timestamps stay the same. Without this check the engine would skip
+    // re-uploading pages (timestamps match), leaving GDrive data encrypted with the old key.
+    const remoteJournals = await this.remote.listRemoteJournals();
+    const remoteJournal = remoteJournals.find((j) => j.id === journalId);
+    const keyChanged =
+      remoteJournal != null &&
+      remoteJournal.salt != null &&
+      localJournal.salt != null &&
+      remoteJournal.salt !== localJournal.salt;
+
     // Upload encrypted journal metadata
     const { pages: _pages, ...metaWithoutPages } = localJournal;
     const encryptedMeta = await aesGcmEncrypt(JSON.stringify(metaWithoutPages), syncKey);
@@ -146,7 +158,7 @@ export class SyncEngine {
         result.uploaded.push(pageId);
       } else if (!localPage && remoteEntry) {
         // Remote only: download
-        if (remoteEntry.deleted) continue; // don't download deleted pages
+        if (remoteEntry.deleted) continue;
         try {
           const encryptedPage = await this.remote.downloadPage(journalId, pageId);
           if (encryptedPage) {
@@ -172,6 +184,12 @@ export class SyncEngine {
           // Remotely deleted, local still exists: propagate deletion
           await this.local.deletePage(journalId, pageId, syncKey);
           result.deleted.push(pageId);
+        } else if (keyChanged) {
+          // Key changed: force re-upload with new encryption key
+          await this.uploadPageAttachments(journalId, localPage, syncKey);
+          const encrypted = await aesGcmEncrypt(JSON.stringify(localPage), syncKey);
+          await this.remote.uploadPage(journalId, pageId, encrypted);
+          result.uploaded.push(pageId);
         } else if (localPage.modified === remoteEntry.modified) {
           // In sync, nothing to do
         } else if (localPage.modified > remoteEntry.modified) {
