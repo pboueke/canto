@@ -1,6 +1,13 @@
 import { useState, useMemo, useCallback } from 'react';
 import type { Filter, PagePreview } from 'canto-data';
 
+export interface UseFilterInitial {
+  query?: string;
+  dateStart?: string;
+  dateEnd?: string;
+  anniversary?: boolean;
+}
+
 const EMPTY_FILTER: Filter = {
   query: '',
   properties: {
@@ -12,7 +19,12 @@ const EMPTY_FILTER: Filter = {
   },
 };
 
-function matchesFilter(page: PagePreview, filter: Filter): boolean {
+function matchesFilter(
+  page: PagePreview,
+  filter: Filter,
+  anniversary: boolean,
+  today: Date,
+): boolean {
   if (filter.query) {
     const q = filter.query.toLowerCase();
     const inText = page.searchText.includes(q);
@@ -43,11 +55,25 @@ function matchesFilter(page: PagePreview, filter: Filter): boolean {
     if (new Date(page.date) > end) return false;
   }
 
+  if (anniversary) {
+    const pageDate = new Date(page.date);
+    if (Number.isNaN(pageDate.getTime())) return false;
+    if (pageDate.getUTCFullYear() >= today.getUTCFullYear()) return false;
+    if (pageDate.getUTCMonth() !== today.getUTCMonth()) return false;
+    if (pageDate.getUTCDate() !== today.getUTCDate()) return false;
+  }
+
   return true;
 }
 
-export function useFilter(pages: PagePreview[]) {
-  const [filter, setFilter] = useState<Filter>({ ...EMPTY_FILTER });
+export function useFilter(pages: PagePreview[], initial?: UseFilterInitial) {
+  const [filter, setFilter] = useState<Filter>(() => ({
+    ...EMPTY_FILTER,
+    query: initial?.query ?? '',
+    dateStart: initial?.dateStart,
+    dateEnd: initial?.dateEnd,
+  }));
+  const [anniversary, setAnniversaryState] = useState<boolean>(initial?.anniversary ?? false);
 
   const isActive =
     filter.query !== '' ||
@@ -57,12 +83,14 @@ export function useFilter(pages: PagePreview[]) {
     filter.properties.hasLocation ||
     filter.properties.tags.length > 0 ||
     !!filter.dateStart ||
-    !!filter.dateEnd;
+    !!filter.dateEnd ||
+    anniversary;
 
   const filteredPages = useMemo(() => {
     if (!isActive) return pages;
-    return pages.filter((p) => matchesFilter(p, filter));
-  }, [pages, filter, isActive]);
+    const today = new Date();
+    return pages.filter((p) => matchesFilter(p, filter, anniversary, today));
+  }, [pages, filter, anniversary, isActive]);
 
   const setQuery = useCallback((query: string) => {
     setFilter((prev) => ({ ...prev, query }));
@@ -96,6 +124,10 @@ export function useFilter(pages: PagePreview[]) {
     });
   }, []);
 
+  const setAnniversary = useCallback((value: boolean) => {
+    setAnniversaryState(value);
+  }, []);
+
   const clearFilters = useCallback(() => {
     setFilter({
       query: '',
@@ -107,10 +139,12 @@ export function useFilter(pages: PagePreview[]) {
         hasLocation: false,
       },
     });
+    setAnniversaryState(false);
   }, []);
 
   return {
     filter,
+    anniversary,
     filteredPages,
     isActive,
     setQuery,
@@ -118,6 +152,7 @@ export function useFilter(pages: PagePreview[]) {
     setDateEnd,
     toggleProperty,
     toggleTag,
+    setAnniversary,
     clearFilters,
   };
 }

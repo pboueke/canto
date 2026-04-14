@@ -230,4 +230,73 @@ describe('useFilter', () => {
     act(() => result.current.setQuery('baking'));
     expect(result.current.filteredPages.map((p) => p.id)).toContain('p6');
   });
+
+  describe('anniversary', () => {
+    const ANNIV_PAGES: PagePreview[] = [
+      makePreview({ id: 'old', date: '2025-04-14T08:00:00Z', tags: ['work'] }),
+      makePreview({ id: 'older', date: '2024-04-14T08:00:00Z', tags: ['travel'] }),
+      makePreview({ id: 'other-day', date: '2025-04-13T08:00:00Z' }),
+      makePreview({ id: 'self-year', date: '2026-04-14T08:00:00Z' }),
+    ];
+
+    beforeEach(() => {
+      jest.useFakeTimers().setSystemTime(new Date('2026-04-14T12:00:00Z'));
+    });
+    afterEach(() => {
+      jest.useRealTimers();
+    });
+
+    it('filters pages to prior-year same month+day matches only', () => {
+      const { result } = renderHook(() => useFilter(ANNIV_PAGES));
+      act(() => result.current.setAnniversary(true));
+      expect(result.current.filteredPages.map((p) => p.id).sort()).toEqual(['old', 'older']);
+      expect(result.current.isActive).toBe(true);
+    });
+
+    it('combines with tag filter (intersection)', () => {
+      const { result } = renderHook(() => useFilter(ANNIV_PAGES));
+      act(() => {
+        result.current.setAnniversary(true);
+        result.current.toggleTag('work');
+      });
+      expect(result.current.filteredPages.map((p) => p.id)).toEqual(['old']);
+    });
+
+    it('clearFilters resets anniversary', () => {
+      const { result } = renderHook(() => useFilter(ANNIV_PAGES));
+      act(() => result.current.setAnniversary(true));
+      expect(result.current.isActive).toBe(true);
+      act(() => result.current.clearFilters());
+      expect(result.current.anniversary).toBe(false);
+      expect(result.current.isActive).toBe(false);
+      expect(result.current.filteredPages).toHaveLength(4);
+    });
+
+    it('setAnniversary(true) then (false) toggles cleanly', () => {
+      const { result } = renderHook(() => useFilter(ANNIV_PAGES));
+      act(() => result.current.setAnniversary(true));
+      expect(result.current.filteredPages).toHaveLength(2);
+      act(() => result.current.setAnniversary(false));
+      expect(result.current.filteredPages).toHaveLength(4);
+      expect(result.current.isActive).toBe(false);
+    });
+
+    it('seeds anniversary from initial state', () => {
+      const { result } = renderHook(() => useFilter(ANNIV_PAGES, { anniversary: true }));
+      expect(result.current.anniversary).toBe(true);
+      expect(result.current.isActive).toBe(true);
+      expect(result.current.filteredPages.map((p) => p.id).sort()).toEqual(['old', 'older']);
+    });
+
+    it('seeds dateStart/dateEnd from initial state', () => {
+      const { result } = renderHook(() =>
+        useFilter(ANNIV_PAGES, {
+          dateStart: '2025-04-01T00:00:00.000Z',
+          dateEnd: '2025-04-30T23:59:59.999Z',
+        }),
+      );
+      expect(result.current.isActive).toBe(true);
+      expect(result.current.filteredPages.map((p) => p.id).sort()).toEqual(['old', 'other-day']);
+    });
+  });
 });

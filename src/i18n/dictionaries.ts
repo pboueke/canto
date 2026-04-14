@@ -67,6 +67,14 @@ export interface Dictionary {
     noPages: string;
     filter: string;
     sort: string;
+    anniversary: string;
+  };
+  calendar: {
+    titleSuffix: string;
+    anniversaryRow: string;
+    anniversaryRowOne: string;
+    anniversaryRowZero: string;
+    noPages: string;
   };
   page: {
     title: string;
@@ -92,6 +100,9 @@ export interface Dictionary {
     deleteMessage: string;
     locationCopied: string;
     decrypting: string;
+    takePhoto: string;
+    takeEncryptedPhoto: string;
+    cameraPermissionDenied: string;
   };
   settings: {
     theme: string;
@@ -337,6 +348,14 @@ const en: Dictionary = {
     noPages: 'No pages yet. Create your first entry!',
     filter: 'Filter',
     sort: 'Sort',
+    anniversary: 'Anniversary',
+  },
+  calendar: {
+    titleSuffix: 'Calendar',
+    anniversaryRow: '{count} pages celebrating an anniversary today',
+    anniversaryRowOne: '1 page celebrating an anniversary today',
+    anniversaryRowZero: 'No anniversaries today',
+    noPages: 'No pages yet',
   },
   page: {
     title: 'Page',
@@ -362,6 +381,9 @@ const en: Dictionary = {
     deleteMessage: 'This entry will be permanently deleted.',
     locationCopied: 'Coordinates copied',
     decrypting: 'Decrypting...',
+    takePhoto: 'Take Photo',
+    takeEncryptedPhoto: 'Encrypted Photo',
+    cameraPermissionDenied: 'Camera permission denied',
   },
   settings: {
     theme: 'Theme',
@@ -616,6 +638,14 @@ const pt: Dictionary = {
     noPages: 'Nenhuma página ainda. Crie sua primeira entrada!',
     filter: 'Filtrar',
     sort: 'Ordenar',
+    anniversary: 'Aniversário',
+  },
+  calendar: {
+    titleSuffix: 'Calendário',
+    anniversaryRow: '{count} páginas celebrando um aniversário hoje',
+    anniversaryRowOne: '1 página celebrando um aniversário hoje',
+    anniversaryRowZero: 'Sem aniversários hoje',
+    noPages: 'Ainda não há páginas',
   },
   page: {
     title: 'Página',
@@ -641,6 +671,9 @@ const pt: Dictionary = {
     deleteMessage: 'Esta entrada será excluída permanentemente.',
     locationCopied: 'Coordenadas copiadas',
     decrypting: 'Descriptografando...',
+    takePhoto: 'Tirar Foto',
+    takeEncryptedPhoto: 'Foto Criptografada',
+    cameraPermissionDenied: 'Permissão de câmera negada',
   },
   settings: {
     theme: 'Tema',
@@ -895,6 +928,14 @@ const es: Dictionary = {
     noPages: '¡Aún no hay páginas. Crea tu primera entrada!',
     filter: 'Filtrar',
     sort: 'Ordenar',
+    anniversary: 'Aniversario',
+  },
+  calendar: {
+    titleSuffix: 'Calendario',
+    anniversaryRow: '{count} páginas celebrando un aniversario hoy',
+    anniversaryRowOne: '1 página celebrando un aniversario hoy',
+    anniversaryRowZero: 'Sin aniversarios hoy',
+    noPages: 'Aún no hay páginas',
   },
   page: {
     title: 'Página',
@@ -920,6 +961,9 @@ const es: Dictionary = {
     deleteMessage: 'Esta entrada se eliminará permanentemente.',
     locationCopied: 'Coordenadas copiadas',
     decrypting: 'Descifrando...',
+    takePhoto: 'Tomar Foto',
+    takeEncryptedPhoto: 'Foto Cifrada',
+    cameraPermissionDenied: 'Permiso de cámara denegado',
   },
   settings: {
     theme: 'Tema',
@@ -1175,6 +1219,14 @@ const de: Dictionary = {
     noPages: 'Noch keine Seiten. Erstelle deinen ersten Eintrag!',
     filter: 'Filtern',
     sort: 'Sortieren',
+    anniversary: 'Jahrestag',
+  },
+  calendar: {
+    titleSuffix: 'Kalender',
+    anniversaryRow: '{count} Seiten feiern heute Jahrestag',
+    anniversaryRowOne: '1 Seite feiert heute Jahrestag',
+    anniversaryRowZero: 'Keine Jahrestage heute',
+    noPages: 'Noch keine Seiten',
   },
   page: {
     title: 'Seite',
@@ -1200,6 +1252,9 @@ const de: Dictionary = {
     deleteMessage: 'Dieser Eintrag wird dauerhaft gelöscht.',
     locationCopied: 'Koordinaten kopiert',
     decrypting: 'Entschlüsseln...',
+    takePhoto: 'Foto aufnehmen',
+    takeEncryptedPhoto: 'Verschlüsseltes Foto',
+    cameraPermissionDenied: 'Kameraberechtigung verweigert',
   },
   settings: {
     theme: 'Thema',
@@ -1454,6 +1509,14 @@ const fr: Dictionary = {
     noPages: 'Pas encore de pages. Créez votre première entrée!',
     filter: 'Filtrer',
     sort: 'Trier',
+    anniversary: 'Anniversaire',
+  },
+  calendar: {
+    titleSuffix: 'Calendrier',
+    anniversaryRow: "{count} pages célèbrent un anniversaire aujourd'hui",
+    anniversaryRowOne: "1 page célèbre un anniversaire aujourd'hui",
+    anniversaryRowZero: "Aucun anniversaire aujourd'hui",
+    noPages: 'Pas encore de pages',
   },
   page: {
     title: 'Page',
@@ -1479,6 +1542,9 @@ const fr: Dictionary = {
     deleteMessage: 'Cette entrée sera définitivement supprimée.',
     locationCopied: 'Coordonnées copiées',
     decrypting: 'Déchiffrement...',
+    takePhoto: 'Prendre une Photo',
+    takeEncryptedPhoto: 'Photo Chiffrée',
+    cameraPermissionDenied: 'Autorisation de la caméra refusée',
   },
   settings: {
     theme: 'Thème',
@@ -1734,6 +1800,14 @@ const ru: Dictionary = {
     noPages: 'Страниц пока нет. Создайте первую запись!',
     filter: 'Фильтр',
     sort: 'Сортировка',
+    anniversary: 'Годовщина',
+  },
+  calendar: {
+    titleSuffix: 'Календарь',
+    anniversaryRow: '{count} страниц отмечают годовщину сегодня',
+    anniversaryRowOne: '1 страница отмечает годовщину сегодня',
+    anniversaryRowZero: 'Сегодня нет годовщин',
+    noPages: 'Страниц пока нет',
   },
   page: {
     title: 'Страница',
@@ -1759,6 +1833,9 @@ const ru: Dictionary = {
     deleteMessage: 'Эта запись будет удалена навсегда.',
     locationCopied: 'Координаты скопированы',
     decrypting: 'Расшифровка...',
+    takePhoto: 'Сделать фото',
+    takeEncryptedPhoto: 'Зашифрованное фото',
+    cameraPermissionDenied: 'Доступ к камере запрещён',
   },
   settings: {
     theme: 'Тема',
@@ -2012,6 +2089,14 @@ const zh: Dictionary = {
     noPages: '还没有页面。创建第一个条目！',
     filter: '筛选',
     sort: '排序',
+    anniversary: '周年纪念',
+  },
+  calendar: {
+    titleSuffix: '日历',
+    anniversaryRow: '今天有 {count} 个页面正在庆祝周年',
+    anniversaryRowOne: '今天有 1 个页面正在庆祝周年',
+    anniversaryRowZero: '今天没有周年纪念',
+    noPages: '还没有页面',
   },
   page: {
     title: '页面',
@@ -2037,6 +2122,9 @@ const zh: Dictionary = {
     deleteMessage: '此条目将被永久删除。',
     locationCopied: '坐标已复制',
     decrypting: '解密中...',
+    takePhoto: '拍照',
+    takeEncryptedPhoto: '加密照片',
+    cameraPermissionDenied: '相机权限被拒绝',
   },
   settings: {
     theme: '主题',
@@ -2286,6 +2374,14 @@ const it: Dictionary = {
     noPages: 'Nessuna pagina ancora. Crea la tua prima voce!',
     filter: 'Filtra',
     sort: 'Ordina',
+    anniversary: 'Anniversario',
+  },
+  calendar: {
+    titleSuffix: 'Calendario',
+    anniversaryRow: '{count} pagine celebrano un anniversario oggi',
+    anniversaryRowOne: '1 pagina celebra un anniversario oggi',
+    anniversaryRowZero: 'Nessun anniversario oggi',
+    noPages: 'Nessuna pagina ancora',
   },
   page: {
     title: 'Pagina',
@@ -2311,6 +2407,9 @@ const it: Dictionary = {
     deleteMessage: 'Questa voce verra eliminata definitivamente.',
     locationCopied: 'Coordinate copiate',
     decrypting: 'Decifratura...',
+    takePhoto: 'Scatta Foto',
+    takeEncryptedPhoto: 'Foto Crittografata',
+    cameraPermissionDenied: 'Permesso fotocamera negato',
   },
   settings: {
     theme: 'Tema',

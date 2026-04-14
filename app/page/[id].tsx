@@ -198,13 +198,28 @@ export default function PageScreen() {
 
   // Attachment handlers
   const handleAddImage = useCallback(
-    async (encrypted: boolean) => {
+    async (encrypted: boolean, source: 'camera' | 'library' = 'library') => {
       if (!draft || !journalId || !id) return;
-      const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ['images'],
-        quality: 0.8,
-        base64: true,
-      });
+
+      let result: ImagePicker.ImagePickerResult;
+      if (source === 'camera') {
+        const perm = await ImagePicker.requestCameraPermissionsAsync();
+        if (!perm.granted) {
+          Alert.alert(t.page.cameraPermissionDenied);
+          return;
+        }
+        result = await ImagePicker.launchCameraAsync({
+          mediaTypes: ['images'],
+          quality: 0.8,
+          base64: true,
+        });
+      } else {
+        result = await ImagePicker.launchImageLibraryAsync({
+          mediaTypes: ['images'],
+          quality: 0.8,
+          base64: true,
+        });
+      }
       if (result.canceled || !result.assets[0]?.base64) return;
 
       const asset = result.assets[0];
@@ -228,7 +243,7 @@ export default function PageScreen() {
         Alert.alert('Error', err instanceof Error ? err.message : String(err));
       }
     },
-    [draft, journalId, id, saveAttachment, updateDraft],
+    [draft, journalId, id, saveAttachment, updateDraft, t],
   );
 
   const handleAddFile = useCallback(
@@ -604,8 +619,10 @@ export default function PageScreen() {
           <AddAttachmentPopup
             visible={addPopupVisible}
             onClose={() => setAddPopupVisible(false)}
-            onAddImage={() => handleAddImage(false)}
-            onAddEncryptedImage={() => handleAddImage(true)}
+            onAddImage={() => handleAddImage(false, 'library')}
+            onAddEncryptedImage={() => handleAddImage(true, 'library')}
+            onTakePhoto={() => handleAddImage(false, 'camera')}
+            onTakeEncryptedPhoto={() => handleAddImage(true, 'camera')}
             onAddFile={() => handleAddFile(false)}
             onAddEncryptedFile={() => handleAddFile(true)}
             onAddLocation={handleAddLocation}

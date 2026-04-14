@@ -49,6 +49,14 @@ export const pl: Dictionary = {
     noPages: 'Brak stron. Utwórz swój pierwszy wpis!',
     filter: 'Filtruj',
     sort: 'Sortuj',
+    anniversary: 'Rocznica',
+  },
+  calendar: {
+    titleSuffix: 'Kalendarz',
+    anniversaryRow: '{count} stron świętuje dziś rocznicę',
+    anniversaryRowOne: '1 strona świętuje dziś rocznicę',
+    anniversaryRowZero: 'Brak rocznic dzisiaj',
+    noPages: 'Brak stron',
   },
   page: {
     title: 'Strona',
@@ -74,6 +82,9 @@ export const pl: Dictionary = {
     deleteMessage: 'Ten wpis zostanie trwale usunięty.',
     locationCopied: 'Współrzędne skopiowane',
     decrypting: 'Odszyfrowywanie...',
+    takePhoto: 'Zrób Zdjęcie',
+    takeEncryptedPhoto: 'Zaszyfrowane Zdjęcie',
+    cameraPermissionDenied: 'Odmówiono dostępu do aparatu',
   },
   settings: {
     theme: 'Motyw',
@@ -328,6 +339,14 @@ export const sv: Dictionary = {
     noPages: 'Inga sidor ännu. Skapa ditt första inlägg!',
     filter: 'Filtrera',
     sort: 'Sortera',
+    anniversary: 'Årsdag',
+  },
+  calendar: {
+    titleSuffix: 'Kalender',
+    anniversaryRow: '{count} sidor firar årsdag idag',
+    anniversaryRowOne: '1 sida firar årsdag idag',
+    anniversaryRowZero: 'Inga årsdagar idag',
+    noPages: 'Inga sidor ännu',
   },
   page: {
     title: 'Sida',
@@ -353,6 +372,9 @@ export const sv: Dictionary = {
     deleteMessage: 'Det här inlägget raderas permanent.',
     locationCopied: 'Koordinater kopierade',
     decrypting: 'Dekrypterar...',
+    takePhoto: 'Ta Foto',
+    takeEncryptedPhoto: 'Krypterat Foto',
+    cameraPermissionDenied: 'Kameraåtkomst nekad',
   },
   settings: {
     theme: 'Tema',
@@ -607,6 +629,14 @@ export const vi: Dictionary = {
     noPages: 'Chưa có trang nào. Hãy tạo bài viết đầu tiên!',
     filter: 'Lọc',
     sort: 'Sắp xếp',
+    anniversary: 'Kỷ niệm',
+  },
+  calendar: {
+    titleSuffix: 'Lịch',
+    anniversaryRow: '{count} trang đang kỷ niệm hôm nay',
+    anniversaryRowOne: '1 trang đang kỷ niệm hôm nay',
+    anniversaryRowZero: 'Không có kỷ niệm nào hôm nay',
+    noPages: 'Chưa có trang nào',
   },
   page: {
     title: 'Trang',
@@ -632,6 +662,9 @@ export const vi: Dictionary = {
     deleteMessage: 'Bài viết này sẽ bị xóa vĩnh viễn.',
     locationCopied: 'Đã sao chép tọa độ',
     decrypting: 'Đang giải mã...',
+    takePhoto: 'Chụp Ảnh',
+    takeEncryptedPhoto: 'Ảnh Mã Hóa',
+    cameraPermissionDenied: 'Quyền truy cập máy ảnh bị từ chối',
   },
   settings: {
     theme: 'Giao diện',
@@ -885,6 +918,14 @@ export const th: Dictionary = {
     noPages: 'ยังไม่มีหน้า สร้างรายการแรกของคุณ!',
     filter: 'กรอง',
     sort: 'เรียงลำดับ',
+    anniversary: 'วันครบรอบ',
+  },
+  calendar: {
+    titleSuffix: 'ปฏิทิน',
+    anniversaryRow: '{count} หน้ากำลังฉลองครบรอบวันนี้',
+    anniversaryRowOne: '1 หน้ากำลังฉลองครบรอบวันนี้',
+    anniversaryRowZero: 'ไม่มีวันครบรอบในวันนี้',
+    noPages: 'ยังไม่มีหน้า',
   },
   page: {
     title: 'หน้า',
@@ -910,6 +951,9 @@ export const th: Dictionary = {
     deleteMessage: 'รายการนี้จะถูกลบอย่างถาวร',
     locationCopied: 'คัดลอกพิกัดแล้ว',
     decrypting: 'กำลังถอดรหัส...',
+    takePhoto: 'ถ่ายรูป',
+    takeEncryptedPhoto: 'รูปที่เข้ารหัส',
+    cameraPermissionDenied: 'ปฏิเสธสิทธิ์เข้าถึงกล้อง',
   },
   settings: {
     theme: 'ธีม',
@@ -1162,6 +1206,14 @@ export const id: Dictionary = {
     noPages: 'Belum ada halaman. Buat entri pertama Anda!',
     filter: 'Filter',
     sort: 'Urutkan',
+    anniversary: 'Hari Jadi',
+  },
+  calendar: {
+    titleSuffix: 'Kalender',
+    anniversaryRow: '{count} halaman merayakan hari jadi hari ini',
+    anniversaryRowOne: '1 halaman merayakan hari jadi hari ini',
+    anniversaryRowZero: 'Tidak ada hari jadi hari ini',
+    noPages: 'Belum ada halaman',
   },
   page: {
     title: 'Halaman',
@@ -1187,6 +1239,9 @@ export const id: Dictionary = {
     deleteMessage: 'Entri ini akan dihapus secara permanen.',
     locationCopied: 'Koordinat disalin',
     decrypting: 'Mendekripsi...',
+    takePhoto: 'Ambil Foto',
+    takeEncryptedPhoto: 'Foto Terenkripsi',
+    cameraPermissionDenied: 'Izin kamera ditolak',
   },
   settings: {
     theme: 'Tema',
@@ -1440,6 +1495,14 @@ export const uk: Dictionary = {
     noPages: 'Сторінок ще немає. Створіть свій перший запис!',
     filter: 'Фільтр',
     sort: 'Сортування',
+    anniversary: 'Річниця',
+  },
+  calendar: {
+    titleSuffix: 'Календар',
+    anniversaryRow: '{count} сторінок святкують річницю сьогодні',
+    anniversaryRowOne: '1 сторінка святкує річницю сьогодні',
+    anniversaryRowZero: 'Сьогодні немає річниць',
+    noPages: 'Сторінок ще немає',
   },
   page: {
     title: 'Сторінка',
@@ -1465,6 +1528,9 @@ export const uk: Dictionary = {
     deleteMessage: 'Цей запис буде видалено назавжди.',
     locationCopied: 'Координати скопійовано',
     decrypting: 'Розшифрування...',
+    takePhoto: 'Зробити фото',
+    takeEncryptedPhoto: 'Зашифроване фото',
+    cameraPermissionDenied: 'Доступ до камери відхилено',
   },
   settings: {
     theme: 'Тема',

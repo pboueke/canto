@@ -12,6 +12,7 @@ import { JournalKeyProvider, useJournalKeys } from '@/contexts/JournalKeyContext
 import { AutoLockModal } from '@/components/common/AutoLockModal';
 import { GoogleAuthProvider } from '@/contexts/GoogleAuthContext';
 import { SyncManagerProvider } from '@/contexts/SyncManagerContext';
+import { CalendarScrollProvider } from '@/contexts/CalendarScrollContext';
 import { type CantoTheme, type ThemeName, themes, lightTheme } from '@/styles/themes';
 import { type LangCode, dictionaries } from '@/i18n/dictionaries';
 
@@ -80,7 +81,9 @@ export default function RootLayout() {
         <GoogleAuthProvider>
           <JournalKeyProvider>
             <SyncManagerProvider>
-              <AppContent theme={theme} isDark={isDark} />
+              <CalendarScrollProvider>
+                <AppContent theme={theme} isDark={isDark} />
+              </CalendarScrollProvider>
             </SyncManagerProvider>
           </JournalKeyProvider>
         </GoogleAuthProvider>
@@ -117,7 +120,13 @@ function AppContent({ theme, isDark }: { theme: CantoTheme; isDark: boolean }) {
           <Stack.Screen name="onboarding" options={{ headerShown: false }} />
           <Stack.Screen name="index" options={{ headerShown: false }} />
           <Stack.Screen
-            name="journal/[id]"
+            name="journal/[id]/index"
+            options={{
+              headerShown: false,
+            }}
+          />
+          <Stack.Screen
+            name="journal/[id]/calendar"
             options={{
               headerShown: false,
             }}

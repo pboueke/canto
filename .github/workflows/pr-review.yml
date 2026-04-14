@@ -92,7 +92,7 @@ jobs:
           import json, os
           cfg = {
             'provider': {'zai-coding-plan': {'options': {'apiKey': os.environ['OPENAI_API_KEY']}}},
-            'model': 'zai-coding-plan/glm-4.6'
+            'model': 'zai-coding-plan/glm-5.1'
           }
           json.dump(cfg, open(os.path.expanduser('~/.config/opencode/opencode.json'), 'w'))
           "
