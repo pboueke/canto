@@ -100,6 +100,13 @@ export class SyncEngine {
     journalId: string,
     syncKey: Uint8Array,
     onProgress?: (current: number, total: number) => void,
+    /**
+     * The remote registry salt observed at the end of the previous successful
+     * sync from this device. Used to disambiguate "I just changed my password
+     * locally" (push) from "another device changed the password" (abort).
+     * Pass `undefined` for the very first sync of a journal.
+     */
+    previousRemoteSalt?: string,
   ): Promise<SyncResult> {
     const result: SyncResult = {
       uploaded: [],
@@ -111,17 +118,45 @@ export class SyncEngine {
     const localJournal = await this.local.getJournal(journalId, syncKey);
     if (!localJournal) return result;
 
-    // Detect encryption key change by comparing local salt with remote registry salt.
-    // When the password is changed, a new salt is generated and local data is re-encrypted,
-    // but page timestamps stay the same. Without this check the engine would skip
-    // re-uploading pages (timestamps match), leaving GDrive data encrypted with the old key.
+    // Compare local salt and encrypted-flag with remote registry. When they differ
+    // we must determine whether the local user just changed the password (push) or
+    // another device changed it (abort to avoid corrupting remote with stale data).
     const remoteJournals = await this.remote.listRemoteJournals();
     const remoteJournal = remoteJournals.find((j) => j.id === journalId);
-    const keyChanged =
+    const saltMismatch =
       remoteJournal != null &&
       remoteJournal.salt != null &&
       localJournal.salt != null &&
       remoteJournal.salt !== localJournal.salt;
+
+    if (saltMismatch && previousRemoteSalt != null) {
+      // We have history. Use it to disambiguate who changed the salt.
+      const localChanged = localJournal.salt !== previousRemoteSalt;
+      const remoteChanged = remoteJournal!.salt !== previousRemoteSalt;
+
+      if (!localChanged && remoteChanged) {
+        // Local hasn't changed since last sync, but remote differs — another
+        // device rotated the key. Aborting prevents us from clobbering the
+        // remote with our stale data.
+        throw new Error(
+          `Sync aborted: the password for "${localJournal.title}" was changed on another ` +
+            `device. Remove this journal locally and re-import it from cloud to continue syncing.`,
+        );
+      }
+      if (localChanged && remoteChanged) {
+        // Both sides diverged from the last-known state — conflict, can't auto-resolve.
+        throw new Error(
+          `Sync aborted: the password for "${localJournal.title}" was changed on another ` +
+            `device AND locally (conflict). Remove this journal locally and re-import.`,
+        );
+      }
+      // Otherwise: localChanged=true && remoteChanged=false → local rotated key, push it.
+    }
+    // Note: encrypted-flag mismatch without salt-mismatch is not normally possible
+    // (adding/removing a password always generates a new salt — see JournalSettings.tsx).
+    // If it does occur, we fall through to push behaviour (no worse than the original
+    // engine, and this corner case is not the one the cross-device bug exposes).
+    const keyChanged = saltMismatch;
 
     // Build local page map
     const localPages = new Map(localJournal.pages.map((p) => [p.id, p]));

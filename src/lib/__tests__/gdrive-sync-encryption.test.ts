@@ -24,39 +24,12 @@ import {
 
 jest.mock('../sync/gdrive/api');
 
-// Use a deterministic but non-identity mock: base64-encode with a key-dependent tag.
-// This lets us verify the engine actually calls encrypt/decrypt (output !== input)
-// and that decryption with the wrong key fails.
-function keyTag(key: Uint8Array): string {
-  return Array.from(key.slice(0, 4), (b) => b.toString(16).padStart(2, '0')).join('');
-}
-const ENC_PREFIX = 'ENC';
-jest.mock('../encryption/utils', () => {
-  const actual = jest.requireActual('../encryption/utils');
-  return {
-    ...actual,
-    aesGcmEncrypt: jest.fn((plaintext: string, key: Uint8Array) => {
-      const tag = Array.from(key.slice(0, 4), (b: number) => b.toString(16).padStart(2, '0')).join(
-        '',
-      );
-      return Promise.resolve(
-        `${ENC_PREFIX}:${tag}:` + btoa(unescape(encodeURIComponent(plaintext))),
-      );
-    }),
-    aesGcmDecrypt: jest.fn((ciphertext: string, key: Uint8Array) => {
-      const tag = Array.from(key.slice(0, 4), (b: number) => b.toString(16).padStart(2, '0')).join(
-        '',
-      );
-      const expectedPrefix = `${ENC_PREFIX}:${tag}:`;
-      if (!ciphertext.startsWith(expectedPrefix)) {
-        return Promise.reject(new Error('Decryption failed: wrong key or corrupted data'));
-      }
-      return Promise.resolve(
-        decodeURIComponent(escape(atob(ciphertext.slice(expectedPrefix.length)))),
-      );
-    }),
-  };
-});
+// Use the shared key-aware mock so wrong-key decryption fails (matches real AES-GCM behavior).
+jest.mock('../encryption/utils', () => ({
+  ...jest.requireActual('../encryption/utils'),
+  ...require('./helpers/key-aware-crypto').keyAwareCryptoMock(),
+}));
+import { keyTag } from './helpers/key-aware-crypto';
 
 const mockedApi = api as jest.Mocked<typeof api>;
 
@@ -580,5 +553,191 @@ describe('GDrive sync encryption', () => {
 
     // With no index, engine treats remote as empty → uploads local page
     expect(result.uploaded).toContain('p1');
+  });
+
+  // ===== previousRemoteSalt semantics (cross-device password change) =====
+
+  describe('previousRemoteSalt: distinguishes local vs remote password change', () => {
+    it('aborts when remote salt changed externally (local salt == previousRemoteSalt)', async () => {
+      // Setup: device A initially synced with salt S0. Then device B (out of band)
+      // changed the password and synced. Now A syncs again — local still has S0,
+      // previousRemoteSalt = S0, but remote registry has S1. This is the corruption
+      // scenario: A would otherwise force-overwrite remote with stale data.
+      const p1 = makePage('p1', 1000, false, [], 'Original');
+      const journal = makeJournal([p1], false, 'UzA='); // S0
+      const local = createMockLocalStore(journal);
+
+      // Pre-populate remote with the OTHER device's state (different salt)
+      const KEY_S0 = new Uint8Array(32).fill(10);
+      const KEY_S1 = new Uint8Array(32).fill(20);
+      const rootId = drive.putFolder('Canto');
+      const jFolderId = drive.putFolder('j1', rootId);
+      const pagesFolderId = drive.putFolder('pages', jFolderId);
+      drive.putFile(
+        'meta.json',
+        jFolderId,
+        'ENC:' + keyTag(KEY_S1) + ':' + btoa('{"id":"j1","title":"My Journal"}'),
+      );
+      drive.putFile(
+        'p1.json',
+        pagesFolderId,
+        'ENC:' + keyTag(KEY_S1) + ':' + btoa('{"id":"p1","modified":2000}'),
+      );
+      drive.putFile('index.json', jFolderId, JSON.stringify({ p1: { modified: 2000 } }));
+      drive.putFile(
+        'canto-journals.json',
+        'appData',
+        JSON.stringify([{ id: 'j1', title: 'My Journal', salt: 'UzE=', encrypted: true }]), // S1
+      );
+
+      const engine = new SyncEngine(local, store);
+      // previousRemoteSalt = S0 (what we last saw); localSalt = S0 (unchanged); remoteSalt = S1
+      await expect(engine.sync('j1', KEY_S0, undefined, 'UzA=')).rejects.toThrow(
+        /password.*changed on another device|encryption state.*changed on another device/i,
+      );
+
+      // Critical: remote must NOT have been overwritten
+      const registryFiles = drive.dump().filter((f) => f.name === 'canto-journals.json');
+      const registry = JSON.parse(registryFiles[0].content);
+      expect(registry[0].salt).toBe('UzE='); // still S1
+      expect(registry[0].encrypted).toBe(true);
+    });
+
+    it('pushes when local salt changed (previousRemoteSalt matches old remote salt)', async () => {
+      // Setup: device A had synced with salt S0. User changed password locally on A,
+      // so local salt is now S1, but remote still has S0. previousRemoteSalt = S0
+      // (matches remote, NOT local) → A correctly pushes its change.
+      const p1 = makePage('p1', 1000, false, [], 'New password');
+      const journal = makeJournal([p1], true, 'UzE='); // S1 (new)
+      const local = createMockLocalStore(journal);
+
+      // First sync to populate remote with old key (S0)
+      const KEY_S0 = new Uint8Array(32).fill(10);
+      const oldJournal = makeJournal([p1], true, 'UzA=');
+      const oldLocal = createMockLocalStore(oldJournal);
+      const engine0 = new SyncEngine(oldLocal, store);
+      await engine0.sync('j1', KEY_S0);
+
+      // Now sync with new key + previousRemoteSalt = S0 (the salt we last observed)
+      const KEY_S1 = new Uint8Array(32).fill(20);
+      const engine = new SyncEngine(local, store);
+      const result = await engine.sync('j1', KEY_S1, undefined, 'UzA=');
+
+      // Force re-uploaded with new key
+      expect(result.uploaded).toContain('p1');
+      const pageFiles = drive.dump().filter((f) => f.name === 'p1.json');
+      expect(pageFiles[0].content).toMatch(new RegExp(`^ENC:${keyTag(KEY_S1)}:`));
+    });
+
+    it('aborts when remote added password (encrypted=true with new salt) — user scenario', async () => {
+      // The user's exact bug: device A has secure=false, salt=S0. Device B (out of band)
+      // added a password — remote now has encrypted=true with a NEW salt (since adding a
+      // password always rotates the salt per JournalSettings.tsx).
+      const p1 = makePage('p1', 1000);
+      const journal = makeJournal([p1], false, 'UzA=');
+      const local = createMockLocalStore(journal);
+
+      const KEY_S0 = new Uint8Array(32).fill(10);
+      const KEY_S1 = new Uint8Array(32).fill(20);
+      const rootId = drive.putFolder('Canto');
+      const jFolderId = drive.putFolder('j1', rootId);
+      drive.putFile(
+        'meta.json',
+        jFolderId,
+        'ENC:' + keyTag(KEY_S1) + ':' + btoa('{"id":"j1","title":"My Journal"}'),
+      );
+      drive.putFile('index.json', jFolderId, JSON.stringify({}));
+      drive.putFile(
+        'canto-journals.json',
+        'appData',
+        JSON.stringify([{ id: 'j1', title: 'My Journal', salt: 'UzE=', encrypted: true }]),
+      );
+
+      const engine = new SyncEngine(local, store);
+      // previousRemoteSalt = S0 (matches our local), remote now has S1 → ABORT
+      await expect(engine.sync('j1', KEY_S0, undefined, 'UzA=')).rejects.toThrow(
+        /changed on another device/i,
+      );
+    });
+
+    it('first sync (no previousRemoteSalt) with salt mismatch — pushes (preserves current behavior)', async () => {
+      // No previousRemoteSalt provided → engine cannot disambiguate, defaults to push.
+      // This preserves backwards compatibility for the case where SyncManager hasn't
+      // recorded a previous salt yet.
+      const p1 = makePage('p1', 1000, false, [], 'Local');
+      const journal = makeJournal([p1], true, 'UzE=');
+      const local = createMockLocalStore(journal);
+
+      const KEY_S0 = new Uint8Array(32).fill(10);
+      const KEY_S1 = new Uint8Array(32).fill(20);
+      const rootId = drive.putFolder('Canto');
+      const jFolderId = drive.putFolder('j1', rootId);
+      drive.putFolder('pages', jFolderId);
+      drive.putFile(
+        'meta.json',
+        jFolderId,
+        'ENC:' + keyTag(KEY_S0) + ':' + btoa('{"id":"j1","title":"My Journal"}'),
+      );
+      drive.putFile('index.json', jFolderId, JSON.stringify({}));
+      drive.putFile(
+        'canto-journals.json',
+        'appData',
+        JSON.stringify([{ id: 'j1', title: 'My Journal', salt: 'UzA=', encrypted: true }]),
+      );
+
+      const engine = new SyncEngine(local, store);
+      // No previousRemoteSalt → push
+      const result = await engine.sync('j1', KEY_S1);
+      expect(result.uploaded).toContain('p1');
+    });
+
+    it('bidirectional change (both changed since last sync) — aborts', async () => {
+      // previousRemoteSalt = S0, but neither localSalt nor remoteSalt match S0.
+      // Both sides changed independently → conflict → abort.
+      const p1 = makePage('p1', 1000);
+      const journal = makeJournal([p1], true, 'UzI='); // S2 (local change)
+      const local = createMockLocalStore(journal);
+
+      const KEY_S1 = new Uint8Array(32).fill(20);
+      const KEY_S2 = new Uint8Array(32).fill(30);
+      const rootId = drive.putFolder('Canto');
+      const jFolderId = drive.putFolder('j1', rootId);
+      drive.putFile(
+        'meta.json',
+        jFolderId,
+        'ENC:' + keyTag(KEY_S1) + ':' + btoa('{"id":"j1","title":"My Journal"}'),
+      );
+      drive.putFile('index.json', jFolderId, JSON.stringify({}));
+      drive.putFile(
+        'canto-journals.json',
+        'appData',
+        JSON.stringify([{ id: 'j1', title: 'My Journal', salt: 'UzE=', encrypted: true }]), // S1 (remote change)
+      );
+
+      const engine = new SyncEngine(local, store);
+      // previousRemoteSalt = S0; localSalt = S2; remoteSalt = S1 → both diverged
+      await expect(engine.sync('j1', KEY_S2, undefined, 'UzA=')).rejects.toThrow(
+        /password.*changed on another device|conflict/i,
+      );
+    });
+
+    it('successful sync where salts match previousRemoteSalt — no abort, no force re-upload', async () => {
+      // localSalt = previousRemoteSalt = remoteSalt → no key change, normal sync.
+      const p1 = makePage('p1', 1000);
+      const journal = makeJournal([p1], true, 'UzA=');
+      const local = createMockLocalStore(journal);
+
+      const KEY_S0 = new Uint8Array(32).fill(10);
+      const engine0 = new SyncEngine(local, store);
+      await engine0.sync('j1', KEY_S0);
+
+      // Re-sync with previousRemoteSalt = S0 (matches both local and remote)
+      const engine = new SyncEngine(local, store);
+      const result = await engine.sync('j1', KEY_S0, undefined, 'UzA=');
+
+      // Page already in sync, no re-upload, no error
+      expect(result.uploaded).toHaveLength(0);
+      expect(result.downloaded).toHaveLength(0);
+    });
   });
 });

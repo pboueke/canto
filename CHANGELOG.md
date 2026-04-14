@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.18.9 - Cross-device password sync fixes
+
+- **fix: prevent sync corruption when password changed on another device** — engine now tracks `lastKnownRemoteSalt` per journal to distinguish "I changed the password locally" (push) from "another device changed it" (abort with a clear error). Previously the engine would blindly overwrite the remote with stale data, obliterating the new-device's password change.
+- **fix: images/attachments not loading after password change + cloud import** — `reencryptJournal` now flips `att.encrypted` flags on all page attachments to match `!!newKey`. The flag was going stale (bytes were re-encrypted but the flag didn't update), causing `getAttachment` to skip the password-decrypt step and return ciphertext.
+- fix: cloud import (`NewJournalModal.executeCloudImport`) records the imported salt via the new `SyncManager.recordRemoteSalt` so the next sync correctly identifies local matches remote.
+- fix: sync engine reorder — metadata/registry upload now happens AFTER page re-uploads, so an interrupted sync mid-rotation leaves the remote in a recoverable state (next sync re-detects the key change and retries) instead of a corrupted one (registry pointing to new salt with pages still encrypted under the old key).
+- fix: NewJournalModal styling — full width and height with safe-area insets on Android/iOS, floating dev-menu-style card on web.
+- test: 14 new tests — 6 engine tests for `previousRemoteSalt` semantics (aborts on remote external change, pushes on local change, first-sync, bidirectional conflict, happy path); 5 manager tests for `lastKnownRemoteSalt` storage and recall; 1 interrupted-sync recovery regression; 6 unit tests verifying `reencryptJournal` updates `att.encrypted` flags (native + web, images + files); 1 E2E test covering the exact user scenario (image loads after password change + re-sync + wipe + cloud import)
+- refactor: extracted key-aware crypto mock into `src/lib/__tests__/helpers/key-aware-crypto.ts` for cross-test reuse; `InMemoryLocalStore` test helper now properly models the two-layer attachment encryption (was previously device-only)
+
 ## v0.18.8 - Sync after password change, UI polish
 
 - **fix: cloud import failed after password change** — sync engine now compares local salt with remote registry salt and force re-uploads all pages with the new key when they differ. Previously the timestamp-equality check skipped re-upload, leaving GDrive pages encrypted with the old key

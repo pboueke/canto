@@ -6,6 +6,7 @@ import { deriveKey, DEFAULT_KDF_ITERATIONS } from '@/lib/encryption/password';
 import { base64ToUint8 } from '@/lib/encryption/utils';
 
 const LAST_SYNC_PREFIX = 'canto:lastSync:';
+const LAST_REMOTE_SALT_PREFIX = 'canto:lastRemoteSalt:';
 
 export type SyncStatus = 'idle' | 'syncing' | 'error';
 
@@ -59,6 +60,15 @@ export class SyncManager {
     await this.store.disconnect();
   }
 
+  /**
+   * Record the remote registry salt for a journal — used by cloud import to seed
+   * the lastKnownRemoteSalt so the next sync correctly identifies that local
+   * matches remote.
+   */
+  async recordRemoteSalt(journalId: string, salt: string): Promise<void> {
+    await AsyncStorage.setItem(LAST_REMOTE_SALT_PREFIX + journalId, salt);
+  }
+
   async syncJournal(
     journalId: string,
     accessToken: string,
@@ -70,6 +80,11 @@ export class SyncManager {
     // Load last sync time
     const lastSyncStr = await AsyncStorage.getItem(LAST_SYNC_PREFIX + journalId);
     const lastSynced = lastSyncStr ? parseInt(lastSyncStr, 10) : null;
+
+    // Load last-known remote salt — used by engine to disambiguate "I changed
+    // password locally" (push) from "another device changed password" (abort).
+    const previousRemoteSalt =
+      (await AsyncStorage.getItem(LAST_REMOTE_SALT_PREFIX + journalId)) ?? undefined;
 
     this.setState(journalId, { status: 'syncing', lastSynced });
 
@@ -93,13 +108,31 @@ export class SyncManager {
         }
       }
 
-      const result = await engine.sync(journalId, syncKey, (current, total) => {
-        this.setState(journalId, {
-          status: 'syncing',
-          lastSynced,
-          progress: { current, total },
-        });
-      });
+      const result = await engine.sync(
+        journalId,
+        syncKey,
+        (current, total) => {
+          this.setState(journalId, {
+            status: 'syncing',
+            lastSynced,
+            progress: { current, total },
+          });
+        },
+        previousRemoteSalt,
+      );
+
+      // After a successful sync, record the remote salt for future sync comparisons.
+      // We re-fetch the registry to get the current state (which may have just been
+      // updated by our sync if a key rotation happened).
+      try {
+        const remoteJournals = await this.store.listRemoteJournals();
+        const updatedRemote = remoteJournals.find((j) => j.id === journalId);
+        if (updatedRemote?.salt) {
+          await AsyncStorage.setItem(LAST_REMOTE_SALT_PREFIX + journalId, updatedRemote.salt);
+        }
+      } catch {
+        // Non-fatal: missing salt record just means next sync defaults to "no history" mode.
+      }
 
       const now = Date.now();
       await AsyncStorage.setItem(LAST_SYNC_PREFIX + journalId, String(now));

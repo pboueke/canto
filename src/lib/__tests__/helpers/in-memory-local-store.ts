@@ -65,16 +65,25 @@ export function createInMemoryLocalStore(
     return `${journalPath(jId)}/attachments/`;
   }
 
+  /** Build a deterministic key tag (first 4 bytes hex) for password-layer detection. */
+  function keyTag(key: Uint8Array): string {
+    return Array.from(key.slice(0, 4), (b) => b.toString(16).padStart(2, '0')).join('');
+  }
+
   async function readEncrypted(path: string, derivedKey?: Uint8Array): Promise<string | null> {
     const ciphertext = store.get(path);
     if (ciphertext === undefined) return null;
     const deviceDecrypted = await encryption.decrypt(ciphertext);
     if (derivedKey) {
-      // Simulate the aesGcmDecrypt fallback behavior: if it fails, return device-decrypted
-      // In our mock, we use a simple prefix to detect password-encrypted data
-      if (deviceDecrypted.startsWith('aes:')) {
-        return deviceDecrypted.slice(4);
+      // Mirror real behavior: if the password layer is present and the key matches,
+      // strip and return plaintext. If the key doesn't match (different tag), the
+      // real `readEncrypted` falls back to the device-decrypted content (which is
+      // garbage/ciphertext from the password layer's perspective).
+      const expectedPrefix = `aes:${keyTag(derivedKey)}:`;
+      if (deviceDecrypted.startsWith(expectedPrefix)) {
+        return deviceDecrypted.slice(expectedPrefix.length);
       }
+      // Wrong key — return raw device-decrypted (mimics fallback path)
       return deviceDecrypted;
     }
     return deviceDecrypted;
@@ -85,7 +94,7 @@ export function createInMemoryLocalStore(
     data: string,
     derivedKey?: Uint8Array,
   ): Promise<void> {
-    const toDeviceEncrypt = derivedKey ? `aes:${data}` : data;
+    const toDeviceEncrypt = derivedKey ? `aes:${keyTag(derivedKey)}:${data}` : data;
     const ciphertext = await encryption.encrypt(toDeviceEncrypt);
     store.set(path, ciphertext);
   }
@@ -210,25 +219,102 @@ export function createInMemoryLocalStore(
       pageId: string,
       attachment: Attachment,
       data: string,
+      derivedKey?: Uint8Array,
     ): Promise<string> {
+      // Mirror real stores: if attachment.encrypted && derivedKey, apply password layer
+      // before device layer. Otherwise just device layer.
       const path = getAttachmentPath(platform, journalId, pageId, attachment);
-      const ciphertext = await encryption.encrypt(data);
+      const toDeviceEncrypt =
+        attachment.encrypted && derivedKey ? `aes:${keyTag(derivedKey)}:${data}` : data;
+      const ciphertext = await encryption.encrypt(toDeviceEncrypt);
       store.set(path, ciphertext);
       return path;
     },
 
-    async getAttachment(path: string): Promise<string | null> {
+    async getAttachment(path: string, derivedKey?: Uint8Array): Promise<string | null> {
       const ciphertext = store.get(path);
       if (ciphertext === undefined) return null;
-      return encryption.decrypt(ciphertext);
+      const deviceDecrypted = await encryption.decrypt(ciphertext);
+      if (derivedKey) {
+        const expectedPrefix = `aes:${keyTag(derivedKey)}:`;
+        if (deviceDecrypted.startsWith(expectedPrefix)) {
+          return deviceDecrypted.slice(expectedPrefix.length);
+        }
+        // Wrong key or no password layer — fall through to device-decrypted content
+        return deviceDecrypted;
+      }
+      return deviceDecrypted;
     },
 
     async deleteAttachment(path: string): Promise<void> {
       store.delete(path);
     },
 
-    async reencryptJournal(): Promise<void> {
-      // not needed for sync tests
+    async reencryptJournal(
+      journal: JournalContent,
+      oldKey: Uint8Array | undefined,
+      newKey: Uint8Array | undefined,
+    ): Promise<void> {
+      // Mirror src/lib/storage/local.ts behavior:
+      // - flip attachment.encrypted flags to match newKey presence
+      // - re-encrypt non-deleted pages with newKey
+      // - re-encrypt attachment FILES (password layer with newKey)
+      // - re-write metadata with newKey
+      // - update index entry with new salt/secure
+      const newAttEncrypted = !!newKey;
+      const remapAttachments = (arr: Attachment[] | undefined): Attachment[] =>
+        (arr ?? []).map((a) => ({ ...a, encrypted: newAttEncrypted }));
+      const pages = journal.pages
+        .filter((p) => !p.deleted)
+        .map((p) => ({
+          ...p,
+          images: remapAttachments(p.images),
+          files: remapAttachments(p.files),
+        }));
+
+      // Re-encrypt attachment files (all files in attachment prefix)
+      const attachKeys = keysWithPrefix(attachmentsPrefix(journal.id));
+      for (const key of attachKeys) {
+        const raw = store.get(key);
+        if (!raw) continue;
+        let plaintext = await encryption.decrypt(raw);
+        if (oldKey) {
+          const oldPrefix = `aes:${keyTag(oldKey)}:`;
+          if (plaintext.startsWith(oldPrefix)) {
+            plaintext = plaintext.slice(oldPrefix.length);
+          }
+        }
+        const toDeviceEncrypt = newKey ? `aes:${keyTag(newKey)}:${plaintext}` : plaintext;
+        const ciphertext = await encryption.encrypt(toDeviceEncrypt);
+        store.set(key, ciphertext);
+      }
+
+      for (const page of pages) {
+        await writeEncrypted(pagePath(journal.id, page.id), JSON.stringify(page), newKey);
+      }
+
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      const { pages: _p, ...metadata } = journal;
+      await writeEncrypted(metaPath(journal.id), JSON.stringify(metadata), newKey);
+
+      const index = await readIndex();
+      const entry: Journal = {
+        id: journal.id,
+        title: journal.title,
+        icon: journal.icon,
+        date: journal.date,
+        secure: journal.secure,
+        salt: journal.salt,
+        biometric: journal.biometric,
+        kdfIterations: journal.kdfIterations,
+      };
+      const existing = index.journals.findIndex((j) => j.id === journal.id);
+      if (existing >= 0) {
+        index.journals[existing] = entry;
+      } else {
+        index.journals.push(entry);
+      }
+      await writeIndex(index);
     },
 
     async reencryptAll(): Promise<void> {
