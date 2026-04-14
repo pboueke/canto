@@ -1,5 +1,6 @@
 import { useState, useMemo, useCallback } from 'react';
 import type { Filter, PagePreview } from 'canto-data';
+import { isAnniversary } from '@/lib/calendar';
 
 export interface UseFilterInitial {
   query?: string;
@@ -55,13 +56,7 @@ function matchesFilter(
     if (new Date(page.date) > end) return false;
   }
 
-  if (anniversary) {
-    const pageDate = new Date(page.date);
-    if (Number.isNaN(pageDate.getTime())) return false;
-    if (pageDate.getUTCFullYear() >= today.getUTCFullYear()) return false;
-    if (pageDate.getUTCMonth() !== today.getUTCMonth()) return false;
-    if (pageDate.getUTCDate() !== today.getUTCDate()) return false;
-  }
+  if (anniversary && !isAnniversary(page, today)) return false;
 
   return true;
 }

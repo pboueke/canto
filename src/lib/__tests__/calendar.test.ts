@@ -110,6 +110,11 @@ describe('getMonthsWithPages', () => {
     expect(result.map((m) => `${m.year}-${m.month}`)).toEqual(['2024-11', '2025-0', '2025-3']);
   });
 
+  it("sort: 'none' preserves insertion order (encounter order from input)", () => {
+    const result = getMonthsWithPages(pages, 'none');
+    expect(result.map((m) => `${m.year}-${m.month}`)).toEqual(['2025-0', '2024-11', '2025-3']);
+  });
+
   it('cross-year months are distinct entries', () => {
     const result = getMonthsWithPages(pages);
     const dec = result.find((m) => m.year === 2024 && m.month === 11);

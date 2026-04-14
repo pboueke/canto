@@ -12,19 +12,21 @@ function parseUtc(date: string): Date | null {
   return d;
 }
 
+/**
+ * True if `page.date` is a prior-year same-UTC-month+day match against `today`.
+ * Feb-29 entries only match on actual Feb-29 (leap days) — on Feb-28 of
+ * non-leap years we intentionally skip them so users see their Feb-29
+ * anniversaries only on the real calendar leap day.
+ */
+export function isAnniversary(page: Pick<PagePreview, 'date'>, today: Date): boolean {
+  const d = parseUtc(page.date);
+  if (!d) return false;
+  if (d.getUTCFullYear() >= today.getUTCFullYear()) return false;
+  return d.getUTCMonth() === today.getUTCMonth() && d.getUTCDate() === today.getUTCDate();
+}
+
 export function getAnniversaryPages(pages: PagePreview[], today: Date): PagePreview[] {
-  const todayMonth = today.getUTCMonth();
-  const todayDay = today.getUTCDate();
-  const todayYear = today.getUTCFullYear();
-  return pages.filter((p) => {
-    const d = parseUtc(p.date);
-    if (!d) return false;
-    if (d.getUTCFullYear() >= todayYear) return false;
-    // Feb-29 entries only surface on Feb-29 (leap days). On Feb-28 of non-leap
-    // years we intentionally skip them — users see their Feb-29 anniversaries
-    // only on the actual calendar leap day.
-    return d.getUTCMonth() === todayMonth && d.getUTCDate() === todayDay;
-  });
+  return pages.filter((p) => isAnniversary(p, today));
 }
 
 export function getMonthsWithPages(
@@ -47,6 +49,7 @@ export function getMonthsWithPages(
     entry.daysWithPages.add(day);
   }
   const entries = Array.from(map.values());
+  if (sort === 'none') return entries;
   entries.sort((a, b) => {
     const ay = a.year * 12 + a.month;
     const by = b.year * 12 + b.month;

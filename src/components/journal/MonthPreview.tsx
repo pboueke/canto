@@ -2,6 +2,7 @@ import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useMemo } from 'react';
 import { useTheme } from '@/hooks/useTheme';
 import { useI18n } from '@/hooks/useI18n';
+import { getContrastText } from '@/styles/themes';
 
 interface MonthPreviewProps {
   year: number;
@@ -93,7 +94,9 @@ export function MonthPreview({ year, month, daysWithPages, onPress }: MonthPrevi
                 >
                   <Text
                     style={{
-                      color: highlighted ? '#fff' : theme.colors.text,
+                      color: highlighted
+                        ? getContrastText(theme.colors.primary)
+                        : theme.colors.text,
                       fontFamily: theme.fonts.regular,
                       fontSize: 13,
                     }}
