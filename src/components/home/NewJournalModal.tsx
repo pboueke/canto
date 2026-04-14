@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import {
   ActivityIndicator,
   Modal,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -11,6 +12,7 @@ import {
   View,
 } from 'react-native';
 import { Feather } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as DocumentPicker from 'expo-document-picker';
 import { useTheme } from '@/hooks/useTheme';
 import { useI18n } from '@/hooks/useI18n';
@@ -68,6 +70,8 @@ export function NewJournalModal({
 }: NewJournalModalProps) {
   const { theme } = useTheme();
   const { t } = useI18n();
+  const insets = useSafeAreaInsets();
+  const isWeb = Platform.OS === 'web';
   const { isSignedIn, accessToken } = useGoogleAuth();
   const { manager } = useSyncManager();
 
@@ -306,6 +310,14 @@ export function NewJournalModal({
         throw saveErr;
       }
 
+      // Seed the SyncManager's lastKnownRemoteSalt so the next sync correctly
+      // identifies that local matches remote — otherwise the engine would treat
+      // this as a "no history" first-sync and risk overwriting remote on any
+      // future password change.
+      if (remote.salt && manager) {
+        await manager.recordRemoteSalt(remote.id, remote.salt);
+      }
+
       if (importWarnings.length > 0) {
         console.warn('[Canto] Cloud import warnings:', importWarnings);
       }
@@ -493,21 +505,36 @@ export function NewJournalModal({
   }
 
   return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={handleClose}>
-      <View style={styles.overlay}>
+    <Modal
+      visible={visible}
+      transparent={isWeb}
+      animationType={isWeb ? 'fade' : 'slide'}
+      onRequestClose={handleClose}
+    >
+      <View style={isWeb ? styles.overlayWeb : styles.overlayNative}>
         <View
           style={[
-            styles.container,
-            webModalContent,
-            {
-              backgroundColor: theme.colors.foreground,
-              borderColor: theme.colors.border,
-              borderWidth: theme.borderWidth,
-            },
+            isWeb ? styles.containerWeb : styles.containerNative,
+            isWeb ? webModalContent : null,
+            isWeb
+              ? {
+                  backgroundColor: theme.colors.foreground,
+                  borderColor: theme.colors.border,
+                  borderWidth: theme.borderWidth,
+                }
+              : { backgroundColor: theme.colors.background },
           ]}
         >
           {/* Header */}
-          <View style={[styles.header, { borderBottomColor: theme.colors.border }]}>
+          <View
+            style={[
+              styles.header,
+              {
+                borderBottomColor: theme.colors.border,
+                paddingTop: isWeb ? 12 : insets.top + 12,
+              },
+            ]}
+          >
             <Pressable onPress={handleClose} style={styles.backBtn}>
               <Feather name="x" size={22} color={theme.colors.text} />
             </Pressable>
@@ -837,7 +864,15 @@ export function NewJournalModal({
                 <View style={{ height: 20 }} />
               </ScrollView>
 
-              <View style={[styles.footer, { borderTopColor: theme.colors.border }]}>
+              <View
+                style={[
+                  styles.footer,
+                  {
+                    borderTopColor: theme.colors.border,
+                    paddingBottom: isWeb ? 12 : insets.bottom + 12,
+                  },
+                ]}
+              >
                 <Pressable
                   onPress={handleClose}
                   style={[styles.button, { backgroundColor: theme.colors.highlight }]}
@@ -1330,18 +1365,24 @@ export function NewJournalModal({
 }
 
 const styles = StyleSheet.create({
-  overlay: {
+  overlayWeb: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.5)',
     justifyContent: 'center',
     alignItems: 'center',
     padding: 30,
   },
-  container: {
+  overlayNative: {
+    flex: 1,
+  },
+  containerWeb: {
     borderRadius: 5,
-    maxHeight: '90%',
+    height: '90%',
     width: '100%',
     overflow: 'hidden',
+  },
+  containerNative: {
+    flex: 1,
   },
   header: {
     flexDirection: 'row',
@@ -1465,6 +1506,7 @@ const styles = StyleSheet.create({
     gap: 10,
     paddingHorizontal: 16,
     paddingTop: 12,
+    paddingBottom: 12,
     borderTopWidth: 1,
   },
   button: {

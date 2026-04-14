@@ -23,6 +23,7 @@ import {
   tryLoadJournal,
 } from '@/hooks/useStorage';
 import { useJournalKeys } from '@/contexts/JournalKeyContext';
+import { useSyncManager } from '@/contexts/SyncManagerContext';
 import { IconPicker } from '@/components/common/IconPicker';
 import { ThemePickerModal } from '@/components/home/ThemePickerModal';
 import { ConfirmDeleteModal } from './ConfirmDeleteModal';
@@ -54,6 +55,7 @@ export function JournalSettings({
   const { deleteJournal } = useDeleteJournal();
   const { saveJournal } = useSaveJournal();
   const { deriveAndCache, setKey, clearKey } = useJournalKeys();
+  const { manager } = useSyncManager();
 
   const [settings, setSettings] = useState<JournalSettingsType>({ ...journal.settings });
   const [showDeleteModal, setShowDeleteModal] = useState(false);
@@ -141,13 +143,18 @@ export function JournalSettings({
       try {
         clearKey(journal.id);
         await deleteJournal(journal.id);
+        // Clear sync state (lastSync, lastRemoteSalt) so a later recreate/re-import
+        // doesn't inherit stale data.
+        if (manager) {
+          await manager.forgetJournal(journal.id);
+        }
         setShowDeleteModal(false);
         router.replace('/');
       } catch (err) {
         setDeleteError(err instanceof Error ? err.message : String(err));
       }
     },
-    [journal, deleteJournal, clearKey, deriveAndCache, t],
+    [journal, deleteJournal, clearKey, deriveAndCache, manager, t],
   );
 
   const handleChangePassword = useCallback(

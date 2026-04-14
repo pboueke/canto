@@ -24,6 +24,10 @@ jest.mock('@react-native-async-storage/async-storage', () => ({
     asyncStore[key] = value;
     return Promise.resolve();
   }),
+  removeItem: jest.fn((key: string) => {
+    delete asyncStore[key];
+    return Promise.resolve();
+  }),
 }));
 
 function createMockRemoteStore(): RemoteStore {
@@ -248,6 +252,100 @@ describe('SyncManager', () => {
 
       expect(r1).not.toBeNull();
       expect(r2).not.toBeNull();
+    });
+  });
+
+  describe('lastKnownRemoteSalt tracking (cross-device password change protection)', () => {
+    it('stores remote salt in AsyncStorage after successful sync', async () => {
+      const journal = makeJournal([]);
+      const local = createMockLocalStore(journal);
+      const remote = createMockRemoteStore();
+      // Remote registry returns the same salt as local journal (no key change scenario)
+      (remote.listRemoteJournals as jest.Mock).mockResolvedValue([
+        { id: 'j1', title: 'Test', salt: 'dGVzdHNhbHQ=', encrypted: false, lastModified: 0 },
+      ]);
+      const manager = new SyncManager(local, remote);
+
+      await manager.syncJournal('j1', 'token');
+
+      expect(asyncStore['canto:lastRemoteSalt:j1']).toBe('dGVzdHNhbHQ=');
+    });
+
+    it('passes stored salt to engine on subsequent sync (via local.getJournal call)', async () => {
+      // Pre-seed the lastKnownRemoteSalt in AsyncStorage
+      asyncStore['canto:lastRemoteSalt:j1'] = 'dGVzdHNhbHQ=';
+      const journal = makeJournal([]);
+      const local = createMockLocalStore(journal);
+      const remote = createMockRemoteStore();
+      (remote.listRemoteJournals as jest.Mock).mockResolvedValue([
+        { id: 'j1', title: 'Test', salt: 'dGVzdHNhbHQ=', encrypted: false, lastModified: 0 },
+      ]);
+      const manager = new SyncManager(local, remote);
+
+      // Should not throw — local salt matches both stored and remote salt
+      const result = await manager.syncJournal('j1', 'token');
+      expect(result).not.toBeNull();
+    });
+
+    it('aborts sync when remote salt changed externally (using stored lastKnownRemoteSalt)', async () => {
+      // Seed: previous sync stored OLD_SALT
+      asyncStore['canto:lastRemoteSalt:j1'] = 'b2xkc2FsdA==';
+      const journal = makeJournal([]); // local salt = 'dGVzdHNhbHQ=' (default from makeJournal)
+      // Override local salt to match the previously stored salt
+      journal.salt = 'b2xkc2FsdA==';
+      const local = createMockLocalStore(journal);
+      const remote = createMockRemoteStore();
+      // Remote now has DIFFERENT salt (changed by another device)
+      (remote.listRemoteJournals as jest.Mock).mockResolvedValue([
+        { id: 'j1', title: 'Test', salt: 'bmV3c2FsdA==', encrypted: false, lastModified: 0 },
+      ]);
+      const manager = new SyncManager(local, remote);
+
+      const result = await manager.syncJournal('j1', 'token');
+      expect(result).toBeNull(); // sync failed
+      expect(manager.getState('j1').status).toBe('error');
+      expect(manager.getState('j1').error).toMatch(/changed on another device/i);
+    });
+
+    it('does NOT store remote salt on failed sync', async () => {
+      const journal = makeJournal([]);
+      const local = createMockLocalStore(journal);
+      (local.getJournal as jest.Mock).mockRejectedValueOnce(new Error('read failure'));
+      const remote = createMockRemoteStore();
+      (remote.listRemoteJournals as jest.Mock).mockResolvedValue([
+        { id: 'j1', title: 'Test', salt: 'somesalt', encrypted: false, lastModified: 0 },
+      ]);
+      const manager = new SyncManager(local, remote);
+
+      await manager.syncJournal('j1', 'token');
+
+      expect(asyncStore['canto:lastRemoteSalt:j1']).toBeUndefined();
+    });
+
+    it('exposes a method to seed lastKnownRemoteSalt (used by cloud import)', async () => {
+      const local = createMockLocalStore(null);
+      const manager = new SyncManager(local, createMockRemoteStore());
+
+      await manager.recordRemoteSalt('j1', 'importedsalt==');
+
+      expect(asyncStore['canto:lastRemoteSalt:j1']).toBe('importedsalt==');
+    });
+
+    it('forgetJournal clears all sync state for a deleted journal', async () => {
+      // Pre-seed sync state
+      asyncStore['canto:lastSync:j1'] = '1700000000000';
+      asyncStore['canto:lastRemoteSalt:j1'] = 'oldsalt==';
+      const local = createMockLocalStore(null);
+      const manager = new SyncManager(local, createMockRemoteStore());
+
+      await manager.forgetJournal('j1');
+
+      expect(asyncStore['canto:lastSync:j1']).toBeUndefined();
+      expect(asyncStore['canto:lastRemoteSalt:j1']).toBeUndefined();
+      // Other journals' state must be untouched
+      asyncStore['canto:lastSync:j2'] = '1700000000000';
+      await manager.forgetJournal('j1');
+      expect(asyncStore['canto:lastSync:j2']).toBeDefined();
     });
   });
 

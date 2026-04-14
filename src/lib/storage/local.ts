@@ -394,7 +394,20 @@ export function createLocalStore(encryption: EncryptionService): LocalStore {
       newKey: Uint8Array | undefined,
       onProgress?: (current: number, total: number) => void,
     ): Promise<void> {
-      const pages = journal.pages.filter((p) => !p.deleted);
+      // Flip attachment.encrypted flags to match the new key state. The attachment
+      // files themselves will be re-encrypted below — the flag must stay in sync
+      // with what's actually on disk so viewers know whether to strip the password
+      // layer when rendering.
+      const newAttEncrypted = !!newKey;
+      const remapAttachments = (arr: Attachment[] | undefined): Attachment[] =>
+        (arr ?? []).map((a) => ({ ...a, encrypted: newAttEncrypted }));
+      const pages = journal.pages
+        .filter((p) => !p.deleted)
+        .map((p) => ({
+          ...p,
+          images: remapAttachments(p.images),
+          files: remapAttachments(p.files),
+        }));
 
       // Count attachments for accurate progress
       const attachDir = getAttachmentsDir(journal.id);
@@ -403,7 +416,7 @@ export function createLocalStore(encryption: EncryptionService): LocalStore {
         : [];
       const total = pages.length + attachFiles.length + 1; // pages + attachments + metadata
 
-      // Step 1: Re-encrypt pages
+      // Step 1: Re-encrypt pages (with updated attachment.encrypted flags)
       let progress = 0;
       for (const page of pages) {
         onProgress?.(++progress, total);

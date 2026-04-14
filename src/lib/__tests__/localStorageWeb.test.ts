@@ -623,6 +623,65 @@ describe('reencryptJournal attachment handling (web)', () => {
     expect(journals).toHaveLength(1);
     expect(journals[0].id).toBe('j1');
   });
+
+  it('sets attachment.encrypted=true when adding password (newKey provided)', async () => {
+    const encryption = createMockEncryption();
+    const store = createLocalStore(encryption);
+    await store.initialize();
+
+    const att: Attachment = {
+      id: 'img1',
+      path: '',
+      name: 'photo.jpg',
+      type: 'image',
+      encrypted: false,
+      deleted: false,
+    };
+    const page: Page = { ...makePage('p1'), images: [att] };
+    const journal = makeJournalContent('j1', [page]);
+    await store.saveJournal(journal);
+    const savedPath = await store.saveAttachment('j1', 'p1', att, 'imagedata');
+
+    const loaded = await store.getJournal('j1');
+    loaded!.pages[0].images[0].path = savedPath;
+
+    const newKey = new Uint8Array(32).fill(42);
+    await store.reencryptJournal(loaded!, undefined, newKey);
+
+    const result = await store.getJournal('j1', newKey);
+    expect(result!.pages[0].images[0].encrypted).toBe(true);
+  });
+
+  it('sets attachment.encrypted=false when removing password (newKey undefined)', async () => {
+    const encryption = createMockEncryption();
+    const store = createLocalStore(encryption);
+    await store.initialize();
+
+    const att: Attachment = {
+      id: 'img1',
+      path: '',
+      name: 'photo.jpg',
+      type: 'image',
+      encrypted: true,
+      deleted: false,
+    };
+    const page: Page = { ...makePage('p1'), images: [att] };
+    const oldKey = new Uint8Array(32).fill(10);
+    const journal: JournalContent = {
+      ...makeJournalContent('j1', [page]),
+      secure: true,
+    };
+    await store.saveJournal(journal, oldKey);
+    const savedPath = await store.saveAttachment('j1', 'p1', att, 'imagedata', oldKey);
+
+    const loaded = await store.getJournal('j1', oldKey);
+    loaded!.pages[0].images[0].path = savedPath;
+
+    await store.reencryptJournal(loaded!, oldKey, undefined);
+
+    const result = await store.getJournal('j1');
+    expect(result!.pages[0].images[0].encrypted).toBe(false);
+  });
 });
 
 describe('IDB error handling (web)', () => {
