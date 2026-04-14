@@ -69,6 +69,24 @@ export class SyncManager {
     await AsyncStorage.setItem(LAST_REMOTE_SALT_PREFIX + journalId, salt);
   }
 
+  /**
+   * Clear all sync state for a journal. Called when a journal is deleted locally
+   * so that a later recreate/re-import with the same ID does not inherit stale
+   * salt/timestamp data.
+   */
+  async forgetJournal(journalId: string): Promise<void> {
+    await AsyncStorage.removeItem(LAST_SYNC_PREFIX + journalId);
+    await AsyncStorage.removeItem(LAST_REMOTE_SALT_PREFIX + journalId);
+    this.states.delete(journalId);
+    this.locks.delete(journalId);
+    const timer = this.debounceTimers.get(journalId);
+    if (timer) {
+      clearTimeout(timer);
+      this.debounceTimers.delete(journalId);
+    }
+    this.notify();
+  }
+
   async syncJournal(
     journalId: string,
     accessToken: string,
@@ -130,8 +148,10 @@ export class SyncManager {
         if (updatedRemote?.salt) {
           await AsyncStorage.setItem(LAST_REMOTE_SALT_PREFIX + journalId, updatedRemote.salt);
         }
-      } catch {
-        // Non-fatal: missing salt record just means next sync defaults to "no history" mode.
+      } catch (err) {
+        // Non-fatal: missing salt record means next sync defaults to "no history" mode.
+        // Log so it's visible in Sentry/console when debugging unexpected sync behavior.
+        console.warn(`[Canto] Failed to record remote salt for ${journalId}:`, err);
       }
 
       const now = Date.now();

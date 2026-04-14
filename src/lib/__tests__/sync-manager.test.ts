@@ -24,6 +24,10 @@ jest.mock('@react-native-async-storage/async-storage', () => ({
     asyncStore[key] = value;
     return Promise.resolve();
   }),
+  removeItem: jest.fn((key: string) => {
+    delete asyncStore[key];
+    return Promise.resolve();
+  }),
 }));
 
 function createMockRemoteStore(): RemoteStore {
@@ -325,6 +329,23 @@ describe('SyncManager', () => {
       await manager.recordRemoteSalt('j1', 'importedsalt==');
 
       expect(asyncStore['canto:lastRemoteSalt:j1']).toBe('importedsalt==');
+    });
+
+    it('forgetJournal clears all sync state for a deleted journal', async () => {
+      // Pre-seed sync state
+      asyncStore['canto:lastSync:j1'] = '1700000000000';
+      asyncStore['canto:lastRemoteSalt:j1'] = 'oldsalt==';
+      const local = createMockLocalStore(null);
+      const manager = new SyncManager(local, createMockRemoteStore());
+
+      await manager.forgetJournal('j1');
+
+      expect(asyncStore['canto:lastSync:j1']).toBeUndefined();
+      expect(asyncStore['canto:lastRemoteSalt:j1']).toBeUndefined();
+      // Other journals' state must be untouched
+      asyncStore['canto:lastSync:j2'] = '1700000000000';
+      await manager.forgetJournal('j1');
+      expect(asyncStore['canto:lastSync:j2']).toBeDefined();
     });
   });
 
