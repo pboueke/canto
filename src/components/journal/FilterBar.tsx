@@ -6,6 +6,7 @@ const DateTimePicker =
   Platform.OS !== 'web' ? require('@react-native-community/datetimepicker').default : null;
 import { useTheme } from '@/hooks/useTheme';
 import { useI18n } from '@/hooks/useI18n';
+import { getContrastText } from '@/styles/themes';
 import type { Filter } from 'canto-data';
 import { FilterModal } from './FilterModal';
 
@@ -208,7 +209,7 @@ export function FilterBar({
             style={[styles.clearBtn, { backgroundColor: theme.colors.error }]}
             onPress={onClearFilters}
           >
-            <Feather name="x" size={14} color="#fff" />
+            <Feather name="x" size={14} color={getContrastText(theme.colors.error)} />
           </Pressable>
         )}
       </View>

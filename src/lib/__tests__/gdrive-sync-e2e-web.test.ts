@@ -577,6 +577,58 @@ describe('GDrive sync E2E (web platform)', () => {
     expect(result.downloaded).toHaveLength(0);
   });
 
+  it('cloud import of password-protected journal saves with password key', async () => {
+    // Device A: create and sync a password-protected journal
+    const localA = createWebLocal();
+    const p1 = makePage('p1', 1000, false, [], 'Secret diary entry');
+    const journal = makeJournal([p1], true, 'c2VjcmV0c2FsdA==');
+    const PASSWORD_KEY = new Uint8Array(32).fill(42);
+    await localA.saveJournal(journal, PASSWORD_KEY);
+
+    const engine = new SyncEngine(localA, store);
+    await engine.sync('j1', PASSWORD_KEY);
+
+    // Device B: simulate cloud import (same flow as NewJournalModal.executeCloudImport)
+    const localB = createWebLocal();
+
+    // 1. Download and parse metadata from GDrive
+    const store2 = new GDriveRemoteStore();
+    await store2.connect({ accessToken: 'test-token' });
+    const encryptedMeta = await store2.downloadJournalMeta('j1');
+    expect(encryptedMeta).not.toBeNull();
+    const meta = JSON.parse(encryptedMeta!);
+
+    // 2. Download sync index and pages
+    const syncIndex = await store2.downloadSyncIndex('j1');
+    const pageIds = syncIndex ? Object.keys(syncIndex).filter((id) => !syncIndex[id].deleted) : [];
+    expect(pageIds).toContain('p1');
+
+    const pages = [];
+    for (const pageId of pageIds) {
+      const rawPage = await store2.downloadPage('j1', pageId);
+      expect(rawPage).not.toBeNull();
+      pages.push(JSON.parse(rawPage!));
+    }
+
+    // 3. Save to local store WITH the password key (the fix)
+    const importedJournal = { ...meta, pages };
+    await localB.saveJournal(importedJournal, PASSWORD_KEY);
+    for (const page of pages) {
+      await localB.savePage('j1', page, PASSWORD_KEY, true);
+    }
+
+    // 4. Verify: reading back WITH the key succeeds
+    const loaded = await localB.getJournal('j1', PASSWORD_KEY);
+    expect(loaded).not.toBeNull();
+    expect(loaded!.title).toBe('My Journal');
+    expect(loaded!.secure).toBe(true);
+
+    const loadedPage = await localB.getPage('j1', 'p1', PASSWORD_KEY);
+    expect(loadedPage).not.toBeNull();
+    expect(loadedPage!.text).toBe('Secret diary entry');
+    expect(loadedPage!.modified).toBe(1000);
+  });
+
   it('imported pages saved WITHOUT preserveModified cause unnecessary re-uploads (regression guard)', async () => {
     const local = createWebLocal();
     const emptyJournal = makeJournal([]);

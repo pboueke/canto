@@ -743,3 +743,36 @@ export const themeNames: ThemeName[] = [
   'onecyan',
   'gruvbox',
 ];
+
+/**
+ * Parse an rgb(...) color string into [r, g, b] components.
+ */
+function parseRgb(color: string): [number, number, number] {
+  const m = color.match(/rgb\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*\)/);
+  if (!m) return [0, 0, 0];
+  return [parseInt(m[1], 10), parseInt(m[2], 10), parseInt(m[3], 10)];
+}
+
+/**
+ * Compute relative luminance per WCAG 2.x (sRGB).
+ */
+function relativeLuminance(r: number, g: number, b: number): number {
+  const [rs, gs, bs] = [r / 255, g / 255, b / 255].map((c) =>
+    c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4,
+  );
+  return 0.2126 * rs + 0.7152 * gs + 0.0722 * bs;
+}
+
+/**
+ * Return a text color (#fff or #000) that provides better contrast
+ * against the given background color (rgb(...) string).
+ */
+export function getContrastText(bgColor: string): '#fff' | '#000' {
+  const [r, g, b] = parseRgb(bgColor);
+  const lum = relativeLuminance(r, g, b);
+  // Contrast ratio against white: (1.05) / (lum + 0.05)
+  // Contrast ratio against black: (lum + 0.05) / 0.05
+  const contrastWhite = 1.05 / (lum + 0.05);
+  const contrastBlack = (lum + 0.05) / 0.05;
+  return contrastWhite >= contrastBlack ? '#fff' : '#000';
+}

@@ -3,6 +3,7 @@ import { Modal, Pressable, StyleSheet, Text, TextInput, View } from 'react-nativ
 import { useTheme } from '@/hooks/useTheme';
 import { useI18n } from '@/hooks/useI18n';
 import { webModalContent } from '@/styles/web';
+import { getContrastText } from '@/styles/themes';
 
 interface ConfirmDeleteModalProps {
   visible: boolean;
@@ -111,7 +112,17 @@ export function ConfirmDeleteModal({
               onPress={handleConfirm}
               disabled={!canConfirm}
             >
-              <Text style={[styles.btnText, { color: '#fff', fontFamily: theme.fonts.bold }]}>
+              <Text
+                style={[
+                  styles.btnText,
+                  {
+                    color: getContrastText(
+                      canConfirm ? theme.colors.error : theme.colors.buttonDisabled,
+                    ),
+                    fontFamily: theme.fonts.bold,
+                  },
+                ]}
+              >
                 {t.common.delete}
               </Text>
             </Pressable>

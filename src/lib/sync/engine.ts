@@ -111,15 +111,17 @@ export class SyncEngine {
     const localJournal = await this.local.getJournal(journalId, syncKey);
     if (!localJournal) return result;
 
-    // Upload encrypted journal metadata
-    const { pages: _pages, ...metaWithoutPages } = localJournal;
-    const encryptedMeta = await aesGcmEncrypt(JSON.stringify(metaWithoutPages), syncKey);
-    await this.remote.uploadJournalMeta(journalId, encryptedMeta, {
-      title: localJournal.title,
-      encrypted: localJournal.secure,
-      salt: localJournal.salt,
-      kdfIterations: localJournal.kdfIterations,
-    });
+    // Detect encryption key change by comparing local salt with remote registry salt.
+    // When the password is changed, a new salt is generated and local data is re-encrypted,
+    // but page timestamps stay the same. Without this check the engine would skip
+    // re-uploading pages (timestamps match), leaving GDrive data encrypted with the old key.
+    const remoteJournals = await this.remote.listRemoteJournals();
+    const remoteJournal = remoteJournals.find((j) => j.id === journalId);
+    const keyChanged =
+      remoteJournal != null &&
+      remoteJournal.salt != null &&
+      localJournal.salt != null &&
+      remoteJournal.salt !== localJournal.salt;
 
     // Build local page map
     const localPages = new Map(localJournal.pages.map((p) => [p.id, p]));
@@ -146,7 +148,7 @@ export class SyncEngine {
         result.uploaded.push(pageId);
       } else if (!localPage && remoteEntry) {
         // Remote only: download
-        if (remoteEntry.deleted) continue; // don't download deleted pages
+        if (remoteEntry.deleted) continue;
         try {
           const encryptedPage = await this.remote.downloadPage(journalId, pageId);
           if (encryptedPage) {
@@ -172,6 +174,12 @@ export class SyncEngine {
           // Remotely deleted, local still exists: propagate deletion
           await this.local.deletePage(journalId, pageId, syncKey);
           result.deleted.push(pageId);
+        } else if (keyChanged) {
+          // Key changed: force re-upload with new encryption key
+          await this.uploadPageAttachments(journalId, localPage, syncKey);
+          const encrypted = await aesGcmEncrypt(JSON.stringify(localPage), syncKey);
+          await this.remote.uploadPage(journalId, pageId, encrypted);
+          result.uploaded.push(pageId);
         } else if (localPage.modified === remoteEntry.modified) {
           // In sync, nothing to do
         } else if (localPage.modified > remoteEntry.modified) {
@@ -198,9 +206,24 @@ export class SyncEngine {
       }
     }
 
-    // Upload sync index with current state of all pages (local + downloaded)
+    // Upload encrypted journal metadata + registry LAST. Doing this after
+    // page re-uploads ensures atomic-ish key rotation: if the sync is
+    // interrupted mid-upload, the remote registry still has the old salt and
+    // the next sync will re-detect the key change and retry. Updating the
+    // registry first would leave the remote in a corrupted state (registry
+    // says "use new key" but pages are still encrypted with the old key).
     const updatedJournal = await this.local.getJournal(journalId, syncKey);
     if (updatedJournal) {
+      const { pages: _pages, ...metaWithoutPages } = updatedJournal;
+      const encryptedMeta = await aesGcmEncrypt(JSON.stringify(metaWithoutPages), syncKey);
+      await this.remote.uploadJournalMeta(journalId, encryptedMeta, {
+        title: updatedJournal.title,
+        encrypted: updatedJournal.secure,
+        salt: updatedJournal.salt,
+        kdfIterations: updatedJournal.kdfIterations,
+      });
+
+      // Upload sync index with current state of all pages (local + downloaded)
       await this.remote.uploadSyncIndex(journalId, buildSyncIndex(updatedJournal.pages));
     }
 

@@ -13,6 +13,7 @@ import {
 import { Feather } from '@expo/vector-icons';
 import { useTheme } from '@/hooks/useTheme';
 import { useI18n } from '@/hooks/useI18n';
+import { getContrastText } from '@/styles/themes';
 import { useJournals, getLocalStore } from '@/hooks/useStorage';
 import { useGoogleAuth } from '@/contexts/GoogleAuthContext';
 import { useSyncManager } from '@/contexts/SyncManagerContext';
@@ -497,12 +498,12 @@ export function AccountButton() {
                 ]}
               >
                 {deleting ? (
-                  <ActivityIndicator size="small" color={theme.colors.foreground} />
+                  <ActivityIndicator size="small" color={getContrastText(theme.colors.highlight)} />
                 ) : (
                   <Text
                     style={[
                       styles.actionText,
-                      { color: theme.colors.foreground, fontFamily: theme.fonts.bold },
+                      { color: getContrastText(theme.colors.error), fontFamily: theme.fonts.bold },
                     ]}
                   >
                     {t.common.delete}

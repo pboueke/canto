@@ -39,7 +39,7 @@ yarn-error.*
 .build_android.sh
 
 # Google OAuth credentials
-google-credentials.ts
+google-credentials*.ts
 *googleusercontent.com.json
 *googleusercontent.com.plist
 
