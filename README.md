@@ -11,7 +11,7 @@
 </p>
 
 <p align="center">
-  A private, encrypted journaling app for Android, iOS*, and Web.
+  A private, encrypted journaling app for Android, iOS*, and Web. <a href="https://pboueke.github.io/canto/">Get it now</a>, it's free forever.
 </p>
 
 <p align="center">
