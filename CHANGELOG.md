@@ -1,5 +1,14 @@
 # Changelog
 
+## v0.19.1 - Release fixes
+
+- **feat: font customization in style picker** — `ThemePickerModal` now offers font-size presets (small/default/large/x-large, scales 0.85/1.0/1.15/1.3) and font-family options (default Lato+Merriweather, OpenDyslexic, Lora serif). Prefs persist via AsyncStorage and apply globally; scaling currently affects the journal page editor + rendered markdown. New `FontPrefsContext`, `src/lib/font.ts`, 7 font tests.
+- **feat: per-page retry on cloud import** — each page download in `executeCloudImport` is now wrapped in `retryWithBackoff` with 5 attempts and 1s/2s/4s/8s exponential backoff. Failed pages after retries still surface via the existing integrity-warning UI. New `src/lib/sync/retry.ts` + 5 unit tests.
+- **feat: 'Preparing import...' state during cloud import setup** — new `cloudImportPhase: 'idle' | 'preparing' | 'downloading'` state covers the gap between tapping a remote journal and the first page download (connect + meta + key derivation + sync index). New `t.sync.preparingImport` key across all 20 locales.
+- **fix: decrypting modal label** — `JournalAccessModal` busy state now reads "Decrypting..." instead of "Loading...". New `t.home.decrypting` key (translations reused verbatim from existing `t.page.decrypting`).
+- **fix: page editor caret hidden by keyboard** — page `ScrollView` wrapped in `KeyboardAvoidingView`; `PageContent` `TextInput` now scrolls to end on `onSelectionChange`/`onContentSizeChange`. Fixed `minHeight: 400` removed from the editor container.
+- chore: extended `CantoTheme.fonts` with `fontScale: number` (defaults to 1.0 on all 10 themes); `applyFontPrefs` swaps the family + scale before the theme reaches `ThemeContext`.
+
 ## v0.19.0 - Per-journal Calendar page + anniversary filter
 
 - **feat: per-journal Calendar page** — new calendar button in `JournalHeader` (left of sync) opens `/journal/{id}/calendar`. Page shows a journal-titled header, an anniversary row ("N pages celebrating an anniversary today" with 0/1/n copy variants), and a vertical scroll of month cards with days-with-pages highlighted. Tapping a month filters the journal to that month's date range; tapping the anniversary row activates the new anniversary filter.

@@ -12,50 +12,51 @@ interface PageContentProps {
 export function PageContent({ content, isEditing, onChangeText }: PageContentProps) {
   const { theme } = useTheme();
   const { t } = useI18n();
+  const scale = theme.fonts.fontScale;
 
   const markdownStyles = {
     body: {
       color: theme.colors.markdown.text,
       fontFamily: theme.fonts.serif,
-      fontSize: 14,
-      lineHeight: 22,
+      fontSize: 14 * scale,
+      lineHeight: 22 * scale,
     },
     heading1: {
       fontFamily: theme.fonts.serifBold,
       color: theme.colors.markdown.text,
-      fontSize: 24,
+      fontSize: 24 * scale,
       marginBottom: 8,
     },
     heading2: {
       fontFamily: theme.fonts.serifBold,
       color: theme.colors.markdown.text,
-      fontSize: 20,
+      fontSize: 20 * scale,
       marginBottom: 6,
     },
     heading3: {
       fontFamily: theme.fonts.serifBold,
       color: theme.colors.markdown.text,
-      fontSize: 17,
+      fontSize: 17 * scale,
       marginBottom: 4,
     },
     code_inline: {
       backgroundColor: theme.colors.markdown.codeBackground,
       fontFamily: undefined,
-      fontSize: 13,
+      fontSize: 13 * scale,
       padding: 2,
       borderRadius: 3,
     },
     code_block: {
       backgroundColor: theme.colors.markdown.codeBackground,
       fontFamily: undefined,
-      fontSize: 13,
+      fontSize: 13 * scale,
       padding: 10,
       borderRadius: 5,
     },
     fence: {
       backgroundColor: theme.colors.markdown.codeBackground,
       fontFamily: undefined,
-      fontSize: 13,
+      fontSize: 13 * scale,
       padding: 10,
       borderRadius: 5,
     },
@@ -94,7 +95,15 @@ export function PageContent({ content, isEditing, onChangeText }: PageContentPro
     >
       {isEditing ? (
         <TextInput
-          style={[styles.input, { color: theme.colors.text, fontFamily: theme.fonts.serif }]}
+          style={[
+            styles.input,
+            {
+              color: theme.colors.text,
+              fontFamily: theme.fonts.serif,
+              fontSize: 14 * scale,
+              lineHeight: 22 * scale,
+            },
+          ]}
           value={content}
           onChangeText={onChangeText}
           multiline
@@ -113,7 +122,6 @@ const styles = StyleSheet.create({
   container: {
     borderRadius: 5,
     padding: 15,
-    minHeight: 400,
     marginTop: 10,
   },
   input: {

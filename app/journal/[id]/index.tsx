@@ -19,6 +19,8 @@ import { useGoogleAuth } from '@/contexts/GoogleAuthContext';
 import { useSyncManager, useSyncState } from '@/contexts/SyncManagerContext';
 import { pageToPreview } from 'canto-data';
 import { type ThemeName, themes } from '@/styles/themes';
+import { useFontPrefs } from '@/contexts/FontPrefsContext';
+import { applyFontPrefs } from '@/lib/font';
 import { getAnniversaryPages } from '@/lib/calendar';
 
 export default function JournalScreen() {
@@ -31,6 +33,7 @@ export default function JournalScreen() {
   const { id } = params;
   const { theme: globalTheme, setThemeName } = useTheme();
   const { t } = useI18n();
+  const { fontFamily, fontSize } = useFontPrefs();
   const { getKey, deriveAndCache } = useJournalKeys();
   const insets = useSafeAreaInsets();
 
@@ -88,8 +91,10 @@ export default function JournalScreen() {
   }, [loading, journal]);
 
   const overrideName = journal?.settings.themeOverride as ThemeName | undefined;
-  const overrideTheme = overrideName && overrideName in themes ? themes[overrideName] : null;
-  const theme = overrideTheme ?? globalTheme;
+  const overrideRawTheme = overrideName && overrideName in themes ? themes[overrideName] : null;
+  const theme = overrideRawTheme
+    ? applyFontPrefs(overrideRawTheme, fontFamily, fontSize)
+    : globalTheme;
   const isDark = theme.isDark;
 
   const pages = useMemo(() => {

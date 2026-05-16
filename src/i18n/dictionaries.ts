@@ -60,6 +60,7 @@ export interface Dictionary {
     biometricUnavailable: string;
     passwordExplainTitle: string;
     passwordExplainBody: string;
+    decrypting: string;
   };
   journal: {
     title: string;
@@ -109,6 +110,16 @@ export interface Dictionary {
     language: string;
     darkMode: string;
     lightMode: string;
+    appearance: string;
+    fontSize: string;
+    fontFamily: string;
+    fontSizeSmall: string;
+    fontSizeDefault: string;
+    fontSizeLarge: string;
+    fontSizeXLarge: string;
+    fontFamilyDefault: string;
+    fontFamilyDyslexic: string;
+    fontFamilySerif: string;
   };
   passwordStrength: {
     weak: string;
@@ -247,6 +258,7 @@ export interface Dictionary {
     signOut: string;
     importFromCloud: string;
     noCloudJournals: string;
+    preparingImport: string;
     journalAlreadyLocal: string;
     connectAccount: string;
     account: string;
@@ -341,6 +353,7 @@ const en: Dictionary = {
     passwordExplainTitle: 'How does Canto protect your data?',
     passwordExplainBody:
       "All your journals are always encrypted on this device using a unique device key stored in secure hardware.\n\nAdding a password provides an extra layer of encryption on top of the device key. This means that even if someone gains access to your device files, they cannot read your journal without the password.\n\nIf you choose not to set a password, your data is still encrypted with the device key — it just won't require a password to open.",
+    decrypting: 'Decrypting...',
   },
   journal: {
     title: 'Pages',
@@ -390,6 +403,16 @@ const en: Dictionary = {
     language: 'Language',
     darkMode: 'Dark Mode',
     lightMode: 'Light Mode',
+    appearance: 'Appearance',
+    fontSize: 'Font size',
+    fontFamily: 'Font family',
+    fontSizeSmall: 'Small',
+    fontSizeDefault: 'Default',
+    fontSizeLarge: 'Large',
+    fontSizeXLarge: 'Extra large',
+    fontFamilyDefault: 'Default',
+    fontFamilyDyslexic: 'OpenDyslexic',
+    fontFamilySerif: 'Serif',
   },
   passwordStrength: {
     weak: 'Weak',
@@ -519,6 +542,7 @@ const en: Dictionary = {
     signOut: 'Sign out',
     importFromCloud: 'Import from Google Drive',
     noCloudJournals: 'No journals found on Google Drive',
+    preparingImport: 'Preparing import...',
     journalAlreadyLocal: 'Already on this device',
     connectAccount: 'Connect account',
     account: 'Account',
@@ -631,6 +655,7 @@ const pt: Dictionary = {
     passwordExplainTitle: 'Como o Canto protege seus dados?',
     passwordExplainBody:
       'Todos os seus diários são sempre criptografados neste dispositivo usando uma chave única armazenada em hardware seguro.\n\nAdicionar uma senha fornece uma camada extra de criptografia sobre a chave do dispositivo. Isso significa que, mesmo que alguém acesse os arquivos do seu dispositivo, não poderá ler seu diário sem a senha.\n\nSe você optar por não definir uma senha, seus dados ainda estarão criptografados com a chave do dispositivo — apenas não exigirão uma senha para abrir.',
+    decrypting: 'Descriptografando...',
   },
   journal: {
     title: 'Páginas',
@@ -680,6 +705,16 @@ const pt: Dictionary = {
     language: 'Idioma',
     darkMode: 'Modo Escuro',
     lightMode: 'Modo Claro',
+    appearance: 'Aparência',
+    fontSize: 'Tamanho da fonte',
+    fontFamily: 'Família da fonte',
+    fontSizeSmall: 'Pequeno',
+    fontSizeDefault: 'Padrão',
+    fontSizeLarge: 'Grande',
+    fontSizeXLarge: 'Extra grande',
+    fontFamilyDefault: 'Padrão',
+    fontFamilyDyslexic: 'OpenDyslexic',
+    fontFamilySerif: 'Serifa',
   },
   passwordStrength: {
     weak: 'Fraca',
@@ -809,6 +844,7 @@ const pt: Dictionary = {
     signOut: 'Sair',
     importFromCloud: 'Importar do Google Drive',
     noCloudJournals: 'Nenhum diário encontrado no Google Drive',
+    preparingImport: 'Preparando importação...',
     journalAlreadyLocal: 'Já está neste dispositivo',
     connectAccount: 'Conectar conta',
     account: 'Conta',
@@ -921,6 +957,7 @@ const es: Dictionary = {
     passwordExplainTitle: '¿Cómo protege Canto tus datos?',
     passwordExplainBody:
       'Todos tus diarios están siempre cifrados en este dispositivo usando una clave única almacenada en hardware seguro.\n\nAñadir una contraseña proporciona una capa extra de cifrado sobre la clave del dispositivo. Esto significa que, incluso si alguien accede a los archivos de tu dispositivo, no podrá leer tu diario sin la contraseña.\n\nSi decides no establecer una contraseña, tus datos siguen cifrados con la clave del dispositivo — simplemente no requerirán una contraseña para abrirlos.',
+    decrypting: 'Descifrando...',
   },
   journal: {
     title: 'Páginas',
@@ -970,6 +1007,16 @@ const es: Dictionary = {
     language: 'Idioma',
     darkMode: 'Modo Oscuro',
     lightMode: 'Modo Claro',
+    appearance: 'Apariencia',
+    fontSize: 'Tamaño de fuente',
+    fontFamily: 'Familia de fuente',
+    fontSizeSmall: 'Pequeño',
+    fontSizeDefault: 'Predeterminado',
+    fontSizeLarge: 'Grande',
+    fontSizeXLarge: 'Extra grande',
+    fontFamilyDefault: 'Predeterminado',
+    fontFamilyDyslexic: 'OpenDyslexic',
+    fontFamilySerif: 'Serif',
   },
   passwordStrength: {
     weak: 'Débil',
@@ -1099,6 +1146,7 @@ const es: Dictionary = {
     signOut: 'Cerrar sesión',
     importFromCloud: 'Importar desde Google Drive',
     noCloudJournals: 'No se encontraron diarios en Google Drive',
+    preparingImport: 'Preparando importación...',
     journalAlreadyLocal: 'Ya está en este dispositivo',
     connectAccount: 'Conectar cuenta',
     account: 'Cuenta',
@@ -1212,6 +1260,7 @@ const de: Dictionary = {
     passwordExplainTitle: 'Wie schützt Canto Ihre Daten?',
     passwordExplainBody:
       'Alle Ihre Tagebücher sind immer auf diesem Gerät mit einem einzigartigen Geräteschlüssel verschlüsselt, der in sicherer Hardware gespeichert ist.\n\nDas Hinzufügen eines Passworts bietet eine zusätzliche Verschlüsselungsebene über dem Geräteschlüssel. Das bedeutet, dass selbst wenn jemand Zugriff auf Ihre Gerätedateien erhält, er Ihr Tagebuch ohne das Passwort nicht lesen kann.\n\nWenn Sie kein Passwort festlegen, sind Ihre Daten trotzdem mit dem Geräteschlüssel verschlüsselt — es wird nur kein Passwort zum Öffnen benötigt.',
+    decrypting: 'Entschlüsseln...',
   },
   journal: {
     title: 'Seiten',
@@ -1261,6 +1310,16 @@ const de: Dictionary = {
     language: 'Sprache',
     darkMode: 'Dunkler Modus',
     lightMode: 'Heller Modus',
+    appearance: 'Erscheinungsbild',
+    fontSize: 'Schriftgröße',
+    fontFamily: 'Schriftart',
+    fontSizeSmall: 'Klein',
+    fontSizeDefault: 'Standard',
+    fontSizeLarge: 'Groß',
+    fontSizeXLarge: 'Sehr groß',
+    fontFamilyDefault: 'Standard',
+    fontFamilyDyslexic: 'OpenDyslexic',
+    fontFamilySerif: 'Serif',
   },
   passwordStrength: {
     weak: 'Schwach',
@@ -1390,6 +1449,7 @@ const de: Dictionary = {
     signOut: 'Abmelden',
     importFromCloud: 'Von Google Drive importieren',
     noCloudJournals: 'Keine Tagebücher auf Google Drive gefunden',
+    preparingImport: 'Import wird vorbereitet...',
     journalAlreadyLocal: 'Bereits auf diesem Gerät',
     connectAccount: 'Konto verbinden',
     account: 'Konto',
@@ -1502,6 +1562,7 @@ const fr: Dictionary = {
     passwordExplainTitle: 'Comment Canto protège-t-il vos données ?',
     passwordExplainBody:
       "Tous vos journaux sont toujours chiffrés sur cet appareil avec une clé unique stockée dans le matériel sécurisé.\n\nAjouter un mot de passe fournit une couche de chiffrement supplémentaire par-dessus la clé de l'appareil. Cela signifie que même si quelqu'un accède aux fichiers de votre appareil, il ne pourra pas lire votre journal sans le mot de passe.\n\nSi vous choisissez de ne pas définir de mot de passe, vos données sont toujours chiffrées avec la clé de l'appareil — aucun mot de passe ne sera requis pour l'ouvrir.",
+    decrypting: 'Déchiffrement...',
   },
   journal: {
     title: 'Pages',
@@ -1551,6 +1612,16 @@ const fr: Dictionary = {
     language: 'Langue',
     darkMode: 'Mode Sombre',
     lightMode: 'Mode Clair',
+    appearance: 'Apparence',
+    fontSize: 'Taille de police',
+    fontFamily: 'Police',
+    fontSizeSmall: 'Petit',
+    fontSizeDefault: 'Par défaut',
+    fontSizeLarge: 'Grand',
+    fontSizeXLarge: 'Très grand',
+    fontFamilyDefault: 'Par défaut',
+    fontFamilyDyslexic: 'OpenDyslexic',
+    fontFamilySerif: 'Serif',
   },
   passwordStrength: {
     weak: 'Faible',
@@ -1680,6 +1751,7 @@ const fr: Dictionary = {
     signOut: 'Se déconnecter',
     importFromCloud: 'Importer depuis Google Drive',
     noCloudJournals: 'Aucun journal trouvé sur Google Drive',
+    preparingImport: "Préparation de l'import...",
     journalAlreadyLocal: 'Déjà sur cet appareil',
     connectAccount: 'Connecter un compte',
     account: 'Compte',
@@ -1793,6 +1865,7 @@ const ru: Dictionary = {
     passwordExplainTitle: 'Как Canto защищает ваши данные?',
     passwordExplainBody:
       'Все ваши дневники всегда зашифрованы на этом устройстве уникальным ключом устройства, хранящимся в защищенном аппаратном модуле.\n\nДобавление пароля обеспечивает дополнительный уровень шифрования поверх ключа устройства. Это означает, что даже если кто-то получит доступ к файлам вашего устройства, он не сможет прочитать ваш дневник без пароля.\n\nЕсли вы решите не устанавливать пароль, ваши данные все равно зашифрованы ключом устройства — просто для открытия не потребуется пароль.',
+    decrypting: 'Расшифровка...',
   },
   journal: {
     title: 'Страницы',
@@ -1842,6 +1915,16 @@ const ru: Dictionary = {
     language: 'Язык',
     darkMode: 'Темный режим',
     lightMode: 'Светлый режим',
+    appearance: 'Внешний вид',
+    fontSize: 'Размер шрифта',
+    fontFamily: 'Шрифт',
+    fontSizeSmall: 'Маленький',
+    fontSizeDefault: 'По умолчанию',
+    fontSizeLarge: 'Большой',
+    fontSizeXLarge: 'Очень большой',
+    fontFamilyDefault: 'По умолчанию',
+    fontFamilyDyslexic: 'OpenDyslexic',
+    fontFamilySerif: 'Serif',
   },
   passwordStrength: {
     weak: 'Слабый',
@@ -1971,6 +2054,7 @@ const ru: Dictionary = {
     signOut: 'Выйти',
     importFromCloud: 'Импортировать из Google Drive',
     noCloudJournals: 'Журналы на Google Drive не найдены',
+    preparingImport: 'Подготовка импорта...',
     journalAlreadyLocal: 'Уже на этом устройстве',
     connectAccount: 'Подключить аккаунт',
     account: 'Аккаунт',
@@ -2082,6 +2166,7 @@ const zh: Dictionary = {
     passwordExplainTitle: 'Canto 如何保护您的数据？',
     passwordExplainBody:
       '您的所有日记始终在此设备上使用存储在安全硬件中的唯一设备密钥进行加密。\n\n添加密码会在设备密钥之上提供额外的加密层。这意味着即使有人访问了您的设备文件，没有密码也无法读取您的日记。\n\n如果您选择不设置密码，您的数据仍然使用设备密钥加密——只是打开时不需要密码。',
+    decrypting: '解密中...',
   },
   journal: {
     title: '页面',
@@ -2131,6 +2216,16 @@ const zh: Dictionary = {
     language: '语言',
     darkMode: '深色模式',
     lightMode: '浅色模式',
+    appearance: '外观',
+    fontSize: '字体大小',
+    fontFamily: '字体',
+    fontSizeSmall: '小',
+    fontSizeDefault: '默认',
+    fontSizeLarge: '大',
+    fontSizeXLarge: '特大',
+    fontFamilyDefault: '默认',
+    fontFamilyDyslexic: 'OpenDyslexic',
+    fontFamilySerif: '衬线',
   },
   passwordStrength: {
     weak: '弱',
@@ -2259,6 +2354,7 @@ const zh: Dictionary = {
     signOut: '退出登录',
     importFromCloud: '从Google Drive导入',
     noCloudJournals: 'Google Drive上未找到日记',
+    preparingImport: '正在准备导入...',
     journalAlreadyLocal: '已在此设备上',
     connectAccount: '连接账户',
     account: '账户',
@@ -2367,6 +2463,7 @@ const it: Dictionary = {
     passwordExplainTitle: 'Come protegge Canto i tuoi dati?',
     passwordExplainBody:
       "Tutti i tuoi diari sono sempre cifrati su questo dispositivo con una chiave unica memorizzata nell'hardware sicuro.\n\nAggiungere una password fornisce un ulteriore livello di cifratura sopra la chiave del dispositivo. Questo significa che anche se qualcuno accede ai file del tuo dispositivo, non potra leggere il tuo diario senza la password.\n\nSe scegli di non impostare una password, i tuoi dati sono comunque cifrati con la chiave del dispositivo — semplicemente non sara richiesta una password per aprirlo.",
+    decrypting: 'Decifratura...',
   },
   journal: {
     title: 'Pagine',
@@ -2416,6 +2513,16 @@ const it: Dictionary = {
     language: 'Lingua',
     darkMode: 'Modalita Scura',
     lightMode: 'Modalita Chiara',
+    appearance: 'Aspetto',
+    fontSize: 'Dimensione del carattere',
+    fontFamily: 'Famiglia del carattere',
+    fontSizeSmall: 'Piccolo',
+    fontSizeDefault: 'Predefinito',
+    fontSizeLarge: 'Grande',
+    fontSizeXLarge: 'Molto grande',
+    fontFamilyDefault: 'Predefinito',
+    fontFamilyDyslexic: 'OpenDyslexic',
+    fontFamilySerif: 'Serif',
   },
   passwordStrength: {
     weak: 'Debole',
@@ -2545,6 +2652,7 @@ const it: Dictionary = {
     signOut: 'Esci',
     importFromCloud: 'Importa da Google Drive',
     noCloudJournals: 'Nessun diario trovato su Google Drive',
+    preparingImport: 'Preparazione importazione...',
     journalAlreadyLocal: 'Gia su questo dispositivo',
     connectAccount: 'Connetti account',
     account: 'Account',

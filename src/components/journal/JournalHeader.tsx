@@ -119,7 +119,14 @@ export function JournalHeader({
         color={theme.colors.text}
       />
       <Text
-        style={[styles.title, { color: theme.colors.text, fontFamily: theme.fonts.bold }]}
+        style={[
+          styles.title,
+          {
+            color: theme.colors.text,
+            fontFamily: theme.fonts.bold,
+            fontSize: 20 * theme.fonts.fontScale,
+          },
+        ]}
         numberOfLines={1}
       >
         {journal.title}

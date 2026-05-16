@@ -81,7 +81,16 @@ export function PageListItem({ page, journalId, settings }: PageListItemProps) {
       <View style={styles.row}>
         <View style={styles.textContent}>
           <View style={styles.titleRow}>
-            <Text style={[styles.date, { color: theme.colors.text, fontFamily: theme.fonts.bold }]}>
+            <Text
+              style={[
+                styles.date,
+                {
+                  color: theme.colors.text,
+                  fontFamily: theme.fonts.bold,
+                  fontSize: 16 * theme.fonts.fontScale,
+                },
+              ]}
+            >
               {dateStr}
             </Text>
             {showIcons && (
@@ -101,7 +110,11 @@ export function PageListItem({ page, journalId, settings }: PageListItemProps) {
             <Text
               style={[
                 styles.time,
-                { color: theme.colors.textSecondary, fontFamily: theme.fonts.regular },
+                {
+                  color: theme.colors.textSecondary,
+                  fontFamily: theme.fonts.regular,
+                  fontSize: 12 * theme.fonts.fontScale,
+                },
               ]}
             >
               {timeStr}
@@ -122,7 +135,11 @@ export function PageListItem({ page, journalId, settings }: PageListItemProps) {
             <Text
               style={[
                 styles.preview,
-                { color: theme.colors.textSecondary, fontFamily: theme.fonts.serif },
+                {
+                  color: theme.colors.textSecondary,
+                  fontFamily: theme.fonts.serif,
+                  fontSize: 13 * theme.fonts.fontScale,
+                },
               ]}
               numberOfLines={1}
             >

@@ -39,7 +39,14 @@ export function AnniversaryRow({ count, onPress }: AnniversaryRowProps) {
       ]}
     >
       <Feather name="gift" size={20} color={textColor} />
-      <Text style={[styles.text, { color: textColor, fontFamily: theme.fonts.bold }]}>{label}</Text>
+      <Text
+        style={[
+          styles.text,
+          { color: textColor, fontFamily: theme.fonts.bold, fontSize: 15 * theme.fonts.fontScale },
+        ]}
+      >
+        {label}
+      </Text>
     </Pressable>
   );
 }

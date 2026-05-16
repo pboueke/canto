@@ -30,7 +30,11 @@ export function CommentList({ comments, editable, onAdd, onEdit, onDelete }: Com
       <Text
         style={[
           styles.title,
-          { color: theme.colors.textSecondary, fontFamily: theme.fonts.regular },
+          {
+            color: theme.colors.textSecondary,
+            fontFamily: theme.fonts.regular,
+            fontSize: 14 * theme.fonts.fontScale,
+          },
         ]}
       >
         {t.page.comments}
@@ -40,7 +44,11 @@ export function CommentList({ comments, editable, onAdd, onEdit, onDelete }: Com
         <Text
           style={[
             styles.placeholder,
-            { color: theme.colors.textSecondary, fontFamily: theme.fonts.light },
+            {
+              color: theme.colors.textSecondary,
+              fontFamily: theme.fonts.light,
+              fontSize: 13 * theme.fonts.fontScale,
+            },
           ]}
         >
           {t.page.noComments}
@@ -58,7 +66,11 @@ export function CommentList({ comments, editable, onAdd, onEdit, onDelete }: Com
                 <Text
                   style={[
                     styles.commentDate,
-                    { color: theme.colors.textSecondary, fontFamily: theme.fonts.light },
+                    {
+                      color: theme.colors.textSecondary,
+                      fontFamily: theme.fonts.light,
+                      fontSize: 11 * theme.fonts.fontScale,
+                    },
                   ]}
                 >
                   {dateStr} {timeStr}
@@ -78,7 +90,11 @@ export function CommentList({ comments, editable, onAdd, onEdit, onDelete }: Com
                 <Text
                   style={[
                     styles.commentText,
-                    { color: theme.colors.text, fontFamily: theme.fonts.regular },
+                    {
+                      color: theme.colors.text,
+                      fontFamily: theme.fonts.regular,
+                      fontSize: 13 * theme.fonts.fontScale,
+                    },
                   ]}
                 >
                   {comment.text}
@@ -101,7 +117,11 @@ export function CommentList({ comments, editable, onAdd, onEdit, onDelete }: Com
           <Text
             style={[
               styles.addText,
-              { color: theme.colors.textSecondary, fontFamily: theme.fonts.regular },
+              {
+                color: theme.colors.textSecondary,
+                fontFamily: theme.fonts.regular,
+                fontSize: 13 * theme.fonts.fontScale,
+              },
             ]}
           >
             {t.page.addComment}

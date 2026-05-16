@@ -13,17 +13,29 @@ import { AutoLockModal } from '@/components/common/AutoLockModal';
 import { GoogleAuthProvider } from '@/contexts/GoogleAuthContext';
 import { SyncManagerProvider } from '@/contexts/SyncManagerContext';
 import { CalendarScrollProvider } from '@/contexts/CalendarScrollContext';
+import { FontPrefsContext } from '@/contexts/FontPrefsContext';
 import { type CantoTheme, type ThemeName, themes, lightTheme } from '@/styles/themes';
 import { type LangCode, dictionaries } from '@/i18n/dictionaries';
+import {
+  type FontFamily,
+  type FontSize,
+  FONT_FAMILIES,
+  FONT_SIZES,
+  applyFontPrefs,
+} from '@/lib/font';
 
 SplashScreen.preventAutoHideAsync();
 
 const THEME_KEY = 'canto:theme';
 const LANG_KEY = 'canto:lang';
+const FONT_SIZE_KEY = 'canto:fontSize';
+const FONT_FAMILY_KEY = 'canto:fontFamily';
 
 export default function RootLayout() {
-  const [theme, setTheme] = useState<CantoTheme>(lightTheme);
+  const [baseTheme, setBaseTheme] = useState<CantoTheme>(lightTheme);
   const [lang, setLangState] = useState<LangCode>('en');
+  const [fontSize, setFontSizeState] = useState<FontSize>('default');
+  const [fontFamily, setFontFamilyState] = useState<FontFamily>('default');
   const [prefsLoaded, setPrefsLoaded] = useState(false);
 
   const [fontsLoaded] = useFonts({
@@ -33,19 +45,33 @@ export default function RootLayout() {
     'Lato-Italic': require('@/assets/fonts/Lato-Italic.ttf'),
     'Merriweather-Regular': require('@/assets/fonts/Merriweather-Regular.ttf'),
     'Merriweather-Bold': require('@/assets/fonts/Merriweather-Bold.ttf'),
+    'OpenDyslexic-Regular': require('@/assets/fonts/OpenDyslexic-Regular.otf'),
+    'OpenDyslexic-Bold': require('@/assets/fonts/OpenDyslexic-Bold.otf'),
+    'OpenDyslexic-Italic': require('@/assets/fonts/OpenDyslexic-Italic.otf'),
+    'Lora-Regular': require('@/assets/fonts/Lora-Regular.ttf'),
+    'Lora-Bold': require('@/assets/fonts/Lora-Bold.ttf'),
+    'Lora-Italic': require('@/assets/fonts/Lora-Italic.ttf'),
   });
 
   useEffect(() => {
     const loadPreferences = async () => {
-      const [savedTheme, savedLang] = await Promise.all([
+      const [savedTheme, savedLang, savedFontSize, savedFontFamily] = await Promise.all([
         AsyncStorage.getItem(THEME_KEY),
         AsyncStorage.getItem(LANG_KEY),
+        AsyncStorage.getItem(FONT_SIZE_KEY),
+        AsyncStorage.getItem(FONT_FAMILY_KEY),
       ]);
       if (savedTheme && savedTheme in themes) {
-        setTheme(themes[savedTheme as ThemeName]);
+        setBaseTheme(themes[savedTheme as ThemeName]);
       }
       if (savedLang && savedLang in dictionaries) {
         setLangState(savedLang as LangCode);
+      }
+      if (savedFontSize && (FONT_SIZES as string[]).includes(savedFontSize)) {
+        setFontSizeState(savedFontSize as FontSize);
+      }
+      if (savedFontFamily && (FONT_FAMILIES as string[]).includes(savedFontFamily)) {
+        setFontFamilyState(savedFontFamily as FontFamily);
       }
       setPrefsLoaded(true);
     };
@@ -61,7 +87,7 @@ export default function RootLayout() {
   const setThemeName = useCallback((name: ThemeName) => {
     const next = themes[name];
     if (next) {
-      setTheme(next);
+      setBaseTheme(next);
       AsyncStorage.setItem(THEME_KEY, name);
     }
   }, []);
@@ -71,22 +97,35 @@ export default function RootLayout() {
     AsyncStorage.setItem(LANG_KEY, newLang);
   }, []);
 
+  const setFontSize = useCallback((size: FontSize) => {
+    setFontSizeState(size);
+    AsyncStorage.setItem(FONT_SIZE_KEY, size);
+  }, []);
+
+  const setFontFamily = useCallback((family: FontFamily) => {
+    setFontFamilyState(family);
+    AsyncStorage.setItem(FONT_FAMILY_KEY, family);
+  }, []);
+
   if (!fontsLoaded || !prefsLoaded) return null;
 
+  const theme = applyFontPrefs(baseTheme, fontFamily, fontSize);
   const isDark = theme.isDark;
 
   return (
     <ThemeContext.Provider value={{ theme, setThemeName, isDark }}>
       <I18nContext.Provider value={{ lang, setLang, t: dictionaries[lang] }}>
-        <GoogleAuthProvider>
-          <JournalKeyProvider>
-            <SyncManagerProvider>
-              <CalendarScrollProvider>
-                <AppContent theme={theme} isDark={isDark} />
-              </CalendarScrollProvider>
-            </SyncManagerProvider>
-          </JournalKeyProvider>
-        </GoogleAuthProvider>
+        <FontPrefsContext.Provider value={{ fontSize, fontFamily, setFontSize, setFontFamily }}>
+          <GoogleAuthProvider>
+            <JournalKeyProvider>
+              <SyncManagerProvider>
+                <CalendarScrollProvider>
+                  <AppContent theme={theme} isDark={isDark} />
+                </CalendarScrollProvider>
+              </SyncManagerProvider>
+            </JournalKeyProvider>
+          </GoogleAuthProvider>
+        </FontPrefsContext.Provider>
       </I18nContext.Provider>
     </ThemeContext.Provider>
   );

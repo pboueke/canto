@@ -3,6 +3,8 @@ import { StyleSheet, Text, View } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { Card } from '@/components/common/Card';
 import { ThemeContext, useTheme } from '@/hooks/useTheme';
+import { useFontPrefs } from '@/contexts/FontPrefsContext';
+import { applyFontPrefs } from '@/lib/font';
 import { type ThemeName, themes } from '@/styles/themes';
 import type { Journal } from 'canto-data';
 
@@ -13,11 +15,14 @@ interface JournalCardProps {
 
 export function JournalCard({ journal, onPress }: JournalCardProps) {
   const { theme: globalTheme, setThemeName } = useTheme();
+  const { fontFamily, fontSize } = useFontPrefs();
   const hasBadges = journal.secure || journal.biometric;
 
   const overrideName = journal.themeOverride as ThemeName | undefined;
-  const overrideTheme = overrideName && overrideName in themes ? themes[overrideName] : null;
-  const theme = overrideTheme ?? globalTheme;
+  const overrideRawTheme = overrideName && overrideName in themes ? themes[overrideName] : null;
+  const theme = overrideRawTheme
+    ? applyFontPrefs(overrideRawTheme, fontFamily, fontSize)
+    : globalTheme;
 
   const themeContextValue = useMemo(
     () => ({ theme, setThemeName, isDark: theme.isDark }),
@@ -39,7 +44,14 @@ export function JournalCard({ journal, onPress }: JournalCardProps) {
         />
       </View>
       <Text
-        style={[styles.name, { color: theme.colors.text, fontFamily: theme.fonts.bold }]}
+        style={[
+          styles.name,
+          {
+            color: theme.colors.text,
+            fontFamily: theme.fonts.bold,
+            fontSize: 14 * theme.fonts.fontScale,
+          },
+        ]}
         numberOfLines={1}
       >
         {journal.title}
@@ -47,7 +59,7 @@ export function JournalCard({ journal, onPress }: JournalCardProps) {
     </Card>
   );
 
-  if (overrideTheme) {
+  if (overrideRawTheme) {
     return <ThemeContext.Provider value={themeContextValue}>{card}</ThemeContext.Provider>;
   }
 

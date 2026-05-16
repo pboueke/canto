@@ -1,7 +1,9 @@
-import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useTheme } from '@/hooks/useTheme';
 import { useI18n } from '@/hooks/useI18n';
+import { useFontPrefs } from '@/contexts/FontPrefsContext';
+import { type FontFamily, type FontSize, FONT_FAMILIES, FONT_SIZES } from '@/lib/font';
 import { type ThemeName, themes, themeNames } from '@/styles/themes';
 import { webModalContent } from '@/styles/web';
 
@@ -67,9 +69,26 @@ export function ThemePickerModal({
 }: ThemePickerModalProps) {
   const { theme, setThemeName } = useTheme();
   const { t } = useI18n();
+  const { fontSize, fontFamily, setFontSize, setFontFamily } = useFontPrefs();
 
   const activeTheme = selectedTheme ?? theme.name;
   const isGlobalSelected = showGlobalOption && selectedTheme === undefined;
+  // Font controls are global app-wide preferences; hide them when this modal
+  // is used as a per-journal theme override picker.
+  const showFontControls = !showGlobalOption;
+
+  const fontSizeLabels: Record<FontSize, string> = {
+    small: t.settings.fontSizeSmall,
+    default: t.settings.fontSizeDefault,
+    large: t.settings.fontSizeLarge,
+    xlarge: t.settings.fontSizeXLarge,
+  };
+
+  const fontFamilyLabels: Record<FontFamily, string> = {
+    default: t.settings.fontFamilyDefault,
+    dyslexic: t.settings.fontFamilyDyslexic,
+    serif: t.settings.fontFamilySerif,
+  };
 
   function handleSelect(name: ThemeName) {
     if (onSelect) {
@@ -102,57 +121,148 @@ export function ThemePickerModal({
           ]}
         >
           <Text style={[styles.title, { color: theme.colors.text, fontFamily: theme.fonts.bold }]}>
-            {t.settings.theme}
+            {showFontControls ? t.settings.appearance : t.settings.theme}
           </Text>
 
-          {showGlobalOption && (
-            <Pressable
-              onPress={handleGlobal}
-              style={[
-                styles.globalOption,
-                {
-                  backgroundColor: isGlobalSelected ? theme.colors.highlight : 'transparent',
-                  borderColor: theme.colors.border,
-                  borderWidth: 1,
-                },
-              ]}
-            >
-              <Text
+          <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollContent}>
+            {showFontControls && (
+              <>
+                <Text
+                  style={[
+                    styles.sectionLabel,
+                    { color: theme.colors.textSecondary, fontFamily: theme.fonts.bold },
+                  ]}
+                >
+                  {t.settings.fontSize}
+                </Text>
+                <View style={styles.chipRow}>
+                  {FONT_SIZES.map((size) => {
+                    const isActive = fontSize === size;
+                    return (
+                      <Pressable
+                        key={size}
+                        onPress={() => setFontSize(size)}
+                        style={[
+                          styles.chip,
+                          {
+                            backgroundColor: isActive ? theme.colors.primary : 'transparent',
+                            borderColor: isActive ? theme.colors.primary : theme.colors.border,
+                          },
+                        ]}
+                      >
+                        <Text
+                          style={{
+                            color: isActive ? theme.colors.foreground : theme.colors.text,
+                            fontFamily: isActive ? theme.fonts.bold : theme.fonts.regular,
+                            fontSize: 13,
+                          }}
+                        >
+                          {fontSizeLabels[size]}
+                        </Text>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+
+                <Text
+                  style={[
+                    styles.sectionLabel,
+                    { color: theme.colors.textSecondary, fontFamily: theme.fonts.bold },
+                  ]}
+                >
+                  {t.settings.fontFamily}
+                </Text>
+                <View style={styles.chipRow}>
+                  {FONT_FAMILIES.map((family) => {
+                    const isActive = fontFamily === family;
+                    return (
+                      <Pressable
+                        key={family}
+                        onPress={() => setFontFamily(family)}
+                        style={[
+                          styles.chip,
+                          {
+                            backgroundColor: isActive ? theme.colors.primary : 'transparent',
+                            borderColor: isActive ? theme.colors.primary : theme.colors.border,
+                          },
+                        ]}
+                      >
+                        <Text
+                          style={{
+                            color: isActive ? theme.colors.foreground : theme.colors.text,
+                            fontFamily: isActive ? theme.fonts.bold : theme.fonts.regular,
+                            fontSize: 13,
+                          }}
+                        >
+                          {fontFamilyLabels[family]}
+                        </Text>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+
+                <Text
+                  style={[
+                    styles.sectionLabel,
+                    { color: theme.colors.textSecondary, fontFamily: theme.fonts.bold },
+                  ]}
+                >
+                  {t.settings.theme}
+                </Text>
+              </>
+            )}
+
+            {showGlobalOption && (
+              <Pressable
+                onPress={handleGlobal}
                 style={[
-                  styles.globalText,
-                  { color: theme.colors.text, fontFamily: theme.fonts.regular },
+                  styles.globalOption,
+                  {
+                    backgroundColor: isGlobalSelected ? theme.colors.highlight : 'transparent',
+                    borderColor: theme.colors.border,
+                    borderWidth: 1,
+                  },
                 ]}
               >
-                {t.journalSettings.useGlobalTheme}
-              </Text>
-              {isGlobalSelected && <Feather name="check" size={18} color={theme.colors.primary} />}
-            </Pressable>
-          )}
+                <Text
+                  style={[
+                    styles.globalText,
+                    { color: theme.colors.text, fontFamily: theme.fonts.regular },
+                  ]}
+                >
+                  {t.journalSettings.useGlobalTheme}
+                </Text>
+                {isGlobalSelected && (
+                  <Feather name="check" size={18} color={theme.colors.primary} />
+                )}
+              </Pressable>
+            )}
 
-          <View style={styles.grid}>
-            {themeNames.map((name) => {
-              const isActive = !isGlobalSelected && activeTheme === name;
-              return (
-                <Pressable key={name} onPress={() => handleSelect(name)} style={styles.item}>
-                  <ThemePreview name={name} isActive={isActive} />
-                  <View style={styles.labelRow}>
-                    <Text
-                      style={[
-                        styles.label,
-                        {
-                          color: isActive ? theme.colors.primary : theme.colors.text,
-                          fontFamily: isActive ? theme.fonts.bold : theme.fonts.regular,
-                        },
-                      ]}
-                    >
-                      {THEME_DISPLAY_NAMES[name]}
-                    </Text>
-                    {isActive && <Feather name="check" size={14} color={theme.colors.primary} />}
-                  </View>
-                </Pressable>
-              );
-            })}
-          </View>
+            <View style={styles.grid}>
+              {themeNames.map((name) => {
+                const isActive = !isGlobalSelected && activeTheme === name;
+                return (
+                  <Pressable key={name} onPress={() => handleSelect(name)} style={styles.item}>
+                    <ThemePreview name={name} isActive={isActive} />
+                    <View style={styles.labelRow}>
+                      <Text
+                        style={[
+                          styles.label,
+                          {
+                            color: isActive ? theme.colors.primary : theme.colors.text,
+                            fontFamily: isActive ? theme.fonts.bold : theme.fonts.regular,
+                          },
+                        ]}
+                      >
+                        {THEME_DISPLAY_NAMES[name]}
+                      </Text>
+                      {isActive && <Feather name="check" size={14} color={theme.colors.primary} />}
+                    </View>
+                  </Pressable>
+                );
+              })}
+            </View>
+          </ScrollView>
 
           <Pressable
             onPress={onClose}
@@ -186,6 +296,31 @@ const styles = StyleSheet.create({
     padding: 20,
     width: '100%',
     maxHeight: '85%',
+  },
+  scroll: {
+    flexGrow: 0,
+  },
+  scrollContent: {
+    paddingBottom: 4,
+  },
+  sectionLabel: {
+    fontSize: 12,
+    textTransform: 'uppercase',
+    marginTop: 12,
+    marginBottom: 8,
+    letterSpacing: 0.5,
+  },
+  chipRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginBottom: 4,
+  },
+  chip: {
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 16,
+    borderWidth: 1,
   },
   title: {
     fontSize: 20,

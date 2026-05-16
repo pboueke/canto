@@ -34,6 +34,12 @@ import type { JournalContent, Page } from 'canto-data';
 import type { RemoteJournalMeta, DownloadFailure } from '@/lib/sync';
 import { safeJsonParse } from '@/lib/utils/json';
 import { DataIntegrityWarningModal } from '@/components/common/DataIntegrityWarningModal';
+import { retryWithBackoff } from '@/lib/sync/retry';
+
+type CloudImportPhase = 'idle' | 'preparing' | 'downloading';
+
+const CLOUD_IMPORT_RETRY_DELAYS_MS = [1000, 2000, 4000, 8000];
+const CLOUD_IMPORT_RETRY_ATTEMPTS = 5;
 
 interface NewJournalModalProps {
   visible: boolean;
@@ -88,6 +94,7 @@ export function NewJournalModal({
   const [error, setError] = useState<string | null>(null);
   const [showPasswordExplain, setShowPasswordExplain] = useState(false);
   const [importing, setImporting] = useState(false);
+  const [cloudImportPhase, setCloudImportPhase] = useState<CloudImportPhase>('idle');
   const [importError, setImportError] = useState<string | null>(null);
   // Import sub-flow state
   const [importFileUri, setImportFileUri] = useState<string | null>(null);
@@ -150,7 +157,7 @@ export function NewJournalModal({
   }
 
   function handleClose() {
-    if (busy || importing) return;
+    if (busy || importing || cloudImportPhase !== 'idle') return;
     resetForm();
     onClose();
   }
@@ -203,7 +210,7 @@ export function NewJournalModal({
   }
 
   async function executeCloudImport(remote: RemoteJournalMeta, password: string) {
-    setImporting(true);
+    setCloudImportPhase('preparing');
     setImportProgress(null);
     try {
       await manager!.connectWithToken(accessToken!);
@@ -236,40 +243,51 @@ export function NewJournalModal({
       const importWarnings: string[] = [];
       const downloadFailures: DownloadFailure[] = [];
 
+      setCloudImportPhase('downloading');
+      setImportProgress({ current: 0, total });
+
+      async function downloadOnePage(pageId: string): Promise<Page | null> {
+        const encryptedPage = await store.downloadPage(remote.id, pageId);
+        if (!encryptedPage) {
+          throw new Error('Not found on remote');
+        }
+        const pageJson = await aesGcmDecrypt(encryptedPage, syncKey);
+        const page = safeJsonParse<Page>(pageJson, `page:${pageId}`);
+
+        const attachments = [...(page.images ?? []), ...(page.files ?? [])].filter(
+          (a) => !a.deleted && a.path,
+        );
+        const results = await Promise.allSettled(
+          attachments.map(async (att) => {
+            const filename = att.path.split('/').pop() ?? att.path;
+            const remotePath = `gdrive://${remote.id}/attachments/${filename}`;
+            const encrypted = await store.downloadAttachment(remotePath);
+            if (encrypted) {
+              const data = await aesGcmDecrypt(encrypted, syncKey);
+              const localPath = await localStore.saveAttachment(remote.id, page.id, att, data);
+              att.path = localPath;
+            }
+          }),
+        );
+        const failures = results.filter((r) => r.status === 'rejected');
+        if (failures.length > 0) {
+          importWarnings.push(
+            `${failures.length} attachment(s) failed to download for page ${page.id}`,
+          );
+        }
+        return page;
+      }
+
       for (const pageId of pageIds) {
         try {
-          const encryptedPage = await store.downloadPage(remote.id, pageId);
-          if (!encryptedPage) {
-            downloadFailures.push({ name: `${pageId}.json`, reason: 'Not found on remote' });
-            continue;
-          }
-          const pageJson = await aesGcmDecrypt(encryptedPage, syncKey);
-          const page = safeJsonParse<Page>(pageJson, `page:${pageId}`);
-
-          // Download and decrypt attachments
-          const attachments = [...(page.images ?? []), ...(page.files ?? [])].filter(
-            (a) => !a.deleted && a.path,
-          );
-          const results = await Promise.allSettled(
-            attachments.map(async (att) => {
-              const filename = att.path.split('/').pop() ?? att.path;
-              const remotePath = `gdrive://${remote.id}/attachments/${filename}`;
-              const encrypted = await store.downloadAttachment(remotePath);
-              if (encrypted) {
-                const data = await aesGcmDecrypt(encrypted, syncKey);
-                const localPath = await localStore.saveAttachment(remote.id, page.id, att, data);
-                att.path = localPath;
-              }
-            }),
-          );
-          const failures = results.filter((r) => r.status === 'rejected');
-          if (failures.length > 0) {
-            importWarnings.push(
-              `${failures.length} attachment(s) failed to download for page ${page.id}`,
-            );
-          }
-
-          journal.pages.push(page);
+          const page = await retryWithBackoff(() => downloadOnePage(pageId), {
+            attempts: CLOUD_IMPORT_RETRY_ATTEMPTS,
+            delaysMs: CLOUD_IMPORT_RETRY_DELAYS_MS,
+            onAttempt: (attempt, err) => {
+              console.warn('[Canto] Cloud import page retry', { pageId, attempt, err });
+            },
+          });
+          if (page) journal.pages.push(page);
         } catch (err) {
           downloadFailures.push({
             name: `${pageId}.json`,
@@ -282,7 +300,7 @@ export function NewJournalModal({
 
       // Show integrity warning if some pages failed
       if (downloadFailures.length > 0) {
-        setImporting(false);
+        setCloudImportPhase('idle');
         setIntegrityWarning({
           type: 'sync',
           details: downloadFailures.map((f) => f.name),
@@ -329,7 +347,7 @@ export function NewJournalModal({
       console.error('[Canto] Cloud import failed:', err);
       setImportError((err instanceof Error ? err.message : String(err)) || 'Unknown error');
     } finally {
-      setImporting(false);
+      setCloudImportPhase('idle');
       setImportProgress(null);
     }
   }
@@ -549,7 +567,7 @@ export function NewJournalModal({
             <View style={{ width: 30 }} />
           </View>
 
-          {busy || importing ? (
+          {busy || importing || cloudImportPhase !== 'idle' ? (
             <View style={styles.busyContainer}>
               <ActivityIndicator size="large" color={theme.colors.primary} />
               <Text
@@ -558,9 +576,13 @@ export function NewJournalModal({
                   { color: theme.colors.textSecondary, fontFamily: theme.fonts.regular },
                 ]}
               >
-                {importing ? t.backup.importing : t.common.loading}
+                {cloudImportPhase === 'preparing'
+                  ? t.sync.preparingImport
+                  : importing || cloudImportPhase === 'downloading'
+                    ? t.backup.importing
+                    : t.common.loading}
               </Text>
-              {importProgress && (
+              {importProgress && cloudImportPhase !== 'preparing' && (
                 <>
                   <View style={[styles.progressTrack, { backgroundColor: theme.colors.border }]}>
                     <View

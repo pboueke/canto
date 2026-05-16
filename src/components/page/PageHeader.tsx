@@ -62,7 +62,14 @@ export function PageHeader({
     <View style={styles.dateSection}>
       <Feather name="calendar" size={16} color={theme.colors.text} />
       <Text
-        style={[styles.dateText, { color: theme.colors.text, fontFamily: theme.fonts.regular }]}
+        style={[
+          styles.dateText,
+          {
+            color: theme.colors.text,
+            fontFamily: theme.fonts.regular,
+            fontSize: 15 * theme.fonts.fontScale,
+          },
+        ]}
       >
         {date}
       </Text>
@@ -74,7 +81,14 @@ export function PageHeader({
     <View style={styles.timeSection}>
       <Feather name="clock" size={16} color={theme.colors.text} />
       <Text
-        style={[styles.timeText, { color: theme.colors.text, fontFamily: theme.fonts.regular }]}
+        style={[
+          styles.timeText,
+          {
+            color: theme.colors.text,
+            fontFamily: theme.fonts.regular,
+            fontSize: 15 * theme.fonts.fontScale,
+          },
+        ]}
       >
         {time}
       </Text>

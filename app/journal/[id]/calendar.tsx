@@ -20,12 +20,15 @@ import { AnniversaryRow } from '@/components/journal/AnniversaryRow';
 import { MonthPreview } from '@/components/journal/MonthPreview';
 import { pageToPreview } from 'canto-data';
 import { type ThemeName, themes } from '@/styles/themes';
+import { useFontPrefs } from '@/contexts/FontPrefsContext';
+import { applyFontPrefs } from '@/lib/font';
 import { getAnniversaryPages, getMonthsWithPages, monthRange } from '@/lib/calendar';
 
 export default function JournalCalendarScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { theme: globalTheme, setThemeName } = useTheme();
   const { t } = useI18n();
+  const { fontFamily, fontSize } = useFontPrefs();
   const { getKey } = useJournalKeys();
   const insets = useSafeAreaInsets();
   const { getOffset, setOffset } = useCalendarScroll();
@@ -34,8 +37,10 @@ export default function JournalCalendarScreen() {
   const { journal, loading } = useJournal(id, derivedKey);
 
   const overrideName = journal?.settings.themeOverride as ThemeName | undefined;
-  const overrideTheme = overrideName && overrideName in themes ? themes[overrideName] : null;
-  const theme = overrideTheme ?? globalTheme;
+  const overrideRawTheme = overrideName && overrideName in themes ? themes[overrideName] : null;
+  const theme = overrideRawTheme
+    ? applyFontPrefs(overrideRawTheme, fontFamily, fontSize)
+    : globalTheme;
   const isDark = theme.isDark;
 
   const pages = useMemo(() => {

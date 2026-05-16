@@ -1,13 +1,6 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
-import {
-  ActivityIndicator,
-  Alert,
-  BackHandler,
-  Platform,
-  ScrollView,
-  StyleSheet,
-  View,
-} from 'react-native';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { ActivityIndicator, Alert, BackHandler, Platform, StyleSheet, View } from 'react-native';
+import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view';
 import { useLocalSearchParams, router } from 'expo-router';
 import { useSafeBack } from '@/hooks/useSafeBack';
 import { useNavigation } from '@react-navigation/native';
@@ -16,6 +9,8 @@ import * as DocumentPicker from 'expo-document-picker';
 import * as Location from 'expo-location';
 import { ThemeContext, useTheme } from '@/hooks/useTheme';
 import { useI18n } from '@/hooks/useI18n';
+import { useFontPrefs } from '@/contexts/FontPrefsContext';
+import { applyFontPrefs } from '@/lib/font';
 import { type ThemeName, themes } from '@/styles/themes';
 import {
   usePage,
@@ -49,10 +44,13 @@ export default function PageScreen() {
   }>();
   const { theme: globalTheme, setThemeName } = useTheme();
   const { t } = useI18n();
+  const { fontFamily, fontSize } = useFontPrefs();
 
-  const overrideTheme =
+  const overrideRawTheme =
     themeOverride && themeOverride in themes ? themes[themeOverride as ThemeName] : null;
-  const theme = overrideTheme ?? globalTheme;
+  const theme = overrideRawTheme
+    ? applyFontPrefs(overrideRawTheme, fontFamily, fontSize)
+    : globalTheme;
   const isDark = theme.isDark;
   const themeContextValue = useMemo(
     () => ({ theme, setThemeName, isDark }),
@@ -517,7 +515,14 @@ export default function PageScreen() {
           onBack={handleBack}
         />
 
-        <ScrollView contentContainerStyle={styles.content}>
+        <KeyboardAwareScrollView
+          contentContainerStyle={styles.content}
+          keyboardShouldPersistTaps="handled"
+          enableOnAndroid
+          enableAutomaticScroll
+          extraScrollHeight={Platform.OS === 'ios' ? 20 : 80}
+          keyboardOpeningTime={0}
+        >
           <TagEditor
             tags={draft.tags}
             allJournalTags={journalTags}
@@ -582,7 +587,7 @@ export default function PageScreen() {
             }}
             onDelete={handleDeleteComment}
           />
-        </ScrollView>
+        </KeyboardAwareScrollView>
 
         <FloatingActionButton
           featherIcon={isEditing ? 'check' : 'edit-2'}

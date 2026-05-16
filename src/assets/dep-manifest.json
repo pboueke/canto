@@ -175,6 +175,11 @@
     "license": "MIT"
   },
   {
+    "name": "react-native-keyboard-aware-scroll-view",
+    "version": "0.9.5",
+    "license": "MIT"
+  },
+  {
     "name": "react-native-markdown-display",
     "version": "7.0.2",
     "license": "MIT"

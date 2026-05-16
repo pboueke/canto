@@ -71,6 +71,7 @@ export interface CantoTheme {
     italic: string;
     serif: string;
     serifBold: string;
+    fontScale: number;
   };
 }
 
@@ -135,6 +136,7 @@ export const lightTheme: CantoTheme = {
     italic: 'Lato-Italic',
     serif: 'Merriweather-Regular',
     serifBold: 'Merriweather-Bold',
+    fontScale: 1.0,
   },
 };
 
@@ -199,6 +201,7 @@ export const darkTheme: CantoTheme = {
     italic: 'Lato-Italic',
     serif: 'Merriweather-Regular',
     serifBold: 'Merriweather-Bold',
+    fontScale: 1.0,
   },
 };
 
@@ -263,6 +266,7 @@ export const monokaiTheme: CantoTheme = {
     italic: 'Lato-Italic',
     serif: 'Merriweather-Regular',
     serifBold: 'Merriweather-Bold',
+    fontScale: 1.0,
   },
 };
 
@@ -327,6 +331,7 @@ export const solarizedTheme: CantoTheme = {
     italic: 'Lato-Italic',
     serif: 'Merriweather-Regular',
     serifBold: 'Merriweather-Bold',
+    fontScale: 1.0,
   },
 };
 
@@ -391,6 +396,7 @@ export const nordTheme: CantoTheme = {
     italic: 'Lato-Italic',
     serif: 'Merriweather-Regular',
     serifBold: 'Merriweather-Bold',
+    fontScale: 1.0,
   },
 };
 
@@ -455,6 +461,7 @@ export const draculaTheme: CantoTheme = {
     italic: 'Lato-Italic',
     serif: 'Merriweather-Regular',
     serifBold: 'Merriweather-Bold',
+    fontScale: 1.0,
   },
 };
 
@@ -520,6 +527,7 @@ export const everforestTheme: CantoTheme = {
     italic: 'Lato-Italic',
     serif: 'Merriweather-Regular',
     serifBold: 'Merriweather-Bold',
+    fontScale: 1.0,
   },
 };
 
@@ -585,6 +593,7 @@ export const rosepineTheme: CantoTheme = {
     italic: 'Lato-Italic',
     serif: 'Merriweather-Regular',
     serifBold: 'Merriweather-Bold',
+    fontScale: 1.0,
   },
 };
 
@@ -650,6 +659,7 @@ export const onecyanTheme: CantoTheme = {
     italic: 'Lato-Italic',
     serif: 'Merriweather-Regular',
     serifBold: 'Merriweather-Bold',
+    fontScale: 1.0,
   },
 };
 
@@ -715,6 +725,7 @@ export const gruvboxTheme: CantoTheme = {
     italic: 'Lato-Italic',
     serif: 'Merriweather-Regular',
     serifBold: 'Merriweather-Bold',
+    fontScale: 1.0,
   },
 };
 

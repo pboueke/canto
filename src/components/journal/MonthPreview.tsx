@@ -72,7 +72,16 @@ export function MonthPreview({ year, month, daysWithPages, onPress }: MonthPrevi
         { backgroundColor: theme.colors.surface, borderColor: theme.colors.border },
       ]}
     >
-      <Text style={[styles.label, { color: theme.colors.text, fontFamily: theme.fonts.bold }]}>
+      <Text
+        style={[
+          styles.label,
+          {
+            color: theme.colors.text,
+            fontFamily: theme.fonts.bold,
+            fontSize: 16 * theme.fonts.fontScale,
+          },
+        ]}
+      >
         {monthLabel}
       </Text>
       <View style={styles.grid}>
@@ -98,7 +107,7 @@ export function MonthPreview({ year, month, daysWithPages, onPress }: MonthPrevi
                         ? getContrastText(theme.colors.primary)
                         : theme.colors.text,
                       fontFamily: theme.fonts.regular,
-                      fontSize: 13,
+                      fontSize: 13 * theme.fonts.fontScale,
                     }}
                   >
                     {day}

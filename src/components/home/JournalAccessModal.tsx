@@ -99,7 +99,7 @@ export function JournalAccessModal({
                   { color: theme.colors.textSecondary, fontFamily: theme.fonts.regular },
                 ]}
               >
-                {t.common.loading}
+                {t.home.decrypting}
               </Text>
             </View>
           ) : (

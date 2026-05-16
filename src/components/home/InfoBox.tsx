@@ -76,7 +76,7 @@ export function InfoBox({ devUnlocked }: InfoBoxProps) {
         accessibilityRole="button"
       >
         <Text style={[styles.label, { color: theme.colors.text, fontFamily: theme.fonts.regular }]}>
-          {t.settings.theme}: {THEME_DISPLAY_NAMES[theme.name] ?? theme.name}
+          {t.settings.appearance}: {THEME_DISPLAY_NAMES[theme.name] ?? theme.name}
         </Text>
       </Pressable>
 
