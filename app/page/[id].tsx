@@ -519,7 +519,7 @@ export default function PageScreen() {
           contentContainerStyle={styles.content}
           keyboardShouldPersistTaps="handled"
           enableOnAndroid
-          enableAutomaticScroll
+          enableAutomaticScroll={Platform.OS !== 'web'}
           extraScrollHeight={Platform.OS === 'ios' ? 20 : 80}
           keyboardOpeningTime={0}
         >
