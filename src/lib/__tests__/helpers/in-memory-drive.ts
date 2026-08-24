@@ -15,6 +15,7 @@ export interface DriveFile {
   mimeType: string;
   parentId?: string;
   content: string;
+  revision: number;
   trashed: boolean;
 }
 
@@ -63,6 +64,7 @@ export class InMemoryDrive {
           mimeType: metadata.mimeType || 'application/json',
           parentId,
           content: content ?? '',
+          revision: 1,
           trashed: false,
         };
         this.files.set(id, file);
@@ -76,11 +78,28 @@ export class InMemoryDrive {
       return file.content;
     });
 
+    this.api.getFileContentWithEtag.mockImplementation(async (_token: string, fileId: string) => {
+      const file = this.files.get(fileId);
+      if (!file) throw new Error(`File not found: ${fileId}`);
+      return { content: file.content, etag: `"${file.revision}"` };
+    });
+
     this.api.updateFile.mockImplementation(
-      async (_token: string, fileId: string, _metadata: unknown, content: string) => {
+      async (
+        _token: string,
+        fileId: string,
+        _metadata: unknown,
+        content: string,
+        _signal?: AbortSignal,
+        ifMatch?: string,
+      ) => {
         const file = this.files.get(fileId);
+        if (file && ifMatch && ifMatch !== `"${file.revision}"`) {
+          throw Object.assign(new Error('precondition failed'), { status: 412 });
+        }
         if (file && content !== undefined) {
           file.content = content;
+          file.revision++;
         }
         return {
           id: fileId,
@@ -100,7 +119,7 @@ export class InMemoryDrive {
   /** Put a file directly into the simulated drive (for setting up remote state). */
   putFile(name: string, parentId: string, content: string, mimeType = 'application/json'): string {
     const id = `file-${this.nextId++}`;
-    this.files.set(id, { id, name, mimeType, parentId, content, trashed: false });
+    this.files.set(id, { id, name, mimeType, parentId, content, revision: 1, trashed: false });
     return id;
   }
 
@@ -112,6 +131,7 @@ export class InMemoryDrive {
       mimeType: 'application/vnd.google-apps.folder',
       parentId,
       content: '',
+      revision: 1,
       trashed: false,
     });
     return id;

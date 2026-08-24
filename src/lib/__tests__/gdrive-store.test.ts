@@ -1082,6 +1082,7 @@ describe('GDriveRemoteStore', () => {
       mockedApi.createFile.mockReset();
       mockedApi.updateFile.mockReset();
       mockedApi.getFileContent.mockReset();
+      mockedApi.getFileContentWithEtag.mockReset();
       mockedApi.deleteFile.mockReset();
     });
 
@@ -1099,21 +1100,144 @@ describe('GDriveRemoteStore', () => {
       mockedApi.listFiles.mockResolvedValueOnce([folder('j-id', 'journal-1')]);
       // findFile for index.json — not found
       mockedApi.listFiles.mockResolvedValueOnce([]);
-      mockedApi.createFile.mockResolvedValueOnce({
-        id: 'idx-id',
-        name: 'index.json',
-        mimeType: 'application/json',
-        modifiedTime: '',
-      });
+      mockedApi.createFile
+        .mockResolvedValueOnce({
+          id: 'delta-id',
+          name: 'index-v2-delta.json',
+          mimeType: 'application/json',
+          modifiedTime: '',
+        })
+        .mockResolvedValueOnce({
+          id: 'idx-id',
+          name: 'index.json',
+          mimeType: 'application/json',
+          modifiedTime: '',
+        });
 
       const index = { p1: { modified: 1000 }, p2: { modified: 2000, deleted: true } };
       await store.uploadSyncIndex('journal-1', index);
 
       expect(mockedApi.createFile).toHaveBeenCalledWith(
         TOKEN,
+        expect.objectContaining({ name: expect.stringMatching(/^index-v2-/) }),
+        JSON.stringify(index),
+      );
+      expect(mockedApi.createFile).toHaveBeenCalledWith(
+        TOKEN,
         expect.objectContaining({ name: 'index.json' }),
         JSON.stringify(index),
       );
+    });
+
+    it('merges concurrent entries and retries a precondition failure', async () => {
+      await store.connect({ accessToken: TOKEN });
+
+      const folder = (id: string, name: string) => ({
+        id,
+        name,
+        mimeType: 'application/vnd.google-apps.folder',
+        modifiedTime: '',
+      });
+      mockedApi.listFiles.mockResolvedValueOnce([folder('root-id', 'Canto')]);
+      mockedApi.listFiles.mockResolvedValueOnce([folder('j-id', 'journal-1')]);
+      mockedApi.listFiles.mockResolvedValueOnce([
+        { id: 'idx-id', name: 'index.json', mimeType: 'application/json', modifiedTime: '' },
+      ]);
+      mockedApi.getFileContentWithEtag
+        .mockResolvedValueOnce({ content: '{"remote":{"modified":1000}}', etag: '"v1"' })
+        .mockResolvedValueOnce({
+          content: '{"remote":{"modified":1000},"other":{"modified":2000}}',
+          etag: '"v2"',
+        });
+      mockedApi.updateFile
+        .mockRejectedValueOnce(Object.assign(new api.GDriveApiError(412), { status: 412 }))
+        .mockResolvedValueOnce({
+          id: 'idx-id',
+          name: 'index.json',
+          mimeType: 'application/json',
+          modifiedTime: '',
+        });
+
+      await store.uploadSyncIndex('journal-1', { local: { modified: 1500 } });
+
+      expect(mockedApi.updateFile).toHaveBeenLastCalledWith(
+        TOKEN,
+        'idx-id',
+        { name: 'index.json', mimeType: 'application/json' },
+        JSON.stringify({
+          remote: { modified: 1000 },
+          other: { modified: 2000 },
+          local: { modified: 1500 },
+        }),
+        undefined,
+        '"v2"',
+      );
+    });
+
+    it('merges immutable deltas when concurrent first writers create duplicate legacy indexes', async () => {
+      const folder = (id: string, name: string) => ({
+        id,
+        name,
+        mimeType: 'application/vnd.google-apps.folder',
+        modifiedTime: '',
+      });
+      const files: Array<{ id: string; name: string; content: string }> = [];
+      let nextId = 1;
+      let indexLookups = 0;
+      let releaseIndexLookups!: () => void;
+      const bothIndexLookups = new Promise<void>((resolve) => {
+        releaseIndexLookups = resolve;
+      });
+      mockedApi.listFiles.mockImplementation(async (_token, query) => {
+        if (query.includes("name = 'Canto'")) return [folder('root-id', 'Canto')];
+        if (query.includes("name = 'journal-1'")) return [folder('j-id', 'journal-1')];
+        if (query.includes("name = 'index.json'")) {
+          if (++indexLookups <= 2) {
+            if (indexLookups === 2) releaseIndexLookups();
+            await bothIndexLookups;
+          }
+          return files
+            .filter((file) => file.name === 'index.json')
+            .map((file) => ({ ...folder(file.id, file.name), mimeType: 'application/json' }));
+        }
+        if (query.includes("name contains 'index-v2-'")) {
+          return files
+            .filter((file) => file.name.startsWith('index-v2-'))
+            .map((file) => ({ ...folder(file.id, file.name), mimeType: 'application/json' }));
+        }
+        return [];
+      });
+      mockedApi.createFile.mockImplementation(async (_token, metadata, content) => {
+        const file = { id: `f-${nextId++}`, name: metadata.name, content };
+        files.push(file);
+        return { ...folder(file.id, file.name), mimeType: metadata.mimeType ?? 'application/json' };
+      });
+      mockedApi.getFileContent.mockImplementation(async (_token, fileId) => {
+        const file = files.find((candidate) => candidate.id === fileId);
+        if (!file) throw new Error('missing test file');
+        return file.content;
+      });
+
+      const first = new GDriveRemoteStore();
+      const second = new GDriveRemoteStore();
+      await Promise.all([
+        first.connect({ accessToken: TOKEN }),
+        second.connect({ accessToken: TOKEN }),
+      ]);
+      await Promise.all([
+        first.uploadSyncIndex('journal-1', { first: { modified: 1000 } }),
+        second.uploadSyncIndex('journal-1', { second: { modified: 2000 } }),
+      ]);
+
+      expect(files.filter((file) => file.name === 'index.json')).toHaveLength(2);
+      expect(files.filter((file) => file.name.startsWith('index-v2-'))).toHaveLength(2);
+
+      const reader = new GDriveRemoteStore();
+      await reader.connect({ accessToken: TOKEN });
+      await expect(reader.downloadSyncIndex('journal-1')).resolves.toEqual({
+        first: { modified: 1000 },
+        second: { modified: 2000 },
+      });
     });
 
     it('downloads a sync index', async () => {

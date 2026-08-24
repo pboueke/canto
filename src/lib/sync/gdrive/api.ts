@@ -1,5 +1,14 @@
+import { recordDriveRequestTrace } from '../debug-trace';
+
 const DRIVE_API = 'https://www.googleapis.com/drive/v3';
 const UPLOAD_API = 'https://www.googleapis.com/upload/drive/v3';
+
+export class GDriveApiError extends Error {
+  constructor(readonly status: number) {
+    super(`Drive API error (${status})`);
+    this.name = 'GDriveApiError';
+  }
+}
 
 function generateBoundary(): string {
   const random = Array.from(crypto.getRandomValues(new Uint8Array(16)))
@@ -25,6 +34,31 @@ function authHeaders(accessToken: string): HeadersInit {
   return { Authorization: `Bearer ${accessToken}` };
 }
 
+/**
+ * Build multipart bytes without first joining an attachment payload into another
+ * full-size JavaScript string. Chrome can stream Blob parts to fetch directly.
+ * Native keeps its established string body because its fetch implementation is
+ * not the browser path under investigation.
+ */
+function multipartBody(
+  boundary: string,
+  metadata: Partial<FileMetadata>,
+  content: string,
+): string | Blob {
+  const parts = [
+    `--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n`,
+    JSON.stringify(metadata),
+    `\r\n--${boundary}\r\nContent-Type: ${metadata.mimeType ?? 'application/json'}\r\n\r\n`,
+    content,
+    `\r\n--${boundary}--`,
+  ];
+
+  if (typeof document !== 'undefined' && typeof Blob !== 'undefined') {
+    return new Blob(parts, { type: `multipart/related; boundary=${boundary}` });
+  }
+  return parts.join('');
+}
+
 function abortableDelay(ms: number, signal?: AbortSignal): Promise<void> {
   return new Promise((resolve, reject) => {
     const timeout = setTimeout(resolve, ms);
@@ -39,28 +73,53 @@ function abortableDelay(ms: number, signal?: AbortSignal): Promise<void> {
   });
 }
 
+function assertGoogleDriveUrl(input: string): void {
+  try {
+    if (new URL(input).origin !== 'https://www.googleapis.com') {
+      throw new Error('Refusing a non-Google Drive request');
+    }
+  } catch (error) {
+    if (error instanceof Error && error.message === 'Refusing a non-Google Drive request') {
+      throw error;
+    }
+    throw new Error('Refusing an invalid Google Drive request');
+  }
+}
+
 /** Retry a fetch once on transient errors while retaining cancellation. */
 async function fetchWithRetry(input: string, init?: RequestInit): Promise<Response> {
+  assertGoogleDriveUrl(input);
   const signal = init?.signal ?? undefined;
+  const attempt = async (): Promise<Response> => {
+    const startedAt = performance.now();
+    try {
+      const response = await fetch(input, init);
+      recordDriveRequestTrace(input, init, startedAt, response);
+      return response;
+    } catch (error) {
+      recordDriveRequestTrace(input, init, startedAt);
+      throw error;
+    }
+  };
   try {
-    const res = await fetch(input, init);
+    const res = await attempt();
     if (res.status >= 500 || res.status === 408 || res.status === 429) {
       const retryAfter = Number(res.headers.get('Retry-After'));
       await abortableDelay(Number.isFinite(retryAfter) ? retryAfter * 1000 : 1000, signal);
-      return fetch(input, init);
+      return attempt();
     }
     return res;
   } catch (error) {
     if (signal?.aborted) throw error;
     await abortableDelay(1000, signal);
-    return fetch(input, init);
+    return attempt();
   }
 }
 
 async function handleResponse<T>(response: Response): Promise<T> {
   const text = await response.text();
   if (!response.ok) {
-    throw new Error(`Drive API error (${response.status})`);
+    throw new GDriveApiError(response.status);
   }
   if (!text) return {} as T;
   try {
@@ -74,18 +133,27 @@ export async function listFiles(
   accessToken: string,
   query: string,
   spaces = 'drive',
+  signal?: AbortSignal,
 ): Promise<DriveFile[]> {
-  const params = new URLSearchParams({
-    q: query,
-    spaces,
-    fields: 'files(id,name,mimeType,modifiedTime)',
-    pageSize: '1000',
-  });
-  const res = await fetchWithRetry(`${DRIVE_API}/files?${params}`, {
-    headers: authHeaders(accessToken),
-  });
-  const data = await handleResponse<{ files: DriveFile[] }>(res);
-  return data.files ?? [];
+  const files: DriveFile[] = [];
+  let pageToken: string | undefined;
+  do {
+    const params = new URLSearchParams({
+      q: query,
+      spaces,
+      fields: 'nextPageToken,files(id,name,mimeType,modifiedTime)',
+      pageSize: '1000',
+    });
+    if (pageToken) params.set('pageToken', pageToken);
+    const res = await fetchWithRetry(`${DRIVE_API}/files?${params}`, {
+      headers: authHeaders(accessToken),
+      signal,
+    });
+    const data = await handleResponse<{ files?: DriveFile[]; nextPageToken?: string }>(res);
+    files.push(...(data.files ?? []));
+    pageToken = data.nextPageToken;
+  } while (pageToken);
+  return files;
 }
 
 export async function getFile(accessToken: string, fileId: string): Promise<DriveFile> {
@@ -96,19 +164,36 @@ export async function getFile(accessToken: string, fileId: string): Promise<Driv
   return handleResponse<DriveFile>(res);
 }
 
-export async function getFileContent(
+export interface FileContentWithEtag {
+  content: string;
+  /** Required for a conditional update; absent only on a malformed proxy response. */
+  etag: string | null;
+}
+
+export async function getFileContentWithEtag(
   accessToken: string,
   fileId: string,
   signal?: AbortSignal,
-): Promise<string> {
+): Promise<FileContentWithEtag> {
   const res = await fetchWithRetry(`${DRIVE_API}/files/${fileId}?alt=media`, {
     headers: authHeaders(accessToken),
     signal,
   });
   if (!res.ok) {
-    throw new Error(`Drive API error (${res.status})`);
+    throw new GDriveApiError(res.status);
   }
-  return res.text();
+  return {
+    content: await res.text(),
+    etag: res.headers?.get('etag') ?? null,
+  };
+}
+
+export async function getFileContent(
+  accessToken: string,
+  fileId: string,
+  signal?: AbortSignal,
+): Promise<string> {
+  return (await getFileContentWithEtag(accessToken, fileId, signal)).content;
 }
 
 export async function createFile(
@@ -119,20 +204,14 @@ export async function createFile(
   signal?: AbortSignal,
 ): Promise<DriveFile> {
   const boundary = generateBoundary();
-  const body = [
-    `--${boundary}`,
-    'Content-Type: application/json; charset=UTF-8',
-    '',
-    JSON.stringify({
+  const body = multipartBody(
+    boundary,
+    {
       ...metadata,
       parents: metadata.parents ?? (spaces === 'appDataFolder' ? ['appDataFolder'] : undefined),
-    }),
-    `--${boundary}`,
-    `Content-Type: ${metadata.mimeType ?? 'application/json'}`,
-    '',
+    },
     content,
-    `--${boundary}--`,
-  ].join('\r\n');
+  );
 
   const res = await fetchWithRetry(`${UPLOAD_API}/files?uploadType=multipart`, {
     method: 'POST',
@@ -152,25 +231,17 @@ export async function updateFile(
   metadata: Partial<FileMetadata>,
   content: string,
   signal?: AbortSignal,
+  ifMatch?: string,
 ): Promise<DriveFile> {
   const boundary = generateBoundary();
-  const body = [
-    `--${boundary}`,
-    'Content-Type: application/json; charset=UTF-8',
-    '',
-    JSON.stringify(metadata),
-    `--${boundary}`,
-    `Content-Type: ${metadata.mimeType ?? 'application/json'}`,
-    '',
-    content,
-    `--${boundary}--`,
-  ].join('\r\n');
+  const body = multipartBody(boundary, metadata, content);
 
   const res = await fetchWithRetry(`${UPLOAD_API}/files/${fileId}?uploadType=multipart`, {
     method: 'PATCH',
     headers: {
       ...authHeaders(accessToken),
       'Content-Type': `multipart/related; boundary=${boundary}`,
+      ...(ifMatch ? { 'If-Match': ifMatch } : {}),
     },
     body,
     signal,

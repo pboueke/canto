@@ -86,6 +86,8 @@ export interface LocalStore {
   forEachAttachmentChunk?(
     attachment: Attachment,
     visitor: (index: number, data: string) => Promise<void>,
+    /** When supplied, skip every other index before reading or decrypting it. */
+    indexes?: ReadonlySet<number>,
   ): Promise<void>;
 
   /** Write sync-decrypted chunk values without reassembling the attachment. */
@@ -95,6 +97,19 @@ export interface LocalStore {
     attachment: Attachment,
     chunks: AsyncIterable<string>,
   ): Promise<string>;
+
+  /**
+   * Copy an attachment into a new immutable generation with larger chunks,
+   * atomically publishing its replacement page only after the new root is complete.
+   */
+  migrateAttachmentChunkGeneration?(
+    journalId: string,
+    pageId: string,
+    attachmentId: string,
+    expectedGeneration: string,
+    targetChunkSize: number,
+    derivedKey?: Uint8Array,
+  ): Promise<Page>;
 
   /**
    * Report attachment existence and stored bytes without reading/decrypting its

@@ -619,15 +619,18 @@ describe('chunked attachment storage (web)', () => {
     const encryption = createMockEncryption();
     const store = createLocalStore(encryption);
     await store.initialize();
-    const data = 'A'.repeat(Math.ceil((ATTACHMENT_CHUNK_SIZE * 2 + 1) / 3) * 4);
+    const data = Buffer.alloc(300, 65).toString('base64');
+    const content = chunkedContentForBase64(data);
+    content.chunkSize = 4;
+    content.chunkCount = Math.ceil(content.byteLength / content.chunkSize);
     const attachment: Attachment = {
       id: 'chunked',
       path: '',
       name: 'movie.mp4',
       type: 'file',
       encrypted: false,
-      size: Math.floor((data.length * 3) / 4),
-      content: chunkedContentForBase64(data),
+      size: 300,
+      content,
       deleted: false,
     };
     const path = await store.saveAttachment('j1', 'p1', attachment, data);
@@ -638,6 +641,20 @@ describe('chunked attachment storage (web)', () => {
     });
     expect(chunks).toHaveLength(attachment.content!.chunkCount);
     expect(chunks.every((chunk) => chunk.length < data.length)).toBe(true);
+
+    (encryption.decrypt as jest.Mock).mockClear();
+    const resumedChunks: number[] = [];
+    await store.forEachAttachmentChunk!(
+      attachment,
+      async (index) => {
+        resumedChunks.push(index);
+      },
+      new Set([1]),
+    );
+    // Completed remote indexes are skipped before device decryption.
+    expect(resumedChunks).toEqual([1]);
+    expect(encryption.decrypt).toHaveBeenCalledTimes(1);
+
     await expect(store.getAttachment(path)).resolves.toBe(data);
   });
 
@@ -664,6 +681,67 @@ describe('chunked attachment storage (web)', () => {
     const path = await store.saveAttachmentStream!('j1', 'p1', attachment, source());
 
     await expect(store.getAttachment(path)).resolves.toBe('QUJDRA==');
+  });
+
+  it('restarts a chunked attachment in a larger immutable generation without full-file reads', async () => {
+    const encryption = createMockEncryption();
+    const store = createLocalStore(encryption);
+    await store.initialize();
+    const sourceChunkSize = 4;
+    const targetChunkSize = 8;
+    const bytes = new Uint8Array(sourceChunkSize * 3 + 1);
+    bytes.forEach((_, index) => {
+      bytes[index] = index % 251;
+    });
+    const attachment: Attachment = {
+      id: 'migrate-me',
+      path: '',
+      name: 'migrate-me.bin',
+      type: 'file',
+      encrypted: false,
+      size: bytes.length,
+      content: {
+        ...chunkedContentForByteLength(bytes.length),
+        chunkSize: sourceChunkSize,
+        chunkCount: Math.ceil(bytes.length / sourceChunkSize),
+      },
+      deleted: false,
+    };
+    const page = { ...makePage('p1'), files: [attachment] };
+    await store.saveJournal(makeJournalContent('j1', [page]));
+    async function* source() {
+      for (let offset = 0; offset < bytes.length; offset += sourceChunkSize) {
+        yield bytes.subarray(offset, Math.min(offset + sourceChunkSize, bytes.length));
+      }
+    }
+    attachment.path = await store.saveAttachmentStream!('j1', 'p1', attachment, source());
+    await store.savePage('j1', page);
+    const oldPath = attachment.path;
+    const oldGeneration = attachment.content!.generation!;
+    const getAttachment = jest.spyOn(store, 'getAttachment');
+
+    const migrated = await store.migrateAttachmentChunkGeneration!(
+      'j1',
+      'p1',
+      attachment.id,
+      oldGeneration,
+      targetChunkSize,
+    );
+    const replacement = migrated.files[0];
+
+    expect(getAttachment).not.toHaveBeenCalled();
+    expect(replacement.path).not.toBe(oldPath);
+    expect(replacement.content).toMatchObject({
+      chunkSize: targetChunkSize,
+      chunkCount: 2,
+    });
+    expect(replacement.content!.generation).not.toBe(oldGeneration);
+    await expect(store.getAttachment(replacement.path)).resolves.toBe(
+      Buffer.from(bytes).toString('base64'),
+    );
+    // A page already open in the UI still holds this old descriptor while a
+    // background sync migrates it. Its explicit image load must remain usable.
+    await expect(store.getAttachment(oldPath)).resolves.toBe(Buffer.from(bytes).toString('base64'));
   });
 });
 
@@ -758,6 +836,36 @@ describe('reencryptJournal attachment handling (web)', () => {
     const journals = await store.listJournals();
     expect(journals).toHaveLength(1);
     expect(journals[0].id).toBe('j1');
+  });
+
+  it('defers a legacy attachment when its size sidecar exceeds stale page metadata', async () => {
+    const encryption = createMockEncryption();
+    const store = createLocalStore(encryption);
+    await store.initialize();
+
+    const attachment: Attachment = {
+      id: 'stale-size',
+      path: '',
+      name: 'video.mp4',
+      type: 'file',
+      encrypted: false,
+      deleted: false,
+      size: 1,
+    };
+    const journal = makeJournalContent('j1', [{ ...makePage('p1'), files: [attachment] }]);
+    await store.saveJournal(journal);
+    attachment.path = await store.saveAttachment('j1', 'p1', attachment, 'small-payload');
+    await store.saveJournal(journal);
+    await putRawStorageRecord(`${attachment.path}.size`, String(ATTACHMENT_CHUNK_SIZE + 1));
+
+    const loaded = await store.getJournal('j1');
+    const result = await store.reencryptJournal(loaded!, undefined, new Uint8Array(32).fill(42));
+
+    expect(result.skippedAttachments).toEqual([
+      { name: 'video.mp4', size: ATTACHMENT_CHUNK_SIZE + 1 },
+    ]);
+    const reloaded = await store.getJournal('j1', new Uint8Array(32).fill(42));
+    expect(reloaded!.pages[0].files[0].encrypted).toBe(false);
   });
 
   it('sets attachment.encrypted=true when adding password (newKey provided)', async () => {
@@ -1207,6 +1315,41 @@ describe('IDB error paths (web/IndexedDB)', () => {
       });
 
       await expect(store.savePage('j1', makePage('p1'))).rejects.toThrow();
+    });
+
+    it('aborts a timed-out write and removes late event handlers', async () => {
+      const { store } = await getInitializedStore();
+      jest.useFakeTimers();
+      const abortSpy = jest.fn();
+      const stalledTransaction = {
+        abort: abortSpy,
+        error: null,
+        oncomplete: null,
+        onerror: null,
+        onabort: null,
+        objectStore: () => ({ put: jest.fn() }),
+      } as unknown as IDBTransaction;
+      IDBDatabase.prototype.transaction = (() =>
+        stalledTransaction) as typeof IDBDatabase.prototype.transaction;
+
+      const attachment: Attachment = {
+        id: 'write-timeout',
+        path: '',
+        name: 'timeout.jpg',
+        type: 'image',
+        encrypted: false,
+        deleted: false,
+      };
+      const pending = store.saveAttachment('j1', 'p1', attachment, 'payload');
+      const timeoutAssertion = expect(pending).rejects.toThrow('[IDB] Timeout writing');
+      await Promise.resolve();
+      await jest.advanceTimersByTimeAsync(10_000);
+
+      await timeoutAssertion;
+      expect(abortSpy).toHaveBeenCalledTimes(1);
+      expect(stalledTransaction.oncomplete).toBeNull();
+      expect(stalledTransaction.onerror).toBeNull();
+      expect(stalledTransaction.onabort).toBeNull();
     });
   });
 

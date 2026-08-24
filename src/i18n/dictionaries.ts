@@ -248,6 +248,7 @@ export interface Dictionary {
     syncNow: string;
     syncing: string;
     syncComplete: string;
+    syncCheckpointed: string;
     syncDeferredAttachments: string;
     syncDeferredChunkGeneration: string;
     syncDeferredAttachmentNotFound: string;
@@ -538,6 +539,8 @@ const en: Dictionary = {
     syncNow: 'Sync now',
     syncing: 'Syncing...',
     syncComplete: 'Sync complete',
+    syncCheckpointed:
+      'Sync paused to protect memory. Fully close this tab, reopen Canto, then sync again.',
     syncDeferredAttachments: 'Some large legacy attachments were not synced',
     syncDeferredChunkGeneration: 'Attachment uses an older chunk format and was not synced',
     syncDeferredAttachmentNotFound: 'Attachment was not found in cloud storage',
@@ -846,6 +849,8 @@ const pt: Dictionary = {
     syncNow: 'Sincronizar agora',
     syncing: 'Sincronizando...',
     syncComplete: 'Sincronização concluída',
+    syncCheckpointed:
+      'Sincronização pausada para proteger a memória. Feche completamente esta aba, reabra o Canto e sincronize novamente.',
     syncDeferredAttachments: 'Alguns anexos grandes antigos não foram sincronizados',
     syncDeferredChunkGeneration: 'O anexo usa um formato de bloco antigo e não foi sincronizado',
     syncDeferredAttachmentNotFound: 'O anexo não foi encontrado no armazenamento em nuvem',
@@ -1155,6 +1160,8 @@ const es: Dictionary = {
     syncNow: 'Sincronizar ahora',
     syncing: 'Sincronizando...',
     syncComplete: 'Sincronización completa',
+    syncCheckpointed:
+      'Sincronización pausada para proteger la memoria. Cierra completamente esta pestaña, vuelve a abrir Canto y sincroniza de nuevo.',
     syncDeferredAttachments: 'Algunos archivos adjuntos heredados grandes no se sincronizaron',
     syncDeferredChunkGeneration:
       'El archivo adjunto usa un formato de bloques antiguo y no se sincronizó',
@@ -1466,6 +1473,8 @@ const de: Dictionary = {
     syncNow: 'Jetzt synchronisieren',
     syncing: 'Synchronisiere...',
     syncComplete: 'Synchronisierung abgeschlossen',
+    syncCheckpointed:
+      'Synchronisierung zum Schutz des Speichers angehalten. Schließen Sie diesen Tab vollständig, öffnen Sie Canto erneut und synchronisieren Sie wieder.',
     syncDeferredAttachments: 'Einige große ältere Anhänge wurden nicht synchronisiert',
     syncDeferredChunkGeneration:
       'Der Anhang verwendet ein älteres Chunk-Format und wurde nicht synchronisiert',
@@ -1776,6 +1785,8 @@ const fr: Dictionary = {
     syncNow: 'Synchroniser maintenant',
     syncing: 'Synchronisation...',
     syncComplete: 'Synchronisation terminée',
+    syncCheckpointed:
+      'Synchronisation suspendue pour protéger la mémoire. Fermez complètement cet onglet, rouvrez Canto, puis synchronisez à nouveau.',
     syncDeferredAttachments:
       'Certaines pièces jointes héritées volumineuses n’ont pas été synchronisées',
     syncDeferredChunkGeneration:
@@ -2087,6 +2098,8 @@ const ru: Dictionary = {
     syncNow: 'Синхронизировать сейчас',
     syncing: 'Синхронизация...',
     syncComplete: 'Синхронизация завершена',
+    syncCheckpointed:
+      'Синхронизация приостановлена для защиты памяти. Полностью закройте эту вкладку, снова откройте Canto и повторите синхронизацию.',
     syncDeferredAttachments: 'Некоторые большие устаревшие вложения не были синхронизированы',
     syncDeferredChunkGeneration:
       'Вложение использует старый формат частей и не было синхронизировано',
@@ -2394,6 +2407,7 @@ const zh: Dictionary = {
     syncNow: '立即同步',
     syncing: '同步中...',
     syncComplete: '同步完成',
+    syncCheckpointed: '为保护内存，同步已暂停。请完全关闭此标签页，重新打开 Canto，然后再次同步。',
     syncDeferredAttachments: '部分大型旧附件未同步',
     syncDeferredChunkGeneration: '附件使用较旧的分块格式，未同步',
     syncDeferredAttachmentNotFound: '未在云存储中找到附件',
@@ -2698,6 +2712,8 @@ const it: Dictionary = {
     syncNow: 'Sincronizza ora',
     syncing: 'Sincronizzazione...',
     syncComplete: 'Sincronizzazione completata',
+    syncCheckpointed:
+      'Sincronizzazione sospesa per proteggere la memoria. Chiudi completamente questa scheda, riapri Canto e sincronizza di nuovo.',
     syncDeferredAttachments:
       'Alcuni allegati legacy di grandi dimensioni non sono stati sincronizzati',
     syncDeferredChunkGeneration:

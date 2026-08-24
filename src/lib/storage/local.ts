@@ -1,12 +1,11 @@
 import { Paths, File, Directory } from 'expo-file-system';
 import type { Journal, JournalContent, Page, Attachment } from 'canto-data';
 import type { EncryptionService } from '@/lib/encryption';
-import { aesGcmEncrypt, aesGcmDecrypt, generateUUID } from '@/lib/encryption/utils';
+import { aesGcmEncrypt, aesGcmDecrypt, generateUUID, uint8ToBase64 } from '@/lib/encryption/utils';
 import { safeJsonParse } from '@/lib/utils/json';
 import type { LocalStore, ReencryptionResult } from './types';
 import { serializeDeviceKeyWrites } from './write-barrier';
 import {
-  chunkBytesToBase64,
   decodeChunkFrame,
   encodeChunkFrame,
   joinBase64Chunks,
@@ -529,7 +528,7 @@ export function createLocalStore(encryption: EncryptionService): LocalStore {
             pageId,
             attachment,
             index,
-            chunkBytesToBase64(bytes),
+            uint8ToBase64(bytes),
           );
           const inner =
             attachment.encrypted && derivedKey ? await aesGcmEncrypt(frame, derivedKey) : frame;
@@ -566,11 +565,11 @@ export function createLocalStore(encryption: EncryptionService): LocalStore {
       const root = new Directory(path);
       const manifestFile = getChunkManifest(root);
       if (!manifestFile.exists) return null;
-      const manifest = JSON.parse(await encryption.decrypt(await manifestFile.text())) as {
+      const manifest = safeJsonParse<{
         journalId: string;
         pageId: string;
         attachment: Attachment;
-      };
+      }>(await encryption.decrypt(await manifestFile.text()), `attachment manifest:${path}`);
       const chunks: string[] = [];
       for (let index = 0; index < manifest.attachment.content!.chunkCount; index++) {
         const chunk = getChunkFile(root, index);
@@ -593,12 +592,15 @@ export function createLocalStore(encryption: EncryptionService): LocalStore {
       if (root.exists) root.delete();
     },
 
-    async forEachAttachmentChunk(attachment, visitor): Promise<void> {
+    async forEachAttachmentChunk(attachment, visitor, indexes): Promise<void> {
       if (!attachment.content || attachment.content.format !== 'canto-chunked-v1') {
         throw new Error(`Chunked content descriptor required for attachment: ${attachment.name}`);
       }
       const root = new Directory(attachment.path);
       for (let index = 0; index < attachment.content.chunkCount; index++) {
+        // A resumed web sync supplies only missing remote indexes. Do not open
+        // completed chunks merely to discover that they can be skipped.
+        if (indexes && !indexes.has(index)) continue;
         const chunk = getChunkFile(root, index);
         if (!chunk.exists)
           throw new Error(`Attachment chunk missing: ${attachment.name} #${index}`);

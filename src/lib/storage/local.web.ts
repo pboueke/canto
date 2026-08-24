@@ -1,12 +1,17 @@
 import type { Journal, JournalContent, Page, Attachment } from 'canto-data';
 import type { EncryptionService } from '@/lib/encryption';
-import { aesGcmEncrypt, aesGcmDecrypt, generateUUID } from '@/lib/encryption/utils';
+import {
+  aesGcmEncrypt,
+  aesGcmDecrypt,
+  base64ToUint8,
+  generateUUID,
+  uint8ToBase64,
+} from '@/lib/encryption/utils';
 import { safeJsonParse } from '@/lib/utils/json';
 import type { LocalStore } from './types';
 import { serializeDeviceKeyWrites } from './write-barrier';
 import {
   base64ByteLength,
-  chunkBytesToBase64,
   decodeChunkFrame,
   encodeChunkFrame,
   joinBase64Chunks,
@@ -216,25 +221,44 @@ async function idbGetAttachment(path: string): Promise<string | null> {
 async function idbPut(path: string, data: string): Promise<void> {
   const db = await openDB();
   return new Promise((resolve, reject) => {
-    const timeout = setTimeout(
-      () => reject(new Error(`[IDB] Timeout writing ${path}`)),
-      IDB_TIMEOUT_MS,
-    );
     const tx = db.transaction(STORE_NAME, 'readwrite');
     const store = tx.objectStore(STORE_NAME);
-    store.put({ path, data });
-    tx.oncomplete = () => {
+    let settled = false;
+    const clearHandlers = () => {
       clearTimeout(timeout);
+      tx.oncomplete = null;
+      tx.onerror = null;
+      tx.onabort = null;
+    };
+    const resolveOnce = () => {
+      if (settled) return;
+      settled = true;
+      clearHandlers();
       resolve();
     };
-    tx.onerror = () => {
-      clearTimeout(timeout);
-      reject(tx.error);
+    const rejectOnce = (error: Error | DOMException | null) => {
+      if (settled) return;
+      settled = true;
+      clearHandlers();
+      reject(error);
     };
-    tx.onabort = () => {
-      clearTimeout(timeout);
-      reject(tx.error ?? new Error('[IDB] Transaction aborted'));
-    };
+    const timeout = setTimeout(() => {
+      rejectOnce(new Error(`[IDB] Timeout writing ${path}`));
+      try {
+        tx.abort();
+      } catch {
+        // The transaction may have completed between timeout and abort.
+      }
+    }, IDB_TIMEOUT_MS);
+
+    tx.oncomplete = resolveOnce;
+    tx.onerror = () => rejectOnce(tx.error);
+    tx.onabort = () => rejectOnce(tx.error ?? new Error('[IDB] Transaction aborted'));
+    try {
+      store.put({ path, data });
+    } catch (error) {
+      rejectOnce(error instanceof Error ? error : new Error(String(error)));
+    }
   });
 }
 
@@ -677,7 +701,7 @@ export function createLocalStore(encryption: EncryptionService): LocalStore {
             pageId,
             attachment,
             index,
-            chunkBytesToBase64(bytes),
+            uint8ToBase64(bytes),
           );
           const inner =
             attachment.encrypted && derivedKey ? await aesGcmEncrypt(frame, derivedKey) : frame;
@@ -698,38 +722,59 @@ export function createLocalStore(encryption: EncryptionService): LocalStore {
     },
 
     async getAttachment(path: string, derivedKey?: Uint8Array): Promise<string | null> {
-      const ciphertext = await idbGetAttachment(path);
-      if (ciphertext) {
-        const deviceDecrypted = await encryption.decrypt(ciphertext);
-        if (derivedKey) {
-          try {
-            return await aesGcmDecrypt(deviceDecrypted, derivedKey);
-          } catch {
-            return deviceDecrypted;
+      let resolvedPath = path;
+      // A background sync can replace a partial immutable generation while a
+      // page screen is open. Follow its bounded redirect chain so that screen's
+      // stale attachment descriptor still opens the replacement content.
+      for (let redirectDepth = 0; redirectDepth < 4; redirectDepth++) {
+        const ciphertext = await idbGetAttachment(resolvedPath);
+        if (ciphertext) {
+          const deviceDecrypted = await encryption.decrypt(ciphertext);
+          if (derivedKey) {
+            try {
+              return await aesGcmDecrypt(deviceDecrypted, derivedKey);
+            } catch {
+              return deviceDecrypted;
+            }
           }
+          return deviceDecrypted;
         }
-        return deviceDecrypted;
+        const manifestCiphertext = await idbGetAttachment(getChunkManifestPath(resolvedPath));
+        if (manifestCiphertext) {
+          const manifest = safeJsonParse<{
+            journalId: string;
+            pageId: string;
+            attachment: Attachment;
+          }>(await encryption.decrypt(manifestCiphertext), `attachment manifest:${resolvedPath}`);
+          const content = manifest.attachment.content;
+          if (!content || content.format !== 'canto-chunked-v1') {
+            throw new Error(`Invalid chunked attachment manifest: ${manifest.attachment.name}`);
+          }
+          const chunks: string[] = [];
+          for (let index = 0; index < content.chunkCount; index++) {
+            const raw = await idbGetAttachment(getChunkPath(resolvedPath, index));
+            if (!raw)
+              throw new Error(`Attachment chunk missing: ${manifest.attachment.name} #${index}`);
+            let frame = await encryption.decrypt(raw);
+            if (manifest.attachment.encrypted && derivedKey)
+              frame = await aesGcmDecrypt(frame, derivedKey);
+            chunks.push(
+              decodeChunkFrame(
+                frame,
+                manifest.journalId,
+                manifest.pageId,
+                manifest.attachment,
+                index,
+              ),
+            );
+          }
+          return joinBase64Chunks(chunks);
+        }
+        const redirectCiphertext = await idbGetAttachment(`${resolvedPath}.redirect`);
+        if (!redirectCiphertext) return null;
+        resolvedPath = await encryption.decrypt(redirectCiphertext);
       }
-      const manifestCiphertext = await idbGetAttachment(getChunkManifestPath(path));
-      if (!manifestCiphertext) return null;
-      const manifest = JSON.parse(await encryption.decrypt(manifestCiphertext)) as {
-        journalId: string;
-        pageId: string;
-        attachment: Attachment;
-      };
-      const chunks: string[] = [];
-      for (let index = 0; index < manifest.attachment.content!.chunkCount; index++) {
-        const raw = await idbGetAttachment(getChunkPath(path, index));
-        if (!raw)
-          throw new Error(`Attachment chunk missing: ${manifest.attachment.name} #${index}`);
-        let frame = await encryption.decrypt(raw);
-        if (manifest.attachment.encrypted && derivedKey)
-          frame = await aesGcmDecrypt(frame, derivedKey);
-        chunks.push(
-          decodeChunkFrame(frame, manifest.journalId, manifest.pageId, manifest.attachment, index),
-        );
-      }
-      return joinBase64Chunks(chunks);
+      throw new Error(`Attachment redirect chain is too deep: ${path}`);
     },
 
     async deleteAttachment(path: string): Promise<void> {
@@ -738,11 +783,14 @@ export function createLocalStore(encryption: EncryptionService): LocalStore {
       await idbDeletePrefix(`${path}/`);
     },
 
-    async forEachAttachmentChunk(attachment, visitor): Promise<void> {
+    async forEachAttachmentChunk(attachment, visitor, indexes): Promise<void> {
       if (!attachment.content || attachment.content.format !== 'canto-chunked-v1') {
         throw new Error(`Chunked content descriptor required for attachment: ${attachment.name}`);
       }
       for (let index = 0; index < attachment.content.chunkCount; index++) {
+        // A resumed web sync supplies only missing remote indexes. Skipping
+        // here is deliberately before IndexedDB and WebCrypto work.
+        if (indexes && !indexes.has(index)) continue;
         const raw = await idbGetAttachment(getChunkPath(attachment.path, index));
         if (!raw) throw new Error(`Attachment chunk missing: ${attachment.name} #${index}`);
         await visitor(index, await encryption.decrypt(raw));
@@ -779,6 +827,164 @@ export function createLocalStore(encryption: EncryptionService): LocalStore {
       }
     },
 
+    async migrateAttachmentChunkGeneration(
+      journalId,
+      pageId,
+      attachmentId,
+      expectedGeneration,
+      targetChunkSize,
+      derivedKey,
+    ): Promise<Page> {
+      if (!Number.isSafeInteger(targetChunkSize) || targetChunkSize < 1) {
+        throw new Error('Attachment target chunk size must be a positive integer');
+      }
+      const rawPage = await readEncrypted(getPagePath(journalId, pageId), encryption, derivedKey);
+      if (!rawPage) throw new Error(`Attachment page not found: ${pageId}`);
+      const page = safeJsonParse<Page>(rawPage, `page:${pageId}`);
+      const attachments = [...(page.images ?? []), ...(page.files ?? [])];
+      const source = attachments.find((attachment) => attachment.id === attachmentId);
+      if (
+        !source?.content ||
+        source.content.format !== 'canto-chunked-v1' ||
+        source.content.generation !== expectedGeneration ||
+        source.content.chunkSize >= targetChunkSize
+      ) {
+        throw new Error(`Attachment is no longer eligible for chunk migration: ${attachmentId}`);
+      }
+      if (source.encrypted && !derivedKey) {
+        throw new Error(`Password key required to migrate attachment: ${source.name}`);
+      }
+      const sourceContent = source.content;
+
+      const content = {
+        ...sourceContent,
+        chunkSize: targetChunkSize,
+        chunkCount: Math.ceil(sourceContent.byteLength / targetChunkSize),
+        generation: generateUUID(),
+      };
+      const replacement: Attachment = { ...source, content, path: '' };
+      const newRoot = getChunkRoot(journalId, pageId, replacement);
+      replacement.path = newRoot;
+      const oldRoot = source.path;
+      const transactionRootPath = transactionRoot(`chunk-migration-${generateUUID()}`);
+      // The transaction publishes the new page first, then reclaims the old
+      // local root. Recovery replays that same order after a crash.
+      const transaction: StorageTransaction = {
+        phase: 'prepared',
+        files: [],
+        newRoots: [newRoot],
+        oldRoots: [oldRoot],
+      };
+      let output = new Uint8Array(Math.min(targetChunkSize, sourceContent.byteLength));
+      let outputLength = 0;
+      let sourceLength = 0;
+      let destinationIndex = 0;
+
+      const writeOutput = async () => {
+        if (outputLength === 0) return;
+        if (destinationIndex >= content.chunkCount) {
+          throw new Error(`Too many migrated attachment chunks: ${source.name}`);
+        }
+        const frame = encodeChunkFrame(
+          journalId,
+          pageId,
+          replacement,
+          destinationIndex++,
+          uint8ToBase64(output.subarray(0, outputLength)),
+        );
+        const inner = replacement.encrypted ? await aesGcmEncrypt(frame, derivedKey!) : frame;
+        await idbPut(getChunkPath(newRoot, destinationIndex - 1), await encryption.encrypt(inner));
+        outputLength = 0;
+        output = new Uint8Array(
+          Math.min(
+            targetChunkSize,
+            Math.max(0, sourceContent.byteLength - destinationIndex * targetChunkSize),
+          ),
+        );
+      };
+
+      // Mark the new root as prepared before its first write so startup can
+      // remove an unreferenced partial generation after a tab/process crash.
+      await writeTransactionMarker(transactionRootPath, transaction);
+      try {
+        for (let index = 0; index < sourceContent.chunkCount; index++) {
+          const raw = await idbGetAttachment(getChunkPath(oldRoot, index));
+          if (!raw) throw new Error(`Attachment chunk missing: ${source.name} #${index}`);
+          let frame = await encryption.decrypt(raw);
+          if (source.encrypted) frame = await aesGcmDecrypt(frame, derivedKey!);
+          const bytes = base64ToUint8(decodeChunkFrame(frame, journalId, pageId, source, index));
+          const expectedLength = Math.min(
+            sourceContent.chunkSize,
+            sourceContent.byteLength - sourceLength,
+          );
+          if (bytes.length !== expectedLength) {
+            throw new Error(`Attachment chunk length mismatch: ${source.name} #${index}`);
+          }
+          sourceLength += bytes.length;
+          let offset = 0;
+          while (offset < bytes.length) {
+            const count = Math.min(output.length - outputLength, bytes.length - offset);
+            output.set(bytes.subarray(offset, offset + count), outputLength);
+            outputLength += count;
+            offset += count;
+            if (outputLength === output.length) await writeOutput();
+          }
+        }
+        if (sourceLength !== sourceContent.byteLength) {
+          throw new Error(`Attachment length mismatch: ${source.name}`);
+        }
+        await writeOutput();
+        if (destinationIndex !== content.chunkCount) {
+          throw new Error(`Migrated attachment chunk count mismatch: ${source.name}`);
+        }
+        await idbPut(
+          getChunkManifestPath(newRoot),
+          await encryption.encrypt(JSON.stringify({ journalId, pageId, attachment: replacement })),
+        );
+
+        const replaceAttachment = (attachment: Attachment) =>
+          attachment.id === attachmentId ? replacement : attachment;
+        const updatedPage: Page = {
+          ...page,
+          images: (page.images ?? []).map(replaceAttachment),
+          files: (page.files ?? []).map(replaceAttachment),
+          modified: Date.now(),
+        };
+        const payload = JSON.stringify(updatedPage);
+        const inner = derivedKey ? await aesGcmEncrypt(payload, derivedKey) : payload;
+        transaction.files.push(
+          await stageRawFile(
+            transactionRootPath,
+            0,
+            getPagePath(journalId, pageId),
+            await encryption.encrypt(inner),
+          ),
+        );
+        // A page screen already open when background sync migrates this
+        // attachment still holds oldRoot. Keep that stale descriptor readable
+        // by atomically redirecting it to the replacement generation.
+        transaction.files.push(
+          await stageRawFile(
+            transactionRootPath,
+            1,
+            `${oldRoot}.redirect`,
+            await encryption.encrypt(newRoot),
+          ),
+        );
+        transaction.phase = 'committing';
+        await writeTransactionMarker(transactionRootPath, transaction);
+        await applyStorageTransaction(transaction);
+        await idbDeletePrefix(`${transactionRootPath}/`);
+        return updatedPage;
+      } catch (error) {
+        if (transaction.phase === 'prepared') {
+          await idbDeletePrefix(`${newRoot}/`).catch(() => undefined);
+          await idbDeletePrefix(`${transactionRootPath}/`).catch(() => undefined);
+        }
+        throw error;
+      }
+    },
+
     async getAttachmentStorageSize(path: string) {
       // Older records have no sidecar and are deliberately reported as unknown:
       // opening their value just to estimate its size would recreate the OOM path.
@@ -807,17 +1013,19 @@ export function createLocalStore(encryption: EncryptionService): LocalStore {
         .flatMap((page) => [...(page.images ?? []), ...(page.files ?? [])])
         .filter((attachment) => !attachment.content);
       const unsafeLegacyPaths = new Set<string>();
+      const unsafeLegacySizes = new Map<string, number | undefined>();
       for (const attachment of legacyAttachments) {
+        // The sidecar is the local storage measurement. Metadata can be stale,
+        // so a small declared value must not authorize a large whole-value read.
         const raw = await idbGet(`${attachment.path}.size`);
         const stored = raw == null ? undefined : Number(raw);
-        const size = attachment.size ?? stored;
-        if (
-          size == null ||
-          !Number.isSafeInteger(size) ||
-          size < 0 ||
-          size > LEGACY_ATTACHMENT_MEMORY_LIMIT_BYTES
-        ) {
+        const declared = attachment.size;
+        const validStored = stored != null && Number.isSafeInteger(stored) && stored >= 0;
+        const validDeclared = declared == null || (Number.isSafeInteger(declared) && declared >= 0);
+        const size = validStored && validDeclared ? Math.max(stored, declared ?? 0) : undefined;
+        if (size == null || size > LEGACY_ATTACHMENT_MEMORY_LIMIT_BYTES) {
           unsafeLegacyPaths.add(attachment.path);
+          unsafeLegacySizes.set(attachment.path, size);
         }
       }
       const incompatible = legacyAttachments.find(
@@ -833,7 +1041,10 @@ export function createLocalStore(encryption: EncryptionService): LocalStore {
         (arr ?? []).map((attachment) => {
           if (!attachment.content && unsafeLegacyPaths.has(attachment.path)) {
             skippedPaths.add(attachment.path);
-            skippedAttachments.push({ name: attachment.name, size: attachment.size });
+            skippedAttachments.push({
+              name: attachment.name,
+              size: unsafeLegacySizes.get(attachment.path) ?? attachment.size,
+            });
             return { ...attachment, encrypted: false };
           }
           // A password transition must never rewrite chunks addressed by the

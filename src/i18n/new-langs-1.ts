@@ -222,6 +222,8 @@ export const ja: Dictionary = {
     syncNow: '今すぐ同期',
     syncing: '同期中...',
     syncComplete: '同期が完了しました',
+    syncCheckpointed:
+      'メモリを保護するため同期を一時停止しました。このタブを完全に閉じ、Canto を開き直してから再度同期してください。',
     syncDeferredAttachments: '一部の大きな旧添付ファイルは同期されませんでした',
     syncDeferredChunkGeneration:
       '添付ファイルは古いチャンク形式を使用しているため同期されませんでした',
@@ -530,6 +532,8 @@ export const ko: Dictionary = {
     syncNow: '지금 동기화',
     syncing: '동기화 중...',
     syncComplete: '동기화 완료',
+    syncCheckpointed:
+      '메모리를 보호하기 위해 동기화를 일시 중지했습니다. 이 탭을 완전히 닫고 Canto를 다시 연 뒤 동기화하세요.',
     syncDeferredAttachments: '일부 대용량 레거시 첨부 파일은 동기화되지 않았습니다',
     syncDeferredChunkGeneration: '첨부 파일이 이전 청크 형식을 사용하여 동기화되지 않았습니다',
     syncDeferredAttachmentNotFound: '클라우드 저장소에서 첨부 파일을 찾을 수 없습니다',
@@ -837,6 +841,8 @@ export const ar: Dictionary = {
     syncNow: 'مزامنة الآن',
     syncing: 'جارٍ المزامنة...',
     syncComplete: 'اكتملت المزامنة',
+    syncCheckpointed:
+      'تم إيقاف المزامنة مؤقتًا لحماية الذاكرة. أغلق علامة التبويب هذه بالكامل، ثم افتح Canto مجددًا وقم بالمزامنة.',
     syncDeferredAttachments: 'لم تتم مزامنة بعض المرفقات القديمة',
     syncDeferredChunkGeneration: 'يستخدم المرفق تنسيق أجزاء قديماً ولم تتم مزامنته',
     syncDeferredAttachmentNotFound: 'لم يتم العثور على المرفق في التخزين السحابي',
@@ -1144,6 +1150,8 @@ export const hi: Dictionary = {
     syncNow: 'अभी सिंक करें',
     syncing: 'सिंक हो रहा है...',
     syncComplete: 'सिंक पूर्ण',
+    syncCheckpointed:
+      'मेमोरी की सुरक्षा के लिए सिंक रोक दिया गया है। इस टैब को पूरी तरह बंद करें, Canto फिर से खोलें, फिर सिंक करें।',
     syncDeferredAttachments: 'कुछ बड़े पुराने अनुलग्नक सिंक नहीं किए गए',
     syncDeferredChunkGeneration:
       'अनुलग्नक पुराने खंड प्रारूप का उपयोग करता है और सिंक नहीं किया गया',
@@ -1453,6 +1461,8 @@ export const tr: Dictionary = {
     syncNow: 'Şimdi senkronize et',
     syncing: 'Senkronize ediliyor...',
     syncComplete: 'Senkronizasyon tamamlandı',
+    syncCheckpointed:
+      'Belleği korumak için senkronizasyon duraklatıldı. Bu sekmeyi tamamen kapatın, Canto’yu yeniden açın ve tekrar senkronize edin.',
     syncDeferredAttachments: 'Bazı büyük eski ekler eşitlenmedi',
     syncDeferredChunkGeneration: 'Ek, eski bir parça biçimi kullandığı için eşitlenmedi',
     syncDeferredAttachmentNotFound: 'Ek bulut depolamada bulunamadı',
@@ -1761,6 +1771,8 @@ export const nl: Dictionary = {
     syncNow: 'Nu synchroniseren',
     syncing: 'Synchroniseren...',
     syncComplete: 'Synchronisatie voltooid',
+    syncCheckpointed:
+      'Synchronisatie is gepauzeerd om het geheugen te beschermen. Sluit dit tabblad volledig, open Canto opnieuw en synchroniseer opnieuw.',
     syncDeferredAttachments: 'Sommige grote oude bijlagen zijn niet gesynchroniseerd',
     syncDeferredChunkGeneration:
       'Bijlage gebruikt een oudere chunkindeling en is niet gesynchroniseerd',

@@ -2,6 +2,7 @@ import {
   listFiles,
   getFile,
   getFileContent,
+  getFileContentWithEtag,
   createFile,
   updateFile,
   deleteFile,
@@ -70,6 +71,25 @@ describe('Google Drive API helper', () => {
         expect.anything(),
       );
     });
+
+    it('paginates so prewarmed chunk listings never treat later files as absent', async () => {
+      const first = [
+        { id: 'f1', name: 'chunk-v1-a-0', mimeType: 'application/octet-stream', modifiedTime: '' },
+      ];
+      const second = [
+        { id: 'f2', name: 'chunk-v1-a-1', mimeType: 'application/octet-stream', modifiedTime: '' },
+      ];
+      mockFetchOk({ files: first, nextPageToken: 'page-2' });
+      mockFetchOk({ files: second });
+
+      await expect(listFiles(TOKEN, "name contains 'chunk-v1-'")).resolves.toEqual([
+        ...first,
+        ...second,
+      ]);
+
+      expect(global.fetch).toHaveBeenCalledTimes(2);
+      expect((global.fetch as jest.Mock).mock.calls[1][0]).toContain('pageToken=page-2');
+    });
   });
 
   describe('getFile', () => {
@@ -105,6 +125,20 @@ describe('Google Drive API helper', () => {
       mockFetchError(401, 'Unauthorized');
       await expect(getFileContent(TOKEN, 'f1')).rejects.toThrow('Drive API error (401)');
     });
+
+    it('returns the ETag required for conditional updates', async () => {
+      (global.fetch as jest.Mock).mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        text: () => Promise.resolve('{"p1":{"modified":1000}}'),
+        headers: { get: (name: string) => (name === 'etag' ? '"index-v1"' : null) },
+      });
+
+      await expect(getFileContentWithEtag(TOKEN, 'index-id')).resolves.toEqual({
+        content: '{"p1":{"modified":1000}}',
+        etag: '"index-v1"',
+      });
+    });
   });
 
   describe('createFile', () => {
@@ -128,6 +162,42 @@ describe('Google Drive API helper', () => {
         expect.stringContaining('uploadType=multipart'),
         expect.objectContaining({ method: 'POST' }),
       );
+    });
+
+    it('uses Blob multipart parts on web rather than a joined request string', async () => {
+      const originalDocument = globalThis.document;
+      Object.defineProperty(globalThis, 'document', { configurable: true, value: {} });
+      try {
+        mockFetchOk({
+          id: 'f1',
+          name: 'test.json',
+          mimeType: 'application/json',
+          modifiedTime: '2026-01-01',
+        });
+
+        await createFile(TOKEN, { name: 'test.json' }, 'attachment-data');
+
+        const call = (global.fetch as jest.Mock).mock.calls[0][1];
+        const body = call.body;
+        const boundary = call.headers['Content-Type'].match(
+          /boundary=(---canto-[a-f0-9]+---)/,
+        )?.[1];
+        expect(body).toBeInstanceOf(Blob);
+        await expect((body as Blob).text()).resolves.toBe(
+          `--${boundary}\r\n` +
+            'Content-Type: application/json; charset=UTF-8\r\n\r\n' +
+            '{"name":"test.json"}' +
+            `\r\n--${boundary}\r\n` +
+            'Content-Type: application/json\r\n\r\n' +
+            'attachment-data' +
+            `\r\n--${boundary}--`,
+        );
+      } finally {
+        Object.defineProperty(globalThis, 'document', {
+          configurable: true,
+          value: originalDocument,
+        });
+      }
     });
 
     it('uses a unique boundary per request', async () => {
@@ -178,6 +248,19 @@ describe('Google Drive API helper', () => {
       expect(global.fetch).toHaveBeenCalledWith(
         expect.stringContaining('files/f1'),
         expect.objectContaining({ method: 'PATCH' }),
+      );
+    });
+
+    it('sends an If-Match ETag for a conditional update', async () => {
+      mockFetchOk({ id: 'f1', name: 'index.json', mimeType: 'application/json', modifiedTime: '' });
+
+      await updateFile(TOKEN, 'f1', { name: 'index.json' }, '{}', undefined, '"index-v1"');
+
+      expect(global.fetch).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.objectContaining({
+          headers: expect.objectContaining({ 'If-Match': '"index-v1"' }),
+        }),
       );
     });
   });
@@ -235,7 +318,7 @@ describe('Google Drive API helper', () => {
       mockFetchError(403, 'insufficient permissions for this file');
       await expect(listFiles(TOKEN, "name = 'test'")).rejects.toThrow('Drive API error (403)');
       // Verify the sensitive body text is NOT in the error
-      await mockFetchError(403, 'secret-token-leaked');
+      mockFetchError(403, 'secret-token-leaked');
       try {
         await listFiles(TOKEN, "name = 'test'");
       } catch (err) {

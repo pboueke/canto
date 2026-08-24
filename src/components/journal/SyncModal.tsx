@@ -102,9 +102,11 @@ export function SyncModal({
     const result = await syncJournal(journal.id, derivedKey ?? undefined);
     setFeedback(
       result
-        ? result.warnings.length > 0
-          ? formatWarnings(result.warnings)
-          : t.sync.syncComplete
+        ? result.checkpointed
+          ? t.sync.syncCheckpointed
+          : result.warnings.length > 0
+            ? formatWarnings(result.warnings)
+            : t.sync.syncComplete
         : getSyncState(journal.id).status === 'error'
           ? t.sync.syncError
           : null,
@@ -128,9 +130,11 @@ export function SyncModal({
     const result = await syncJournal(journal.id, derivedKey ?? undefined);
     setFeedback(
       result
-        ? result.warnings.length > 0
-          ? formatWarnings(result.warnings)
-          : t.sync.syncComplete
+        ? result.checkpointed
+          ? t.sync.syncCheckpointed
+          : result.warnings.length > 0
+            ? formatWarnings(result.warnings)
+            : t.sync.syncComplete
         : getSyncState(journal.id).status === 'error'
           ? t.sync.syncError
           : null,
@@ -147,6 +151,7 @@ export function SyncModal({
     : t.sync.neverSynced;
 
   const isSyncing = syncState.status === 'syncing';
+  const isCheckpointed = syncState.status === 'checkpointed';
 
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
@@ -262,12 +267,12 @@ export function SyncModal({
                   {/* Sync now */}
                   <Pressable
                     onPress={handleSyncNow}
-                    disabled={isSyncing}
+                    disabled={isSyncing || isCheckpointed}
                     style={[
                       styles.actionBtn,
                       {
                         backgroundColor: theme.colors.primary,
-                        opacity: isSyncing ? 0.5 : 1,
+                        opacity: isSyncing || isCheckpointed ? 0.5 : 1,
                       },
                     ]}
                   >
@@ -299,7 +304,7 @@ export function SyncModal({
           )}
 
           {/* Feedback */}
-          {feedback && !isSyncing && (
+          {(feedback || isCheckpointed) && !isSyncing && (
             <Text
               style={[
                 styles.feedback,
@@ -309,7 +314,7 @@ export function SyncModal({
                 },
               ]}
             >
-              {feedback}
+              {feedback ?? t.sync.syncCheckpointed}
             </Text>
           )}
 

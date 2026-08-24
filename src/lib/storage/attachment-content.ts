@@ -1,10 +1,10 @@
 import type { Attachment, ChunkedAttachmentContent } from 'canto-data';
-import { base64ToUint8, generateUUID } from '@/lib/encryption/utils';
+import { base64ToUint8, generateUUID, uint8ToBase64 } from '@/lib/encryption/utils';
 
 /** Maximum decoded payload per chunk. Keep this aligned with canto-chunked-v1. */
-export const ATTACHMENT_CHUNK_SIZE = 512 * 1024;
-/** Legacy values still cross whole-value crypto APIs, so never open more than one chunk. */
-export const LEGACY_ATTACHMENT_MEMORY_LIMIT_BYTES = ATTACHMENT_CHUNK_SIZE;
+export const ATTACHMENT_CHUNK_SIZE = 10 * 1024 * 1024;
+/** Legacy values still cross whole-value crypto APIs, so retain their separate 512 KiB cap. */
+export const LEGACY_ATTACHMENT_MEMORY_LIMIT_BYTES = 512 * 1024;
 
 const BASE64 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
 const BASE64_LOOKUP = new Uint8Array(128);
@@ -25,10 +25,12 @@ interface ChunkFrame {
 
 /** Return decoded bytes without materialising a decoded copy of the value. */
 export function base64ByteLength(data: string): number {
-  const normalizedLength = data.replace(/[\r\n\s]/g, '').length;
-  if (normalizedLength === 0) return 0;
-  const padding = data.endsWith('==') ? 2 : data.endsWith('=') ? 1 : 0;
-  return Math.floor((normalizedLength * 3) / 4) - padding;
+  const normalized = data.replace(/[\r\n\s]/g, '');
+  if (normalized.length === 0) return 0;
+  let padding = 0;
+  if (normalized.endsWith('==')) padding = 2;
+  else if (normalized.endsWith('=')) padding = 1;
+  return Math.floor((normalized.length * 3) / 4) - padding;
 }
 
 /** Descriptor for new content with an immutable copy-on-write generation. */
@@ -50,24 +52,10 @@ export function chunkedContentForBase64(data: string): ChunkedAttachmentContent 
   return chunkedContentForByteLength(base64ByteLength(data));
 }
 
-export function chunkBytesToBase64(bytes: Uint8Array): string {
-  // Convert in 8 KiB (a multiple of three) pieces. This deliberately avoids
-  // the historical per-byte string concatenation amplification.
-  const parts: string[] = [];
-  const fullChunk = 8190;
-  for (let offset = 0; offset < bytes.length; offset += fullChunk) {
-    const part = bytes.subarray(offset, Math.min(bytes.length, offset + fullChunk));
-    let binary = '';
-    for (let i = 0; i < part.length; i++) binary += String.fromCharCode(part[i]);
-    parts.push(btoa(binary));
-  }
-  return parts.join('');
-}
-
 /**
- * Decode base64 incrementally into exact 512 KiB payload chunks. Splitting the
- * encoded string on four-character boundaries is incorrect at 512 KiB because
- * 512 KiB is not divisible by three; it produces an extra two-byte chunk.
+ * Decode base64 incrementally into exact descriptor-sized payload chunks.
+ * Splitting the encoded string on four-character boundaries is incorrect when
+ * the chunk size is not divisible by three; it produces an extra partial chunk.
  */
 export function splitBase64Chunks(data: string, content: ChunkedAttachmentContent): string[] {
   const clean = data.replace(/[\r\n\s]/g, '');
@@ -78,7 +66,7 @@ export function splitBase64Chunks(data: string, content: ChunkedAttachmentConten
   let current = new Uint8Array(Math.min(content.chunkSize, content.byteLength));
   let used = 0;
   const flush = () => {
-    chunks.push(chunkBytesToBase64(current.subarray(0, used)));
+    chunks.push(uint8ToBase64(current.subarray(0, used)));
     used = 0;
     current = new Uint8Array(Math.min(content.chunkSize, content.byteLength));
   };
@@ -121,7 +109,7 @@ export function joinBase64Chunks(chunks: string[]): string {
     bytes.set(decoded, offset);
     offset += decoded.length;
   }
-  return chunkBytesToBase64(bytes);
+  return uint8ToBase64(bytes);
 }
 
 export function encodeChunkFrame(

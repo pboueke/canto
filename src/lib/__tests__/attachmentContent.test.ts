@@ -1,5 +1,12 @@
 import type { Attachment } from 'canto-data';
-import { decodeChunkFrame, encodeChunkFrame } from '../storage/attachment-content';
+import {
+  base64ByteLength,
+  chunkedContentForBase64,
+  decodeChunkFrame,
+  encodeChunkFrame,
+  splitBase64Chunks,
+  ATTACHMENT_CHUNK_SIZE,
+} from '../storage/attachment-content';
 
 function attachment(generation?: string): Attachment {
   return {
@@ -12,12 +19,23 @@ function attachment(generation?: string): Attachment {
     content: {
       format: 'canto-chunked-v1',
       byteLength: 3,
-      chunkSize: 512 * 1024,
+      chunkSize: ATTACHMENT_CHUNK_SIZE,
       chunkCount: 1,
       ...(generation ? { generation } : {}),
     },
   };
 }
+
+describe('attachment content helpers', () => {
+  it('normalizes trailing whitespace before calculating base64 padding', () => {
+    const data = 'QQ==\n';
+    const content = chunkedContentForBase64(data);
+
+    expect(base64ByteLength(data)).toBe(1);
+    expect(content.byteLength).toBe(1);
+    expect(splitBase64Chunks(data, content)).toEqual(['QQ==']);
+  });
+});
 
 describe('attachment chunk frames', () => {
   it('rejects a valid frame from a stale content generation', () => {

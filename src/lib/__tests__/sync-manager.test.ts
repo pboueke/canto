@@ -110,6 +110,7 @@ function createMockLocalStore(journal: JournalContent | null): LocalStore {
 
 beforeEach(() => {
   Object.keys(asyncStore).forEach((k) => delete asyncStore[k]);
+  if (typeof sessionStorage !== 'undefined') sessionStorage.clear();
 });
 
 describe('SyncManager', () => {
@@ -161,6 +162,135 @@ describe('SyncManager', () => {
       expect(states[0].status).toBe('syncing');
       expect(states[states.length - 1].status).toBe('idle');
       expect(states[states.length - 1].lastSynced).toBeGreaterThan(0);
+    });
+
+    it('blocks same-tab retries after a web chunk-budget checkpoint', async () => {
+      const originalSessionStorage = Object.getOwnPropertyDescriptor(globalThis, 'sessionStorage');
+      const session = new Map<string, string>();
+      Object.defineProperty(globalThis, 'sessionStorage', {
+        configurable: true,
+        value: {
+          getItem: (key: string) => session.get(key) ?? null,
+          setItem: (key: string, value: string) => session.set(key, value),
+          clear: () => session.clear(),
+        },
+      });
+      const attachment = {
+        id: 'chunked-video',
+        path: '/local/chunked-video',
+        name: 'chunked-video.mp4',
+        type: 'file' as const,
+        encrypted: false,
+        deleted: false,
+        content: {
+          format: 'canto-chunked-v1' as const,
+          byteLength: 17 * 512,
+          chunkSize: 512,
+          chunkCount: 17,
+          generation: 'generation-1',
+        },
+      };
+      const journal = makeJournal([{ ...makePage('p1', 1000), files: [attachment] }]);
+      const local = createMockLocalStore(journal);
+      const remote = createMockRemoteStore();
+      const manager = new SyncManager(local, remote, true);
+      const persisted = new Set<number>();
+      local.forEachAttachmentChunk = jest.fn(async (_attachment, visitor, indexes) => {
+        for (const index of indexes ?? []) await visitor(index, `frame-${index}`);
+      });
+      remote.listAttachmentChunkIndexes = jest.fn(async () => new Set(persisted));
+      remote.uploadAttachmentChunk = jest.fn(async (_journalId, _id, _generation, index) => {
+        persisted.add(index);
+      });
+
+      try {
+        const first = await manager.syncJournal('j1', 'token');
+
+        expect(first?.checkpointed).toBe(true);
+        expect(manager.getState('j1').status).toBe('checkpointed');
+        expect(asyncStore['canto:lastSync:j1']).toBeUndefined();
+        expect(asyncStore['canto:lastRemoteSalt:j1']).toBeUndefined();
+        const readsBeforeRetry = (local.forEachAttachmentChunk as jest.Mock).mock.calls.length;
+
+        await expect(manager.syncJournal('j1', 'token')).resolves.toBeNull();
+        expect((local.forEachAttachmentChunk as jest.Mock).mock.calls).toHaveLength(
+          readsBeforeRetry,
+        );
+        expect(manager.getState('j1').status).toBe('checkpointed');
+      } finally {
+        if (originalSessionStorage) {
+          Object.defineProperty(globalThis, 'sessionStorage', originalSessionStorage);
+        } else {
+          delete (globalThis as { sessionStorage?: unknown }).sessionStorage;
+        }
+      }
+    });
+
+    it('blocks same-tab retries when a bounded chunk run is cancelled after local work starts', async () => {
+      const originalSessionStorage = Object.getOwnPropertyDescriptor(globalThis, 'sessionStorage');
+      const session = new Map<string, string>();
+      Object.defineProperty(globalThis, 'sessionStorage', {
+        configurable: true,
+        value: {
+          getItem: (key: string) => session.get(key) ?? null,
+          setItem: (key: string, value: string) => session.set(key, value),
+          clear: () => session.clear(),
+        },
+      });
+      const attachment = {
+        id: 'chunked-video',
+        path: '/local/chunked-video',
+        name: 'chunked-video.mp4',
+        type: 'file' as const,
+        encrypted: false,
+        deleted: false,
+        content: {
+          format: 'canto-chunked-v1' as const,
+          byteLength: 512,
+          chunkSize: 512,
+          chunkCount: 1,
+          generation: 'generation-1',
+        },
+      };
+      const journal = makeJournal([{ ...makePage('p1', 1000), files: [attachment] }]);
+      const local = createMockLocalStore(journal);
+      const remote = createMockRemoteStore();
+      const manager = new SyncManager(local, remote, true);
+      let releaseUpload!: () => void;
+      let markUploadStarted!: () => void;
+      const uploadStarted = new Promise<void>((resolve) => {
+        markUploadStarted = resolve;
+      });
+      local.forEachAttachmentChunk = jest.fn(async (_attachment, visitor, indexes) => {
+        for (const index of indexes ?? []) await visitor(index, `frame-${index}`);
+      });
+      remote.listAttachmentChunkIndexes = jest.fn(async () => new Set<number>());
+      remote.uploadAttachmentChunk = jest.fn(
+        async () =>
+          new Promise<void>((resolve) => {
+            releaseUpload = resolve;
+            markUploadStarted();
+          }),
+      );
+
+      try {
+        const sync = manager.syncJournal('j1', 'token');
+        await uploadStarted;
+        manager.cancelSync('j1');
+        releaseUpload();
+
+        await expect(sync).resolves.toBeNull();
+        expect(manager.getState('j1').status).toBe('checkpointed');
+        const readsBeforeRetry = (local.forEachAttachmentChunk as jest.Mock).mock.calls.length;
+        await expect(manager.syncJournal('j1', 'token')).resolves.toBeNull();
+        expect(local.forEachAttachmentChunk).toHaveBeenCalledTimes(readsBeforeRetry);
+      } finally {
+        if (originalSessionStorage) {
+          Object.defineProperty(globalThis, 'sessionStorage', originalSessionStorage);
+        } else {
+          delete (globalThis as { sessionStorage?: unknown }).sessionStorage;
+        }
+      }
     });
 
     it('transitions to error on failure', async () => {

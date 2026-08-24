@@ -11,7 +11,7 @@ import { enqueueThumbnail } from '@/hooks/useImageQueue';
 import { useJournalKeys } from '@/contexts/JournalKeyContext';
 import type { JournalSettings } from 'canto-data';
 import type { ListPagePreview } from '@/lib/pagePreview';
-import { ATTACHMENT_CHUNK_SIZE } from '@/lib/storage/attachment-content';
+import { LEGACY_ATTACHMENT_MEMORY_LIMIT_BYTES } from '@/lib/storage/attachment-content';
 
 interface PageListItemProps {
   page: ListPagePreview;
@@ -53,7 +53,7 @@ export function PageListItem({
       page.firstImageChunked ||
       !showThumbnail ||
       page.firstImageSize == null ||
-      page.firstImageSize > ATTACHMENT_CHUNK_SIZE
+      page.firstImageSize > LEGACY_ATTACHMENT_MEMORY_LIMIT_BYTES
     )
       return;
     const cancel = enqueueThumbnail(

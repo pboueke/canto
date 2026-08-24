@@ -14,7 +14,7 @@ import { inspectBackup, importJournal } from '../backup/import.web';
 import type { EncryptionService } from '../encryption';
 import type { JournalContent, Page, Attachment } from 'canto-data';
 import { aesGcmEncryptBytes, aesGcmDecryptBytes } from '../encryption/utils';
-import { ATTACHMENT_CHUNK_SIZE } from '../storage/attachment-content';
+import { LEGACY_ATTACHMENT_MEMORY_LIMIT_BYTES } from '../storage/attachment-content';
 import { canGenerateThumbnailFromAttachment, pageToListPreview } from '../pagePreview';
 
 // ---------------------------------------------------------------------------
@@ -908,7 +908,7 @@ describe('importJournal (web)', () => {
     zip.file('pages/p1.json', await aesGcmEncryptBytes(JSON.stringify(page), key));
     // Regression: v1 encrypted entries are one AES-GCM value. They must remain
     // importable above the bounded chunk threshold, then become chunked locally.
-    const attachmentData = btoa('x'.repeat(ATTACHMENT_CHUNK_SIZE + 1));
+    const attachmentData = btoa('x'.repeat(LEGACY_ATTACHMENT_MEMORY_LIMIT_BYTES + 1));
     zip.file('attachments/image-att1.jpg', await aesGcmEncryptBytes(attachmentData, key));
     fetchResponse = await zip.generateAsync({ type: 'arraybuffer' });
 

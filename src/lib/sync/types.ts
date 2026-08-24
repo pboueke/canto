@@ -1,4 +1,4 @@
-import type { SyncProvider } from 'canto-data';
+import type { Attachment, SyncProvider } from 'canto-data';
 
 export type { SyncProvider };
 
@@ -80,6 +80,29 @@ export interface RemoteStore {
   /** Delete an attachment on the remote. */
   deleteAttachment(remotePath: string): Promise<void>;
 
+  /**
+   * Resolve exact remote IDs for chunk generations this sync will upload, so
+   * bounded chunk transfers do not perform one Drive search per chunk.
+   */
+  prepareAttachmentChunkUploads?(
+    journalId: string,
+    attachments: Attachment[],
+    signal?: AbortSignal,
+  ): Promise<void>;
+
+  /**
+   * List the persisted indexes for one immutable attachment generation. This
+   * must not read local attachment data; resumable web sync uses it to skip
+   * completed chunks before IndexedDB or WebCrypto work begins.
+   */
+  listAttachmentChunkIndexes?(
+    journalId: string,
+    attachmentId: string,
+    generation: string,
+    chunkCount: number,
+    signal?: AbortSignal,
+  ): Promise<ReadonlySet<number>>;
+
   /** Additive bounded-payload transfer surface for canto-chunked-v1 attachments. */
   uploadAttachmentChunk?(
     journalId: string,
@@ -140,4 +163,9 @@ export interface SyncResult {
   conflicts: SyncConflict[];
   /** Attachments intentionally left dirty rather than risking legacy OOM. */
   warnings: SyncWarning[];
+  /**
+   * Web-only safety stop. The current renderer must be closed before another
+   * sync resumes its immutable, unindexed attachment generations.
+   */
+  checkpointed?: boolean;
 }

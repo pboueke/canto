@@ -142,6 +142,13 @@ describe('base64 round-trip', () => {
     const result = base64ToUint8(dirty);
     expect(result).toEqual(bytes);
   });
+
+  it('encodes a sync-sized chunk with standard base64 output', () => {
+    const bytes = new Uint8Array(512 * 1024);
+    for (let index = 0; index < bytes.length; index++) bytes[index] = index % 251;
+
+    expect(uint8ToBase64(bytes)).toBe(Buffer.from(bytes).toString('base64'));
+  });
 });
 
 describe('generateUUID', () => {

@@ -222,6 +222,8 @@ export const pl: Dictionary = {
     syncNow: 'Synchronizuj teraz',
     syncing: 'Synchronizacja...',
     syncComplete: 'Synchronizacja zakończona',
+    syncCheckpointed:
+      'Synchronizacja została wstrzymana, aby chronić pamięć. Całkowicie zamknij tę kartę, ponownie otwórz Canto i zsynchronizuj ponownie.',
     syncDeferredAttachments: 'Niektóre duże starsze załączniki nie zostały zsynchronizowane',
     syncDeferredChunkGeneration:
       'Załącznik używa starszego formatu fragmentów i nie został zsynchronizowany',
@@ -531,6 +533,8 @@ export const sv: Dictionary = {
     syncNow: 'Synkronisera nu',
     syncing: 'Synkroniserar...',
     syncComplete: 'Synkronisering klar',
+    syncCheckpointed:
+      'Synkronisering er sat på pause for at beskytte hukommelsen. Luk denne fane helt, åbn Canto igen, og synkroniser igen.',
     syncDeferredAttachments: 'Vissa stora äldre bilagor synkroniserades inte',
     syncDeferredChunkGeneration:
       'Bilagan använder ett äldre segmentformat och synkroniserades inte',
@@ -841,6 +845,8 @@ export const vi: Dictionary = {
     syncNow: 'Đồng bộ ngay',
     syncing: 'Đang đồng bộ...',
     syncComplete: 'Đồng bộ hoàn tất',
+    syncCheckpointed:
+      'Đồng bộ đã tạm dừng để bảo vệ bộ nhớ. Hãy đóng hoàn toàn thẻ này, mở lại Canto rồi đồng bộ lại.',
     syncDeferredAttachments: 'Một số tệp đính kèm cũ lớn chưa được đồng bộ',
     syncDeferredChunkGeneration: 'Tệp đính kèm dùng định dạng đoạn cũ và chưa được đồng bộ',
     syncDeferredAttachmentNotFound: 'Không tìm thấy tệp đính kèm trong bộ nhớ đám mây',
@@ -1147,6 +1153,8 @@ export const th: Dictionary = {
     syncNow: 'ซิงค์ตอนนี้',
     syncing: 'กำลังซิงค์...',
     syncComplete: 'ซิงค์เสร็จสิ้น',
+    syncCheckpointed:
+      'การซิงค์ถูกหยุดชั่วคราวเพื่อปกป้องหน่วยความจำ ปิดแท็บนี้ให้สนิท เปิด Canto ใหม่ แล้วซิงค์อีกครั้ง',
     syncDeferredAttachments: 'ไฟล์แนบเก่าขนาดใหญ่บางไฟล์ไม่ได้ซิงค์',
     syncDeferredChunkGeneration: 'ไฟล์แนบใช้รูปแบบชิ้นส่วนเก่าและไม่ได้ซิงค์',
     syncDeferredAttachmentNotFound: 'ไม่พบไฟล์แนบในที่เก็บข้อมูลบนคลาวด์',
@@ -1454,6 +1462,8 @@ export const id: Dictionary = {
     syncNow: 'Sinkronkan sekarang',
     syncing: 'Menyinkronkan...',
     syncComplete: 'Sinkronisasi selesai',
+    syncCheckpointed:
+      'Sinkronisasi dijeda untuk melindungi memori. Tutup tab ini sepenuhnya, buka Canto lagi, lalu sinkronkan kembali.',
     syncDeferredAttachments: 'Beberapa lampiran lama berukuran besar tidak disinkronkan',
     syncDeferredChunkGeneration: 'Lampiran menggunakan format potongan lama dan tidak disinkronkan',
     syncDeferredAttachmentNotFound: 'Lampiran tidak ditemukan di penyimpanan cloud',
@@ -1762,6 +1772,8 @@ export const uk: Dictionary = {
     syncNow: 'Синхронізувати зараз',
     syncing: 'Синхронізація...',
     syncComplete: 'Синхронізацію завершено',
+    syncCheckpointed:
+      'Синхронізацію призупинено для захисту пам’яті. Повністю закрийте цю вкладку, знову відкрийте Canto та синхронізуйте ще раз.',
     syncDeferredAttachments: 'Деякі великі застарілі вкладення не було синхронізовано',
     syncDeferredChunkGeneration:
       'Вкладення використовує старіший формат фрагментів і не було синхронізовано',
