@@ -19,6 +19,17 @@ const textDecoder = new TextDecoder();
 // also permits its imported CryptoKey to be collected.
 const importedAesKeys = new WeakMap<Uint8Array, Promise<AESEncryptionKey>>();
 
+/** Evict a native imported key before its mutable source bytes are cleared. */
+export function releaseImportedAesKey(key: Uint8Array): void {
+  importedAesKeys.delete(key);
+}
+
+/** Release the native key identity and then zero the source key material. */
+export function releaseAndZeroAesKey(key: Uint8Array): void {
+  releaseImportedAesKey(key);
+  key.fill(0);
+}
+
 function importAesKey(key: Uint8Array): Promise<AESEncryptionKey> {
   let imported = importedAesKeys.get(key);
   if (!imported) {

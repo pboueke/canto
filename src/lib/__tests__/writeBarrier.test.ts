@@ -54,4 +54,30 @@ describe('device-key rotation read barrier', () => {
     await lateRead;
     expect(getPage).toHaveBeenCalledTimes(1);
   });
+
+  it('treats a newly added unclassified method as a writer by default', async () => {
+    const rotationStarted = deferred();
+    const releaseRotation = deferred();
+    const reencryptAll = jest.fn(async (..._args: unknown[]) => {
+      rotationStarted.resolve();
+      await releaseRotation.promise;
+    });
+    const futureMutator = jest.fn(async (..._args: unknown[]) => undefined);
+    const guarded = serializeDeviceKeyWrites({ reencryptAll, futureMutator });
+
+    const rotation = guarded.reencryptAll(
+      async () => '',
+      async () => '',
+      async () => '',
+    );
+    await rotationStarted.promise;
+    const write = guarded.futureMutator('new data');
+    await Promise.resolve();
+    expect(futureMutator).not.toHaveBeenCalled();
+
+    releaseRotation.resolve();
+    await rotation;
+    await write;
+    expect(futureMutator).toHaveBeenCalledWith('new data');
+  });
 });

@@ -682,67 +682,6 @@ describe('chunked attachment storage (web)', () => {
 
     await expect(store.getAttachment(path)).resolves.toBe('QUJDRA==');
   });
-
-  it('restarts a chunked attachment in a larger immutable generation without full-file reads', async () => {
-    const encryption = createMockEncryption();
-    const store = createLocalStore(encryption);
-    await store.initialize();
-    const sourceChunkSize = 4;
-    const targetChunkSize = 8;
-    const bytes = new Uint8Array(sourceChunkSize * 3 + 1);
-    bytes.forEach((_, index) => {
-      bytes[index] = index % 251;
-    });
-    const attachment: Attachment = {
-      id: 'migrate-me',
-      path: '',
-      name: 'migrate-me.bin',
-      type: 'file',
-      encrypted: false,
-      size: bytes.length,
-      content: {
-        ...chunkedContentForByteLength(bytes.length),
-        chunkSize: sourceChunkSize,
-        chunkCount: Math.ceil(bytes.length / sourceChunkSize),
-      },
-      deleted: false,
-    };
-    const page = { ...makePage('p1'), files: [attachment] };
-    await store.saveJournal(makeJournalContent('j1', [page]));
-    async function* source() {
-      for (let offset = 0; offset < bytes.length; offset += sourceChunkSize) {
-        yield bytes.subarray(offset, Math.min(offset + sourceChunkSize, bytes.length));
-      }
-    }
-    attachment.path = await store.saveAttachmentStream!('j1', 'p1', attachment, source());
-    await store.savePage('j1', page);
-    const oldPath = attachment.path;
-    const oldGeneration = attachment.content!.generation!;
-    const getAttachment = jest.spyOn(store, 'getAttachment');
-
-    const migrated = await store.migrateAttachmentChunkGeneration!(
-      'j1',
-      'p1',
-      attachment.id,
-      oldGeneration,
-      targetChunkSize,
-    );
-    const replacement = migrated.files[0];
-
-    expect(getAttachment).not.toHaveBeenCalled();
-    expect(replacement.path).not.toBe(oldPath);
-    expect(replacement.content).toMatchObject({
-      chunkSize: targetChunkSize,
-      chunkCount: 2,
-    });
-    expect(replacement.content!.generation).not.toBe(oldGeneration);
-    await expect(store.getAttachment(replacement.path)).resolves.toBe(
-      Buffer.from(bytes).toString('base64'),
-    );
-    // A page already open in the UI still holds this old descriptor while a
-    // background sync migrates it. Its explicit image load must remain usable.
-    await expect(store.getAttachment(oldPath)).resolves.toBe(Buffer.from(bytes).toString('base64'));
-  });
 });
 
 describe('reencryptJournal (web/IndexedDB)', () => {

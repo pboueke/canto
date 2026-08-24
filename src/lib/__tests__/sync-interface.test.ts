@@ -171,6 +171,28 @@ describe('SyncEngine — provider-agnostic interface', () => {
       expect(remote.downloadSyncIndex).toHaveBeenCalledWith('journal-1');
     });
 
+    it('uses one index publication session instead of re-reading for each page', async () => {
+      const first = makePage('p1', 1000);
+      const second = makePage('p2', 2000);
+      const local = createMockLocalStore(makeJournal([first, second]));
+      const remote = createMockRemoteStore(makeJournal([]));
+      const publishPage = jest.fn();
+      const finalize = jest.fn();
+      remote.openSyncIndexPublication = jest.fn().mockResolvedValue({
+        initial: {},
+        publishPage,
+        finalize,
+      });
+
+      await new SyncEngine(local, remote).sync('journal-1', SYNC_KEY);
+
+      expect(remote.downloadSyncIndex).not.toHaveBeenCalled();
+      expect(publishPage).toHaveBeenCalledTimes(2);
+      expect(publishPage).toHaveBeenCalledWith('p1', { modified: 1000 }, undefined);
+      expect(publishPage).toHaveBeenCalledWith('p2', { modified: 2000 }, undefined);
+      expect(finalize).toHaveBeenCalledWith({ successful: true, signal: undefined });
+    });
+
     it('calls connect/disconnect are not called by SyncEngine directly', async () => {
       const local = createMockLocalStore(makeJournal([]));
       const remote = createMockRemoteStore(makeJournal([]));

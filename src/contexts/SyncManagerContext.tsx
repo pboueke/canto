@@ -9,6 +9,7 @@ import {
 } from 'react';
 import type { ReactNode } from 'react';
 import { useGoogleAuth } from './GoogleAuthContext';
+import { useJournalKeys } from './JournalKeyContext';
 import { SyncManager, type SyncState } from '@/lib/sync/manager';
 import { GDriveRemoteStore } from '@/lib/sync/gdrive';
 import { getLocalStore } from '@/hooks/useStorage';
@@ -59,6 +60,7 @@ export function useSyncState(journalId: string): SyncState {
       prev.status === next.status &&
       prev.lastSynced === next.lastSynced &&
       prev.error === next.error &&
+      prev.requiresFreshRenderer === next.requiresFreshRenderer &&
       prev.progress?.current === next.progress?.current &&
       prev.progress?.total === next.progress?.total
     ) {
@@ -73,6 +75,7 @@ export function useSyncState(journalId: string): SyncState {
 
 export function SyncManagerProvider({ children }: { children: ReactNode }) {
   const { accessToken, getAccessToken, isSignedIn } = useGoogleAuth();
+  const { onAutoLock } = useJournalKeys();
   const managerRef = useRef<SyncManager | null>(null);
 
   useEffect(() => {
@@ -85,6 +88,14 @@ export function SyncManagerProvider({ children }: { children: ReactNode }) {
       managerRef.current?.disconnect();
     };
   }, []);
+
+  useEffect(() => {
+    return onAutoLock(() => {
+      // JournalKeyProvider notifies listeners before it releases imported keys
+      // and zeroes the source Uint8Arrays.
+      managerRef.current?.cancelAllSyncs();
+    });
+  }, [onAutoLock]);
 
   useEffect(() => {
     if (!accessToken) {

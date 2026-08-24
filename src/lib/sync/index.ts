@@ -1,10 +1,12 @@
 export type {
   SyncProvider,
   RemoteStore,
+  PreparedChunkUploads,
   RemoteJournalMeta,
   SyncResult,
   SyncConflict,
   SyncIndex,
+  SyncIndexPublication,
   RegistryInfo,
   DownloadFailure,
 } from './types';

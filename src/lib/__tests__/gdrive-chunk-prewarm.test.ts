@@ -96,6 +96,29 @@ describe('GDriveRemoteStore chunk upload prewarm', () => {
     expect(mockedApi.updateFile).not.toHaveBeenCalled();
   });
 
+  it('prepares present and absent indexes once, then never reads local-present chunks', async () => {
+    const existingName = 'chunk-v1-attachment-1-generation-1-0';
+    configureFolders([{ id: 'remote-chunk-0', name: existingName }]);
+
+    const prepared = await store.prepareChunkUploads(JOURNAL_ID, [attachment]);
+
+    expect(prepared.missingIndexes(attachment)).toEqual([1]);
+    await prepared.uploadMissingChunk(attachment, 1, 'chunk-1');
+
+    expect(exactChunkLookups()).toEqual([]);
+    expect(mockedApi.updateFile).not.toHaveBeenCalled();
+    expect(mockedApi.createFile).toHaveBeenCalledWith(
+      TOKEN,
+      expect.objectContaining({ name: 'chunk-v1-attachment-1-generation-1-1' }),
+      'chunk-1',
+      'drive',
+      undefined,
+    );
+    await expect(prepared.uploadMissingChunk(attachment, 0, 'chunk-0')).rejects.toThrow(
+      'not prepared as missing',
+    );
+  });
+
   it('updates found chunks and creates only missing chunks after a partial upload', async () => {
     const existingName = 'chunk-v1-attachment-1-generation-1-0';
     configureFolders([{ id: 'remote-chunk-0', name: existingName }]);

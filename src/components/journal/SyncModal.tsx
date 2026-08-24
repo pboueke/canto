@@ -92,6 +92,29 @@ export function SyncModal({
     [journal, derivedKey, saveJournal, onJournalChanged],
   );
 
+  const formatResultFeedback = useCallback(
+    (result: Awaited<ReturnType<typeof syncJournal>>) => {
+      if (!result) {
+        const state = getSyncState(journal.id);
+        if (state.status === 'error') {
+          return state.requiresFreshRenderer
+            ? `${t.sync.syncError}\n${t.sync.syncCheckpointed}`
+            : t.sync.syncError;
+        }
+        return null;
+      }
+      const primary = result.checkpointed
+        ? t.sync.syncCheckpointed
+        : result.warnings.length > 0
+          ? formatWarnings(result.warnings)
+          : t.sync.syncComplete;
+      return result.requiresFreshRenderer && !result.checkpointed
+        ? `${primary}\n${t.sync.syncCheckpointed}`
+        : primary;
+    },
+    [formatWarnings, getSyncState, journal.id, syncJournal, t],
+  );
+
   const handleEnableSync = useCallback(async () => {
     await updateSettings({
       syncProvider: 'gdrive',
@@ -100,18 +123,8 @@ export function SyncModal({
     });
     setFeedback(t.sync.syncing);
     const result = await syncJournal(journal.id, derivedKey ?? undefined);
-    setFeedback(
-      result
-        ? result.checkpointed
-          ? t.sync.syncCheckpointed
-          : result.warnings.length > 0
-            ? formatWarnings(result.warnings)
-            : t.sync.syncComplete
-        : getSyncState(journal.id).status === 'error'
-          ? t.sync.syncError
-          : null,
-    );
-  }, [updateSettings, syncJournal, getSyncState, journal.id, derivedKey, t, formatWarnings]);
+    setFeedback(formatResultFeedback(result));
+  }, [updateSettings, syncJournal, journal.id, derivedKey, t, formatResultFeedback]);
 
   const handleDisableSync = useCallback(async () => {
     // Invalidate the active run before changing settings so it cannot write a
@@ -128,18 +141,8 @@ export function SyncModal({
   const handleSyncNow = useCallback(async () => {
     setFeedback(t.sync.syncing);
     const result = await syncJournal(journal.id, derivedKey ?? undefined);
-    setFeedback(
-      result
-        ? result.checkpointed
-          ? t.sync.syncCheckpointed
-          : result.warnings.length > 0
-            ? formatWarnings(result.warnings)
-            : t.sync.syncComplete
-        : getSyncState(journal.id).status === 'error'
-          ? t.sync.syncError
-          : null,
-    );
-  }, [syncJournal, getSyncState, journal.id, derivedKey, t, formatWarnings]);
+    setFeedback(formatResultFeedback(result));
+  }, [syncJournal, journal.id, derivedKey, t, formatResultFeedback]);
 
   const handleAutoSyncToggle = useCallback(
     (val: boolean) => updateSettings({ autoSync: val }),
@@ -152,6 +155,8 @@ export function SyncModal({
 
   const isSyncing = syncState.status === 'syncing';
   const isCheckpointed = syncState.status === 'checkpointed';
+  const requiresFreshRenderer = syncState.requiresFreshRenderer === true;
+  const syncBlocked = isCheckpointed || requiresFreshRenderer;
 
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
@@ -267,12 +272,12 @@ export function SyncModal({
                   {/* Sync now */}
                   <Pressable
                     onPress={handleSyncNow}
-                    disabled={isSyncing || isCheckpointed}
+                    disabled={isSyncing || syncBlocked}
                     style={[
                       styles.actionBtn,
                       {
                         backgroundColor: theme.colors.primary,
-                        opacity: isSyncing || isCheckpointed ? 0.5 : 1,
+                        opacity: isSyncing || syncBlocked ? 0.5 : 1,
                       },
                     ]}
                   >
@@ -304,7 +309,7 @@ export function SyncModal({
           )}
 
           {/* Feedback */}
-          {(feedback || isCheckpointed) && !isSyncing && (
+          {(feedback || syncBlocked) && !isSyncing && (
             <Text
               style={[
                 styles.feedback,

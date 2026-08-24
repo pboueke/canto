@@ -73,40 +73,22 @@ export class DeviceKeyWriteBarrier {
 export function serializeDeviceKeyWrites<T extends object>(store: T): T {
   const barrier = new DeviceKeyWriteBarrier();
   const mutable = store as Record<string, unknown>;
-  const writerMethods = [
-    'saveJournal',
-    'deleteJournal',
-    'savePage',
-    'deletePage',
-    'saveAttachment',
-    'saveAttachmentStream',
-    'saveAttachmentChunks',
-    'deleteAttachment',
-    'reencryptJournal',
-  ];
-  for (const name of writerMethods) {
-    const original = mutable[name];
-    if (typeof original !== 'function') continue;
-    mutable[name] = (...args: unknown[]) =>
-      barrier.write(() =>
-        (original as (...inner: unknown[]) => Promise<unknown>).apply(store, args),
-      );
-  }
-  const readerMethods = [
+  const readerMethods = new Set([
     'listJournals',
     'getJournal',
     'getPage',
     'getAttachment',
     'getAttachmentStorageSize',
     'forEachAttachmentChunk',
-  ];
-  for (const name of readerMethods) {
-    const original = mutable[name];
+  ]);
+  for (const [name, original] of Object.entries(mutable)) {
+    if (name === 'reencryptAll') continue;
     if (typeof original !== 'function') continue;
+    const guard = readerMethods.has(name)
+      ? barrier.read.bind(barrier)
+      : barrier.write.bind(barrier);
     mutable[name] = (...args: unknown[]) =>
-      barrier.read(() =>
-        (original as (...inner: unknown[]) => Promise<unknown>).apply(store, args),
-      );
+      guard(() => (original as (...inner: unknown[]) => Promise<unknown>).apply(store, args));
   }
   const rotate = mutable.reencryptAll;
   if (typeof rotate === 'function') {

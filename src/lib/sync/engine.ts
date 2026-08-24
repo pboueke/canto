@@ -1,10 +1,11 @@
 import type { Page, Attachment, JournalContent } from 'canto-data';
 import type { LocalStore } from '@/lib/storage/types';
-import type { RemoteStore, SyncResult, SyncIndex } from './types';
+import type { PreparedChunkUploads, RemoteStore, SyncResult, SyncIndex } from './types';
 import { aesGcmEncrypt, aesGcmDecrypt } from '@/lib/encryption/utils';
 import { safeJsonParse } from '@/lib/utils/json';
 import { finishSyncDebugTrace, recordSyncDebugPhase, startSyncDebugTrace } from './debug-trace';
 import { LEGACY_ATTACHMENT_MEMORY_LIMIT_BYTES } from '@/lib/storage/attachment-content';
+import type { RendererWorkLedger } from './renderer-work-ledger';
 
 const CONCURRENCY = 4;
 const ATTACHMENT_CONCURRENCY = 2;
@@ -13,11 +14,6 @@ const ATTACHMENT_CONCURRENCY = 2;
 // its cap below one chunk until every existing attachment has a descriptor.
 export const LEGACY_ATTACHMENT_SYNC_LIMIT_BYTES = LEGACY_ATTACHMENT_MEMORY_LIMIT_BYTES;
 
-/** Cap for native-allocation-heavy WebCrypto + fetch work per tab. */
-export const WEB_SYNC_NEW_CHUNK_BUDGET = 150;
-/** Requested destination size when restarting an already-partial web upload. */
-export const WEB_SYNC_RESTART_CHUNK_SIZE_BYTES = 10 * 1024 * 1024;
-
 export interface SyncOptions {
   /**
    * Maximum missing immutable chunks this run may read, encrypt, and upload.
@@ -25,12 +21,10 @@ export interface SyncOptions {
    */
   newChunkUploadBudget?: number;
   /**
-   * Restart partial uploads below this chunk size in a fresh immutable local
-   * generation before transferring them. Web only; omitted elsewhere.
+   * Web-only append-only, tab-lifetime accounting for native-allocation-heavy
+   * work. Takes precedence over the legacy count option above.
    */
-  restartPartialUploadChunkSize?: number;
-  /** Called immediately before this renderer reads its first reserved chunk. */
-  onChunkUploadWorkStarted?: () => void;
+  rendererWorkLedger?: RendererWorkLedger;
 }
 
 interface AttachmentUploadOutcome {
@@ -38,7 +32,13 @@ interface AttachmentUploadOutcome {
   checkpointed: boolean;
 }
 
-class NewChunkUploadBudget {
+interface ChunkUploadBudget {
+  readonly exhausted: boolean;
+  reserve(attachment: Attachment, indexes: readonly number[]): ReadonlySet<number>;
+}
+
+/** Compatibility adapter while non-Web callers/tests still use a count limit. */
+class NewChunkUploadBudget implements ChunkUploadBudget {
   private remaining: number;
 
   constructor(limit: number) {
@@ -53,10 +53,48 @@ class NewChunkUploadBudget {
   }
 
   /** Reserve work before local reads so a budget boundary never opens a chunk. */
-  reserve(indexes: readonly number[]): ReadonlySet<number> {
+  reserve(_attachment: Attachment, indexes: readonly number[]): ReadonlySet<number> {
     const permitted = indexes.slice(0, this.remaining);
     this.remaining -= permitted.length;
     return new Set(permitted);
+  }
+}
+
+function chunkByteLength(attachment: Attachment, index: number): number {
+  const content = attachment.content;
+  if (
+    content?.format !== 'canto-chunked-v1' ||
+    !Number.isSafeInteger(content.byteLength) ||
+    content.byteLength < 0 ||
+    !Number.isSafeInteger(content.chunkSize) ||
+    content.chunkSize < 1 ||
+    !Number.isSafeInteger(content.chunkCount) ||
+    content.chunkCount !== Math.ceil(content.byteLength / content.chunkSize) ||
+    !Number.isSafeInteger(index) ||
+    index < 0 ||
+    index >= content.chunkCount
+  ) {
+    throw new Error(`Invalid chunk descriptor for attachment: ${attachment.name}`);
+  }
+  const remaining = content.byteLength - index * content.chunkSize;
+  if (remaining < 1) throw new Error(`Invalid chunk descriptor for attachment: ${attachment.name}`);
+  return Math.min(content.chunkSize, remaining);
+}
+
+class RendererChunkUploadBudget implements ChunkUploadBudget {
+  constructor(private readonly ledger: RendererWorkLedger) {}
+
+  get exhausted(): boolean {
+    return this.ledger.requiresFreshRenderer;
+  }
+
+  reserve(attachment: Attachment, indexes: readonly number[]): ReadonlySet<number> {
+    const permitted = new Set<number>();
+    for (const index of indexes) {
+      if (!this.ledger.reserve(chunkByteLength(attachment, index))) break;
+      permitted.add(index);
+    }
+    return permitted;
   }
 }
 
@@ -168,9 +206,8 @@ export class SyncEngine {
     syncKey: Uint8Array,
     warnings: SyncResult['warnings'],
     signal?: AbortSignal,
-    budget?: NewChunkUploadBudget,
-    restartPartialUploadChunkSize?: number,
-    onChunkUploadWorkStarted?: () => void,
+    budget?: ChunkUploadBudget,
+    preparedChunkUploads?: PreparedChunkUploads,
   ): Promise<AttachmentUploadOutcome> {
     const atts = pageAttachments(page).filter((a) => !this.remote.isRemotePath(a.path));
     let deferred = false;
@@ -192,13 +229,18 @@ export class SyncEngine {
             });
             return;
           }
-          if (!this.local.forEachAttachmentChunk || !this.remote.uploadAttachmentChunk) {
+          if (
+            !this.local.forEachAttachmentChunk ||
+            (!preparedChunkUploads && !this.remote.uploadAttachmentChunk)
+          ) {
             throw new Error('Chunked attachment transfer is unavailable');
           }
 
           let indexes: ReadonlySet<number> | undefined;
           let missingIndexes: number[] | undefined;
-          if (budget) {
+          if (preparedChunkUploads) {
+            missingIndexes = [...preparedChunkUploads.missingIndexes(att)];
+          } else if (budget) {
             if (!this.remote.listAttachmentChunkIndexes) {
               throw new Error('Chunked attachment resume inventory is unavailable');
             }
@@ -214,59 +256,49 @@ export class SyncEngine {
               { length: att.content.chunkCount },
               (_, index) => index,
             ).filter((index) => !present.has(index));
+          }
+          if (missingIndexes) {
             if (missingIndexes.length === 0) return;
-            if (
-              present.size > 0 &&
-              restartPartialUploadChunkSize != null &&
-              att.content.chunkSize < restartPartialUploadChunkSize &&
-              this.local.migrateAttachmentChunkGeneration
-            ) {
-              const migrated = await this.local.migrateAttachmentChunkGeneration(
-                journalId,
-                page.id,
-                att.id,
-                att.content.generation,
-                restartPartialUploadChunkSize,
-                syncKey,
-              );
-              assertNotCancelled(signal);
-              Object.assign(page, migrated);
-              const replacement = pageAttachments(page).find(
-                (candidate) => candidate.id === att.id,
-              );
-              if (!replacement) throw new Error(`Migrated attachment is missing: ${att.name}`);
-              await transfer(replacement);
-              return;
-            }
-            if (budget.exhausted) {
+            if (budget?.exhausted) {
               checkpointed = true;
               return;
             }
-            indexes = budget.reserve(missingIndexes);
-            if (indexes.size === 0) {
-              checkpointed = true;
-              return;
+            if (budget) {
+              indexes = budget.reserve(att, missingIndexes);
+              if (indexes.size === 0) {
+                checkpointed = true;
+                return;
+              }
+            } else {
+              indexes = new Set(missingIndexes);
             }
           }
 
-          // Notify the manager before IndexedDB/WebCrypto work. If this run is
-          // cancelled or fails below, the tab must still not start another
-          // bounded run on top of these native allocations.
-          if (budget && indexes && indexes.size > 0) onChunkUploadWorkStarted?.();
           await this.local.forEachAttachmentChunk(
             att,
             async (index, data) => {
               assertNotCancelled(signal);
+              if (indexes && !indexes.has(index)) return;
               const encrypted = await aesGcmEncrypt(data, syncKey);
               assertNotCancelled(signal);
-              await this.remote.uploadAttachmentChunk!(
-                journalId,
-                att.id,
-                att.content!.generation,
-                index,
-                encrypted,
-                signal,
-              );
+              try {
+                if (preparedChunkUploads) {
+                  await preparedChunkUploads.uploadMissingChunk(att, index, encrypted, signal);
+                } else {
+                  await this.remote.uploadAttachmentChunk!(
+                    journalId,
+                    att.id,
+                    att.content!.generation,
+                    index,
+                    encrypted,
+                    signal,
+                  );
+                }
+              } finally {
+                // Do not retain payloads in queues, results, or adapter state.
+                // Browser-native allocation may remain, which is why the ledger
+                // reserved before this local read and never refunds the work.
+              }
               recordSyncDebugPhase('attachment-chunk-uploaded');
               assertNotCancelled(signal);
             },
@@ -322,22 +354,9 @@ export class SyncEngine {
       }
     };
 
-    // A checkpoint budget must reserve a chunk before its read. Keep transfers
-    // serial so two attachment workers cannot race the shared reservation.
-    if (budget) {
-      for (const initialAttachment of atts) {
-        // Migration replaces the page's attachment object with a new immutable
-        // generation. Resolve it just before transfer instead of using a stale
-        // pre-migration object from the initial attachment list.
-        const att = pageAttachments(page).find(
-          (attachment) => attachment.id === initialAttachment.id,
-        );
-        if (att) await transfer(att);
-        if (checkpointed) break;
-      }
-    } else {
-      await parallel(atts, transfer, ATTACHMENT_CONCURRENCY);
-    }
+    // At most two attachment workers enter local-read/WebCrypto/fetch work.
+    // Reservations are synchronous, so this remains safe with a shared ledger.
+    await parallel(atts, transfer, ATTACHMENT_CONCURRENCY);
     return { complete: !deferred && !checkpointed, checkpointed };
   }
 
@@ -528,9 +547,11 @@ export class SyncEngine {
       // Password/key changes must stay atomic. A bounded web run is permitted
       // only when it cannot publish pages under a new registry salt.
       const chunkBudget =
-        !keyChanged && options?.newChunkUploadBudget != null
-          ? new NewChunkUploadBudget(options.newChunkUploadBudget)
-          : undefined;
+        !keyChanged && options?.rendererWorkLedger
+          ? new RendererChunkUploadBudget(options.rendererWorkLedger)
+          : !keyChanged && options?.newChunkUploadBudget != null
+            ? new NewChunkUploadBudget(options.newChunkUploadBudget)
+            : undefined;
 
       // A changed password/sync key is an all-or-nothing remote transition. Do
       // this metadata-only preflight before uploading *any* page/chunk so an old
@@ -547,8 +568,13 @@ export class SyncEngine {
       // Build local page map
       const localPages = new Map(localJournal.pages.map((p) => [p.id, p]));
 
-      // Download remote sync index for timestamp comparison (no decryption needed)
-      const remoteIndex = (await this.remote.downloadSyncIndex(journalId)) ?? {};
+      // Download remote sync index exactly once for timestamp comparison and
+      // publication. The provider owns immutable delta merging thereafter.
+      const publication = this.remote.openSyncIndexPublication
+        ? await this.remote.openSyncIndexPublication(journalId, signal)
+        : undefined;
+      const remoteIndex =
+        publication?.initial ?? (await this.remote.downloadSyncIndex(journalId)) ?? {};
       assertNotCancelled(signal);
 
       // A key rotation cannot publish a new salt while a non-deleted remote-only
@@ -568,25 +594,27 @@ export class SyncEngine {
         }
       }
 
-      // Resolve exact existing chunk IDs once for only the pages this invocation
-      // will upload. This avoids a Drive search before every bounded chunk request.
-      if (this.remote.prepareAttachmentChunkUploads && !chunkBudget) {
-        const attachmentsToUpload = localJournal.pages
-          .filter((page) => {
-            const remoteEntry = remoteIndex[page.id];
-            return (
-              !page.deleted &&
-              (!remoteEntry ||
-                (!remoteEntry.deleted && (keyChanged || page.modified > remoteEntry.modified)))
-            );
-          })
-          .flatMap((page) => pageAttachments(page))
-          .filter(
-            (attachment) =>
-              attachment.content?.format === 'canto-chunked-v1' &&
-              !!attachment.content.generation &&
-              !this.remote.isRemotePath(attachment.path),
+      const attachmentsToUpload = localJournal.pages
+        .filter((page) => {
+          const remoteEntry = remoteIndex[page.id];
+          return (
+            !page.deleted &&
+            (!remoteEntry ||
+              (!remoteEntry.deleted && (keyChanged || page.modified > remoteEntry.modified)))
           );
+        })
+        .flatMap((page) => pageAttachments(page))
+        .filter(
+          (attachment) =>
+            attachment.content?.format === 'canto-chunked-v1' &&
+            !!attachment.content.generation &&
+            !this.remote.isRemotePath(attachment.path),
+        );
+      const preparedChunkUploads =
+        !keyChanged && this.remote.prepareChunkUploads
+          ? await this.remote.prepareChunkUploads(journalId, attachmentsToUpload, signal)
+          : undefined;
+      if (!keyChanged && !preparedChunkUploads && this.remote.prepareAttachmentChunkUploads) {
         if (attachmentsToUpload.length > 0) {
           await this.remote.prepareAttachmentChunkUploads(journalId, attachmentsToUpload, signal);
           assertNotCancelled(signal);
@@ -601,10 +629,19 @@ export class SyncEngine {
       // downloaded, instead of incorrectly removing/overwriting their index row.
       const nextIndex: SyncIndex = { ...remoteIndex };
       const publishSnapshotEntry = (page: Page) => {
-        nextIndex[page.id] = {
+        const entry = {
           modified: page.modified,
           ...(page.deleted ? { deleted: true } : {}),
         };
+        nextIndex[page.id] = entry;
+        return entry;
+      };
+      const publishCompletedPage = async (page: Page) => {
+        const entry = publishSnapshotEntry(page);
+        if (publication) {
+          await publication.publishPage(page.id, entry, signal);
+          assertNotCancelled(signal);
+        }
       };
       const mergeLatestRemoteIndex = (latest: SyncIndex) => {
         for (const [pageId, latestEntry] of Object.entries(latest)) {
@@ -620,7 +657,24 @@ export class SyncEngine {
           }
         }
       };
-      const uploadMergedSyncIndex = async () => {
+      const indexHasChanges = () => {
+        const nextIds = Object.keys(nextIndex);
+        const remoteIds = Object.keys(remoteIndex);
+        return (
+          nextIds.length !== remoteIds.length ||
+          nextIds.some((pageId) => {
+            const next = nextIndex[pageId];
+            const prior = remoteIndex[pageId];
+            return next?.modified !== prior?.modified || next?.deleted !== prior?.deleted;
+          })
+        );
+      };
+      const uploadMergedSyncIndex = async (successful: boolean) => {
+        if (publication) {
+          await publication.finalize({ successful, signal });
+          assertNotCancelled(signal);
+          return;
+        }
         // Re-read immediately before every index write so a concurrently
         // published page is retained. The provider still owns conditional
         // update semantics; this merge prevents a checkpoint from blindly
@@ -633,14 +687,14 @@ export class SyncEngine {
       };
       const checkpointCompletedPage = async (): Promise<boolean> => {
         if (!chunkBudget) return false;
-        // The index is the publication boundary. Each completed page is
-        // durable before this renderer can stop; partial generations never
-        // receive an index entry.
-        await uploadMergedSyncIndex();
-        if (!chunkBudget.exhausted) return false;
-        result.checkpointed = true;
-        traceOutcome = 'completed';
-        return true;
+        // With an immutable publication session the completed page has already
+        // crossed its visibility boundary. Do not call a budget boundary just
+        // because the allowance was exactly consumed: a later page must prove
+        // that missing work remains before this run becomes checkpointed.
+        return false;
+      };
+      const finalizeCheckpoint = async () => {
+        if (indexHasChanges()) await uploadMergedSyncIndex(false);
       };
       const total = allPageIds.size;
       let current = 0;
@@ -654,7 +708,7 @@ export class SyncEngine {
         if (localPage && !remoteEntry) {
           // Local only: retain an unsynced deletion marker but never upload its page.
           if (localPage.deleted) {
-            publishSnapshotEntry(localPage);
+            await publishCompletedPage(localPage);
             continue;
           }
           const attachmentOutcome = await this.uploadPageAttachments(
@@ -664,11 +718,11 @@ export class SyncEngine {
             result.warnings,
             signal,
             chunkBudget,
-            options?.restartPartialUploadChunkSize,
-            options?.onChunkUploadWorkStarted,
+            preparedChunkUploads,
           );
           if (!attachmentOutcome.complete) {
             if (attachmentOutcome.checkpointed) {
+              await finalizeCheckpoint();
               result.checkpointed = true;
               traceOutcome = 'completed';
               return result;
@@ -680,7 +734,7 @@ export class SyncEngine {
           assertNotCancelled(signal);
           await this.remote.uploadPage(journalId, pageId, encrypted);
           assertNotCancelled(signal);
-          publishSnapshotEntry(localPage);
+          await publishCompletedPage(localPage);
           result.uploaded.push(pageId);
           if (await checkpointCompletedPage()) return result;
         } else if (!localPage && remoteEntry) {
@@ -715,13 +769,13 @@ export class SyncEngine {
           // Both exist: compare timestamps
           if (localPage.deleted && remoteEntry.deleted) {
             // Both deleted — retain the snapshot deletion marker.
-            publishSnapshotEntry(localPage);
+            await publishCompletedPage(localPage);
             result.deleted.push(pageId);
           } else if (localPage.deleted) {
             // Locally deleted, remote still exists: propagate deletion
             await this.remote.deletePage(journalId, pageId);
             assertNotCancelled(signal);
-            publishSnapshotEntry(localPage);
+            await publishCompletedPage(localPage);
             result.deleted.push(pageId);
           } else if (remoteEntry.deleted) {
             // Remotely deleted, local still exists: propagate deletion
@@ -744,7 +798,7 @@ export class SyncEngine {
             assertNotCancelled(signal);
             await this.remote.uploadPage(journalId, pageId, encrypted);
             assertNotCancelled(signal);
-            publishSnapshotEntry(localPage);
+            await publishCompletedPage(localPage);
             result.uploaded.push(pageId);
           } else if (localPage.modified === remoteEntry.modified) {
             // In sync, nothing to do
@@ -757,11 +811,11 @@ export class SyncEngine {
               result.warnings,
               signal,
               chunkBudget,
-              options?.restartPartialUploadChunkSize,
-              options?.onChunkUploadWorkStarted,
+              preparedChunkUploads,
             );
             if (!attachmentOutcome.complete) {
               if (attachmentOutcome.checkpointed) {
+                await finalizeCheckpoint();
                 result.checkpointed = true;
                 traceOutcome = 'completed';
                 return result;
@@ -773,7 +827,7 @@ export class SyncEngine {
             assertNotCancelled(signal);
             await this.remote.uploadPage(journalId, pageId, encrypted);
             assertNotCancelled(signal);
-            publishSnapshotEntry(localPage);
+            await publishCompletedPage(localPage);
             // Retain prior published generations: see the race-safety note above.
             result.uploaded.push(pageId);
             if (await checkpointCompletedPage()) return result;
@@ -826,7 +880,7 @@ export class SyncEngine {
         kdfIterations: localJournal.kdfIterations,
       });
       assertNotCancelled(signal);
-      await uploadMergedSyncIndex();
+      await uploadMergedSyncIndex(true);
 
       traceOutcome = 'completed';
       return result;

@@ -99,19 +99,6 @@ export interface LocalStore {
   ): Promise<string>;
 
   /**
-   * Copy an attachment into a new immutable generation with larger chunks,
-   * atomically publishing its replacement page only after the new root is complete.
-   */
-  migrateAttachmentChunkGeneration?(
-    journalId: string,
-    pageId: string,
-    attachmentId: string,
-    expectedGeneration: string,
-    targetChunkSize: number,
-    derivedKey?: Uint8Array,
-  ): Promise<Page>;
-
-  /**
    * Report attachment existence and stored bytes without reading/decrypting its
    * payload. Missing and unknown are intentionally distinct: sync may retain
    * its historical missing-file behavior, but must defer unknown legacy data.

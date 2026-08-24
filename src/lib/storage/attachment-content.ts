@@ -2,7 +2,7 @@ import type { Attachment, ChunkedAttachmentContent } from 'canto-data';
 import { base64ToUint8, generateUUID, uint8ToBase64 } from '@/lib/encryption/utils';
 
 /** Maximum decoded payload per chunk. Keep this aligned with canto-chunked-v1. */
-export const ATTACHMENT_CHUNK_SIZE = 10 * 1024 * 1024;
+export const ATTACHMENT_CHUNK_SIZE = 12 * 1024 * 1024;
 /** Legacy values still cross whole-value crypto APIs, so retain their separate 512 KiB cap. */
 export const LEGACY_ATTACHMENT_MEMORY_LIMIT_BYTES = 512 * 1024;
 

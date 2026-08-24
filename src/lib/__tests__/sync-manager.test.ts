@@ -164,7 +164,7 @@ describe('SyncManager', () => {
       expect(states[states.length - 1].lastSynced).toBeGreaterThan(0);
     });
 
-    it('blocks same-tab retries after a web chunk-budget checkpoint', async () => {
+    it('resumes a checkpointed sync after a browser page reload', async () => {
       const originalSessionStorage = Object.getOwnPropertyDescriptor(globalThis, 'sessionStorage');
       const session = new Map<string, string>();
       Object.defineProperty(globalThis, 'sessionStorage', {
@@ -184,9 +184,9 @@ describe('SyncManager', () => {
         deleted: false,
         content: {
           format: 'canto-chunked-v1' as const,
-          byteLength: 17 * 512,
-          chunkSize: 512,
-          chunkCount: 17,
+          byteLength: 80 * 1024 * 1024,
+          chunkSize: 1024 * 1024,
+          chunkCount: 80,
           generation: 'generation-1',
         },
       };
@@ -210,13 +210,15 @@ describe('SyncManager', () => {
         expect(manager.getState('j1').status).toBe('checkpointed');
         expect(asyncStore['canto:lastSync:j1']).toBeUndefined();
         expect(asyncStore['canto:lastRemoteSalt:j1']).toBeUndefined();
-        const readsBeforeRetry = (local.forEachAttachmentChunk as jest.Mock).mock.calls.length;
+        // A reload creates a new renderer and frees the browser-native
+        // allocations that caused the checkpoint. It must retain the durable
+        // Drive chunks, but not the in-memory renderer budget.
+        const reloadedManager = new SyncManager(local, remote, true);
+        const resumed = await reloadedManager.syncJournal('j1', 'token');
 
-        await expect(manager.syncJournal('j1', 'token')).resolves.toBeNull();
-        expect((local.forEachAttachmentChunk as jest.Mock).mock.calls).toHaveLength(
-          readsBeforeRetry,
-        );
-        expect(manager.getState('j1').status).toBe('checkpointed');
+        expect(resumed?.checkpointed).toBeFalsy();
+        expect(persisted.size).toBe(80);
+        expect(reloadedManager.getState('j1').status).toBe('idle');
       } finally {
         if (originalSessionStorage) {
           Object.defineProperty(globalThis, 'sessionStorage', originalSessionStorage);
@@ -226,7 +228,7 @@ describe('SyncManager', () => {
       }
     });
 
-    it('blocks same-tab retries when a bounded chunk run is cancelled after local work starts', async () => {
+    it('keeps cancellation distinct when the renderer lifetime budget still has capacity', async () => {
       const originalSessionStorage = Object.getOwnPropertyDescriptor(globalThis, 'sessionStorage');
       const session = new Map<string, string>();
       Object.defineProperty(globalThis, 'sessionStorage', {
@@ -280,10 +282,8 @@ describe('SyncManager', () => {
         releaseUpload();
 
         await expect(sync).resolves.toBeNull();
-        expect(manager.getState('j1').status).toBe('checkpointed');
-        const readsBeforeRetry = (local.forEachAttachmentChunk as jest.Mock).mock.calls.length;
-        await expect(manager.syncJournal('j1', 'token')).resolves.toBeNull();
-        expect(local.forEachAttachmentChunk).toHaveBeenCalledTimes(readsBeforeRetry);
+        expect(manager.getState('j1').status).toBe('idle');
+        expect(manager.getState('j1').requiresFreshRenderer).toBeUndefined();
       } finally {
         if (originalSessionStorage) {
           Object.defineProperty(globalThis, 'sessionStorage', originalSessionStorage);

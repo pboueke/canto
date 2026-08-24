@@ -1,7 +1,7 @@
 import { pbkdf2Async } from '@noble/hashes/pbkdf2.js';
 import { sha256 } from '@noble/hashes/sha2.js';
 import type { PasswordEncryptionProvider } from './types';
-import { aesGcmEncrypt, aesGcmDecrypt } from './utils';
+import { aesGcmEncrypt, aesGcmDecrypt, releaseAndZeroAesKey } from './utils';
 
 const KEY_LENGTH = 32; // 256 bits
 
@@ -130,7 +130,7 @@ export function createPasswordEncryption(
       try {
         return await aesGcmEncrypt(plaintext, key);
       } finally {
-        key.fill(0);
+        releaseAndZeroAesKey(key);
       }
     },
 
@@ -139,7 +139,7 @@ export function createPasswordEncryption(
       try {
         return await aesGcmDecrypt(ciphertext, key);
       } finally {
-        key.fill(0);
+        releaseAndZeroAesKey(key);
       }
     },
   };

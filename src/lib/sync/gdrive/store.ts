@@ -1,5 +1,12 @@
 import type { Attachment } from 'canto-data';
-import type { RemoteStore, RemoteJournalMeta, RegistryInfo, SyncIndex } from '../types';
+import type {
+  PreparedChunkUploads,
+  RemoteStore,
+  RemoteJournalMeta,
+  RegistryInfo,
+  SyncIndex,
+  SyncIndexPublication,
+} from '../types';
 import { safeJsonParse } from '@/lib/utils/json';
 import { generateUUID } from '@/lib/encryption/utils';
 import * as api from './api';
@@ -32,6 +39,21 @@ interface RegistryEntry {
 const SYNC_INDEX_WRITE_ATTEMPTS = 3;
 const SYNC_INDEX_SNAPSHOT_PREFIX = 'index-v2-';
 const SYNC_INDEX_SNAPSHOT_NAME = /^index-v2-[0-9a-f-]{36}\.json$/;
+const SYNC_INDEX_COMPACT_PREFIX = 'index-v3-';
+const SYNC_INDEX_COMPACT_NAME = /^index-v3-[0-9a-f-]{36}\.json$/;
+const SYNC_INDEX_COMPACTION_THRESHOLD = 128;
+/**
+ * Sync journals remain visible in Drive so users can inspect and recover their
+ * content. Index deltas are implementation metadata, however, so keep new
+ * ones in Drive's hidden app-data space rather than cluttering each journal.
+ */
+const HIDDEN_INDEX_FILE_PREFIX = 'canto-sync-index-v1-';
+
+interface CompactSyncIndex {
+  version: 3;
+  entries: SyncIndex;
+  coveredFileIds: string[];
+}
 
 function shouldReplaceIndexEntry(
   current: SyncIndex[string] | undefined,
@@ -53,6 +75,15 @@ function mergeSyncIndexes(base: SyncIndex, incoming: SyncIndex): SyncIndex {
     if (shouldReplaceIndexEntry(merged[pageId], entry)) merged[pageId] = entry;
   }
   return merged;
+}
+
+function hiddenIndexName(journalId: string, prefix: string): string {
+  return `${HIDDEN_INDEX_FILE_PREFIX}${journalId}-${prefix}${generateUUID()}.json`;
+}
+
+function isHiddenIndexName(journalId: string, name: string, pattern: RegExp): boolean {
+  const prefix = `${HIDDEN_INDEX_FILE_PREFIX}${journalId}-`;
+  return name.startsWith(prefix) && pattern.test(name.slice(prefix.length));
 }
 
 export class GDriveRemoteStore implements RemoteStore {
@@ -386,45 +417,27 @@ export class GDriveRemoteStore implements RemoteStore {
     return delta;
   }
 
-  async uploadSyncIndex(journalId: string, index: SyncIndex): Promise<void> {
-    const journalFolderId = await this.getJournalFolderId(journalId);
+  private async updateCompatibilitySyncIndex(
+    journalFolderId: string,
+    index: SyncIndex,
+    signal?: AbortSignal,
+  ): Promise<boolean> {
     const name = 'index.json';
     const fileId = await this.findFile(name, journalFolderId);
-    const delta = this.syncIndexDelta(journalId, index);
-
-    // A unique immutable delta is the authoritative publication record. Unlike
-    // index.json, it has no first-writer race: concurrent devices produce
-    // different files and readers merge every delta by page revision.
-    if (Object.keys(delta).length > 0) {
-      await api.createFile(
-        this.token(),
-        {
-          name: `${SYNC_INDEX_SNAPSHOT_PREFIX}${generateUUID()}.json`,
-          mimeType: 'application/json',
-          parents: [journalFolderId],
-        },
-        JSON.stringify(delta),
-      );
-      this.syncIndexSnapshots.set(
-        journalId,
-        mergeSyncIndexes(this.syncIndexSnapshots.get(journalId) ?? {}, delta),
-      );
-    }
-
     if (!fileId) {
-      // Keep the legacy projection for pre-v2 clients. It is not relied upon
-      // for current-client correctness; immutable deltas above are race-safe.
       const created = await api.createFile(
         this.token(),
         { name, mimeType: 'application/json', parents: [journalFolderId] },
         JSON.stringify(index),
+        'drive',
+        signal,
       );
       this.fileIdCache.set(this.fileCacheKey(name, journalFolderId), created.id);
-      return;
+      return true;
     }
 
     for (let attempt = 0; attempt < SYNC_INDEX_WRITE_ATTEMPTS; attempt++) {
-      const current = await api.getFileContentWithEtag(this.token(), fileId);
+      const current = await api.getFileContentWithEtag(this.token(), fileId, signal);
       if (!current.etag) break;
       const merged = mergeSyncIndexes(
         safeJsonParse<SyncIndex>(current.content, 'sync-index'),
@@ -436,16 +449,210 @@ export class GDriveRemoteStore implements RemoteStore {
           fileId,
           { name, mimeType: 'application/json' },
           JSON.stringify(merged),
-          undefined,
+          signal,
           current.etag,
         );
-        return;
+        return true;
       } catch (error) {
         if (!(error instanceof api.GDriveApiError) || error.status !== 412) throw error;
       }
     }
-    // The immutable delta is already durable, so a compatibility-projection
-    // conflict must not turn a completed page into an unsafe retry.
+    // Immutable deltas remain authoritative if the compatibility projection
+    // races or a proxy omitted ETags.
+    return false;
+  }
+
+  /**
+   * Fold hidden immutable index metadata into one new snapshot. The snapshot is
+   * published before any deletion, so a failed cleanup can only leave extra
+   * metadata behind; it can never make a published page disappear.
+   */
+  private async compactSyncIndex(
+    journalId: string,
+    journalFolderId: string,
+    forceAfterSuccessfulSync: boolean,
+    canDeleteLegacyArtifacts: boolean,
+    signal?: AbortSignal,
+  ): Promise<void> {
+    const legacyFiles =
+      (await api.listFiles(
+        this.token(),
+        `name contains 'index-v' and '${escapeQuery(journalFolderId)}' in parents and trashed = false`,
+        'drive',
+        signal,
+      )) ?? [];
+    const hiddenFiles =
+      (await api.listFiles(
+        this.token(),
+        `name contains '${escapeQuery(`${HIDDEN_INDEX_FILE_PREFIX}${journalId}-`)}'`,
+        'appDataFolder',
+        signal,
+      )) ?? [];
+    const legacyV2Files = legacyFiles.filter((file) => SYNC_INDEX_SNAPSHOT_NAME.test(file.name));
+    const hiddenV2Files = hiddenFiles.filter((file) =>
+      isHiddenIndexName(journalId, file.name, SYNC_INDEX_SNAPSHOT_NAME),
+    );
+    const legacyCompactFiles = legacyFiles.filter((file) =>
+      SYNC_INDEX_COMPACT_NAME.test(file.name),
+    );
+    const hiddenCompactFiles = hiddenFiles.filter((file) =>
+      isHiddenIndexName(journalId, file.name, SYNC_INDEX_COMPACT_NAME),
+    );
+    const v2Files = [...legacyV2Files, ...hiddenV2Files];
+    const compactFiles = [...legacyCompactFiles, ...hiddenCompactFiles];
+    const shouldCompact = forceAfterSuccessfulSync
+      ? v2Files.length > 0 || compactFiles.length > 1
+      : v2Files.length >= SYNC_INDEX_COMPACTION_THRESHOLD;
+    if (!shouldCompact) return;
+
+    let merged: SyncIndex = {};
+    for (const file of compactFiles) {
+      const compact = safeJsonParse<CompactSyncIndex>(
+        await api.getFileContent(this.token(), file.id, signal),
+        'sync-index-compact',
+      );
+      if (
+        compact.version !== 3 ||
+        !compact.entries ||
+        !Array.isArray(compact.coveredFileIds) ||
+        !compact.coveredFileIds.every((id) => typeof id === 'string')
+      ) {
+        throw new Error('Invalid compact sync index');
+      }
+      merged = mergeSyncIndexes(merged, compact.entries);
+    }
+    for (const file of v2Files) {
+      merged = mergeSyncIndexes(
+        merged,
+        safeJsonParse<SyncIndex>(
+          await api.getFileContent(this.token(), file.id, signal),
+          'sync-index-delta',
+        ),
+      );
+    }
+    await api.createFile(
+      this.token(),
+      {
+        name: hiddenIndexName(journalId, SYNC_INDEX_COMPACT_PREFIX),
+        mimeType: 'application/json',
+        parents: ['appDataFolder'],
+      },
+      JSON.stringify({
+        version: 3,
+        entries: merged,
+        coveredFileIds: v2Files.map((file) => file.id),
+      } satisfies CompactSyncIndex),
+      'appDataFolder',
+      signal,
+    );
+
+    // Every listed source is represented in the just-created snapshot. Delete
+    // only after that durable publication; a concurrent writer can add new
+    // files, but it cannot make us delete a file we did not list.
+    const sources = [
+      ...hiddenV2Files,
+      ...hiddenCompactFiles,
+      ...(canDeleteLegacyArtifacts ? [...legacyV2Files, ...legacyCompactFiles] : []),
+    ];
+    const workers = Math.min(4, sources.length);
+    let next = 0;
+    await Promise.all(
+      Array.from({ length: workers }, async () => {
+        while (next < sources.length) {
+          const source = sources[next++];
+          try {
+            await api.deleteFile(this.token(), source.id);
+          } catch (error) {
+            // The new snapshot is already authoritative. A failed permanent
+            // deletion is harmless and will be retried by a later compaction.
+            console.warn('[GDrive] Deferred compacted sync-index cleanup:', error);
+          }
+        }
+      }),
+    );
+  }
+
+  async openSyncIndexPublication(
+    journalId: string,
+    signal?: AbortSignal,
+  ): Promise<SyncIndexPublication> {
+    const initial = (await this.downloadSyncIndex(journalId)) ?? {};
+    const journalFolderId = await this.getJournalFolderId(journalId);
+    let merged: SyncIndex = { ...initial };
+    let finalized = false;
+
+    return {
+      initial,
+      publishPage: async (pageId, entry, publishSignal) => {
+        if (finalized) throw new Error('Sync index publication is already finalized');
+        const prior = merged[pageId];
+        if (!shouldReplaceIndexEntry(prior, entry)) return;
+        await api.createFile(
+          this.token(),
+          {
+            name: hiddenIndexName(journalId, SYNC_INDEX_SNAPSHOT_PREFIX),
+            mimeType: 'application/json',
+            parents: ['appDataFolder'],
+          },
+          JSON.stringify({ [pageId]: entry }),
+          'appDataFolder',
+          publishSignal ?? signal,
+        );
+        merged = mergeSyncIndexes(merged, { [pageId]: entry });
+        this.syncIndexSnapshots.set(journalId, merged);
+      },
+      finalize: async (options = {}) => {
+        if (finalized) return;
+        finalized = true;
+        const finalizeSignal = options.signal ?? signal;
+        const compatibilityUpdated = await this.updateCompatibilitySyncIndex(
+          journalFolderId,
+          merged,
+          finalizeSignal,
+        );
+        try {
+          await this.compactSyncIndex(
+            journalId,
+            journalFolderId,
+            options.successful === true,
+            compatibilityUpdated,
+            finalizeSignal,
+          );
+        } catch (error) {
+          // The completed immutable deltas and compatibility projection remain
+          // readable. Compaction is an optimization, never a reason to turn a
+          // durable page publication into a failed sync.
+          console.warn('[GDrive] Sync-index compaction deferred:', error);
+        }
+      },
+    };
+  }
+
+  async uploadSyncIndex(journalId: string, index: SyncIndex): Promise<void> {
+    const journalFolderId = await this.getJournalFolderId(journalId);
+    const delta = this.syncIndexDelta(journalId, index);
+
+    // A unique immutable delta is the authoritative publication record. Unlike
+    // index.json, it has no first-writer race: concurrent devices produce
+    // different files and readers merge every delta by page revision.
+    if (Object.keys(delta).length > 0) {
+      await api.createFile(
+        this.token(),
+        {
+          name: hiddenIndexName(journalId, SYNC_INDEX_SNAPSHOT_PREFIX),
+          mimeType: 'application/json',
+          parents: ['appDataFolder'],
+        },
+        JSON.stringify(delta),
+        'appDataFolder',
+      );
+      this.syncIndexSnapshots.set(
+        journalId,
+        mergeSyncIndexes(this.syncIndexSnapshots.get(journalId) ?? {}, delta),
+      );
+    }
+
+    await this.updateCompatibilitySyncIndex(journalFolderId, index);
   }
 
   async downloadSyncIndex(journalId: string): Promise<SyncIndex | null> {
@@ -460,13 +667,52 @@ export class GDriveRemoteStore implements RemoteStore {
       );
       found = true;
     }
-    const snapshots =
+    // Root-level deltas came from pre-19.2.4 builds. New immutable metadata
+    // belongs in appDataFolder, which is hidden from Drive's normal UI.
+    const legacySnapshots =
       (await api.listFiles(
         this.token(),
-        `name contains '${SYNC_INDEX_SNAPSHOT_PREFIX}' and '${escapeQuery(journalFolderId)}' in parents and trashed = false`,
+        `name contains 'index-v' and '${escapeQuery(journalFolderId)}' in parents and trashed = false`,
       )) ?? [];
+    const hiddenSnapshots =
+      (await api.listFiles(
+        this.token(),
+        `name contains '${escapeQuery(`${HIDDEN_INDEX_FILE_PREFIX}${journalId}-`)}'`,
+        'appDataFolder',
+      )) ?? [];
+    const snapshots = [...legacySnapshots, ...hiddenSnapshots];
+    const covered = new Set<string>();
     for (const snapshot of snapshots) {
-      if (!SYNC_INDEX_SNAPSHOT_NAME.test(snapshot.name)) continue;
+      if (
+        !SYNC_INDEX_COMPACT_NAME.test(snapshot.name) &&
+        !isHiddenIndexName(journalId, snapshot.name, SYNC_INDEX_COMPACT_NAME)
+      ) {
+        continue;
+      }
+      const compact = safeJsonParse<CompactSyncIndex>(
+        await api.getFileContent(this.token(), snapshot.id),
+        'sync-index-compact',
+      );
+      if (
+        compact.version !== 3 ||
+        !compact.entries ||
+        !Array.isArray(compact.coveredFileIds) ||
+        !compact.coveredFileIds.every((id) => typeof id === 'string')
+      ) {
+        throw new Error('Invalid compact sync index');
+      }
+      merged = mergeSyncIndexes(merged, compact.entries);
+      compact.coveredFileIds.forEach((id) => covered.add(id));
+      found = true;
+    }
+    for (const snapshot of snapshots) {
+      const isLegacySnapshot = SYNC_INDEX_SNAPSHOT_NAME.test(snapshot.name);
+      const isHiddenSnapshot = isHiddenIndexName(
+        journalId,
+        snapshot.name,
+        SYNC_INDEX_SNAPSHOT_NAME,
+      );
+      if ((!isLegacySnapshot && !isHiddenSnapshot) || covered.has(snapshot.id)) continue;
       merged = mergeSyncIndexes(
         merged,
         safeJsonParse<SyncIndex>(
@@ -529,6 +775,79 @@ export class GDriveRemoteStore implements RemoteStore {
     for (const name of targetNames) {
       this.prewarmedChunkKeys.add(this.fileCacheKey(name, attachmentsFolderId));
     }
+  }
+
+  async prepareChunkUploads(
+    journalId: string,
+    attachments: readonly Attachment[],
+    signal?: AbortSignal,
+  ): Promise<PreparedChunkUploads> {
+    const targets = new Map<string, { attachmentKey: string; index: number }>();
+    const missingByAttachment = new Map<string, Set<number>>();
+    const keyFor = (attachment: Attachment): string => {
+      const content = attachment.content;
+      if (content?.format !== 'canto-chunked-v1' || !content.generation) {
+        throw new Error(`Immutable chunk generation required for attachment: ${attachment.name}`);
+      }
+      return `${attachment.id}:${content.generation}`;
+    };
+
+    for (const attachment of attachments) {
+      const attachmentKey = keyFor(attachment);
+      const content = attachment.content!;
+      const missing = new Set<number>();
+      missingByAttachment.set(attachmentKey, missing);
+      for (let index = 0; index < content.chunkCount; index++) {
+        const name = this.chunkName(attachment.id, content.generation, index);
+        targets.set(name, { attachmentKey, index });
+        missing.add(index);
+      }
+    }
+
+    const attachmentsFolderId = await this.getAttachmentsFolderId(journalId);
+    if (targets.size > 0) {
+      const files = await api.listFiles(
+        this.token(),
+        `name contains 'chunk-v1-' and '${escapeQuery(attachmentsFolderId)}' in parents and trashed = false`,
+        'drive',
+        signal,
+      );
+      for (const file of files) {
+        const target = targets.get(file.name);
+        if (!target) continue;
+        missingByAttachment.get(target.attachmentKey)?.delete(target.index);
+        this.fileIdCache.set(this.fileCacheKey(file.name, attachmentsFolderId), file.id);
+      }
+    }
+
+    return {
+      missingIndexes: (attachment) => {
+        const missing = missingByAttachment.get(keyFor(attachment));
+        if (!missing) throw new Error(`Attachment was not prepared: ${attachment.name}`);
+        return [...missing].sort((a, b) => a - b);
+      },
+      uploadMissingChunk: async (attachment, index, encryptedData, uploadSignal) => {
+        const attachmentKey = keyFor(attachment);
+        const missing = missingByAttachment.get(attachmentKey);
+        if (!missing?.has(index)) {
+          throw new Error(`Chunk was not prepared as missing: ${attachment.name} #${index}`);
+        }
+        const name = this.chunkName(attachment.id, attachment.content!.generation, index);
+        const created = await api.createFile(
+          this.token(),
+          {
+            name,
+            mimeType: 'application/octet-stream',
+            parents: [attachmentsFolderId],
+          },
+          encryptedData,
+          'drive',
+          uploadSignal ?? signal,
+        );
+        this.fileIdCache.set(this.fileCacheKey(name, attachmentsFolderId), created.id);
+        missing.delete(index);
+      },
+    };
   }
 
   async listAttachmentChunkIndexes(

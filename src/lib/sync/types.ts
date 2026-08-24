@@ -24,6 +24,33 @@ export interface RegistryInfo {
   kdfIterations?: number;
 }
 
+/**
+ * A prepared immutable attachment-generation view for one sync. The adapter
+ * owns provider IDs, name queries, and absent/present bookkeeping; callers
+ * only ask which indexes still need payload work.
+ */
+export interface PreparedChunkUploads {
+  missingIndexes(attachment: Attachment): readonly number[];
+  uploadMissingChunk(
+    attachment: Attachment,
+    index: number,
+    encryptedData: string,
+    signal?: AbortSignal,
+  ): Promise<void>;
+}
+
+/**
+ * One immutable-index publication session. `publishPage` is the durable
+ * visibility boundary for a page; `finalize` updates the legacy projection at
+ * most once after all session changes are known.
+ */
+export interface SyncIndexPublication {
+  readonly initial: Readonly<SyncIndex>;
+  publishPage(pageId: string, entry: SyncIndex[string], signal?: AbortSignal): Promise<void>;
+  /** A completed run may compact and clean index metadata; checkpoints retain the 128-delta cap. */
+  finalize(options?: { successful?: boolean; signal?: AbortSignal }): Promise<void>;
+}
+
 export interface RemoteStore {
   /** The provider identifier for this store. */
   readonly provider: SyncProvider;
@@ -71,6 +98,9 @@ export interface RemoteStore {
   /** Download the sync timestamp index for a journal. */
   downloadSyncIndex(journalId: string): Promise<SyncIndex | null>;
 
+  /** Open one provider-owned index read/write session for a sync invocation. */
+  openSyncIndexPublication?(journalId: string, signal?: AbortSignal): Promise<SyncIndexPublication>;
+
   /** Upload an attachment. Returns the remote path/identifier. */
   uploadAttachment(journalId: string, localPath: string, data: string): Promise<string>;
 
@@ -89,6 +119,17 @@ export interface RemoteStore {
     attachments: Attachment[],
     signal?: AbortSignal,
   ): Promise<void>;
+
+  /**
+   * Prepare one metadata-only immutable chunk inventory for this sync.
+   * New implementations should use this deep seam instead of the legacy
+   * prepare/list/upload trio below.
+   */
+  prepareChunkUploads?(
+    journalId: string,
+    attachments: readonly Attachment[],
+    signal?: AbortSignal,
+  ): Promise<PreparedChunkUploads>;
 
   /**
    * List the persisted indexes for one immutable attachment generation. This
@@ -168,4 +209,6 @@ export interface SyncResult {
    * sync resumes its immutable, unindexed attachment generations.
    */
   checkpointed?: boolean;
+  /** Native-heavy work has consumed the tab-lifetime renderer allowance. */
+  requiresFreshRenderer?: boolean;
 }

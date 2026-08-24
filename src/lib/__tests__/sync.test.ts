@@ -728,75 +728,7 @@ describe('SyncEngine', () => {
       expect(remote.uploadSyncIndex).toHaveBeenCalled();
     });
 
-    it('restarts a partial web upload in a larger immutable generation before uploading', async () => {
-      const att = {
-        ...makeAttachment('video', '/local/chunk-root'),
-        content: {
-          format: 'canto-chunked-v1' as const,
-          byteLength: 1536,
-          chunkSize: 512,
-          chunkCount: 3,
-          generation: 'generation-1',
-        },
-      };
-      const page = { ...makePage('p1', 1000), images: [att] };
-      const local = createMockLocalStore(makeJournal([page]));
-      const remote = createMockRemoteStore(makeJournal([]));
-      const replacement = {
-        ...att,
-        path: '/local/new-chunk-root',
-        content: {
-          ...att.content,
-          chunkSize: 1024,
-          chunkCount: 2,
-          generation: 'generation-2',
-        },
-      };
-      const migratedPage = { ...page, images: [replacement], modified: 2000 };
-      local.migrateAttachmentChunkGeneration = jest.fn().mockResolvedValue(migratedPage);
-      local.forEachAttachmentChunk = jest.fn(async (_attachment, visitor, indexes) => {
-        for (const index of indexes ?? []) await visitor(index, `frame-${index}`);
-      });
-      remote.listAttachmentChunkIndexes = jest.fn((_journalId, _id, generation) =>
-        Promise.resolve(generation === 'generation-1' ? new Set([0]) : new Set()),
-      );
-      remote.uploadAttachmentChunk = jest.fn();
-
-      await new SyncEngine(local, remote).sync(
-        'journal-1',
-        SYNC_KEY,
-        undefined,
-        undefined,
-        undefined,
-        { newChunkUploadBudget: 2, restartPartialUploadChunkSize: 1024 },
-      );
-
-      expect(local.migrateAttachmentChunkGeneration).toHaveBeenCalledWith(
-        'journal-1',
-        'p1',
-        att.id,
-        'generation-1',
-        1024,
-        SYNC_KEY,
-      );
-      expect(local.forEachAttachmentChunk).toHaveBeenCalledWith(
-        replacement,
-        expect.any(Function),
-        new Set([0, 1]),
-      );
-      expect(remote.uploadAttachmentChunk).toHaveBeenCalledTimes(2);
-      expect(remote.uploadAttachmentChunk).toHaveBeenCalledWith(
-        'journal-1',
-        att.id,
-        'generation-2',
-        0,
-        'frame-0',
-        undefined,
-      );
-      expect(remote.uploadPage).toHaveBeenCalledWith('journal-1', 'p1', expect.any(String));
-    });
-
-    it('retains a concurrently published index entry when checkpointing a completed page', async () => {
+    it('completes when the final chunk exactly consumes a legacy count budget', async () => {
       const att = {
         ...makeAttachment('video', '/local/chunk-root'),
         content: {
@@ -815,9 +747,7 @@ describe('SyncEngine', () => {
       });
       remote.listAttachmentChunkIndexes = jest.fn(async () => new Set<number>());
       remote.uploadAttachmentChunk = jest.fn();
-      (remote.downloadSyncIndex as jest.Mock)
-        .mockResolvedValueOnce({})
-        .mockResolvedValueOnce({ p2: { modified: 2000 } });
+      (remote.downloadSyncIndex as jest.Mock).mockResolvedValueOnce({});
 
       const result = await new SyncEngine(local, remote).sync(
         'journal-1',
@@ -828,10 +758,9 @@ describe('SyncEngine', () => {
         { newChunkUploadBudget: 1 },
       );
 
-      expect(result.checkpointed).toBe(true);
+      expect(result.checkpointed).toBeUndefined();
       expect(remote.uploadSyncIndex).toHaveBeenCalledWith('journal-1', {
         p1: { modified: 1000 },
-        p2: { modified: 2000 },
       });
     });
 

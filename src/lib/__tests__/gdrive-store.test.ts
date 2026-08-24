@@ -1119,14 +1119,146 @@ describe('GDriveRemoteStore', () => {
 
       expect(mockedApi.createFile).toHaveBeenCalledWith(
         TOKEN,
-        expect.objectContaining({ name: expect.stringMatching(/^index-v2-/) }),
+        expect.objectContaining({
+          name: expect.stringMatching(/-index-v2-/),
+          parents: ['appDataFolder'],
+        }),
         JSON.stringify(index),
+        'appDataFolder',
       );
       expect(mockedApi.createFile).toHaveBeenCalledWith(
         TOKEN,
         expect.objectContaining({ name: 'index.json' }),
         JSON.stringify(index),
+        'drive',
+        undefined,
       );
+    });
+
+    it('compacts and permanently removes published deltas after a successful sync', async () => {
+      await store.connect({ accessToken: TOKEN });
+
+      const folder = (id: string, name: string) => ({
+        id,
+        name,
+        mimeType: 'application/vnd.google-apps.folder',
+        modifiedTime: '',
+      });
+      const legacyFiles = [
+        {
+          id: 'legacy-v2',
+          name: 'index-v2-00000000-0000-4000-8000-000000000000.json',
+          content: JSON.stringify({ remote: { modified: 500 } }),
+        },
+      ];
+      const hiddenFiles: Array<{ id: string; name: string; content: string }> = [];
+      let nextId = 1;
+      mockedApi.listFiles.mockImplementation(async (_token, query) => {
+        if (query.includes("name = 'Canto'")) return [folder('root-id', 'Canto')];
+        if (query.includes("name = 'journal-1'")) return [folder('journal-id', 'journal-1')];
+        if (query.includes("name = 'index.json'")) return [];
+        if (query.includes("name contains 'index-v'")) {
+          return legacyFiles.map((file) => ({
+            id: file.id,
+            name: file.name,
+            mimeType: 'application/json',
+            modifiedTime: '',
+          }));
+        }
+        if (query.includes("name contains 'canto-sync-index-v1-journal-1-'")) {
+          return hiddenFiles.map((file) => ({
+            id: file.id,
+            name: file.name,
+            mimeType: 'application/json',
+            modifiedTime: '',
+          }));
+        }
+        return [];
+      });
+      mockedApi.createFile.mockImplementation(async (_token, metadata, content) => {
+        const id = `file-${nextId++}`;
+        if (metadata.name.startsWith('canto-sync-index-v1-')) {
+          hiddenFiles.push({ id, name: metadata.name, content });
+        }
+        return {
+          id,
+          name: metadata.name,
+          mimeType: metadata.mimeType ?? 'application/json',
+          modifiedTime: '',
+        };
+      });
+      mockedApi.getFileContent.mockImplementation(async (_token, fileId) => {
+        const file = [...legacyFiles, ...hiddenFiles].find((candidate) => candidate.id === fileId);
+        if (!file) throw new Error('missing hidden index file');
+        return file.content;
+      });
+      mockedApi.deleteFile.mockImplementation(async (_token, fileId) => {
+        const index = hiddenFiles.findIndex((file) => file.id === fileId);
+        if (index >= 0) hiddenFiles.splice(index, 1);
+        const legacyIndex = legacyFiles.findIndex((file) => file.id === fileId);
+        if (legacyIndex >= 0) legacyFiles.splice(legacyIndex, 1);
+      });
+
+      const publication = await store.openSyncIndexPublication('journal-1');
+      await publication.publishPage('p1', { modified: 1000 });
+      await publication.finalize({ successful: true });
+
+      expect(hiddenFiles).toHaveLength(1);
+      expect(hiddenFiles[0].name).toMatch(/-index-v3-/);
+      expect(JSON.parse(hiddenFiles[0].content)).toEqual({
+        version: 3,
+        entries: { remote: { modified: 500 }, p1: { modified: 1000 } },
+        coveredFileIds: expect.any(Array),
+      });
+      expect(legacyFiles).toHaveLength(0);
+      expect(mockedApi.deleteFile).toHaveBeenCalledTimes(2);
+    });
+
+    it('keeps fewer than 128 deltas at a checkpoint', async () => {
+      await store.connect({ accessToken: TOKEN });
+
+      const folder = (id: string, name: string) => ({
+        id,
+        name,
+        mimeType: 'application/vnd.google-apps.folder',
+        modifiedTime: '',
+      });
+      const hiddenFiles: Array<{ id: string; name: string; content: string }> = [];
+      let nextId = 1;
+      mockedApi.listFiles.mockImplementation(async (_token, query) => {
+        if (query.includes("name = 'Canto'")) return [folder('root-id', 'Canto')];
+        if (query.includes("name = 'journal-1'")) return [folder('journal-id', 'journal-1')];
+        if (query.includes("name = 'index.json'")) return [];
+        if (query.includes("name contains 'index-v'")) return [];
+        if (query.includes("name contains 'canto-sync-index-v1-journal-1-'")) {
+          return hiddenFiles.map((file) => ({
+            id: file.id,
+            name: file.name,
+            mimeType: 'application/json',
+            modifiedTime: '',
+          }));
+        }
+        return [];
+      });
+      mockedApi.createFile.mockImplementation(async (_token, metadata, content) => {
+        const id = `file-${nextId++}`;
+        if (metadata.name.startsWith('canto-sync-index-v1-')) {
+          hiddenFiles.push({ id, name: metadata.name, content });
+        }
+        return {
+          id,
+          name: metadata.name,
+          mimeType: metadata.mimeType ?? 'application/json',
+          modifiedTime: '',
+        };
+      });
+
+      const publication = await store.openSyncIndexPublication('journal-1');
+      await publication.publishPage('p1', { modified: 1000 });
+      await publication.finalize({ successful: false });
+
+      expect(hiddenFiles.map((file) => file.name)).toEqual([expect.stringMatching(/-index-v2-/)]);
+      expect(mockedApi.deleteFile).not.toHaveBeenCalled();
     });
 
     it('merges concurrent entries and retries a precondition failure', async () => {
@@ -1200,9 +1332,16 @@ describe('GDriveRemoteStore', () => {
             .filter((file) => file.name === 'index.json')
             .map((file) => ({ ...folder(file.id, file.name), mimeType: 'application/json' }));
         }
-        if (query.includes("name contains 'index-v2-'")) {
+        if (
+          query.includes("name contains 'index-v'") ||
+          query.includes("name contains 'canto-sync-index-v1-journal-1-'")
+        ) {
           return files
-            .filter((file) => file.name.startsWith('index-v2-'))
+            .filter(
+              (file) =>
+                file.name.startsWith('index-v2-') ||
+                file.name.startsWith('canto-sync-index-v1-journal-1-index-v2-'),
+            )
             .map((file) => ({ ...folder(file.id, file.name), mimeType: 'application/json' }));
         }
         return [];
@@ -1230,7 +1369,9 @@ describe('GDriveRemoteStore', () => {
       ]);
 
       expect(files.filter((file) => file.name === 'index.json')).toHaveLength(2);
-      expect(files.filter((file) => file.name.startsWith('index-v2-'))).toHaveLength(2);
+      expect(
+        files.filter((file) => file.name.startsWith('canto-sync-index-v1-journal-1-index-v2-')),
+      ).toHaveLength(2);
 
       const reader = new GDriveRemoteStore();
       await reader.connect({ accessToken: TOKEN });
@@ -1255,6 +1396,8 @@ describe('GDriveRemoteStore', () => {
       mockedApi.listFiles.mockResolvedValueOnce([
         { id: 'idx-id', name: 'index.json', mimeType: 'application/json', modifiedTime: '' },
       ]);
+      mockedApi.listFiles.mockResolvedValueOnce([]); // legacy root-level deltas
+      mockedApi.listFiles.mockResolvedValueOnce([]); // hidden deltas
 
       const index = { p1: { modified: 1000 }, p2: { modified: 2000 } };
       mockedApi.getFileContent.mockResolvedValueOnce(JSON.stringify(index));
@@ -1276,6 +1419,8 @@ describe('GDriveRemoteStore', () => {
       mockedApi.listFiles.mockResolvedValueOnce([folder('root-id', 'Canto')]);
       mockedApi.listFiles.mockResolvedValueOnce([folder('j-id', 'journal-1')]);
       mockedApi.listFiles.mockResolvedValueOnce([]); // index.json not found
+      mockedApi.listFiles.mockResolvedValueOnce([]); // legacy root-level deltas
+      mockedApi.listFiles.mockResolvedValueOnce([]); // hidden deltas
 
       const result = await store.downloadSyncIndex('journal-1');
       expect(result).toBeNull();

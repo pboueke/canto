@@ -1,5 +1,5 @@
 import type { EncryptionProvider } from './types';
-import { aesGcmEncrypt, aesGcmDecrypt } from './utils';
+import { aesGcmEncrypt, aesGcmDecrypt, releaseAndZeroAesKey } from './utils';
 
 function getRandomBytes(length: number): Uint8Array {
   const bytes = new Uint8Array(length);
@@ -139,7 +139,7 @@ export function createDeviceEncryption(): EncryptionProvider {
 
     clearKey(): void {
       if (cachedKey) {
-        cachedKey.fill(0);
+        releaseAndZeroAesKey(cachedKey);
         cachedKey = null;
       }
       // Reset the module-level promise so the next getKey() re-reads from SecureStore

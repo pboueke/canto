@@ -2,7 +2,7 @@ import { createContext, useContext, useCallback, useRef, useEffect } from 'react
 import type { ReactNode } from 'react';
 import { AppState } from 'react-native';
 import { deriveKey, DEFAULT_KDF_ITERATIONS } from '@/lib/encryption/password';
-import { base64ToUint8 } from '@/lib/encryption/utils';
+import { base64ToUint8, releaseAndZeroAesKey } from '@/lib/encryption/utils';
 import { getAutoLockTimeout } from '@/components/home/SecuritySettingsModal';
 
 interface JournalKeyContextValue {
@@ -59,14 +59,14 @@ export function JournalKeyProvider({ children }: { children: ReactNode }) {
   const clearKey = useCallback((journalId: string) => {
     const key = keysRef.current.get(journalId);
     if (key) {
-      key.fill(0);
+      releaseAndZeroAesKey(key);
       keysRef.current.delete(journalId);
     }
   }, []);
 
   const clearAll = useCallback(() => {
     for (const key of keysRef.current.values()) {
-      key.fill(0);
+      releaseAndZeroAesKey(key);
     }
     keysRef.current.clear();
   }, []);
@@ -83,10 +83,10 @@ export function JournalKeyProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const triggerAutoLock = useCallback(() => {
-    clearAll();
     for (const listener of autoLockListenersRef.current) {
       listener();
     }
+    clearAll();
   }, [clearAll]);
 
   // Keep clearAllRef in sync so effects use the latest triggerAutoLock without re-registering

@@ -1,16 +1,11 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Platform } from 'react-native';
-import {
-  SyncEngine,
-  isSyncCancelledError,
-  SyncCancelledError,
-  WEB_SYNC_NEW_CHUNK_BUDGET,
-  WEB_SYNC_RESTART_CHUNK_SIZE_BYTES,
-} from './engine';
+import { SyncEngine, isSyncCancelledError, SyncCancelledError } from './engine';
 import type { LocalStore } from '@/lib/storage/types';
 import type { RemoteStore, SyncResult } from './types';
 import { deriveKey, DEFAULT_KDF_ITERATIONS } from '@/lib/encryption/password';
 import { base64ToUint8 } from '@/lib/encryption/utils';
+import { RendererWorkLedger } from './renderer-work-ledger';
 
 const LAST_SYNC_PREFIX = 'canto:lastSync:';
 const LAST_REMOTE_SALT_PREFIX = 'canto:lastRemoteSalt:';
@@ -28,6 +23,7 @@ export interface SyncState {
   error?: string;
   errorStack?: string;
   progress?: SyncProgress;
+  requiresFreshRenderer?: boolean;
 }
 
 export class SyncManager {
@@ -36,12 +32,15 @@ export class SyncManager {
   private debounceTimers = new Map<string, ReturnType<typeof setTimeout>>();
   private abortControllers = new Map<string, AbortController>();
   private listeners = new Set<() => void>();
+  private readonly rendererWorkLedger: RendererWorkLedger | undefined;
 
   constructor(
     private local: LocalStore,
     private store: RemoteStore,
     private readonly webCheckpointing = Platform.OS === 'web',
-  ) {}
+  ) {
+    this.rendererWorkLedger = this.webCheckpointing ? new RendererWorkLedger() : undefined;
+  }
 
   subscribe(listener: () => void): () => void {
     this.listeners.add(listener);
@@ -55,29 +54,15 @@ export class SyncManager {
   getState(journalId: string): SyncState {
     return (
       this.states.get(journalId) ??
-      (this.hasWebCheckpoint(journalId)
-        ? { status: 'checkpointed', lastSynced: null }
+      (this.hasWebCheckpoint()
+        ? { status: 'checkpointed', lastSynced: null, requiresFreshRenderer: true }
         : { status: 'idle', lastSynced: null })
     );
   }
 
-  private checkpointKey(journalId: string): string {
-    return `canto:syncCheckpoint:${journalId}`;
-  }
-
   /** sessionStorage survives reloads but is discarded with a fully closed tab. */
-  private hasWebCheckpoint(journalId: string): boolean {
-    return (
-      this.webCheckpointing &&
-      typeof sessionStorage !== 'undefined' &&
-      sessionStorage.getItem(this.checkpointKey(journalId)) === '1'
-    );
-  }
-
-  private markWebCheckpoint(journalId: string): void {
-    if (this.webCheckpointing && typeof sessionStorage !== 'undefined') {
-      sessionStorage.setItem(this.checkpointKey(journalId), '1');
-    }
+  private hasWebCheckpoint(): boolean {
+    return this.rendererWorkLedger?.requiresFreshRenderer === true;
   }
 
   private setState(journalId: string, state: SyncState) {
@@ -117,6 +102,11 @@ export class SyncManager {
     ])) {
       this.cancelSync(journalId);
     }
+  }
+
+  /** Abort active work before JournalKeyProvider zeroes its cached keys. */
+  cancelAllSyncs(): void {
+    this.dispose();
   }
 
   /**
@@ -181,8 +171,12 @@ export class SyncManager {
       return null;
     }
     const lastSynced = lastSyncStr ? parseInt(lastSyncStr, 10) : null;
-    if (this.hasWebCheckpoint(journalId)) {
-      this.setState(journalId, { status: 'checkpointed', lastSynced });
+    if (this.hasWebCheckpoint()) {
+      this.setState(journalId, {
+        status: 'checkpointed',
+        lastSynced,
+        requiresFreshRenderer: true,
+      });
       this.abortControllers.delete(journalId);
       this.locks.delete(journalId);
       return null;
@@ -199,15 +193,6 @@ export class SyncManager {
     }
 
     this.setState(journalId, { status: 'syncing', lastSynced });
-    let chunkUploadWorkStarted = false;
-    const markChunkUploadWorkStarted = () => {
-      chunkUploadWorkStarted = true;
-      // Set this before the local chunk read. A cancellation or recoverable
-      // failure after WebCrypto/IndexedDB work must not permit another bounded
-      // run in the same renderer.
-      this.markWebCheckpoint(journalId);
-    };
-
     try {
       await this.connectWithToken(accessToken);
       throwIfCancelled();
@@ -246,19 +231,20 @@ export class SyncManager {
         controller.signal,
         this.webCheckpointing
           ? {
-              newChunkUploadBudget: WEB_SYNC_NEW_CHUNK_BUDGET,
-              restartPartialUploadChunkSize: WEB_SYNC_RESTART_CHUNK_SIZE_BYTES,
-              onChunkUploadWorkStarted: markChunkUploadWorkStarted,
+              rendererWorkLedger: this.rendererWorkLedger,
             }
           : undefined,
       );
       throwIfCancelled();
-      if (result.checkpointed || chunkUploadWorkStarted) {
-        this.markWebCheckpoint(journalId);
+      if (result.checkpointed) {
         if (isCurrentRun()) {
-          this.setState(journalId, { status: 'checkpointed', lastSynced });
+          this.setState(journalId, {
+            status: 'checkpointed',
+            lastSynced,
+            requiresFreshRenderer: true,
+          });
         }
-        return { ...result, checkpointed: true };
+        return { ...result, checkpointed: true, requiresFreshRenderer: true };
       }
 
       // After a successful sync, record the remote salt for future sync comparisons.
@@ -286,20 +272,23 @@ export class SyncManager {
       const now = Date.now();
       await this.persistForRun(LAST_SYNC_PREFIX + journalId, String(now), controller, isCurrentRun);
       if (isCurrentRun()) {
-        this.setState(journalId, { status: 'idle', lastSynced: now });
+        this.setState(journalId, {
+          status: 'idle',
+          lastSynced: now,
+          ...(this.hasWebCheckpoint() ? { requiresFreshRenderer: true } : {}),
+        });
       }
 
-      return result;
+      return this.hasWebCheckpoint() ? { ...result, requiresFreshRenderer: true } : result;
     } catch (err) {
       if (isSyncCancelledError(err) || controller.signal.aborted || !isCurrentRun()) {
-        if (chunkUploadWorkStarted && isCurrentRun()) {
-          this.setState(journalId, { status: 'checkpointed', lastSynced });
+        if (isCurrentRun()) {
+          this.setState(journalId, {
+            status: 'idle',
+            lastSynced,
+            ...(this.hasWebCheckpoint() ? { requiresFreshRenderer: true } : {}),
+          });
         }
-        return null;
-      }
-
-      if (chunkUploadWorkStarted) {
-        this.setState(journalId, { status: 'checkpointed', lastSynced });
         return null;
       }
 
@@ -311,6 +300,7 @@ export class SyncManager {
         lastSynced: lastSynced ?? null,
         error: message,
         errorStack: stack,
+        requiresFreshRenderer: this.hasWebCheckpoint(),
       });
       return null;
     } finally {
@@ -325,9 +315,13 @@ export class SyncManager {
     derivedKey?: Uint8Array,
     delayMs = 5000,
   ) {
-    if (this.hasWebCheckpoint(journalId)) {
+    if (this.hasWebCheckpoint()) {
       const state = this.getState(journalId);
-      this.setState(journalId, { status: 'checkpointed', lastSynced: state.lastSynced });
+      this.setState(journalId, {
+        status: 'checkpointed',
+        lastSynced: state.lastSynced,
+        requiresFreshRenderer: true,
+      });
       return;
     }
     const existing = this.debounceTimers.get(journalId);
