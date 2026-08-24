@@ -61,7 +61,7 @@ function matchesFilter(
   return true;
 }
 
-export function useFilter(pages: PagePreview[], initial?: UseFilterInitial) {
+export function useFilter<T extends PagePreview>(pages: T[], initial?: UseFilterInitial) {
   const [filter, setFilter] = useState<Filter>(() => ({
     ...EMPTY_FILTER,
     query: initial?.query ?? '',

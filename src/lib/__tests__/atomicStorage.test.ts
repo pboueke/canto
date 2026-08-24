@@ -1,6 +1,6 @@
 import { createLocalStore } from '../storage/local';
 import type { EncryptionService } from '../encryption';
-import type { JournalContent, Page } from 'canto-data';
+import type { Attachment, JournalContent, Page } from 'canto-data';
 
 // In-memory filesystem mock (same pattern as localStorage.test.ts)
 const filesystem: Record<string, string> = {};
@@ -311,10 +311,30 @@ describe('reencryptJournal', () => {
     const store = createLocalStore(enc);
     await store.initialize();
 
-    const journal = makeJournalContent('j1', [makePage('p1')]);
+    const images: Attachment[] = [
+      {
+        id: 'img1',
+        path: '/mock-docs/canto/j1/attachments/img1.jpg',
+        name: 'img1.jpg',
+        type: 'image',
+        encrypted: false,
+        deleted: false,
+        size: 1,
+      },
+      {
+        id: 'img2',
+        path: '/mock-docs/canto/j1/attachments/img2.jpg',
+        name: 'img2.jpg',
+        type: 'image',
+        encrypted: false,
+        deleted: false,
+        size: 1,
+      },
+    ];
+    const journal = makeJournalContent('j1', [{ ...makePage('p1'), images }]);
     await store.saveJournal(journal);
 
-    // Add two attachment files
+    // Add two attachment files registered by the page metadata.
     filesystem['/mock-docs/canto/j1/attachments/img1.jpg'] = 'enc:data1';
     filesystem['/mock-docs/canto/j1/attachments/img2.jpg'] = 'enc:data2';
 

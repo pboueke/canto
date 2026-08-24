@@ -80,6 +80,36 @@ export interface RemoteStore {
   /** Delete an attachment on the remote. */
   deleteAttachment(remotePath: string): Promise<void>;
 
+  /** Additive bounded-payload transfer surface for canto-chunked-v1 attachments. */
+  uploadAttachmentChunk?(
+    journalId: string,
+    attachmentId: string,
+    generation: string | undefined,
+    index: number,
+    data: string,
+    signal?: AbortSignal,
+  ): Promise<void>;
+  downloadAttachmentChunk?(
+    journalId: string,
+    attachmentId: string,
+    generation: string | undefined,
+    index: number,
+    signal?: AbortSignal,
+  ): Promise<string | null>;
+  /** Remove one unreferenced chunk after a failed upload or committed generation replacement. */
+  deleteAttachmentChunk?(
+    journalId: string,
+    attachmentId: string,
+    generation: string | undefined,
+    index: number,
+  ): Promise<void>;
+  /** Remove every old generation for an attachment after its replacement page publishes. */
+  deleteAttachmentGenerationsExcept?(
+    journalId: string,
+    attachmentId: string,
+    generation: string,
+  ): Promise<void>;
+
   /** Delete a journal and all its contents from the remote. */
   deleteJournal(journalId: string): Promise<void>;
 }
@@ -87,6 +117,13 @@ export interface RemoteStore {
 export interface DownloadFailure {
   name: string;
   reason: string;
+}
+
+export interface SyncWarning {
+  pageId: string;
+  name: string;
+  size?: number;
+  reason: 'legacy-attachment-too-large' | 'chunk-generation-missing';
 }
 
 export interface SyncConflict {
@@ -101,4 +138,6 @@ export interface SyncResult {
   downloaded: string[]; // page IDs
   deleted: string[]; // page IDs
   conflicts: SyncConflict[];
+  /** Attachments intentionally left dirty rather than risking legacy OOM. */
+  warnings: SyncWarning[];
 }

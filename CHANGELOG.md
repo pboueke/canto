@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.19.2 - Backup integrity and resilient web sync
+
+- **fix: transactional backup import validation** — native and web imports now read back newly persisted journals, verify their metadata/settings/page count, and roll back the imported journal if persistence verification fails. Imported page `modified` timestamps are preserved rather than rewritten during import.
+- **fix: large web attachments can retry safely** — IndexedDB attachment reads now receive a longer timeout and bounded retry for transient timeout/abort failures; metadata and index reads retain the normal timeout.
+- **fix: safe web password protection for large attachments** — attachments over 32 MiB remain device-encrypted but are skipped from the journal-password layer to avoid browser crashes; the completed password-protection modal names every affected file and warns about synced backups. Existing large attachments already protected by a password are rejected before any rewrite.
+- **fix: secure-journal preview reliability** — list previews retain password-protected image paths and reload after the journal key becomes available; virtual pagination no longer resets merely because filtering recreates an equivalent page array.
+- **fix: controlled attachment sync and cancellation** — attachment transfer concurrency is capped at two. Disabling sync, forgetting a journal, or tearing down the sync manager cancels pending work without recording a stale successful sync or deleting remote backup data. Attachment failures name the affected path and suggest retrying.
+- **fix: prevent legacy attachment sync memory exhaustion** — Expo Crypto now uses its native base64 bridge rather than repeated JavaScript string concatenation. Imported attachment sizes are retained, and known legacy attachments over 32 MiB are left dirty with structured sync warnings instead of entering the unsafe whole-file upload path. Drive media retries now honor cancellation.
+- test: added coverage for import rollback/timestamp preservation, retried web attachment reads, attachment concurrency/error context, and cancellation during an in-flight attachment upload.
+
 ## v0.19.1 - Release fixes
 
 - **feat: font customization in style picker** — `ThemePickerModal` now offers font-size presets (small/default/large/x-large, scales 0.85/1.0/1.15/1.3) and font-family options (default Lato+Merriweather, OpenDyslexic, Lora serif). Prefs persist via AsyncStorage and apply globally; scaling currently affects the journal page editor + rendered markdown. New `FontPrefsContext`, `src/lib/font.ts`, 7 font tests.

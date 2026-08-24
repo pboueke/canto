@@ -3,9 +3,18 @@
  * Mirrors localStorage.test.ts which tests the native (expo-file-system) version.
  */
 import 'fake-indexeddb/auto';
-import { createLocalStore, _resetDB } from '../storage/local.web';
+import {
+  createLocalStore,
+  _resetDB,
+  WEB_PASSWORD_ATTACHMENT_LIMIT_BYTES,
+} from '../storage/local.web';
 import type { EncryptionService } from '../encryption';
 import type { JournalContent, Page, Attachment } from 'canto-data';
+import {
+  ATTACHMENT_CHUNK_SIZE,
+  chunkedContentForBase64,
+  chunkedContentForByteLength,
+} from '../storage/attachment-content';
 
 // Passthrough encryption mock (no actual encryption for test simplicity)
 function createMockEncryption(): EncryptionService {
@@ -43,6 +52,37 @@ function makeJournalContent(id: string, pages: Page[] = []): JournalContent {
   };
 }
 
+async function putRawStorageRecord(path: string, data: string): Promise<void> {
+  const db = await new Promise<IDBDatabase>((resolve, reject) => {
+    const request = indexedDB.open('canto');
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error);
+  });
+  await new Promise<void>((resolve, reject) => {
+    const tx = db.transaction('files', 'readwrite');
+    tx.objectStore('files').put({ path, data });
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+  db.close();
+}
+
+async function getRawStorageRecord(path: string): Promise<string | undefined> {
+  const db = await new Promise<IDBDatabase>((resolve, reject) => {
+    const request = indexedDB.open('canto');
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error);
+  });
+  const value = await new Promise<{ path: string; data: string } | undefined>((resolve, reject) => {
+    const tx = db.transaction('files', 'readonly');
+    const request = tx.objectStore('files').get(path);
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error);
+  });
+  db.close();
+  return value?.data;
+}
+
 function makePage(id: string): Page {
   return {
     id,
@@ -61,6 +101,38 @@ beforeEach(async () => {
   // Close cached connection and delete the database between tests
   _resetDB();
   indexedDB.deleteDatabase('canto');
+});
+
+describe('storage transaction recovery (web/IndexedDB)', () => {
+  it('rolls back prepared staging and replays a durable commit on the next initialize', async () => {
+    const first = createLocalStore(createMockEncryption());
+    await first.initialize();
+    const target = 'canto/j1/metadata.json';
+    const preparedRoot = 'canto/.transactions/prepared';
+    await putRawStorageRecord(target, 'enc:old');
+    await putRawStorageRecord(`${preparedRoot}/file-0`, 'enc:new');
+    await putRawStorageRecord(
+      `${preparedRoot}/marker`,
+      JSON.stringify({ phase: 'prepared', files: [{ target, staged: `${preparedRoot}/file-0` }] }),
+    );
+    _resetDB();
+    await createLocalStore(createMockEncryption()).initialize();
+    expect(await getRawStorageRecord(target)).toBe('enc:old');
+
+    const committedRoot = 'canto/.transactions/committed';
+    await putRawStorageRecord(`${committedRoot}/file-0`, 'enc:new');
+    await putRawStorageRecord(
+      `${committedRoot}/marker`,
+      JSON.stringify({
+        phase: 'committing',
+        files: [{ target, staged: `${committedRoot}/file-0` }],
+      }),
+    );
+    _resetDB();
+    await createLocalStore(createMockEncryption()).initialize();
+    expect(await getRawStorageRecord(target)).toBe('enc:new');
+    expect(await getRawStorageRecord(`${committedRoot}/marker`)).toBeUndefined();
+  });
 });
 
 describe('createLocalStore (web/IndexedDB)', () => {
@@ -428,6 +500,12 @@ describe('reencryptAll (web/IndexedDB)', () => {
     newEncryption.encrypt = jest.fn((data: string) => Promise.resolve(`new:${data}`));
     newEncryption.decrypt = jest.fn((data: string) => Promise.resolve(data.replace(/^new:/, '')));
     const newStore = createLocalStore(newEncryption);
+    // Simulate restarting after data commit but before the UI key-finalization
+    // call: the durable, keyless completion proof must survive startup.
+    await newStore.initialize();
+    expect(await newStore.hasCompletedDeviceKeyRotation?.()).toBe(true);
+    await newStore.clearCompletedDeviceKeyRotation?.();
+    expect(await newStore.hasCompletedDeviceKeyRotation?.()).toBe(false);
 
     const journals = await newStore.listJournals();
     expect(journals).toHaveLength(1);
@@ -512,9 +590,12 @@ describe('reencryptAll (web/IndexedDB)', () => {
       encrypted: false,
       deleted: false,
     };
-    await store.saveAttachment('j1', 'p1', attachment, 'imagedata');
+    const path = await store.saveAttachment('j1', 'p1', attachment, 'imagedata');
 
-    const oldDecrypt = (ct: string) => Promise.resolve(ct.replace(/^old:/, ''));
+    const oldDecrypt = (ct: string) => {
+      if (/^\d+$/.test(ct)) return Promise.reject(new Error('Invalid ciphertext: too short'));
+      return Promise.resolve(ct.replace(/^old:/, ''));
+    };
     const oldEncrypt = (pt: string) => Promise.resolve(`old:${pt}`);
     const newEncrypt = (pt: string) => Promise.resolve(`new:${pt}`);
     await store.reencryptAll(oldDecrypt, oldEncrypt, newEncrypt);
@@ -528,6 +609,61 @@ describe('reencryptAll (web/IndexedDB)', () => {
 
     const journals = await newStore.listJournals();
     expect(journals).toHaveLength(1);
+    expect(await newStore.getAttachment(path)).toBe('imagedata');
+    expect(await newStore.getAttachmentStorageSize?.(path)).toEqual({ status: 'known', bytes: 6 });
+  });
+});
+
+describe('chunked attachment storage (web)', () => {
+  it('stores, validates, and streams each chunk without a whole-value sync read', async () => {
+    const encryption = createMockEncryption();
+    const store = createLocalStore(encryption);
+    await store.initialize();
+    const data = 'A'.repeat(Math.ceil((ATTACHMENT_CHUNK_SIZE * 2 + 1) / 3) * 4);
+    const attachment: Attachment = {
+      id: 'chunked',
+      path: '',
+      name: 'movie.mp4',
+      type: 'file',
+      encrypted: false,
+      size: Math.floor((data.length * 3) / 4),
+      content: chunkedContentForBase64(data),
+      deleted: false,
+    };
+    const path = await store.saveAttachment('j1', 'p1', attachment, data);
+    attachment.path = path;
+    const chunks: string[] = [];
+    await store.forEachAttachmentChunk!(attachment, async (_index, chunk) => {
+      chunks.push(chunk);
+    });
+    expect(chunks).toHaveLength(attachment.content!.chunkCount);
+    expect(chunks.every((chunk) => chunk.length < data.length)).toBe(true);
+    await expect(store.getAttachment(path)).resolves.toBe(data);
+  });
+
+  it('ingests byte streams without a FileReader/base64 source value', async () => {
+    const encryption = createMockEncryption();
+    const store = createLocalStore(encryption);
+    await store.initialize();
+    const attachment: Attachment = {
+      id: 'streamed',
+      path: '',
+      name: 'streamed.bin',
+      type: 'file',
+      encrypted: false,
+      size: 4,
+      content: chunkedContentForByteLength(4),
+      deleted: false,
+    };
+    async function* source() {
+      // The picker stream adapter coalesces arbitrary source reads into exact
+      // descriptor-sized chunks before this storage boundary.
+      yield new Uint8Array([65, 66, 67, 68]);
+    }
+
+    const path = await store.saveAttachmentStream!('j1', 'p1', attachment, source());
+
+    await expect(store.getAttachment(path)).resolves.toBe('QUJDRA==');
   });
 });
 
@@ -650,6 +786,132 @@ describe('reencryptJournal attachment handling (web)', () => {
 
     const result = await store.getJournal('j1', newKey);
     expect(result!.pages[0].images[0].encrypted).toBe(true);
+  });
+
+  it('reproduces the raw size-sidecar failure during password re-encryption', async () => {
+    const encryption: EncryptionService = {
+      ...createMockEncryption(),
+      decrypt: async (data: string) => {
+        if (/^\d+$/.test(data)) throw new Error('Invalid ciphertext: too short');
+        return data.replace(/^enc:/, '');
+      },
+    };
+    const store = createLocalStore(encryption);
+    await store.initialize();
+
+    const attachment: Attachment = {
+      id: 'img1',
+      path: '',
+      name: 'photo.jpg',
+      type: 'image',
+      encrypted: false,
+      deleted: false,
+    };
+    const journal = makeJournalContent('j1', [{ ...makePage('p1'), images: [attachment] }]);
+    await store.saveJournal(journal);
+    const path = await store.saveAttachment('j1', 'p1', attachment, 'imagedata');
+    const loaded = await store.getJournal('j1');
+    loaded!.pages[0].images[0].path = path;
+
+    await expect(
+      store.reencryptJournal(loaded!, undefined, new Uint8Array(32).fill(42)),
+    ).resolves.toEqual({ skippedAttachments: [] });
+    expect(await store.getAttachmentStorageSize?.(path)).toEqual({ status: 'known', bytes: 6 });
+  });
+
+  it('reports and leaves oversized attachments outside the journal password layer', async () => {
+    const encryption = createMockEncryption();
+    const store = createLocalStore(encryption);
+    await store.initialize();
+
+    const att: Attachment = {
+      id: 'large-image',
+      path: '',
+      name: 'large-video.mp4',
+      type: 'file',
+      encrypted: false,
+      size: WEB_PASSWORD_ATTACHMENT_LIMIT_BYTES + 1,
+      deleted: false,
+    };
+    const page: Page = { ...makePage('p1'), files: [att] };
+    const journal = makeJournalContent('j1', [page]);
+    await store.saveJournal(journal);
+    const savedPath = await store.saveAttachment('j1', 'p1', att, 'large-file-data');
+
+    const loaded = await store.getJournal('j1');
+    loaded!.pages[0].files[0].path = savedPath;
+    const newKey = new Uint8Array(32).fill(42);
+
+    const result = await store.reencryptJournal(loaded!, undefined, newKey);
+
+    expect(result.skippedAttachments).toEqual([
+      {
+        name: 'large-video.mp4',
+        size: WEB_PASSWORD_ATTACHMENT_LIMIT_BYTES + 1,
+      },
+    ]);
+    const reloaded = await store.getJournal('j1', newKey);
+    expect(reloaded!.pages[0].files[0].encrypted).toBe(false);
+    expect(await store.getAttachment(savedPath, newKey)).toBe('large-file-data');
+  });
+
+  it('re-encrypts chunk payloads while keeping the manifest outside the password layer', async () => {
+    const encryption = createMockEncryption();
+    const store = createLocalStore(encryption);
+    await store.initialize();
+    const attachment: Attachment = {
+      id: 'chunked-password',
+      path: '',
+      name: 'movie.mp4',
+      type: 'file',
+      encrypted: false,
+      size: 3,
+      content: chunkedContentForBase64('QUJD'),
+      deleted: false,
+    };
+    const journal = makeJournalContent('j1', [{ ...makePage('p1'), files: [attachment] }]);
+    await store.saveJournal(journal);
+    const path = await store.saveAttachment('j1', 'p1', attachment, 'QUJD');
+    const loaded = await store.getJournal('j1');
+    loaded!.pages[0].files[0].path = path;
+    const key = new Uint8Array(32).fill(42);
+
+    await store.reencryptJournal(loaded!, undefined, key);
+
+    const rotated = await store.getJournal('j1', key);
+    const rotatedPath = rotated!.pages[0].files[0].path;
+    expect(rotatedPath).not.toBe(path);
+    await expect(store.getAttachment(rotatedPath, key)).resolves.toBe('QUJD');
+    await expect(store.getAttachment(path, key)).resolves.toBeNull();
+  });
+
+  it('rejects a password change before writing when an existing protected attachment is oversized', async () => {
+    const encryption = createMockEncryption();
+    const store = createLocalStore(encryption);
+    await store.initialize();
+
+    const oldKey = new Uint8Array(32).fill(10);
+    const newKey = new Uint8Array(32).fill(42);
+    const att: Attachment = {
+      id: 'large-image',
+      path: '',
+      name: 'already-protected.mp4',
+      type: 'file',
+      encrypted: true,
+      size: 512 * 1024 + 1,
+      deleted: false,
+    };
+    const journal: JournalContent = {
+      ...makeJournalContent('j1', [{ ...makePage('p1'), files: [att] }]),
+      secure: true,
+    };
+    await store.saveJournal(journal, oldKey);
+    const loaded = await store.getJournal('j1', oldKey);
+
+    await expect(store.reencryptJournal(loaded!, oldKey, newKey)).rejects.toThrow(
+      'Cannot safely re-encrypt legacy attachment: already-protected.mp4',
+    );
+    await expect(store.getJournal('j1', oldKey)).resolves.not.toBeNull();
   });
 
   it('sets attachment.encrypted=false when removing password (newKey undefined)', async () => {
@@ -837,8 +1099,8 @@ describe('IDB error paths (web/IndexedDB)', () => {
             queueMicrotask(() => {
               try {
                 tx.abort();
-              } catch {
-                /* */
+              } catch (error) {
+                void error;
               }
             });
             return { onsuccess: null, onerror: null } as unknown as IDBRequest;
@@ -848,6 +1110,41 @@ describe('IDB error paths (web/IndexedDB)', () => {
       });
 
       await expect(store.getPage('j1', 'p1')).rejects.toThrow();
+    });
+  });
+
+  describe('attachment reads retry transient transaction aborts', () => {
+    it('retries an attachment read after the first transaction aborts', async () => {
+      const { store } = await getInitializedStore();
+      const attachment: Attachment = {
+        id: 'retry-image',
+        path: '',
+        name: 'retry.jpg',
+        type: 'image',
+        encrypted: false,
+        deleted: false,
+      };
+      const path = await store.saveAttachment('j1', 'p1', attachment, 'attachment-data');
+
+      interceptNextTransaction((tx) => {
+        const origOS = tx.objectStore.bind(tx);
+        tx.objectStore = (name: string) => {
+          const os = origOS(name);
+          os.get = () => {
+            queueMicrotask(() => {
+              try {
+                tx.abort();
+              } catch {
+                /* The transaction may already have settled. */
+              }
+            });
+            return { onsuccess: null, onerror: null } as unknown as IDBRequest;
+          };
+          return os;
+        };
+      });
+
+      await expect(store.getAttachment(path)).resolves.toBe('attachment-data');
     });
   });
 
@@ -894,8 +1191,8 @@ describe('IDB error paths (web/IndexedDB)', () => {
             queueMicrotask(() => {
               try {
                 tx.abort();
-              } catch {
-                /* */
+              } catch (error) {
+                void error;
               }
             });
             return { onsuccess: null, onerror: null } as unknown as IDBRequest;
@@ -956,8 +1253,8 @@ describe('IDB error paths (web/IndexedDB)', () => {
             queueMicrotask(() => {
               try {
                 tx.abort();
-              } catch {
-                /* */
+              } catch (error) {
+                void error;
               }
             });
             return { onsuccess: null, onerror: null } as unknown as IDBRequest;
@@ -1018,8 +1315,8 @@ describe('IDB error paths (web/IndexedDB)', () => {
             queueMicrotask(() => {
               try {
                 tx.abort();
-              } catch {
-                /* */
+              } catch (error) {
+                void error;
               }
             });
             return { onsuccess: null, onerror: null } as unknown as IDBRequest;
@@ -1171,5 +1468,47 @@ describe('encrypted operations (web/IndexedDB)', () => {
     const journals = await store2.listJournals();
     expect(journals).toHaveLength(1);
     expect(journals[0].id).toBe('j1');
+  });
+});
+
+describe('device-key rotation write barrier (web)', () => {
+  it('blocks a concurrent save until rotation commits', async () => {
+    const encryption = createMockEncryption();
+    const store = createLocalStore(encryption);
+    await store.initialize();
+    await store.saveJournal(makeJournalContent('j1', [makePage('p1')]));
+
+    let releaseRotation!: () => void;
+    const rotationGate = new Promise<void>((resolve) => {
+      releaseRotation = resolve;
+    });
+    let rotationStarted!: () => void;
+    const started = new Promise<void>((resolve) => {
+      rotationStarted = resolve;
+    });
+    let writesDuringRotation = 0;
+    encryption.encrypt = jest.fn(async (data: string) => {
+      writesDuringRotation++;
+      return data;
+    });
+
+    const rotation = store.reencryptAll(
+      async (value) => value.replace(/^enc:/, ''),
+      async (value) => value,
+      async (value) => {
+        rotationStarted();
+        await rotationGate;
+        return value;
+      },
+    );
+    await started;
+    const concurrentSave = store.savePage('j1', makePage('p2'));
+    await Promise.resolve();
+
+    expect(writesDuringRotation).toBe(0);
+    releaseRotation();
+    await rotation;
+    await concurrentSave;
+    expect(writesDuringRotation).toBe(1);
   });
 });

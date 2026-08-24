@@ -39,6 +39,36 @@ describe('usePagination', () => {
     expect(result.current.visiblePages).toHaveLength(15);
   });
 
+  it('keeps the loaded page when a parent recreates an equivalent item array', () => {
+    const items = makeItems(50);
+    const { result, rerender } = renderHook(
+      ({ data }: { data: number[] }) => usePagination(data, 15),
+      { initialProps: { data: items } },
+    );
+
+    act(() => result.current.loadMore());
+    expect(result.current.visiblePages).toHaveLength(30);
+
+    rerender({ data: [...items] });
+
+    expect(result.current.visiblePages).toHaveLength(30);
+  });
+
+  it('keeps the loaded page when refreshed page records have the same IDs', () => {
+    const items = makeItems(50).map((id) => ({ id }));
+    const { result, rerender } = renderHook(
+      ({ data }: { data: { id: number }[] }) => usePagination(data, 15, (page) => page.id),
+      { initialProps: { data: items } },
+    );
+
+    act(() => result.current.loadMore());
+    expect(result.current.visiblePages).toHaveLength(30);
+
+    rerender({ data: items.map((page) => ({ ...page })) });
+
+    expect(result.current.visiblePages).toHaveLength(30);
+  });
+
   it('resets when items array reference changes', () => {
     let items = makeItems(50);
     const { result, rerender } = renderHook(

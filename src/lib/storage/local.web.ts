@@ -1,8 +1,18 @@
 import type { Journal, JournalContent, Page, Attachment } from 'canto-data';
 import type { EncryptionService } from '@/lib/encryption';
-import { aesGcmEncrypt, aesGcmDecrypt } from '@/lib/encryption/utils';
+import { aesGcmEncrypt, aesGcmDecrypt, generateUUID } from '@/lib/encryption/utils';
 import { safeJsonParse } from '@/lib/utils/json';
 import type { LocalStore } from './types';
+import { serializeDeviceKeyWrites } from './write-barrier';
+import {
+  base64ByteLength,
+  chunkBytesToBase64,
+  decodeChunkFrame,
+  encodeChunkFrame,
+  joinBase64Chunks,
+  splitBase64Chunks,
+  LEGACY_ATTACHMENT_MEMORY_LIMIT_BYTES,
+} from './attachment-content';
 
 const DB_NAME = 'canto';
 const DB_VERSION = 1;
@@ -10,6 +20,7 @@ const STORE_NAME = 'files';
 
 const BASE_PATH = 'canto';
 const JOURNALS_INDEX_PATH = `${BASE_PATH}/journals.json`;
+const DEVICE_KEY_ROTATION_COMPLETE_PATH = `${BASE_PATH}/.device-key-rotation-complete`;
 
 function getJournalPath(journalId: string): string {
   return `${BASE_PATH}/${journalId}`;
@@ -49,6 +60,21 @@ function getAttachmentPath(journalId: string, pageId: string, attachment: Attach
   return `${getAttachmentsPrefix(journalId)}${encPrefix}${typePrefix}-${pageId}-${hash}.${ext}`;
 }
 
+function getChunkRoot(journalId: string, pageId: string, attachment: Attachment): string {
+  // A generation is a local copy-on-write root. The page starts referencing it
+  // only after all chunks and the manifest have been written successfully.
+  const generation = attachment.content?.generation ?? 'legacy';
+  return `${getAttachmentsPrefix(journalId)}chunk-v1-${pageId}-${attachment.id}-${generation}`;
+}
+
+function getChunkPath(root: string, index: number): string {
+  return `${root}/${index}`;
+}
+
+function getChunkManifestPath(root: string): string {
+  return `${root}/manifest`;
+}
+
 // ---------------------------------------------------------------------------
 // IndexedDB helpers
 // ---------------------------------------------------------------------------
@@ -83,21 +109,72 @@ export function _resetDB(): void {
 }
 
 const IDB_TIMEOUT_MS = 10_000;
+const ATTACHMENT_READ_TIMEOUT_MS = 60_000;
+const ATTACHMENT_READ_ATTEMPTS = 3;
+const ATTACHMENT_RETRY_DELAYS_MS = [100, 300];
 
-async function idbGet(path: string): Promise<string | null> {
+/** Attachments above this size remain device-encrypted but are not password-encrypted on web. */
+export const WEB_PASSWORD_ATTACHMENT_LIMIT_BYTES = 32 * 1024 * 1024;
+
+async function idbGet(path: string, timeoutMs = IDB_TIMEOUT_MS): Promise<string | null> {
   const db = await openDB();
   return new Promise((resolve, reject) => {
-    const timeout = setTimeout(
-      () => reject(new Error(`[IDB] Timeout reading ${path}`)),
-      IDB_TIMEOUT_MS,
-    );
     const tx = db.transaction(STORE_NAME, 'readonly');
     const store = tx.objectStore(STORE_NAME);
     const req = store.get(path);
+    let settled = false;
+    const clearHandlers = () => {
+      clearTimeout(timeout);
+      req.onsuccess = null;
+      req.onerror = null;
+      tx.onabort = null;
+    };
+    const resolveOnce = (value: string | null) => {
+      if (settled) return;
+      settled = true;
+      clearHandlers();
+      resolve(value);
+    };
+    const rejectOnce = (error: Error | DOMException | null) => {
+      if (settled) return;
+      settled = true;
+      clearHandlers();
+      reject(error);
+    };
+    const timeout = setTimeout(() => {
+      rejectOnce(new Error(`[IDB] Timeout reading ${path}`));
+      try {
+        tx.abort();
+      } catch {
+        // The request may have completed between the timeout and abort attempt.
+      }
+    }, timeoutMs);
+
+    req.onsuccess = () => {
+      const result = req.result as { path: string; data: string } | undefined;
+      resolveOnce(result?.data ?? null);
+    };
+    req.onerror = () => rejectOnce(req.error);
+    tx.onabort = () => rejectOnce(tx.error ?? new Error('[IDB] Transaction aborted'));
+  });
+}
+
+async function idbHas(path: string): Promise<boolean> {
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORE_NAME, 'readonly');
+    const req = tx.objectStore(STORE_NAME).getKey(path);
+    const timeout = setTimeout(() => {
+      try {
+        tx.abort();
+      } catch {
+        // The request may have completed between the timeout and abort attempt.
+      }
+      reject(new Error(`[IDB] Timeout checking ${path}`));
+    }, IDB_TIMEOUT_MS);
     req.onsuccess = () => {
       clearTimeout(timeout);
-      const result = req.result as { path: string; data: string } | undefined;
-      resolve(result?.data ?? null);
+      resolve(req.result !== undefined);
     };
     req.onerror = () => {
       clearTimeout(timeout);
@@ -108,6 +185,32 @@ async function idbGet(path: string): Promise<string | null> {
       reject(tx.error ?? new Error('[IDB] Transaction aborted'));
     };
   });
+}
+
+function isRetryableAttachmentReadError(error: unknown): boolean {
+  if (error instanceof DOMException && error.name === 'AbortError') return true;
+  const message = error instanceof Error ? error.message : String(error);
+  return message.startsWith('[IDB] Timeout reading') || message === '[IDB] Transaction aborted';
+}
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function idbGetAttachment(path: string): Promise<string | null> {
+  let lastError: unknown;
+  for (let attempt = 0; attempt < ATTACHMENT_READ_ATTEMPTS; attempt++) {
+    try {
+      return await idbGet(path, ATTACHMENT_READ_TIMEOUT_MS);
+    } catch (err) {
+      lastError = err;
+      if (!isRetryableAttachmentReadError(err) || attempt === ATTACHMENT_READ_ATTEMPTS - 1) {
+        throw err;
+      }
+      await delay(ATTACHMENT_RETRY_DELAYS_MS[attempt]);
+    }
+  }
+  throw lastError;
 }
 
 async function idbPut(path: string, data: string): Promise<void> {
@@ -221,6 +324,90 @@ async function idbListKeys(prefix: string): Promise<string[]> {
   });
 }
 
+/** Size sidecars are raw decimal metadata, not encrypted attachment content. */
+async function isAttachmentSizeSidecar(path: string): Promise<boolean> {
+  if (!path.endsWith('.size')) return false;
+  const value = await idbGet(path);
+  return value !== null && /^(?:0|[1-9]\d*)$/.test(value) && (await idbHas(path.slice(0, -5)));
+}
+
+function isChunkManifest(path: string): boolean {
+  return path.endsWith('/manifest');
+}
+
+// ---------------------------------------------------------------------------
+// Crash-recoverable raw ciphertext transactions
+// ---------------------------------------------------------------------------
+
+const TRANSACTIONS_PREFIX = `${BASE_PATH}/.transactions/`;
+type TransactionPhase = 'prepared' | 'committing';
+interface StorageTransaction {
+  phase: TransactionPhase;
+  files: { target: string; staged: string }[];
+  newRoots?: string[];
+  oldRoots?: string[];
+}
+
+function transactionRoot(id: string): string {
+  return `${TRANSACTIONS_PREFIX}${id}`;
+}
+
+function transactionMarkerPath(root: string): string {
+  return `${root}/marker`;
+}
+
+async function writeTransactionMarker(
+  root: string,
+  transaction: StorageTransaction,
+): Promise<void> {
+  // The marker contains paths and state only. Ciphertexts remain in private
+  // IndexedDB records; no plaintext or key material is ever recorded here.
+  await idbPut(transactionMarkerPath(root), JSON.stringify(transaction));
+}
+
+async function readTransactionMarker(root: string): Promise<StorageTransaction | null> {
+  const raw = await idbGet(transactionMarkerPath(root));
+  if (!raw) return null;
+  try {
+    return JSON.parse(raw) as StorageTransaction;
+  } catch {
+    return null;
+  }
+}
+
+async function stageRawFile(
+  root: string,
+  index: number,
+  target: string,
+  ciphertext: string,
+): Promise<{ target: string; staged: string }> {
+  const staged = `${root}/file-${index}`;
+  await idbPut(staged, ciphertext);
+  return { target, staged };
+}
+
+async function applyStorageTransaction(transaction: StorageTransaction): Promise<void> {
+  for (const { target, staged } of transaction.files) {
+    const raw = await idbGet(staged);
+    if (raw == null) throw new Error(`Incomplete storage transaction staging: ${staged}`);
+    await idbPut(target, raw);
+  }
+  for (const root of transaction.oldRoots ?? []) await idbDeletePrefix(`${root}/`);
+}
+
+async function recoverTransactions(): Promise<void> {
+  const keys = await idbListKeys(TRANSACTIONS_PREFIX);
+  const roots = new Set(keys.map((key) => key.split('/').slice(0, -1).join('/')));
+  for (const root of roots) {
+    const transaction = await readTransactionMarker(root);
+    if (transaction?.phase === 'committing') await applyStorageTransaction(transaction);
+    if (transaction?.phase !== 'committing') {
+      for (const newRoot of transaction?.newRoots ?? []) await idbDeletePrefix(`${newRoot}/`);
+    }
+    await idbDeletePrefix(`${root}/`);
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Encrypted read/write (same logic as native)
 // ---------------------------------------------------------------------------
@@ -278,9 +465,10 @@ export function createLocalStore(encryption: EncryptionService): LocalStore {
     await writeEncrypted(JOURNALS_INDEX_PATH, JSON.stringify(index), encryption);
   }
 
-  return {
+  const store: LocalStore = {
     async initialize(): Promise<void> {
       await openDB();
+      await recoverTransactions();
     },
 
     async listJournals(): Promise<Journal[]> {
@@ -349,6 +537,14 @@ export function createLocalStore(encryption: EncryptionService): LocalStore {
       await writeIndex(index);
     },
 
+    async hasCompletedDeviceKeyRotation(): Promise<boolean> {
+      return idbHas(DEVICE_KEY_ROTATION_COMPLETE_PATH);
+    },
+
+    async clearCompletedDeviceKeyRotation(): Promise<void> {
+      await idbDelete(DEVICE_KEY_ROTATION_COMPLETE_PATH);
+    },
+
     async deleteJournal(id: string): Promise<void> {
       await idbDeletePrefix(getJournalPath(id));
 
@@ -400,9 +596,12 @@ export function createLocalStore(encryption: EncryptionService): LocalStore {
         Promise.resolve()
           .then(async () => {
             for (const att of attachments) {
-              const path = getAttachmentPath(journalId, pageId, att);
               try {
-                await idbDelete(path);
+                if (att.content?.format === 'canto-chunked-v1') {
+                  await idbDeletePrefix(`${att.path}/`);
+                } else {
+                  await idbDelete(att.path);
+                }
               } catch {
                 // Best-effort cleanup
               }
@@ -421,33 +620,178 @@ export function createLocalStore(encryption: EncryptionService): LocalStore {
       data: string,
       derivedKey?: Uint8Array,
     ): Promise<string> {
+      if (attachment.content?.format === 'canto-chunked-v1') {
+        const root = getChunkRoot(journalId, pageId, attachment);
+        if ((await idbListKeys(`${root}/`)).length > 0) {
+          throw new Error(`Attachment generation already exists: ${attachment.name}`);
+        }
+        try {
+          const chunks = splitBase64Chunks(data, attachment.content);
+          for (let index = 0; index < chunks.length; index++) {
+            const frame = encodeChunkFrame(journalId, pageId, attachment, index, chunks[index]);
+            const inner =
+              attachment.encrypted && derivedKey ? await aesGcmEncrypt(frame, derivedKey) : frame;
+            await idbPut(getChunkPath(root, index), await encryption.encrypt(inner));
+          }
+          await idbPut(
+            getChunkManifestPath(root),
+            await encryption.encrypt(JSON.stringify({ journalId, pageId, attachment })),
+          );
+          return root;
+        } catch (error) {
+          await idbDeletePrefix(`${root}/`);
+          throw error;
+        }
+      }
       const path = getAttachmentPath(journalId, pageId, attachment);
-
       const toDeviceEncrypt =
         attachment.encrypted && derivedKey ? await aesGcmEncrypt(data, derivedKey) : data;
       const ciphertext = await encryption.encrypt(toDeviceEncrypt);
       await idbPut(path, ciphertext);
-
+      await idbPut(`${path}.size`, String(base64ByteLength(data)));
       return path;
     },
 
-    async getAttachment(path: string, derivedKey?: Uint8Array): Promise<string | null> {
-      const ciphertext = await idbGet(path);
-      if (!ciphertext) return null;
-
-      const deviceDecrypted = await encryption.decrypt(ciphertext);
-      if (derivedKey) {
-        try {
-          return await aesGcmDecrypt(deviceDecrypted, derivedKey);
-        } catch {
-          return deviceDecrypted;
-        }
+    async saveAttachmentStream(journalId, pageId, attachment, chunks, derivedKey): Promise<string> {
+      if (attachment.content?.format !== 'canto-chunked-v1') {
+        throw new Error(`Chunked content descriptor required for attachment: ${attachment.name}`);
       }
-      return deviceDecrypted;
+      const root = getChunkRoot(journalId, pageId, attachment);
+      if ((await idbListKeys(`${root}/`)).length > 0) {
+        throw new Error(`Attachment generation already exists: ${attachment.name}`);
+      }
+      let index = 0;
+      let written = 0;
+      try {
+        for await (const bytes of chunks) {
+          if (bytes.length === 0) continue;
+          if (bytes.length > attachment.content.chunkSize) {
+            throw new Error(`Attachment stream chunk exceeds limit: ${attachment.name}`);
+          }
+          if (index >= attachment.content.chunkCount) {
+            throw new Error(`Too many attachment chunks: ${attachment.name}`);
+          }
+          written += bytes.length;
+          const frame = encodeChunkFrame(
+            journalId,
+            pageId,
+            attachment,
+            index,
+            chunkBytesToBase64(bytes),
+          );
+          const inner =
+            attachment.encrypted && derivedKey ? await aesGcmEncrypt(frame, derivedKey) : frame;
+          await idbPut(getChunkPath(root, index++), await encryption.encrypt(inner));
+        }
+        if (index !== attachment.content.chunkCount || written !== attachment.content.byteLength) {
+          throw new Error(`Attachment stream length mismatch: ${attachment.name}`);
+        }
+        await idbPut(
+          getChunkManifestPath(root),
+          await encryption.encrypt(JSON.stringify({ journalId, pageId, attachment })),
+        );
+        return root;
+      } catch (error) {
+        await idbDeletePrefix(`${root}/`);
+        throw error;
+      }
+    },
+
+    async getAttachment(path: string, derivedKey?: Uint8Array): Promise<string | null> {
+      const ciphertext = await idbGetAttachment(path);
+      if (ciphertext) {
+        const deviceDecrypted = await encryption.decrypt(ciphertext);
+        if (derivedKey) {
+          try {
+            return await aesGcmDecrypt(deviceDecrypted, derivedKey);
+          } catch {
+            return deviceDecrypted;
+          }
+        }
+        return deviceDecrypted;
+      }
+      const manifestCiphertext = await idbGetAttachment(getChunkManifestPath(path));
+      if (!manifestCiphertext) return null;
+      const manifest = JSON.parse(await encryption.decrypt(manifestCiphertext)) as {
+        journalId: string;
+        pageId: string;
+        attachment: Attachment;
+      };
+      const chunks: string[] = [];
+      for (let index = 0; index < manifest.attachment.content!.chunkCount; index++) {
+        const raw = await idbGetAttachment(getChunkPath(path, index));
+        if (!raw)
+          throw new Error(`Attachment chunk missing: ${manifest.attachment.name} #${index}`);
+        let frame = await encryption.decrypt(raw);
+        if (manifest.attachment.encrypted && derivedKey)
+          frame = await aesGcmDecrypt(frame, derivedKey);
+        chunks.push(
+          decodeChunkFrame(frame, manifest.journalId, manifest.pageId, manifest.attachment, index),
+        );
+      }
+      return joinBase64Chunks(chunks);
     },
 
     async deleteAttachment(path: string): Promise<void> {
       await idbDelete(path);
+      await idbDelete(`${path}.size`);
+      await idbDeletePrefix(`${path}/`);
+    },
+
+    async forEachAttachmentChunk(attachment, visitor): Promise<void> {
+      if (!attachment.content || attachment.content.format !== 'canto-chunked-v1') {
+        throw new Error(`Chunked content descriptor required for attachment: ${attachment.name}`);
+      }
+      for (let index = 0; index < attachment.content.chunkCount; index++) {
+        const raw = await idbGetAttachment(getChunkPath(attachment.path, index));
+        if (!raw) throw new Error(`Attachment chunk missing: ${attachment.name} #${index}`);
+        await visitor(index, await encryption.decrypt(raw));
+      }
+    },
+
+    async saveAttachmentChunks(journalId, pageId, attachment, chunks): Promise<string> {
+      if (!attachment.content || attachment.content.format !== 'canto-chunked-v1') {
+        throw new Error(`Chunked content descriptor required for attachment: ${attachment.name}`);
+      }
+      const root = getChunkRoot(journalId, pageId, attachment);
+      const existingKeys = await idbListKeys(`${root}/`);
+      if (existingKeys.length > 0) {
+        if (existingKeys.includes(getChunkManifestPath(root))) return root;
+        throw new Error(`Incomplete attachment generation already exists: ${attachment.name}`);
+      }
+      let count = 0;
+      try {
+        for await (const chunk of chunks) {
+          if (count >= attachment.content.chunkCount)
+            throw new Error(`Too many attachment chunks: ${attachment.name}`);
+          await idbPut(getChunkPath(root, count++), await encryption.encrypt(chunk));
+        }
+        if (count !== attachment.content.chunkCount)
+          throw new Error(`Missing attachment chunks: ${attachment.name}`);
+        await idbPut(
+          getChunkManifestPath(root),
+          await encryption.encrypt(JSON.stringify({ journalId, pageId, attachment })),
+        );
+        return root;
+      } catch (error) {
+        await idbDeletePrefix(`${root}/`);
+        throw error;
+      }
+    },
+
+    async getAttachmentStorageSize(path: string) {
+      // Older records have no sidecar and are deliberately reported as unknown:
+      // opening their value just to estimate its size would recreate the OOM path.
+      const raw = await idbGet(`${path}.size`);
+      if (raw == null) {
+        return (await idbHas(path))
+          ? { status: 'unknown' as const }
+          : { status: 'missing' as const };
+      }
+      const size = Number(raw);
+      return Number.isSafeInteger(size) && size >= 0
+        ? { status: 'known' as const, bytes: size }
+        : { status: 'unknown' as const };
     },
 
     async reencryptJournal(
@@ -455,14 +799,55 @@ export function createLocalStore(encryption: EncryptionService): LocalStore {
       oldKey: Uint8Array | undefined,
       newKey: Uint8Array | undefined,
       onProgress?: (current: number, total: number) => void,
-    ): Promise<void> {
-      // Flip attachment.encrypted flags to match the new key state. The attachment
-      // files themselves will be re-encrypted below — the flag must stay in sync
-      // with what's actually on disk so viewers know whether to strip the password
-      // layer when rendering.
-      const newAttEncrypted = !!newKey;
+    ) {
+      const skippedAttachments: { name: string; size?: number }[] = [];
+      const skippedPaths = new Set<string>();
+      const legacyAttachments = journal.pages
+        .filter((page) => !page.deleted)
+        .flatMap((page) => [...(page.images ?? []), ...(page.files ?? [])])
+        .filter((attachment) => !attachment.content);
+      const unsafeLegacyPaths = new Set<string>();
+      for (const attachment of legacyAttachments) {
+        const raw = await idbGet(`${attachment.path}.size`);
+        const stored = raw == null ? undefined : Number(raw);
+        const size = attachment.size ?? stored;
+        if (
+          size == null ||
+          !Number.isSafeInteger(size) ||
+          size < 0 ||
+          size > LEGACY_ATTACHMENT_MEMORY_LIMIT_BYTES
+        ) {
+          unsafeLegacyPaths.add(attachment.path);
+        }
+      }
+      const incompatible = legacyAttachments.find(
+        (attachment) => attachment.encrypted && unsafeLegacyPaths.has(attachment.path),
+      );
+      if (incompatible) {
+        throw new Error(`Cannot safely re-encrypt legacy attachment: ${incompatible.name}`);
+      }
+      // Chunked payloads are password-encrypted one bounded frame at a time.
+      // Unsafe legacy values remain device-encrypted and outside the journal
+      // password layer rather than being opened as one whole string.
       const remapAttachments = (arr: Attachment[] | undefined): Attachment[] =>
-        (arr ?? []).map((a) => ({ ...a, encrypted: newAttEncrypted }));
+        (arr ?? []).map((attachment) => {
+          if (!attachment.content && unsafeLegacyPaths.has(attachment.path)) {
+            skippedPaths.add(attachment.path);
+            skippedAttachments.push({ name: attachment.name, size: attachment.size });
+            return { ...attachment, encrypted: false };
+          }
+          // A password transition must never rewrite chunks addressed by the
+          // published page. Give the replacement frames a new local/remote
+          // generation and publish the page only after that generation exists.
+          if (attachment.content?.format === 'canto-chunked-v1') {
+            return {
+              ...attachment,
+              encrypted: !!newKey,
+              content: { ...attachment.content, generation: generateUUID() },
+            };
+          }
+          return { ...attachment, encrypted: !!newKey };
+        });
       const pages = journal.pages
         .filter((p) => !p.deleted)
         .map((p) => ({
@@ -471,66 +856,218 @@ export function createLocalStore(encryption: EncryptionService): LocalStore {
           files: remapAttachments(p.files),
         }));
 
-      const attachKeys = await idbListKeys(getAttachmentsPrefix(journal.id));
-      const total = pages.length + attachKeys.length + 1;
-
-      let progress = 0;
-      for (const page of pages) {
-        onProgress?.(++progress, total);
-        await writeEncrypted(
-          getPagePath(journal.id, page.id),
-          JSON.stringify(page),
-          encryption,
-          newKey,
-        );
-      }
-
-      for (const key of attachKeys) {
-        onProgress?.(++progress, total);
-        const raw = await idbGet(key);
-        if (!raw) continue;
-        let plaintext = await encryption.decrypt(raw);
-        if (oldKey) {
-          try {
-            plaintext = await aesGcmDecrypt(plaintext, oldKey);
-          } catch {
-            // Not password-encrypted
+      const replacementRoots: { oldRoot: string; newRoot: string }[] = [];
+      const transactionRootPath = transactionRoot(`password-${generateUUID()}`);
+      const transaction: StorageTransaction = { phase: 'prepared', files: [] };
+      try {
+        // Create every chunked replacement generation before modifying pages.
+        // If any bounded frame fails, the published page still points to its
+        // untouched previous generation.
+        for (let pageIndex = 0; pageIndex < pages.length; pageIndex++) {
+          const oldPage = journal.pages.find((page) => page.id === pages[pageIndex].id)!;
+          const newPage = pages[pageIndex];
+          for (const kind of ['images', 'files'] as const) {
+            for (let index = 0; index < oldPage[kind].length; index++) {
+              const oldAttachment = oldPage[kind][index];
+              const newAttachment = newPage[kind][index];
+              if (
+                !oldAttachment.content ||
+                oldAttachment.content.format !== 'canto-chunked-v1' ||
+                !newAttachment.content ||
+                newAttachment.content.format !== 'canto-chunked-v1'
+              )
+                continue;
+              const oldRoot = oldAttachment.path;
+              const newRoot = getChunkRoot(journal.id, newPage.id, newAttachment);
+              try {
+                for (
+                  let chunkIndex = 0;
+                  chunkIndex < oldAttachment.content.chunkCount;
+                  chunkIndex++
+                ) {
+                  const raw = await idbGetAttachment(getChunkPath(oldRoot, chunkIndex));
+                  if (!raw)
+                    throw new Error(
+                      `Attachment chunk missing: ${oldAttachment.name} #${chunkIndex}`,
+                    );
+                  let frame = await encryption.decrypt(raw);
+                  if (oldAttachment.encrypted && oldKey) frame = await aesGcmDecrypt(frame, oldKey);
+                  const data = decodeChunkFrame(
+                    frame,
+                    journal.id,
+                    oldPage.id,
+                    oldAttachment,
+                    chunkIndex,
+                  );
+                  const nextFrame = encodeChunkFrame(
+                    journal.id,
+                    newPage.id,
+                    newAttachment,
+                    chunkIndex,
+                    data,
+                  );
+                  const inner =
+                    newAttachment.encrypted && newKey
+                      ? await aesGcmEncrypt(nextFrame, newKey)
+                      : nextFrame;
+                  await idbPut(getChunkPath(newRoot, chunkIndex), await encryption.encrypt(inner));
+                }
+                await idbPut(
+                  getChunkManifestPath(newRoot),
+                  await encryption.encrypt(
+                    JSON.stringify({
+                      journalId: journal.id,
+                      pageId: newPage.id,
+                      attachment: newAttachment,
+                    }),
+                  ),
+                );
+                newAttachment.path = newRoot;
+                replacementRoots.push({ oldRoot, newRoot });
+              } catch (error) {
+                await idbDeletePrefix(`${newRoot}/`);
+                throw error;
+              }
+            }
           }
         }
-        const toDeviceEncrypt = newKey ? await aesGcmEncrypt(plaintext, newKey) : plaintext;
-        const ciphertext = await encryption.encrypt(toDeviceEncrypt);
-        await idbPut(key, ciphertext);
-      }
 
-      onProgress?.(++progress, total);
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
-      const { pages: _p, ...metadata } = journal;
-      await writeEncrypted(
-        getMetadataPath(journal.id),
-        JSON.stringify(metadata),
-        encryption,
-        newKey,
-      );
+        const attachKeys = await idbListKeys(getAttachmentsPrefix(journal.id));
+        const encryptedAttachmentKeys: string[] = [];
+        const safeLegacyPaths = new Set(
+          legacyAttachments
+            .filter((attachment) => !unsafeLegacyPaths.has(attachment.path))
+            .map((attachment) => attachment.path),
+        );
+        for (const key of attachKeys) {
+          if (
+            safeLegacyPaths.has(key) &&
+            !(await isAttachmentSizeSidecar(key)) &&
+            !isChunkManifest(key) &&
+            !key.includes('/chunk-v1-')
+          )
+            encryptedAttachmentKeys.push(key);
+        }
+        const total = pages.length + encryptedAttachmentKeys.length + 1;
 
-      const index = await readIndex();
-      const entry: Journal = {
-        id: journal.id,
-        title: journal.title,
-        icon: journal.icon,
-        date: journal.date,
-        secure: journal.secure,
-        salt: journal.salt,
-        biometric: journal.biometric,
-        kdfIterations: journal.kdfIterations,
-        themeOverride: journal.settings.themeOverride,
-      };
-      const existing = index.journals.findIndex((j) => j.id === journal.id);
-      if (existing >= 0) {
-        index.journals[existing] = entry;
-      } else {
-        index.journals.push(entry);
+        let progress = 0;
+        for (const page of pages) {
+          onProgress?.(++progress, total);
+          const payload = JSON.stringify(page);
+          const inner = newKey ? await aesGcmEncrypt(payload, newKey) : payload;
+          transaction.files.push(
+            await stageRawFile(
+              transactionRootPath,
+              transaction.files.length,
+              getPagePath(journal.id, page.id),
+              await encryption.encrypt(inner),
+            ),
+          );
+        }
+
+        for (const key of encryptedAttachmentKeys) {
+          onProgress?.(++progress, total);
+          if (skippedPaths.has(key)) continue;
+          const raw = await idbGet(key);
+          if (!raw) continue;
+          let plaintext = await encryption.decrypt(raw);
+          if (oldKey) {
+            try {
+              plaintext = await aesGcmDecrypt(plaintext, oldKey);
+            } catch {
+              // Not password-encrypted
+            }
+          }
+          const toDeviceEncrypt = newKey ? await aesGcmEncrypt(plaintext, newKey) : plaintext;
+          transaction.files.push(
+            await stageRawFile(
+              transactionRootPath,
+              transaction.files.length,
+              key,
+              await encryption.encrypt(toDeviceEncrypt),
+            ),
+          );
+        }
+
+        // Chunk manifests are deliberately device-encrypted only: their attachment
+        // flags must follow the rewritten pages, but they are not attachment payloads.
+        for (const page of pages) {
+          for (const attachment of [...(page.images ?? []), ...(page.files ?? [])]) {
+            if (attachment.content?.format === 'canto-chunked-v1' && attachment.path) {
+              await idbPut(
+                getChunkManifestPath(attachment.path),
+                await encryption.encrypt(
+                  JSON.stringify({ journalId: journal.id, pageId: page.id, attachment }),
+                ),
+              );
+            }
+          }
+        }
+
+        onProgress?.(++progress, total);
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
+        const { pages: _p, ...metadata } = journal;
+        const metadataPayload = JSON.stringify(metadata);
+        const metadataInner = newKey
+          ? await aesGcmEncrypt(metadataPayload, newKey)
+          : metadataPayload;
+        transaction.files.push(
+          await stageRawFile(
+            transactionRootPath,
+            transaction.files.length,
+            getMetadataPath(journal.id),
+            await encryption.encrypt(metadataInner),
+          ),
+        );
+
+        const index = await readIndex();
+        const entry: Journal = {
+          id: journal.id,
+          title: journal.title,
+          icon: journal.icon,
+          date: journal.date,
+          secure: journal.secure,
+          salt: journal.salt,
+          biometric: journal.biometric,
+          kdfIterations: journal.kdfIterations,
+          themeOverride: journal.settings.themeOverride,
+        };
+        const existing = index.journals.findIndex((j) => j.id === journal.id);
+        if (existing >= 0) {
+          index.journals[existing] = entry;
+        } else {
+          index.journals.push(entry);
+        }
+        transaction.files.push(
+          await stageRawFile(
+            transactionRootPath,
+            transaction.files.length,
+            JOURNALS_INDEX_PATH,
+            await encryption.encrypt(JSON.stringify(index)),
+          ),
+        );
+        transaction.newRoots = replacementRoots.map(({ newRoot }) => newRoot);
+        transaction.oldRoots = replacementRoots.map(({ oldRoot }) => oldRoot);
+        await writeTransactionMarker(transactionRootPath, transaction);
+        transaction.phase = 'committing';
+        await writeTransactionMarker(transactionRootPath, transaction);
+        await applyStorageTransaction(transaction);
+        await idbDeletePrefix(`${transactionRootPath}/`);
+        // The new page is now durable. Old roots are only garbage-collected
+        // afterwards, so a failed copy can never make the published version
+        // unreadable.
+        return { skippedAttachments };
+      } catch (error) {
+        if (transaction.phase === 'prepared') {
+          await Promise.all(
+            replacementRoots.map(({ newRoot }) =>
+              idbDeletePrefix(`${newRoot}/`).catch(() => undefined),
+            ),
+          );
+          await idbDeletePrefix(`${transactionRootPath}/`).catch(() => undefined);
+        }
+        throw error;
       }
-      await writeIndex(index);
     },
 
     async reencryptAll(
@@ -539,52 +1076,88 @@ export function createLocalStore(encryption: EncryptionService): LocalStore {
       newDeviceEncrypt: (plaintext: string) => Promise<string>,
       onProgress?: (current: number, total: number) => void,
     ): Promise<void> {
-      let journals: Journal[] = [];
       const indexData = await idbGet(JOURNALS_INDEX_PATH);
-      if (indexData) {
-        const decrypted = await oldDeviceDecrypt(indexData);
-        const reencrypted = await newDeviceEncrypt(decrypted);
-        await idbPut(JOURNALS_INDEX_PATH, reencrypted);
-        journals = safeJsonParse<JournalIndex>(decrypted, 'journals index').journals;
-      }
-
-      let processed = 0;
-      const total = journals.length;
-
-      for (const j of journals) {
-        processed++;
-        onProgress?.(processed, total);
-
-        // Re-encrypt metadata
-        const metaData = await idbGet(getMetadataPath(j.id));
-        if (metaData) {
-          const decrypted = await oldDeviceDecrypt(metaData);
-          const reencrypted = await newDeviceEncrypt(decrypted);
-          await idbPut(getMetadataPath(j.id), reencrypted);
-        }
-
-        // Re-encrypt pages
-        const pageKeys = await idbListKeys(getPagesPrefix(j.id));
-        for (const key of pageKeys) {
-          const data = await idbGet(key);
-          if (data) {
-            const decrypted = await oldDeviceDecrypt(data);
-            const reencrypted = await newDeviceEncrypt(decrypted);
-            await idbPut(key, reencrypted);
+      const journals = indexData
+        ? safeJsonParse<JournalIndex>(await oldDeviceDecrypt(indexData), 'journals index').journals
+        : [];
+      const root = transactionRoot(`device-${generateUUID()}`);
+      const transaction: StorageTransaction = { phase: 'prepared', files: [] };
+      try {
+        const keys = (await idbListKeys(`${BASE_PATH}/`)).filter(
+          (key) =>
+            !key.startsWith(TRANSACTIONS_PREFIX) &&
+            key !== DEVICE_KEY_ROTATION_COMPLETE_PATH &&
+            !key.endsWith('.size'),
+        );
+        const unsafeLegacy = [] as string[];
+        for (const key of keys) {
+          if (
+            !key.includes('/attachments/') ||
+            key.includes('/chunk-v1-') ||
+            isChunkManifest(key)
+          ) {
+            continue;
+          }
+          const rawSize = await idbGet(`${key}.size`);
+          const size = rawSize == null ? undefined : Number(rawSize);
+          if (
+            size == null ||
+            !Number.isSafeInteger(size) ||
+            size < 0 ||
+            size > LEGACY_ATTACHMENT_MEMORY_LIMIT_BYTES
+          ) {
+            unsafeLegacy.push(key);
           }
         }
-
-        // Re-encrypt attachments
-        const attachKeys = await idbListKeys(getAttachmentsPrefix(j.id));
-        for (const key of attachKeys) {
-          const data = await idbGet(key);
-          if (data) {
-            const decrypted = await oldDeviceDecrypt(data);
-            const reencrypted = await newDeviceEncrypt(decrypted);
-            await idbPut(key, reencrypted);
-          }
+        if (unsafeLegacy.length > 0) {
+          throw new Error(
+            `Cannot safely rotate device key for legacy attachment: ${unsafeLegacy[0]}`,
+          );
         }
+        let staged = 0;
+        let processed = 0;
+        for (const journal of journals) {
+          const prefix = `${getJournalPath(journal.id)}/`;
+          for (const key of keys.filter((candidate) => candidate.startsWith(prefix))) {
+            const ciphertext = await idbGet(key);
+            if (ciphertext != null) {
+              transaction.files.push(
+                await stageRawFile(
+                  root,
+                  staged++,
+                  key,
+                  await newDeviceEncrypt(await oldDeviceDecrypt(ciphertext)),
+                ),
+              );
+            }
+          }
+          onProgress?.(++processed, journals.length);
+        }
+        if (indexData != null) {
+          transaction.files.push(
+            await stageRawFile(
+              root,
+              staged,
+              JOURNALS_INDEX_PATH,
+              await newDeviceEncrypt(await oldDeviceDecrypt(indexData)),
+            ),
+          );
+        }
+        // This raw marker is staged with every ciphertext. It becomes visible
+        // only at the same durable commit point, and contains no key material.
+        transaction.files.push(
+          await stageRawFile(root, staged + 1, DEVICE_KEY_ROTATION_COMPLETE_PATH, 'complete'),
+        );
+        await writeTransactionMarker(root, transaction);
+        transaction.phase = 'committing';
+        await writeTransactionMarker(root, transaction);
+        await applyStorageTransaction(transaction);
+        await idbDeletePrefix(`${root}/`);
+      } catch (error) {
+        if (transaction.phase === 'prepared') await idbDeletePrefix(`${root}/`);
+        throw error;
       }
     },
   };
+  return serializeDeviceKeyWrites(store);
 }

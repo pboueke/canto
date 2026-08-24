@@ -17,7 +17,7 @@ import { SyncModal } from '@/components/journal/SyncModal';
 import { FloatingActionButton } from '@/components/common/FloatingActionButton';
 import { useGoogleAuth } from '@/contexts/GoogleAuthContext';
 import { useSyncManager, useSyncState } from '@/contexts/SyncManagerContext';
-import { pageToPreview } from 'canto-data';
+import { pageToListPreview } from '@/lib/pagePreview';
 import { type ThemeName, themes } from '@/styles/themes';
 import { useFontPrefs } from '@/contexts/FontPrefsContext';
 import { applyFontPrefs } from '@/lib/font';
@@ -56,27 +56,16 @@ export default function JournalScreen() {
 
   const lastSyncedModified = useRef<number | null>(null);
 
-  useFocusEffect(
-    useCallback(() => {
-      refresh();
-      if (!journal?.settings.autoSync || !journal.settings.remoteSync || !isSignedIn) return;
-
-      const latestModified = journal.pages.reduce((max, p) => Math.max(max, p.modified), 0);
-      if (lastSyncedModified.current === null || latestModified > lastSyncedModified.current) {
-        lastSyncedModified.current = latestModified;
-        syncJournal(journal.id, derivedKey ?? undefined);
-      }
-    }, [
-      refresh,
-      journal?.settings.autoSync,
-      journal?.settings.remoteSync,
-      isSignedIn,
-      journal?.id,
-      journal?.pages,
-      derivedKey,
-      syncJournal,
-    ]),
-  );
+  // A visible chunked source is never used for a list thumbnail. Sync is held
+  // until every eligible initial thumbnail has actually entered its loader.
+  const thumbnailStarts = useRef(new Set<string>());
+  const [thumbnailStartVersion, setThumbnailStartVersion] = useState(0);
+  const onThumbnailLoadStart = useCallback((pageId: string) => {
+    if (!thumbnailStarts.current.has(pageId)) {
+      thumbnailStarts.current.add(pageId);
+      setThumbnailStartVersion((version) => version + 1);
+    }
+  }, []);
 
   useEffect(() => {
     if (journal && journal.salt && !journal.secure && !getKey(journal.id)) {
@@ -110,7 +99,7 @@ export default function JournalScreen() {
         }
         return 0;
       })
-      .map(pageToPreview);
+      .map(pageToListPreview);
     return sorted;
   }, [journal]);
 
@@ -145,7 +134,47 @@ export default function JournalScreen() {
     clearFilters,
   } = useFilter(pages, initialFilter);
 
-  const { visiblePages, loadMore, hasMore } = usePagination(filteredPages, 15);
+  const { visiblePages, loadMore, hasMore } = usePagination(filteredPages, 15, (page) => page.id);
+  const initialThumbnailIds = useMemo(
+    () =>
+      visiblePages
+        .filter(
+          (page) =>
+            !page.thumbnail &&
+            !!page.firstImage &&
+            !page.firstImageChunked &&
+            (journal?.settings.previewThumbnail ?? true),
+        )
+        .map((page) => page.id),
+    [visiblePages, journal?.settings.previewThumbnail],
+  );
+
+  useFocusEffect(
+    useCallback(() => {
+      refresh();
+      if (!journal?.settings.autoSync || !journal.settings.remoteSync || !isSignedIn) return;
+      // Do not race a queued InteractionManager callback. Every initially
+      // visible legacy thumbnail has called into its actual loader first.
+      if (!initialThumbnailIds.every((pageId) => thumbnailStarts.current.has(pageId))) return;
+
+      const latestModified = journal.pages.reduce((max, page) => Math.max(max, page.modified), 0);
+      if (lastSyncedModified.current === latestModified) return;
+      lastSyncedModified.current = latestModified;
+      void syncJournal(journal.id, derivedKey ?? undefined);
+    }, [
+      refresh,
+      journal?.settings.autoSync,
+      journal?.settings.remoteSync,
+      journal?.settings.previewThumbnail,
+      journal?.id,
+      journal?.pages,
+      isSignedIn,
+      initialThumbnailIds,
+      thumbnailStartVersion,
+      derivedKey,
+      syncJournal,
+    ]),
+  );
 
   const themeContextValue = useMemo(
     () => ({ theme, setThemeName, isDark }),
@@ -246,6 +275,7 @@ export default function JournalScreen() {
         ) : (
           <FlatList
             data={visiblePages}
+            initialNumToRender={visiblePages.length}
             keyExtractor={(item) => item.id}
             contentContainerStyle={styles.list}
             onEndReached={loadMore}
@@ -260,7 +290,12 @@ export default function JournalScreen() {
               ) : null
             }
             renderItem={({ item }) => (
-              <PageListItem page={item} journalId={journal.id} settings={journal.settings} />
+              <PageListItem
+                page={item}
+                journalId={journal.id}
+                settings={journal.settings}
+                onThumbnailLoadStart={onThumbnailLoadStart}
+              />
             )}
           />
         )}

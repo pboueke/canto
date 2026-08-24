@@ -29,6 +29,7 @@ import { ThemePickerModal } from '@/components/home/ThemePickerModal';
 import { ConfirmDeleteModal } from './ConfirmDeleteModal';
 import { ChangePasswordModal } from './ChangePasswordModal';
 import { isBiometricAvailable } from '@/lib/biometric';
+import type { ReencryptionResult } from '@/lib/storage/types';
 import { type ThemeName, themes } from '@/styles/themes';
 import type { JournalContent, JournalSettings as JournalSettingsType } from 'canto-data';
 import { webModalContent } from '@/styles/web';
@@ -66,6 +67,7 @@ export function JournalSettings({
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [passwordProgress, setPasswordProgress] = useState('');
   const [passwordError, setPasswordError] = useState('');
+  const [passwordResult, setPasswordResult] = useState<ReencryptionResult | null>(null);
   const [saving, setSaving] = useState(false);
   const [biometricSupported, setBiometricSupported] = useState(false);
   const [showThemePicker, setShowThemePicker] = useState(false);
@@ -160,6 +162,7 @@ export function JournalSettings({
   const handleChangePassword = useCallback(
     async (currentPwd: string | undefined, newPwd: string | undefined, kdfIterations?: number) => {
       setPasswordError('');
+      setPasswordResult(null);
       setPasswordProgress(t.journalSettings.reencrypting);
 
       const encryption = getEncryptionService();
@@ -205,9 +208,10 @@ export function JournalSettings({
         settings: { ...journal.settings },
       };
 
-      // Step 4: Atomic re-encryption with progress
+      // Step 4: Re-encrypt with progress
+      let result: ReencryptionResult;
       try {
-        await store.reencryptJournal(
+        result = await store.reencryptJournal(
           updatedJournal,
           derivedKey ?? undefined,
           newKey,
@@ -240,7 +244,8 @@ export function JournalSettings({
 
       setPasswordProgress('');
       onJournalChanged();
-      setShowPasswordModal(false);
+      setPasswordResult(result);
+      return result;
     },
     [journal, derivedKey, deriveAndCache, setKey, clearKey, onJournalChanged, t],
   );
@@ -687,9 +692,11 @@ export function JournalSettings({
           setShowPasswordModal(false);
           setPasswordError('');
           setPasswordProgress('');
+          setPasswordResult(null);
         }}
         progress={passwordProgress}
         error={passwordError}
+        result={passwordResult}
       />
 
       <ThemePickerModal

@@ -20,6 +20,7 @@ function hexToBytes(hex: string): Uint8Array {
 }
 
 const DEVICE_KEY_ALIAS = 'canto_device_encryption_key';
+const PREVIOUS_DEVICE_KEY_ALIAS = 'canto_device_encryption_previous_key';
 
 if (typeof window !== 'undefined') {
   console.warn(
@@ -58,9 +59,49 @@ export async function prepareKeyRotation(): Promise<{ oldKey: Uint8Array; newKey
   return { oldKey, newKey };
 }
 
-/** Persist the new device key after re-encryption succeeds. */
+/** Persist a fallback key before the staged storage transaction can commit. Call abortKeyRotation if staging fails. */
+export async function beginKeyRotation(oldKey: Uint8Array, newKey: Uint8Array): Promise<void> {
+  localStorage.setItem(PREVIOUS_DEVICE_KEY_ALIAS, bytesToHex(oldKey));
+  localStorage.setItem(DEVICE_KEY_ALIAS, bytesToHex(newKey));
+  keyCreationPromise = null;
+}
+
+/** Restore the old key when data staging did not reach its durable commit point. */
+export async function abortKeyRotation(): Promise<void> {
+  const previous = localStorage.getItem(PREVIOUS_DEVICE_KEY_ALIAS);
+  if (previous) localStorage.setItem(DEVICE_KEY_ALIAS, previous);
+  localStorage.removeItem(PREVIOUS_DEVICE_KEY_ALIAS);
+  keyCreationPromise = null;
+}
+
+/**
+ * Resolve a restart between beginKeyRotation and the storage commit marker.
+ * Without the marker, restore the prior key before a retry can overwrite the
+ * only key that decrypts the old committed data.
+ */
+export async function recoverKeyRotation(completed: boolean): Promise<void> {
+  const previous = localStorage.getItem(PREVIOUS_DEVICE_KEY_ALIAS);
+  if (!previous) return;
+  if (completed) {
+    await finalizeCompletedKeyRotation();
+  } else {
+    await abortKeyRotation();
+  }
+}
+
+/** Finalize a completed data transaction and discard the fallback key. */
 export async function commitKeyRotation(newKey: Uint8Array): Promise<void> {
   localStorage.setItem(DEVICE_KEY_ALIAS, bytesToHex(newKey));
+  await finalizeCompletedKeyRotation();
+}
+
+/**
+ * Discard a fallback key only after LocalStore has durably proved that its
+ * device-data transaction committed. This is idempotent so startup recovery
+ * can safely retry across a crash between key finalization and marker cleanup.
+ */
+export async function finalizeCompletedKeyRotation(): Promise<void> {
+  localStorage.removeItem(PREVIOUS_DEVICE_KEY_ALIAS);
   keyCreationPromise = null;
 }
 
@@ -87,7 +128,13 @@ export function createDeviceEncryption(): EncryptionProvider {
 
     async decrypt(ciphertext: string): Promise<string> {
       const key = await getKey();
-      return await aesGcmDecrypt(ciphertext, key);
+      try {
+        return await aesGcmDecrypt(ciphertext, key);
+      } catch (error) {
+        const previous = localStorage.getItem(PREVIOUS_DEVICE_KEY_ALIAS);
+        if (!previous) throw error;
+        return await aesGcmDecrypt(ciphertext, hexToBytes(previous));
+      }
     },
 
     clearKey(): void {

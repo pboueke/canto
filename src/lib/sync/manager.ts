@@ -1,5 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { SyncEngine } from './engine';
+import { SyncEngine, isSyncCancelledError, SyncCancelledError } from './engine';
 import type { LocalStore } from '@/lib/storage/types';
 import type { RemoteStore, SyncResult } from './types';
 import { deriveKey, DEFAULT_KDF_ITERATIONS } from '@/lib/encryption/password';
@@ -27,6 +27,7 @@ export class SyncManager {
   private states = new Map<string, SyncState>();
   private locks = new Set<string>();
   private debounceTimers = new Map<string, ReturnType<typeof setTimeout>>();
+  private abortControllers = new Map<string, AbortController>();
   private listeners = new Set<() => void>();
 
   constructor(
@@ -60,6 +61,32 @@ export class SyncManager {
     await this.store.disconnect();
   }
 
+  /** Cancel a running or pending sync without altering its remote backup. */
+  cancelSync(journalId: string): void {
+    this.abortControllers.get(journalId)?.abort();
+
+    const timer = this.debounceTimers.get(journalId);
+    if (timer) {
+      clearTimeout(timer);
+      this.debounceTimers.delete(journalId);
+    }
+
+    const state = this.getState(journalId);
+    if (state.status === 'syncing') {
+      this.setState(journalId, { status: 'idle', lastSynced: state.lastSynced });
+    }
+  }
+
+  /** Cancel every active sync before the owning app context is torn down. */
+  dispose(): void {
+    for (const journalId of new Set([
+      ...this.abortControllers.keys(),
+      ...this.debounceTimers.keys(),
+    ])) {
+      this.cancelSync(journalId);
+    }
+  }
+
   /**
    * Record the remote registry salt for a journal — used by cloud import to seed
    * the lastKnownRemoteSalt so the next sync correctly identifies that local
@@ -75,16 +102,29 @@ export class SyncManager {
    * salt/timestamp data.
    */
   async forgetJournal(journalId: string): Promise<void> {
+    this.cancelSync(journalId);
     await AsyncStorage.removeItem(LAST_SYNC_PREFIX + journalId);
     await AsyncStorage.removeItem(LAST_REMOTE_SALT_PREFIX + journalId);
     this.states.delete(journalId);
-    this.locks.delete(journalId);
-    const timer = this.debounceTimers.get(journalId);
-    if (timer) {
-      clearTimeout(timer);
-      this.debounceTimers.delete(journalId);
-    }
     this.notify();
+  }
+
+  /** Restore the prior value if cancellation wins while AsyncStorage is writing. */
+  private async persistForRun(
+    key: string,
+    value: string,
+    controller: AbortController,
+    isCurrentRun: () => boolean,
+  ): Promise<void> {
+    if (controller.signal.aborted || !isCurrentRun()) throw new SyncCancelledError();
+    const previous = await AsyncStorage.getItem(key);
+    if (controller.signal.aborted || !isCurrentRun()) throw new SyncCancelledError();
+    await AsyncStorage.setItem(key, value);
+    if (controller.signal.aborted || !isCurrentRun()) {
+      if (previous == null) await AsyncStorage.removeItem(key);
+      else await AsyncStorage.setItem(key, previous);
+      throw new SyncCancelledError();
+    }
   }
 
   async syncJournal(
@@ -94,20 +134,37 @@ export class SyncManager {
   ): Promise<SyncResult | null> {
     if (this.locks.has(journalId)) return null;
     this.locks.add(journalId);
+    const controller = new AbortController();
+    this.abortControllers.set(journalId, controller);
+    const throwIfCancelled = () => {
+      if (controller.signal.aborted) throw new SyncCancelledError();
+    };
+    const isCurrentRun = () => this.abortControllers.get(journalId) === controller;
 
     // Load last sync time
     const lastSyncStr = await AsyncStorage.getItem(LAST_SYNC_PREFIX + journalId);
+    if (controller.signal.aborted) {
+      this.abortControllers.delete(journalId);
+      this.locks.delete(journalId);
+      return null;
+    }
     const lastSynced = lastSyncStr ? parseInt(lastSyncStr, 10) : null;
 
     // Load last-known remote salt — used by engine to disambiguate "I changed
     // password locally" (push) from "another device changed password" (abort).
     const previousRemoteSalt =
       (await AsyncStorage.getItem(LAST_REMOTE_SALT_PREFIX + journalId)) ?? undefined;
+    if (controller.signal.aborted) {
+      this.abortControllers.delete(journalId);
+      this.locks.delete(journalId);
+      return null;
+    }
 
     this.setState(journalId, { status: 'syncing', lastSynced });
 
     try {
       await this.connectWithToken(accessToken);
+      throwIfCancelled();
       const engine = new SyncEngine(this.local, this.store);
 
       // Ensure we always have a sync key. For password-protected journals the
@@ -117,6 +174,7 @@ export class SyncManager {
       let syncKey = derivedKey;
       if (!syncKey) {
         const journals = await this.local.listJournals();
+        throwIfCancelled();
         const journal = journals.find((j) => j.id === journalId);
         if (journal?.salt) {
           const saltBytes = base64ToUint8(journal.salt);
@@ -130,36 +188,53 @@ export class SyncManager {
         journalId,
         syncKey,
         (current, total) => {
-          this.setState(journalId, {
-            status: 'syncing',
-            lastSynced,
-            progress: { current, total },
-          });
+          if (!controller.signal.aborted && isCurrentRun()) {
+            this.setState(journalId, {
+              status: 'syncing',
+              lastSynced,
+              progress: { current, total },
+            });
+          }
         },
         previousRemoteSalt,
+        controller.signal,
       );
+      throwIfCancelled();
 
       // After a successful sync, record the remote salt for future sync comparisons.
       // We re-fetch the registry to get the current state (which may have just been
       // updated by our sync if a key rotation happened).
       try {
         const remoteJournals = await this.store.listRemoteJournals();
+        throwIfCancelled();
         const updatedRemote = remoteJournals.find((j) => j.id === journalId);
         if (updatedRemote?.salt) {
-          await AsyncStorage.setItem(LAST_REMOTE_SALT_PREFIX + journalId, updatedRemote.salt);
+          await this.persistForRun(
+            LAST_REMOTE_SALT_PREFIX + journalId,
+            updatedRemote.salt,
+            controller,
+            isCurrentRun,
+          );
         }
       } catch (err) {
+        if (isSyncCancelledError(err)) throw err;
         // Non-fatal: missing salt record means next sync defaults to "no history" mode.
         // Log so it's visible in Sentry/console when debugging unexpected sync behavior.
         console.warn(`[Canto] Failed to record remote salt for ${journalId}:`, err);
       }
 
       const now = Date.now();
-      await AsyncStorage.setItem(LAST_SYNC_PREFIX + journalId, String(now));
-      this.setState(journalId, { status: 'idle', lastSynced: now });
+      await this.persistForRun(LAST_SYNC_PREFIX + journalId, String(now), controller, isCurrentRun);
+      if (isCurrentRun()) {
+        this.setState(journalId, { status: 'idle', lastSynced: now });
+      }
 
       return result;
     } catch (err) {
+      if (isSyncCancelledError(err) || controller.signal.aborted || !isCurrentRun()) {
+        return null;
+      }
+
       const message = err instanceof Error ? err.message : String(err);
       const stack = err instanceof Error ? err.stack : undefined;
       console.error(`[Canto] Sync failed for ${journalId}:`, err);
@@ -171,6 +246,7 @@ export class SyncManager {
       });
       return null;
     } finally {
+      if (isCurrentRun()) this.abortControllers.delete(journalId);
       this.locks.delete(journalId);
     }
   }

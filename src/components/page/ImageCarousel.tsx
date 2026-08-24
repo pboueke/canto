@@ -16,6 +16,7 @@ import { useTheme } from '@/hooks/useTheme';
 import { useI18n } from '@/hooks/useI18n';
 import { useImageQueue } from '@/hooks/useImageQueue';
 import type { Attachment } from 'canto-data';
+import { canGenerateThumbnailFromAttachment } from '@/lib/pagePreview';
 
 const HORIZONTAL_PADDING = 10;
 const IMAGE_HEIGHT = 250;
@@ -29,6 +30,8 @@ interface ImageCarouselProps {
   onMoveLeft?: (id: string) => void;
   onMoveRight?: (id: string) => void;
   onDownload?: (image: Attachment) => void;
+  /** Persisted small preview for the first image; never a reconstructed original. */
+  thumbnail?: string;
   loadImage: (path: string) => Promise<string | null>;
 }
 
@@ -40,6 +43,7 @@ export function ImageCarousel({
   onMoveLeft,
   onMoveRight,
   onDownload,
+  thumbnail,
   loadImage,
 }: ImageCarouselProps) {
   const { theme } = useTheme();
@@ -61,9 +65,12 @@ export function ImageCarousel({
   const activeImagesKey = activeImages.map((img) => img.id).join(',');
 
   useEffect(() => {
-    enqueue(activeImages);
+    // Automatic carousel work follows the list-preview memory contract:
+    // only a declared, bounded legacy value may be reconstructed. Chunked,
+    // unknown-size, and large legacy images require an explicit tap.
+    enqueue(activeImages.filter(canGenerateThumbnailFromAttachment));
     return () => cancelAll();
-  }, [activeImagesKey]);
+  }, [activeImagesKey, enqueue, cancelAll]);
 
   if (activeImages.length === 0) return null;
 
@@ -106,6 +113,10 @@ export function ImageCarousel({
         }}
         renderItem={({ item, index }) => {
           const imageUri = loadedImages[item.id];
+          const previewUri =
+            !imageUri && index === 0 && thumbnail
+              ? `data:image/jpeg;base64,${thumbnail}`
+              : undefined;
           const isLoading = loadingImages[item.id];
 
           return (
@@ -115,19 +126,41 @@ export function ImageCarousel({
                 .replace('{n}', String(index + 1))
                 .replace('{m}', String(activeImages.length))}
             >
-              {imageUri ? (
+              {imageUri || previewUri ? (
                 <Pressable
                   onPress={() => {
                     setCurrentIndex(index);
-                    setViewerVisible(true);
+                    if (imageUri) {
+                      setViewerVisible(true);
+                    } else {
+                      // A persisted thumbnail is intentionally not passed to the
+                      // full viewer. Opening the original is explicit user work.
+                      enqueue([item]);
+                    }
                   }}
-                  accessibilityRole="image"
+                  accessibilityRole={imageUri ? 'image' : 'button'}
+                  testID={`carousel-image-${item.id}`}
                 >
                   <Image
-                    source={{ uri: imageUri }}
+                    source={{ uri: imageUri ?? previewUri! }}
                     style={[styles.image, { backgroundColor: theme.colors.surface }]}
                     resizeMode="contain"
                   />
+                </Pressable>
+              ) : !canGenerateThumbnailFromAttachment(item) ? (
+                <Pressable
+                  onPress={() => enqueue([item])}
+                  accessibilityLabel={t.a11y.imageNofM
+                    .replace('{n}', String(index + 1))
+                    .replace('{m}', String(activeImages.length))}
+                  accessibilityRole="button"
+                  style={[styles.imagePlaceholder, { backgroundColor: theme.colors.surface }]}
+                >
+                  {isLoading ? (
+                    <ActivityIndicator size="large" color={theme.colors.primary} />
+                  ) : (
+                    <Feather name="image" size={40} color={theme.colors.textSecondary} />
+                  )}
                 </Pressable>
               ) : (
                 <View style={[styles.imagePlaceholder, { backgroundColor: theme.colors.surface }]}>

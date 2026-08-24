@@ -8,6 +8,7 @@ import { useSyncManager, useSyncState } from '@/contexts/SyncManagerContext';
 import { useSaveJournal } from '@/hooks/useStorage';
 import type { JournalContent, JournalSettings } from 'canto-data';
 import { webModalContent } from '@/styles/web';
+import { formatSyncWarning } from '@/lib/sync/warnings';
 
 interface SyncModalProps {
   visible: boolean;
@@ -56,15 +57,28 @@ export function SyncModal({
   onJournalChanged,
 }: SyncModalProps) {
   const { theme } = useTheme();
-  const { t } = useI18n();
+  const { t, lang } = useI18n();
   const { isSignedIn, signIn } = useGoogleAuth();
-  const { syncJournal } = useSyncManager();
+  const { syncJournal, cancelSync, getSyncState } = useSyncManager();
   const syncState = useSyncState(journal.id);
   const { saveJournal } = useSaveJournal();
 
   const [feedback, setFeedback] = useState<string | null>(null);
 
   const isSyncEnabled = journal.settings.syncProvider === 'gdrive';
+  const formatWarnings = useCallback(
+    (warnings: { name: string; size?: number; reason: string }[]) =>
+      warnings
+        .map((warning) =>
+          formatSyncWarning(warning, lang, {
+            legacyAttachmentTooLarge: t.sync.syncDeferredAttachments,
+            chunkGenerationMissing: t.sync.syncDeferredChunkGeneration,
+            attachmentNotFound: t.sync.syncDeferredAttachmentNotFound,
+          }),
+        )
+        .join('\n'),
+    [lang, t],
+  );
 
   const updateSettings = useCallback(
     async (patch: Partial<JournalSettings>) => {
@@ -86,23 +100,42 @@ export function SyncModal({
     });
     setFeedback(t.sync.syncing);
     const result = await syncJournal(journal.id, derivedKey ?? undefined);
-    setFeedback(result ? t.sync.syncComplete : t.sync.syncError);
-  }, [updateSettings, syncJournal, journal.id, derivedKey, t]);
+    setFeedback(
+      result
+        ? result.warnings.length > 0
+          ? formatWarnings(result.warnings)
+          : t.sync.syncComplete
+        : getSyncState(journal.id).status === 'error'
+          ? t.sync.syncError
+          : null,
+    );
+  }, [updateSettings, syncJournal, getSyncState, journal.id, derivedKey, t, formatWarnings]);
 
   const handleDisableSync = useCallback(async () => {
+    // Invalidate the active run before changing settings so it cannot write a
+    // stale success state or continue uploading after the user disables sync.
+    cancelSync(journal.id);
     await updateSettings({
       syncProvider: undefined,
       remoteSync: false,
       autoSync: false,
     });
     setFeedback(null);
-  }, [updateSettings]);
+  }, [cancelSync, journal.id, updateSettings]);
 
   const handleSyncNow = useCallback(async () => {
     setFeedback(t.sync.syncing);
     const result = await syncJournal(journal.id, derivedKey ?? undefined);
-    setFeedback(result ? t.sync.syncComplete : t.sync.syncError);
-  }, [syncJournal, journal.id, derivedKey, t]);
+    setFeedback(
+      result
+        ? result.warnings.length > 0
+          ? formatWarnings(result.warnings)
+          : t.sync.syncComplete
+        : getSyncState(journal.id).status === 'error'
+          ? t.sync.syncError
+          : null,
+    );
+  }, [syncJournal, getSyncState, journal.id, derivedKey, t, formatWarnings]);
 
   const handleAutoSyncToggle = useCallback(
     (val: boolean) => updateSettings({ autoSync: val }),

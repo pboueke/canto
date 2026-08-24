@@ -1,5 +1,6 @@
 import { renderHook, act, waitFor } from '@testing-library/react-native';
 import type { JournalContent, Page, Journal } from 'canto-data';
+import type { LocalStore } from '@/lib/storage';
 import { DEFAULT_JOURNAL_SETTINGS } from 'canto-data';
 
 // ---------------------------------------------------------------------------
@@ -53,6 +54,7 @@ import {
   getEncryptionService,
   getLocalStore,
   tryLoadJournal,
+  finalizeCompletedDeviceKeyRotationIfReady,
 } from '../useStorage';
 
 beforeEach(() => {
@@ -112,6 +114,30 @@ describe('getLocalStore', () => {
     const store = await getLocalStore();
     expect(mockStore.initialize).toHaveBeenCalled();
     expect(store).toBe(mockStore);
+  });
+});
+
+describe('finalizeCompletedDeviceKeyRotationIfReady', () => {
+  it('keeps the previous key when LocalStore has not durably committed data', async () => {
+    const store = {
+      hasCompletedDeviceKeyRotation: jest.fn().mockResolvedValue(false),
+      clearCompletedDeviceKeyRotation: jest.fn(),
+    } as unknown as LocalStore;
+
+    await finalizeCompletedDeviceKeyRotationIfReady(store);
+
+    expect(store.clearCompletedDeviceKeyRotation).not.toHaveBeenCalled();
+  });
+
+  it('clears the durable completion proof only after finalizing the key', async () => {
+    const store = {
+      hasCompletedDeviceKeyRotation: jest.fn().mockResolvedValue(true),
+      clearCompletedDeviceKeyRotation: jest.fn().mockResolvedValue(undefined),
+    } as unknown as LocalStore;
+
+    await finalizeCompletedDeviceKeyRotationIfReady(store);
+
+    expect(store.clearCompletedDeviceKeyRotation).toHaveBeenCalledTimes(1);
   });
 });
 

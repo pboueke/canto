@@ -1,14 +1,19 @@
 import React from 'react';
 import { render, fireEvent } from '@testing-library/react-native';
+import { Image } from 'react-native';
 import { ImageCarousel } from '../ImageCarousel';
 import type { Attachment } from 'canto-data';
 
+const mockEnqueue = jest.fn();
+const mockCancelAll = jest.fn();
+let mockLoadedImages: Record<string, string> = { 'img-1': 'data:image/jpeg;base64,abc' };
+
 jest.mock('@/hooks/useImageQueue', () => ({
   useImageQueue: () => ({
-    loadedImages: { 'img-1': 'data:image/jpeg;base64,abc' },
+    loadedImages: mockLoadedImages,
     loadingImages: {},
-    enqueue: jest.fn(),
-    cancelAll: jest.fn(),
+    enqueue: mockEnqueue,
+    cancelAll: mockCancelAll,
   }),
 }));
 
@@ -60,6 +65,7 @@ const makeImage = (id: string): Attachment => ({
   path: `/images/${id}.jpg`,
   name: `${id}.jpg`,
   type: 'image',
+  size: 512 * 1024,
   encrypted: false,
   deleted: false,
 });
@@ -71,6 +77,83 @@ const defaultProps = {
 };
 
 describe('ImageCarousel', () => {
+  beforeEach(() => {
+    mockLoadedImages = { 'img-1': 'data:image/jpeg;base64,abc' };
+    mockEnqueue.mockClear();
+    mockCancelAll.mockClear();
+  });
+
+  it('does not automatically queue chunked originals', () => {
+    const image = {
+      ...makeImage('chunked-image'),
+      content: {
+        format: 'canto-chunked-v1' as const,
+        byteLength: 1,
+        chunkSize: 512 * 1024,
+        chunkCount: 1,
+        generation: 'generation-1',
+      },
+    };
+
+    const { getAllByLabelText } = render(<ImageCarousel {...defaultProps} images={[image]} />);
+
+    expect(mockEnqueue).toHaveBeenCalledWith([]);
+    const chunkedPlaceholder = getAllByLabelText('Image 1 of 1').find(
+      (node) => node.props.accessibilityRole === 'button',
+    );
+    expect(chunkedPlaceholder).toBeDefined();
+    fireEvent.press(chunkedPlaceholder!);
+    expect(mockEnqueue).toHaveBeenLastCalledWith([image]);
+  });
+
+  it('renders a persisted import thumbnail for a chunked original without loading it', () => {
+    const image = {
+      ...makeImage('chunked-preview'),
+      content: {
+        format: 'canto-chunked-v1' as const,
+        byteLength: 1,
+        chunkSize: 512 * 1024,
+        chunkCount: 1,
+        generation: 'generation-1',
+      },
+    };
+    mockLoadedImages = {};
+
+    const { UNSAFE_getAllByType, getByTestId } = render(
+      <ImageCarousel {...defaultProps} images={[image]} thumbnail="dGh1bWJuYWls" />,
+    );
+
+    expect(mockEnqueue).toHaveBeenCalledWith([]);
+    expect(UNSAFE_getAllByType(Image)).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          props: expect.objectContaining({
+            source: { uri: 'data:image/jpeg;base64,dGh1bWJuYWls' },
+          }),
+        }),
+      ]),
+    );
+    fireEvent.press(getByTestId('carousel-image-chunked-preview'));
+    expect(mockEnqueue).toHaveBeenLastCalledWith([image]);
+  });
+
+  it('does not automatically queue unknown or oversized legacy originals and lets the user tap to load', () => {
+    const unknown = { ...makeImage('unknown'), size: undefined };
+    const large = { ...makeImage('large'), size: 512 * 1024 + 1 };
+
+    const { getAllByLabelText } = render(
+      <ImageCarousel {...defaultProps} images={[unknown, large]} />,
+    );
+
+    expect(mockEnqueue).toHaveBeenCalledWith([]);
+    const placeholders = getAllByLabelText(/Image \d+ of 2/).filter(
+      (node) => node.props.accessibilityRole === 'button',
+    );
+    expect(placeholders).toHaveLength(2);
+    fireEvent.press(placeholders[0]);
+    expect(mockEnqueue).toHaveBeenLastCalledWith([unknown]);
+  });
+
   it('renders download button when not editing and onDownload is provided', () => {
     const onDownload = jest.fn();
     const { getByLabelText } = render(<ImageCarousel {...defaultProps} onDownload={onDownload} />);

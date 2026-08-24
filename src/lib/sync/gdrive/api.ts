@@ -25,18 +25,34 @@ function authHeaders(accessToken: string): HeadersInit {
   return { Authorization: `Bearer ${accessToken}` };
 }
 
-/** Retry a fetch once on transient (5xx / network) errors. */
+function abortableDelay(ms: number, signal?: AbortSignal): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const timeout = setTimeout(resolve, ms);
+    signal?.addEventListener(
+      'abort',
+      () => {
+        clearTimeout(timeout);
+        reject(new DOMException('Sync cancelled', 'AbortError'));
+      },
+      { once: true },
+    );
+  });
+}
+
+/** Retry a fetch once on transient errors while retaining cancellation. */
 async function fetchWithRetry(input: string, init?: RequestInit): Promise<Response> {
+  const signal = init?.signal ?? undefined;
   try {
     const res = await fetch(input, init);
-    if (res.status >= 500) {
-      await new Promise((r) => setTimeout(r, 1000));
+    if (res.status >= 500 || res.status === 408 || res.status === 429) {
+      const retryAfter = Number(res.headers.get('Retry-After'));
+      await abortableDelay(Number.isFinite(retryAfter) ? retryAfter * 1000 : 1000, signal);
       return fetch(input, init);
     }
     return res;
-  } catch {
-    // Network error — retry once
-    await new Promise((r) => setTimeout(r, 1000));
+  } catch (error) {
+    if (signal?.aborted) throw error;
+    await abortableDelay(1000, signal);
     return fetch(input, init);
   }
 }
@@ -80,9 +96,14 @@ export async function getFile(accessToken: string, fileId: string): Promise<Driv
   return handleResponse<DriveFile>(res);
 }
 
-export async function getFileContent(accessToken: string, fileId: string): Promise<string> {
+export async function getFileContent(
+  accessToken: string,
+  fileId: string,
+  signal?: AbortSignal,
+): Promise<string> {
   const res = await fetchWithRetry(`${DRIVE_API}/files/${fileId}?alt=media`, {
     headers: authHeaders(accessToken),
+    signal,
   });
   if (!res.ok) {
     throw new Error(`Drive API error (${res.status})`);
@@ -95,6 +116,7 @@ export async function createFile(
   metadata: FileMetadata,
   content: string,
   spaces = 'drive',
+  signal?: AbortSignal,
 ): Promise<DriveFile> {
   const boundary = generateBoundary();
   const body = [
@@ -119,6 +141,7 @@ export async function createFile(
       'Content-Type': `multipart/related; boundary=${boundary}`,
     },
     body,
+    signal,
   });
   return handleResponse<DriveFile>(res);
 }
@@ -128,6 +151,7 @@ export async function updateFile(
   fileId: string,
   metadata: Partial<FileMetadata>,
   content: string,
+  signal?: AbortSignal,
 ): Promise<DriveFile> {
   const boundary = generateBoundary();
   const body = [
@@ -149,6 +173,7 @@ export async function updateFile(
       'Content-Type': `multipart/related; boundary=${boundary}`,
     },
     body,
+    signal,
   });
   return handleResponse<DriveFile>(res);
 }

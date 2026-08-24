@@ -34,6 +34,7 @@ const makeAttachment = (id: string, path: string, deleted = false): Attachment =
   name: `${id}.png`,
   type: 'image',
   encrypted: false,
+  size: 16,
   deleted,
 });
 
@@ -78,6 +79,7 @@ function createMockLocalStore(journal: JournalContent | null): LocalStore {
         Promise.resolve(`/local/${att.name}`),
       ),
     getAttachment: jest.fn().mockResolvedValue('base64data'),
+    getAttachmentStorageSize: jest.fn().mockResolvedValue({ status: 'known', bytes: 6 }),
     deleteAttachment: jest.fn(),
     reencryptJournal: jest.fn(),
     reencryptAll: jest.fn(),

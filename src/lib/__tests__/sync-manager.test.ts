@@ -101,6 +101,7 @@ function createMockLocalStore(journal: JournalContent | null): LocalStore {
     deletePage: jest.fn(),
     saveAttachment: jest.fn(),
     getAttachment: jest.fn(),
+    getAttachmentStorageSize: jest.fn().mockResolvedValue({ status: 'known', bytes: 6 }),
     deleteAttachment: jest.fn(),
     reencryptJournal: jest.fn(),
     reencryptAll: jest.fn(),
@@ -252,6 +253,44 @@ describe('SyncManager', () => {
 
       expect(r1).not.toBeNull();
       expect(r2).not.toBeNull();
+    });
+
+    it('cancels an in-flight attachment upload without recording a successful sync', async () => {
+      const attachment = {
+        id: 'video',
+        path: '/local/large-video.mp4',
+        name: 'large-video.mp4',
+        type: 'file' as const,
+        encrypted: false,
+        deleted: false,
+      };
+      const journal = makeJournal([{ ...makePage('p1', 1000), files: [attachment] }]);
+      const local = createMockLocalStore(journal);
+      const remote = createMockRemoteStore();
+      const manager = new SyncManager(local, remote);
+      let releaseRead!: (data: string) => void;
+      let markReadStarted!: () => void;
+      const readStarted = new Promise<void>((resolve) => {
+        markReadStarted = resolve;
+      });
+      (local.getAttachment as jest.Mock).mockImplementation(
+        () =>
+          new Promise<string>((resolve) => {
+            releaseRead = resolve;
+            markReadStarted();
+          }),
+      );
+
+      const sync = manager.syncJournal('j1', 'token');
+      await readStarted;
+      manager.cancelSync('j1');
+      releaseRead('base64-video-data');
+
+      await expect(sync).resolves.toBeNull();
+      expect(remote.uploadAttachment).not.toHaveBeenCalled();
+      expect(remote.uploadPage).not.toHaveBeenCalled();
+      expect(manager.getState('j1')).toEqual({ status: 'idle', lastSynced: null });
+      expect(asyncStore['canto:lastSync:j1']).toBeUndefined();
     });
   });
 
@@ -590,8 +629,8 @@ describe('SyncManager', () => {
       await new Promise((r) => setTimeout(r, 50));
       jest.useFakeTimers();
 
-      // getJournal called twice per sync: once by engine for content, once for sync index update
-      expect(local.getJournal).toHaveBeenCalledTimes(2);
+      // The engine uses a single immutable journal snapshot for content and index.
+      expect(local.getJournal).toHaveBeenCalledTimes(1);
       // listJournals called once to resolve sync key from salt
       expect(local.listJournals).toHaveBeenCalledTimes(1);
     });

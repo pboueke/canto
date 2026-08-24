@@ -24,9 +24,14 @@ export async function aesGcmEncrypt(plaintext: string, key: Uint8Array): Promise
   if (key.length !== 32) throw new Error(`Invalid AES key: expected 32 bytes, got ${key.length}`);
   const aesKey = await AESEncryptionKey.import(key);
   const sealed = await aesEncryptAsync(textEncoder.encode(plaintext), aesKey);
-  const combined = await sealed.combined();
+  // Let the native implementation encode directly. Repeated JS string
+  // concatenation in uint8ToBase64 amplified a 32 MiB attachment to gigabytes
+  // of transient RSS on Hermes.
+  const combined = await sealed.combined('base64');
   await yieldThread();
-  return uint8ToBase64(combined);
+  // Jest's Expo adapter implements the older Uint8Array-only overload. Keep
+  // that compatibility without taking the JS encoder path on real runtimes.
+  return typeof combined === 'string' ? combined : uint8ToBase64(combined);
 }
 
 /**
@@ -35,14 +40,12 @@ export async function aesGcmEncrypt(plaintext: string, key: Uint8Array): Promise
  */
 export async function aesGcmDecrypt(ciphertext: string, key: Uint8Array): Promise<string> {
   if (key.length !== 32) throw new Error(`Invalid AES key: expected 32 bytes, got ${key.length}`);
-  await yieldThread();
-  const data = base64ToUint8(ciphertext);
-
-  if (data.length < NONCE_LENGTH + TAG_LENGTH) {
+  if (ciphertext.length < Math.ceil((NONCE_LENGTH + TAG_LENGTH) / 3) * 4) {
     throw new Error('Invalid ciphertext: too short');
   }
 
-  const sealed = AESSealedData.fromCombined(data);
+  await yieldThread();
+  const sealed = AESSealedData.fromCombined(ciphertext);
   const aesKey = await AESEncryptionKey.import(key);
   const result = await aesDecryptAsync(sealed, aesKey);
 

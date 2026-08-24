@@ -1,6 +1,10 @@
 import React from 'react';
 import { render } from '@testing-library/react-native';
 
+const mockGetKey = jest.fn();
+const mockGetAttachment = jest.fn();
+const mockEnqueueThumbnail = jest.fn();
+
 jest.mock('@expo/vector-icons', () => ({
   Feather: () => null,
 }));
@@ -35,17 +39,17 @@ jest.mock('@/hooks/useI18n', () => ({
 
 jest.mock('@/hooks/useStorage', () => ({
   useAttachment: () => ({
-    getAttachment: jest.fn().mockResolvedValue(null),
+    getAttachment: (...args: unknown[]) => mockGetAttachment(...args),
   }),
 }));
 
 jest.mock('@/hooks/useImageQueue', () => ({
-  enqueueThumbnail: jest.fn(),
+  enqueueThumbnail: (...args: unknown[]) => mockEnqueueThumbnail(...args),
 }));
 
 jest.mock('@/contexts/JournalKeyContext', () => ({
   useJournalKeys: () => ({
-    getKey: jest.fn().mockReturnValue(undefined),
+    getKey: (...args: unknown[]) => mockGetKey(...args),
   }),
 }));
 
@@ -54,9 +58,9 @@ jest.mock('react-native-safe-area-context', () => ({
 }));
 
 import { PageListItem } from '../PageListItem';
-import type { PagePreview } from 'canto-data';
+import type { ListPagePreview } from '@/lib/pagePreview';
 
-function makePagePreview(overrides?: Partial<PagePreview>): PagePreview {
+function makePagePreview(overrides?: Partial<ListPagePreview>): ListPagePreview {
   return {
     id: 'p1',
     date: '2026-03-15T14:30:00.000Z',
@@ -72,6 +76,91 @@ function makePagePreview(overrides?: Partial<PagePreview>): PagePreview {
 }
 
 describe('PageListItem', () => {
+  beforeEach(() => {
+    mockGetKey.mockReset().mockReturnValue(undefined);
+    mockGetAttachment.mockReset().mockResolvedValue(null);
+    mockEnqueueThumbnail.mockReset().mockReturnValue(jest.fn());
+  });
+
+  it('loads a password-protected thumbnail with the journal key', async () => {
+    let loadThumbnail: (() => Promise<string | null>) | undefined;
+    mockEnqueueThumbnail.mockImplementation((_id, load) => {
+      loadThumbnail = load;
+      return jest.fn();
+    });
+    mockGetAttachment.mockResolvedValue('image-data');
+    const preview = makePagePreview({
+      hasImage: true,
+      firstImage: 'canto/j1/attachments/i-image.jpg',
+      firstImageEncrypted: true,
+      firstImageSize: 1024,
+    });
+    render(<PageListItem page={preview} journalId="j1" />);
+
+    await loadThumbnail!();
+    expect(mockGetAttachment).toHaveBeenCalledWith('canto/j1/attachments/i-image.jpg', true);
+  });
+
+  it('does not enqueue a thumbnail read for an unknown-size legacy original', () => {
+    render(
+      <PageListItem
+        page={makePagePreview({
+          hasImage: true,
+          firstImage: 'canto/j1/attachments/legacy-image.jpg',
+        })}
+        journalId="j1"
+      />,
+    );
+
+    expect(mockEnqueueThumbnail).not.toHaveBeenCalled();
+  });
+
+  it('does not enqueue a thumbnail read for an oversized legacy original', () => {
+    render(
+      <PageListItem
+        page={makePagePreview({
+          hasImage: true,
+          firstImage: 'canto/j1/attachments/legacy-image.jpg',
+          firstImageSize: 512 * 1024 + 1,
+        })}
+        journalId="j1"
+      />,
+    );
+
+    expect(mockEnqueueThumbnail).not.toHaveBeenCalled();
+  });
+
+  it('does not enqueue a thumbnail read for a chunked original', () => {
+    render(
+      <PageListItem
+        page={makePagePreview({
+          hasImage: true,
+          firstImage: 'canto/j1/attachments/chunk-root',
+          firstImageChunked: true,
+        })}
+        journalId="j1"
+      />,
+    );
+
+    expect(mockEnqueueThumbnail).not.toHaveBeenCalled();
+    expect(mockGetAttachment).not.toHaveBeenCalled();
+  });
+
+  it('retries thumbnail loading after the journal key becomes available', () => {
+    const preview = makePagePreview({
+      hasImage: true,
+      firstImage: 'canto/j1/attachments/i-image.jpg',
+      firstImageSize: 1024,
+    });
+    const { rerender } = render(<PageListItem page={preview} journalId="j1" />);
+    expect(mockEnqueueThumbnail).toHaveBeenCalledTimes(1);
+
+    mockGetKey.mockReturnValue(new Uint8Array(32));
+    rerender(<PageListItem page={preview} journalId="j1" />);
+
+    expect(mockEnqueueThumbnail).toHaveBeenCalledTimes(2);
+  });
+
   it('renders date and preview text', () => {
     const page = makePagePreview();
     const { getByText } = render(<PageListItem page={page} journalId="j1" />);

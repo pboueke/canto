@@ -21,6 +21,7 @@ function hexToBytes(hex: string): Uint8Array {
 }
 
 const DEVICE_KEY_ALIAS = 'canto_device_encryption_key';
+const PREVIOUS_DEVICE_KEY_ALIAS = 'canto_device_encryption_previous_key';
 
 let keyCreationPromise: Promise<Uint8Array> | null = null;
 
@@ -52,9 +53,55 @@ export async function prepareKeyRotation(): Promise<{ oldKey: Uint8Array; newKey
   return { oldKey, newKey };
 }
 
-/** Persist the new device key after re-encryption succeeds. */
+/**
+ * Begin the durable device-key cutover before storage can publish new
+ * ciphertext. The previous key remains in SecureStore only until commit, so a
+ * restart can decrypt either side of a staged storage transaction. Call
+ * abortKeyRotation when data staging fails before its durable commit point.
+ */
+export async function beginKeyRotation(oldKey: Uint8Array, newKey: Uint8Array): Promise<void> {
+  await SecureStore.setItemAsync(PREVIOUS_DEVICE_KEY_ALIAS, bytesToHex(oldKey));
+  await SecureStore.setItemAsync(DEVICE_KEY_ALIAS, bytesToHex(newKey));
+  keyCreationPromise = null;
+}
+
+/** Restore the old key when data staging did not reach its durable commit point. */
+export async function abortKeyRotation(): Promise<void> {
+  const previous = await SecureStore.getItemAsync(PREVIOUS_DEVICE_KEY_ALIAS);
+  if (previous) await SecureStore.setItemAsync(DEVICE_KEY_ALIAS, previous);
+  await SecureStore.deleteItemAsync(PREVIOUS_DEVICE_KEY_ALIAS);
+  keyCreationPromise = null;
+}
+
+/**
+ * Resolve a restart between beginKeyRotation and the storage commit marker.
+ * Without the marker, the current key must be restored before any retry can
+ * replace the only fallback capable of reading the old ciphertext.
+ */
+export async function recoverKeyRotation(completed: boolean): Promise<void> {
+  const previous = await SecureStore.getItemAsync(PREVIOUS_DEVICE_KEY_ALIAS);
+  if (!previous) return;
+  if (completed) {
+    await finalizeCompletedKeyRotation();
+  } else {
+    await abortKeyRotation();
+  }
+}
+
+/** Finalize a completed data transaction and securely discard the fallback key. */
 export async function commitKeyRotation(newKey: Uint8Array): Promise<void> {
   await SecureStore.setItemAsync(DEVICE_KEY_ALIAS, bytesToHex(newKey));
+  await finalizeCompletedKeyRotation();
+}
+
+/**
+ * Discard a fallback key only after LocalStore has durably proved that its
+ * device-data transaction committed. This is intentionally idempotent so
+ * startup can retry if it crashes after removing the fallback but before
+ * clearing LocalStore's completion marker.
+ */
+export async function finalizeCompletedKeyRotation(): Promise<void> {
+  await SecureStore.deleteItemAsync(PREVIOUS_DEVICE_KEY_ALIAS);
   keyCreationPromise = null;
 }
 
@@ -81,7 +128,15 @@ export function createDeviceEncryption(): EncryptionProvider {
 
     async decrypt(ciphertext: string): Promise<string> {
       const key = await getKey();
-      return await aesGcmDecrypt(ciphertext, key);
+      try {
+        return await aesGcmDecrypt(ciphertext, key);
+      } catch (error) {
+        // During a durable rotation the old committed view may still exist
+        // until LocalStore replays its commit marker at startup.
+        const previous = await SecureStore.getItemAsync(PREVIOUS_DEVICE_KEY_ALIAS);
+        if (!previous) throw error;
+        return await aesGcmDecrypt(ciphertext, hexToBytes(previous));
+      }
     },
 
     clearKey(): void {

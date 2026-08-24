@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import type { Journal, JournalContent, Page, Attachment } from 'canto-data';
 import { DEFAULT_JOURNAL_SETTINGS, SCHEMA_VERSION } from 'canto-data';
 import { createEncryptionService } from '@/lib/encryption';
+import { recoverKeyRotation } from '@/lib/encryption/device';
 import { createLocalStore } from '@/lib/storage';
 import type { LocalStore } from '@/lib/storage';
 import { generateUUID, uint8ToBase64 } from '@/lib/encryption/utils';
@@ -18,12 +19,26 @@ function getStore(): LocalStore {
   return storeInstance;
 }
 
+/** Resolve an interrupted device-key rotation before later writes can replace its fallback. */
+export async function finalizeCompletedDeviceKeyRotationIfReady(store: LocalStore): Promise<void> {
+  const completed =
+    !!store.hasCompletedDeviceKeyRotation && (await store.hasCompletedDeviceKeyRotation());
+  await recoverKeyRotation(completed);
+  if (completed) await store.clearCompletedDeviceKeyRotation?.();
+}
+
 async function ensureInitialized(): Promise<LocalStore> {
   const store = getStore();
   if (!initPromise) {
     initPromise = store
       .initialize()
-      .then(() => store)
+      .then(async () => {
+        // LocalStore writes this marker in the same durable transaction as
+        // all re-encrypted data. Only then is it safe to discard the previous
+        // device key; a crash during either cleanup step is retried on startup.
+        await finalizeCompletedDeviceKeyRotationIfReady(store);
+        return store;
+      })
       .catch((err) => {
         initPromise = null;
         throw err;
@@ -417,6 +432,28 @@ export function useAttachment(derivedKey?: Uint8Array | null) {
     [derivedKey],
   );
 
+  const saveAttachmentStream = useCallback(
+    async (
+      journalId: string,
+      pageId: string,
+      attachment: Attachment,
+      chunks: AsyncIterable<Uint8Array>,
+    ): Promise<string> => {
+      const store = await ensureInitialized();
+      if (!store.saveAttachmentStream) {
+        throw new Error('Chunked attachment ingestion is unavailable');
+      }
+      return store.saveAttachmentStream(
+        journalId,
+        pageId,
+        attachment,
+        chunks,
+        attachment.encrypted ? (derivedKey ?? undefined) : undefined,
+      );
+    },
+    [derivedKey],
+  );
+
   const getAttachment = useCallback(
     async (path: string, encrypted: boolean): Promise<string | null> => {
       const store = await ensureInitialized();
@@ -430,5 +467,5 @@ export function useAttachment(derivedKey?: Uint8Array | null) {
     return store.deleteAttachment(path);
   }, []);
 
-  return { saveAttachment, getAttachment, deleteAttachment };
+  return { saveAttachment, saveAttachmentStream, getAttachment, deleteAttachment };
 }

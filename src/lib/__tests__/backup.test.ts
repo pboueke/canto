@@ -11,6 +11,7 @@ import type { LocalStore } from '../storage';
 // In-memory filesystem mock (same pattern as localStorage.test.ts)
 // ---------------------------------------------------------------------------
 const filesystem: Record<string, string> = {};
+const mockGenerateThumbnailFromChunks = jest.fn();
 
 jest.mock('expo-file-system', () => {
   class MockFile {
@@ -130,6 +131,9 @@ jest.mock('@/hooks/useStorage', () => ({
   getLocalStore: jest.fn(async () => mockStore),
   getEncryptionService: jest.fn(() => mockCreateEncryption()),
 }));
+jest.mock('@/lib/thumbnail', () => ({
+  generateThumbnailFromChunks: (...args: unknown[]) => mockGenerateThumbnailFromChunks(...args),
+}));
 
 // ---------------------------------------------------------------------------
 // Now import the modules under test (after all jest.mock calls)
@@ -228,6 +232,8 @@ beforeEach(() => {
   for (const key of Object.keys(filesystem)) delete filesystem[key];
   sharedFiles.length = 0;
   mockStore = createLocalStore(mockCreateEncryption());
+  mockGenerateThumbnailFromChunks.mockReset();
+  mockGenerateThumbnailFromChunks.mockResolvedValue('dGh1bWJuYWls');
 });
 
 // ===================================================================
@@ -718,6 +724,7 @@ describe('importJournal', () => {
     const loaded = await mockStore.getJournal(result.journalId);
     expect(loaded).not.toBeNull();
     expect(loaded!.pages.length).toBeGreaterThanOrEqual(1);
+    expect(loaded!.pages[0].modified).toBe(page.modified);
   });
 
   it('generates new UUIDs for imported journal and pages', async () => {
@@ -1081,6 +1088,42 @@ describe('importJournal', () => {
     expect(loaded).not.toBeNull();
   });
 
+  it('persists a bounded thumbnail while importing a chunked image', async () => {
+    const imageAtt = makeAttachment('i1', {
+      path: 'image-i1.jpg',
+      name: 'photo.jpg',
+      type: 'image',
+    });
+    const page = makePage('p1', { images: [imageAtt], thumbnail: undefined });
+    const uri = await buildZip({
+      manifest: {
+        version: 1,
+        appVersion: '0.19.2',
+        exportDate: '2026-05-17T00:00:00Z',
+        encrypted: false,
+        journalTitle: 'Image Preview',
+      },
+      journalJson: JSON.stringify(makeJournal('j1')),
+      pages: [{ id: 'p1', json: JSON.stringify(page) }],
+      attachments: [
+        {
+          filename: 'image-i1.jpg',
+          data: new Uint8Array([
+            0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 13, 0x49, 0x48, 0x44, 0x52, 0,
+            0, 0, 1, 0, 0, 0, 1,
+          ]),
+        },
+      ],
+    });
+
+    const result = await importJournal(uri, 'Image Preview');
+    const loaded = await mockStore.getJournal(result.journalId);
+
+    expect(loaded!.pages[0].images[0].content?.format).toBe('canto-chunked-v1');
+    expect(mockGenerateThumbnailFromChunks).toHaveBeenCalledTimes(1);
+    expect(loaded!.pages[0].thumbnail).toBe('dGh1bWJuYWls');
+  });
+
   it('rewrites file attachment paths during import', async () => {
     const fileAtt: Attachment = {
       id: 'f1',
@@ -1287,15 +1330,15 @@ describe('importJournal', () => {
       attachments: [{ filename: 'image-a1.jpg', data: btoa('fake-image-data') }],
     });
 
-    // Make saveAttachment throw on the first call
-    const originalSaveAttachment = mockStore.saveAttachment.bind(mockStore);
+    // New flat-v1 attachments are streamed into a chunk generation.
+    const originalSaveAttachmentStream = mockStore.saveAttachmentStream!.bind(mockStore);
     let callCount = 0;
-    jest.spyOn(mockStore, 'saveAttachment').mockImplementation(async (...args) => {
+    jest.spyOn(mockStore, 'saveAttachmentStream').mockImplementation(async (...args) => {
       callCount++;
       if (callCount === 1) {
         throw new Error('Disk full');
       }
-      return originalSaveAttachment(...args);
+      return originalSaveAttachmentStream(...args);
     });
 
     const saveJournalSpy = jest.spyOn(mockStore, 'saveJournal');
@@ -1320,6 +1363,120 @@ describe('importJournal', () => {
     const importedAtt = loaded!.pages[0].images.find((a) => a.name === 'photo.jpg');
     expect(importedAtt).toBeDefined();
     expect(importedAtt!.path).toBe('');
+  });
+
+  it('streams oversized flat-v1 attachments without materializing entry async output', async () => {
+    const source = new Uint8Array(1024 * 1024 + 31);
+    source.forEach((_, index) => {
+      source[index] = index % 251;
+    });
+    const attachment = makeAttachment('large', {
+      name: 'large.bin',
+      path: 'file-large.bin',
+      type: 'file',
+    });
+    const page = makePage('source-page', { files: [attachment] });
+    const journal = makeJournal('source-journal');
+    const uri = await buildZip({
+      manifest: {
+        version: 1,
+        appVersion: '0.19.1',
+        exportDate: '2026-05-16T00:00:00Z',
+        encrypted: false,
+        journalTitle: journal.title,
+      },
+      journalJson: JSON.stringify(journal),
+      settingsJson: JSON.stringify(journal.settings),
+      pages: [{ id: page.id, json: JSON.stringify(page) }],
+      attachments: [{ filename: 'file-large.bin', data: source }],
+    });
+    const fixtureZip = new JSZip();
+    fixtureZip.file('entry', 'value');
+    const prototype = Object.getPrototypeOf(fixtureZip.file('entry')!) as {
+      async: (...args: unknown[]) => Promise<unknown>;
+    };
+    const originalAsync = prototype.async;
+    const asyncSpy = jest.spyOn(prototype, 'async').mockImplementation(function (
+      this: JSZip.JSZipObject,
+      ...args: unknown[]
+    ) {
+      if (this.name.startsWith('attachments/')) {
+        throw new Error(`Unbounded ZIP entry read: ${String(args[0])}`);
+      }
+      return Reflect.apply(originalAsync, this, args);
+    });
+
+    const result = await importJournal(uri, 'Streamed import');
+
+    expect(result.attachmentErrors).toBeUndefined();
+    expect(asyncSpy.mock.calls.some(([type]) => type === 'base64')).toBe(false);
+    const saved = await mockStore.getAttachment(
+      (await mockStore.getJournal(result.journalId))!.pages[0].files[0].path,
+    );
+    expect(atob(saved!).length).toBe(source.length);
+    asyncSpy.mockRestore();
+  });
+
+  it('rolls back a journal when storage readback fails', async () => {
+    const key = new Uint8Array(32).fill(0xab);
+    const journal = makeJournal('source-journal', {
+      secure: true,
+      salt: 'dGVzdHNhbHQ=',
+    });
+    const uri = await buildZip({
+      manifest: {
+        version: 1,
+        appVersion: '0.19.1',
+        exportDate: '2026-05-16T00:00:00Z',
+        encrypted: false,
+        journalTitle: journal.title,
+      },
+      journalJson: JSON.stringify(journal),
+      settingsJson: JSON.stringify(journal.settings),
+      pages: [{ id: 'source-page', json: JSON.stringify(makePage('source-page')) }],
+    });
+
+    jest.spyOn(mockStore, 'getJournal').mockRejectedValue(new Error('unreadable metadata'));
+    const deleteSpy = jest.spyOn(mockStore, 'deleteJournal');
+
+    await expect(importJournal(uri, 'Imported journal', key)).rejects.toThrow(
+      'Imported journal failed storage verification: unreadable metadata',
+    );
+
+    expect(deleteSpy).toHaveBeenCalledTimes(1);
+    const importedId = deleteSpy.mock.calls[0][0];
+    expect(importedId).not.toBe('source-journal');
+    expect(mockStore.getJournal).toHaveBeenCalledWith(importedId, key);
+    expect(await mockStore.listJournals()).toEqual([]);
+  });
+
+  it('keeps the original write error when rollback cleanup fails', async () => {
+    const journal = makeJournal('source-journal');
+    const uri = await buildZip({
+      manifest: {
+        version: 1,
+        appVersion: '0.19.1',
+        exportDate: '2026-05-16T00:00:00Z',
+        encrypted: false,
+        journalTitle: journal.title,
+      },
+      journalJson: JSON.stringify(journal),
+      settingsJson: JSON.stringify(journal.settings),
+    });
+
+    jest.spyOn(mockStore, 'saveJournal').mockRejectedValue(new Error('disk full'));
+    const deleteSpy = jest
+      .spyOn(mockStore, 'deleteJournal')
+      .mockRejectedValue(new Error('cleanup failed'));
+    const consoleWarnSpy = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+
+    await expect(importJournal(uri, 'Imported journal')).rejects.toThrow(
+      'Imported journal failed storage verification: disk full',
+    );
+
+    expect(deleteSpy).toHaveBeenCalledTimes(1);
+    expect(deleteSpy.mock.calls[0][0]).not.toBe('source-journal');
+    consoleWarnSpy.mockRestore();
   });
 });
 

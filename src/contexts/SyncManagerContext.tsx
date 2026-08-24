@@ -16,6 +16,7 @@ import type { SyncProvider, SyncResult } from '@/lib/sync';
 
 interface SyncManagerCtxValue {
   syncJournal: (journalId: string, derivedKey?: Uint8Array) => Promise<SyncResult | null>;
+  cancelSync: (journalId: string) => void;
   scheduleSyncDebounced: (journalId: string, derivedKey?: Uint8Array) => void;
   getSyncState: (journalId: string) => SyncState;
   manager: SyncManager | null;
@@ -26,6 +27,7 @@ const DEFAULT_STATE: SyncState = { status: 'idle', lastSynced: null };
 
 const SyncManagerCtx = createContext<SyncManagerCtxValue>({
   syncJournal: async () => null,
+  cancelSync: () => {},
   scheduleSyncDebounced: () => {},
   getSyncState: () => DEFAULT_STATE,
   manager: null,
@@ -79,6 +81,7 @@ export function SyncManagerProvider({ children }: { children: ReactNode }) {
       managerRef.current = new SyncManager(store, new GDriveRemoteStore());
     })();
     return () => {
+      managerRef.current?.dispose?.();
       managerRef.current?.disconnect();
     };
   }, []);
@@ -98,6 +101,10 @@ export function SyncManagerProvider({ children }: { children: ReactNode }) {
     },
     [accessToken, getAccessToken],
   );
+
+  const cancelSync = useCallback((journalId: string) => {
+    managerRef.current?.cancelSync(journalId);
+  }, []);
 
   const scheduleSyncDebounced = useCallback(
     (journalId: string, derivedKey?: Uint8Array) => {
@@ -125,12 +132,13 @@ export function SyncManagerProvider({ children }: { children: ReactNode }) {
   const value = useMemo(
     () => ({
       syncJournal,
+      cancelSync,
       scheduleSyncDebounced,
       getSyncState,
       manager: managerRef.current,
       provider: currentProvider,
     }),
-    [syncJournal, scheduleSyncDebounced, getSyncState, currentProvider],
+    [syncJournal, cancelSync, scheduleSyncDebounced, getSyncState, currentProvider],
   );
 
   return <SyncManagerCtx.Provider value={value}>{children}</SyncManagerCtx.Provider>;

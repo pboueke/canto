@@ -32,9 +32,11 @@ import { useGoogleAuth } from '@/contexts/GoogleAuthContext';
 import { useSyncManager } from '@/contexts/SyncManagerContext';
 import type { JournalContent, Page } from 'canto-data';
 import type { RemoteJournalMeta, DownloadFailure } from '@/lib/sync';
+import { downloadCloudPageAttachments } from '@/lib/sync/cloud-attachment-import';
 import { safeJsonParse } from '@/lib/utils/json';
 import { DataIntegrityWarningModal } from '@/components/common/DataIntegrityWarningModal';
 import { retryWithBackoff } from '@/lib/sync/retry';
+import { formatSyncWarning } from '@/lib/sync/warnings';
 
 type CloudImportPhase = 'idle' | 'preparing' | 'downloading';
 
@@ -75,7 +77,7 @@ export function NewJournalModal({
   existingIds = [],
 }: NewJournalModalProps) {
   const { theme } = useTheme();
-  const { t } = useI18n();
+  const { t, lang } = useI18n();
   const insets = useSafeAreaInsets();
   const isWeb = Platform.OS === 'web';
   const { isSignedIn, accessToken } = useGoogleAuth();
@@ -240,7 +242,7 @@ export function NewJournalModal({
       // Download and decrypt each page
       const { getLocalStore } = await import('@/hooks/useStorage');
       const localStore = await getLocalStore();
-      const importWarnings: string[] = [];
+      const importWarnings: { name: string; size?: number; reason: string; pageId: string }[] = [];
       const downloadFailures: DownloadFailure[] = [];
 
       setCloudImportPhase('downloading');
@@ -254,27 +256,16 @@ export function NewJournalModal({
         const pageJson = await aesGcmDecrypt(encryptedPage, syncKey);
         const page = safeJsonParse<Page>(pageJson, `page:${pageId}`);
 
-        const attachments = [...(page.images ?? []), ...(page.files ?? [])].filter(
-          (a) => !a.deleted && a.path,
+        const attachmentWarnings = await downloadCloudPageAttachments({
+          journalId: remote.id,
+          page,
+          syncKey,
+          localStore,
+          remoteStore: store,
+        });
+        importWarnings.push(
+          ...attachmentWarnings.map((warning) => ({ ...warning, pageId: page.id })),
         );
-        const results = await Promise.allSettled(
-          attachments.map(async (att) => {
-            const filename = att.path.split('/').pop() ?? att.path;
-            const remotePath = `gdrive://${remote.id}/attachments/${filename}`;
-            const encrypted = await store.downloadAttachment(remotePath);
-            if (encrypted) {
-              const data = await aesGcmDecrypt(encrypted, syncKey);
-              const localPath = await localStore.saveAttachment(remote.id, page.id, att, data);
-              att.path = localPath;
-            }
-          }),
-        );
-        const failures = results.filter((r) => r.status === 'rejected');
-        if (failures.length > 0) {
-          importWarnings.push(
-            `${failures.length} attachment(s) failed to download for page ${page.id}`,
-          );
-        }
         return page;
       }
 
@@ -337,7 +328,21 @@ export function NewJournalModal({
       }
 
       if (importWarnings.length > 0) {
-        console.warn('[Canto] Cloud import warnings:', importWarnings);
+        // The journal is safely imported, but unsafe legacy attachments remain
+        // absent. Show the same localized, per-file result as normal sync;
+        // never leave this important state in a console-only English warning.
+        onImportComplete?.(journal.id);
+        setIntegrityWarning({
+          type: 'import',
+          details: importWarnings.map((warning) =>
+            formatSyncWarning(warning, lang, {
+              legacyAttachmentTooLarge: t.sync.syncDeferredAttachments,
+              chunkGenerationMissing: t.sync.syncDeferredChunkGeneration,
+              attachmentNotFound: t.sync.syncDeferredAttachmentNotFound,
+            }),
+          ),
+        });
+        return;
       }
 
       resetForm();

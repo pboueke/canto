@@ -1,6 +1,6 @@
 {
   "name": "canto",
-  "version": "0.19.1",
+  "version": "0.19.2",
   "main": "expo-router/entry",
   "scripts": {
     "start": "expo start",
@@ -26,7 +26,7 @@
     "@react-native-async-storage/async-storage": "2.2.0",
     "@react-native-community/datetimepicker": "8.6.0",
     "@react-native-google-signin/google-signin": "^16.1.2",
-    "canto-data": "^1.0.4",
+    "canto-data": "^1.2.0",
     "expo": "~55.0.13",
     "expo-auth-session": "~55.0.13",
     "expo-clipboard": "~55.0.13",

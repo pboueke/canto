@@ -194,16 +194,23 @@ export class GDriveRemoteStore implements RemoteStore {
     parentId: string,
     content: string,
     mimeType = 'application/json',
+    signal?: AbortSignal,
   ): Promise<void> {
     const existingId = await this.findFile(name, parentId);
     if (existingId) {
-      await api.updateFile(this.token(), existingId, { name, mimeType }, content);
+      if (signal)
+        await api.updateFile(this.token(), existingId, { name, mimeType }, content, signal);
+      else await api.updateFile(this.token(), existingId, { name, mimeType }, content);
     } else {
-      const created = await api.createFile(
-        this.token(),
-        { name, mimeType, parents: [parentId] },
-        content,
-      );
+      const created = signal
+        ? await api.createFile(
+            this.token(),
+            { name, mimeType, parents: [parentId] },
+            content,
+            'drive',
+            signal,
+          )
+        : await api.createFile(this.token(), { name, mimeType, parents: [parentId] }, content);
       this.fileIdCache.set(`file:${parentId}/${name}`, created.id);
     }
   }
@@ -296,6 +303,83 @@ export class GDriveRemoteStore implements RemoteStore {
     const name = localPath.split('/').pop() ?? localPath;
     await this.upsertFile(name, attachmentsFolderId, data, 'application/octet-stream');
     return `gdrive://${journalId}/attachments/${name}`;
+  }
+
+  private chunkName(attachmentId: string, generation: string | undefined, index: number): string {
+    // Generation-less descriptors were published by 1.1.0 and retain their
+    // original addresses. New descriptors use immutable generation addresses
+    // so a failed replacement cannot corrupt the page currently published.
+    return generation
+      ? `chunk-v1-${attachmentId}-${generation}-${index}`
+      : `chunk-v1-${attachmentId}-${index}`;
+  }
+
+  async uploadAttachmentChunk(
+    journalId: string,
+    attachmentId: string,
+    generation: string | undefined,
+    index: number,
+    data: string,
+    signal?: AbortSignal,
+  ): Promise<void> {
+    const attachmentsFolderId = await this.getAttachmentsFolderId(journalId);
+    await this.upsertFile(
+      this.chunkName(attachmentId, generation, index),
+      attachmentsFolderId,
+      data,
+      'application/octet-stream',
+      signal,
+    );
+  }
+
+  async downloadAttachmentChunk(
+    journalId: string,
+    attachmentId: string,
+    generation: string | undefined,
+    index: number,
+    signal?: AbortSignal,
+  ): Promise<string | null> {
+    const attachmentsFolderId = await this.getAttachmentsFolderId(journalId);
+    const name = this.chunkName(attachmentId, generation, index);
+    const fileId = await this.findFile(name, attachmentsFolderId);
+    if (!fileId) return null;
+    return api.getFileContent(this.token(), fileId, signal);
+  }
+
+  async deleteAttachmentChunk(
+    journalId: string,
+    attachmentId: string,
+    generation: string | undefined,
+    index: number,
+  ): Promise<void> {
+    const attachmentsFolderId = await this.getAttachmentsFolderId(journalId);
+    const name = this.chunkName(attachmentId, generation, index);
+    const fileId = await this.findFile(name, attachmentsFolderId);
+    if (!fileId) return;
+    await api.deleteFile(this.token(), fileId);
+    this.fileIdCache.delete(`file:${attachmentsFolderId}/${name}`);
+  }
+
+  async deleteAttachmentGenerationsExcept(
+    journalId: string,
+    attachmentId: string,
+    generation: string,
+  ): Promise<void> {
+    const attachmentsFolderId = await this.getAttachmentsFolderId(journalId);
+    const prefix = `chunk-v1-${attachmentId}-`;
+    const retainedPrefix = `${prefix}${generation}-`;
+    const files = await api.listFiles(
+      this.token(),
+      `name contains '${escapeQuery(prefix)}' and '${escapeQuery(attachmentsFolderId)}' in parents and trashed = false`,
+    );
+    await Promise.all(
+      files
+        .filter((file) => !file.name.startsWith(retainedPrefix))
+        .map(async (file) => {
+          await api.deleteFile(this.token(), file.id);
+          this.fileIdCache.delete(`file:${attachmentsFolderId}/${file.name}`);
+        }),
+    );
   }
 
   async downloadAttachment(remotePath: string): Promise<string | null> {

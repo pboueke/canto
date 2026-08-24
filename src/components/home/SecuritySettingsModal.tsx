@@ -5,7 +5,12 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTheme } from '@/hooks/useTheme';
 import { useI18n } from '@/hooks/useI18n';
 import { getLocalStore, getEncryptionService } from '@/hooks/useStorage';
-import { prepareKeyRotation, commitKeyRotation } from '@/lib/encryption/device';
+import {
+  prepareKeyRotation,
+  beginKeyRotation,
+  commitKeyRotation,
+  abortKeyRotation,
+} from '@/lib/encryption/device';
 import { aesGcmEncrypt, aesGcmDecrypt } from '@/lib/encryption/utils';
 import { webModalContent } from '@/styles/web';
 
@@ -79,13 +84,28 @@ export function SecuritySettingsModal({ visible, onClose }: SecuritySettingsModa
             const oldEncrypt = (plaintext: string) => aesGcmEncrypt(plaintext, newKey);
             const newEncrypt = (plaintext: string) => aesGcmEncrypt(plaintext, newKey);
 
+            // Persist a protected fallback before LocalStore can publish the
+            // new ciphertext generation. A restart can decrypt either side
+            // until the storage commit marker is replayed.
+            await beginKeyRotation(secureStoreKey, newKey);
             await store.reencryptAll(oldDecrypt, oldEncrypt, newEncrypt);
-            // Only persist the new key after re-encryption succeeds
             await commitKeyRotation(newKey);
+            // A crash before this cleanup is harmless: startup finalization is
+            // idempotent and will consume the durable completion proof.
+            await store.clearCompletedDeviceKeyRotation?.();
             // Clear the singleton's cached device key so it picks up the new one
             encryption.clearSession();
             Alert.alert(t.security.rotateSuccess);
           } catch (err) {
+            // A failed pre-commit rewrite must restore the old current key.
+            // Retaining the new key here would make a retry overwrite the only
+            // fallback that can decrypt the untouched legacy ciphertext.
+            try {
+              const store = await getLocalStore();
+              if (!(await store.hasCompletedDeviceKeyRotation?.())) await abortKeyRotation();
+            } catch (recoveryError) {
+              console.warn('[Canto] Failed to restore previous device key:', recoveryError);
+            }
             Alert.alert('Error', err instanceof Error ? err.message : String(err));
           } finally {
             setRotating(false);

@@ -1,6 +1,7 @@
 import { createLocalStore } from '../storage/local';
 import type { EncryptionService } from '../encryption';
 import type { JournalContent, Page, Attachment } from 'canto-data';
+import { ATTACHMENT_CHUNK_SIZE, chunkedContentForBase64 } from '../storage/attachment-content';
 
 // In-memory filesystem mock
 const filesystem: Record<string, string> = {};
@@ -145,6 +146,40 @@ beforeEach(() => {
   for (const key of Object.keys(filesystem)) {
     delete filesystem[key];
   }
+});
+
+describe('storage transaction recovery (native)', () => {
+  it('rolls back a prepared transaction and retains the old readable view', async () => {
+    const target = '/mock-docs/canto/j1/metadata.json';
+    const root = '/mock-docs/canto/.transactions/password-interrupted';
+    filesystem[target] = 'enc:old';
+    filesystem[`${root}/file-0`] = 'enc:new';
+    filesystem[`${root}/marker.json`] = JSON.stringify({
+      phase: 'prepared',
+      files: [{ target, staged: `${root}/file-0` }],
+    });
+
+    await createLocalStore(createMockEncryption()).initialize();
+
+    expect(filesystem[target]).toBe('enc:old');
+    expect(filesystem[`${root}/marker.json`]).toBeUndefined();
+  });
+
+  it('replays a committed transaction after interruption before exposing storage', async () => {
+    const target = '/mock-docs/canto/j1/metadata.json';
+    const root = '/mock-docs/canto/.transactions/device-interrupted';
+    filesystem[target] = 'old-device-ciphertext';
+    filesystem[`${root}/file-0`] = 'new-device-ciphertext';
+    filesystem[`${root}/marker.json`] = JSON.stringify({
+      phase: 'committing',
+      files: [{ target, staged: `${root}/file-0` }],
+    });
+
+    await createLocalStore(createMockEncryption()).initialize();
+
+    expect(filesystem[target]).toBe('new-device-ciphertext');
+    expect(filesystem[`${root}/marker.json`]).toBeUndefined();
+  });
 });
 
 describe('createLocalStore', () => {
@@ -418,6 +453,71 @@ describe('getAttachment', () => {
   });
 });
 
+describe('chunked attachment storage (native)', () => {
+  it('writes independently encrypted chunks and reassembles only on an explicit read', async () => {
+    const store = createLocalStore(createMockEncryption());
+    await store.initialize();
+    const data = 'A'.repeat(Math.ceil((ATTACHMENT_CHUNK_SIZE + 1) / 3) * 4);
+    const attachment: Attachment = {
+      id: 'chunked',
+      path: '',
+      name: 'recording.mp4',
+      type: 'file',
+      encrypted: false,
+      size: Math.floor((data.length * 3) / 4),
+      content: chunkedContentForBase64(data),
+      deleted: false,
+    };
+    const path = await store.saveAttachment('j1', 'p1', attachment, data);
+    attachment.path = path;
+    const chunks: string[] = [];
+    await store.forEachAttachmentChunk!(attachment, async (_index, chunk) => {
+      chunks.push(chunk);
+    });
+    expect(chunks).toHaveLength(attachment.content!.chunkCount);
+    expect(await store.getAttachment(path)).toBe(data);
+  });
+
+  it('keeps the published native generation readable when replacement encryption fails', async () => {
+    const encryption = createMockEncryption();
+    const store = createLocalStore(encryption);
+    await store.initialize();
+    const data = 'AQIDBA==';
+    const attachment: Attachment = {
+      id: 'chunked',
+      path: '',
+      name: 'recording.mp4',
+      type: 'file',
+      encrypted: false,
+      size: 4,
+      content: chunkedContentForBase64(data),
+      deleted: false,
+    };
+    const journal = makeJournalContent('j1', [{ ...makePage('p1'), files: [attachment] }]);
+    await store.saveJournal(journal);
+    const path = await store.saveAttachment('j1', 'p1', attachment, data);
+    const loaded = await store.getJournal('j1');
+    loaded!.pages[0].files[0].path = path;
+    await store.savePage('j1', loaded!.pages[0], undefined, true);
+
+    (encryption.encrypt as jest.Mock).mockImplementation((value: string) => {
+      if (value.includes('"format":"canto-chunked-v1"')) {
+        return Promise.reject(new Error('simulated replacement failure'));
+      }
+      return Promise.resolve(`enc:${value}`);
+    });
+
+    await expect(
+      store.reencryptJournal(loaded!, undefined, new Uint8Array(32).fill(7)),
+    ).rejects.toThrow('simulated replacement failure');
+
+    // The page was not published with its new generation, so the original
+    // unprotected journal and its original root remain the live version.
+    expect(await store.getJournal('j1')).not.toBeNull();
+    expect(await store.getAttachment(path)).toBe(data);
+  });
+});
+
 describe('reencryptJournal', () => {
   it('re-encrypts pages and metadata with progress', async () => {
     const encryption = createMockEncryption();
@@ -648,6 +748,12 @@ describe('reencryptAll (device key rotation)', () => {
     newEncryption.encrypt = jest.fn((data: string) => Promise.resolve(`new:${data}`));
     newEncryption.decrypt = jest.fn((data: string) => Promise.resolve(data.replace(/^new:/, '')));
     const newStore = createLocalStore(newEncryption);
+    // Simulate restarting after data commit but before the UI key-finalization
+    // call: the durable, keyless completion proof must survive startup.
+    await newStore.initialize();
+    expect(await newStore.hasCompletedDeviceKeyRotation?.()).toBe(true);
+    await newStore.clearCompletedDeviceKeyRotation?.();
+    expect(await newStore.hasCompletedDeviceKeyRotation?.()).toBe(false);
 
     const journals = await newStore.listJournals();
     expect(journals).toHaveLength(1);
@@ -812,5 +918,47 @@ describe('reencryptAll (device key rotation)', () => {
     expect(result!.title).toBe('Journal j1');
     expect(result!.pages).toHaveLength(1);
     expect(result!.pages[0].text).toBe('Page p1 content');
+  });
+});
+
+describe('device-key rotation write barrier (native)', () => {
+  it('blocks a concurrent save until rotation commits', async () => {
+    const encryption = createMockEncryption();
+    const store = createLocalStore(encryption);
+    await store.initialize();
+    await store.saveJournal(makeJournalContent('j1', [makePage('p1')]));
+
+    let releaseRotation!: () => void;
+    const rotationGate = new Promise<void>((resolve) => {
+      releaseRotation = resolve;
+    });
+    let rotationStarted!: () => void;
+    const started = new Promise<void>((resolve) => {
+      rotationStarted = resolve;
+    });
+    let writesDuringRotation = 0;
+    encryption.encrypt = jest.fn(async (data: string) => {
+      writesDuringRotation++;
+      return data;
+    });
+
+    const rotation = store.reencryptAll(
+      async (value) => value.replace(/^enc:/, ''),
+      async (value) => value,
+      async (value) => {
+        rotationStarted();
+        await rotationGate;
+        return value;
+      },
+    );
+    await started;
+    const concurrentSave = store.savePage('j1', makePage('p2'));
+    await Promise.resolve();
+
+    expect(writesDuringRotation).toBe(0);
+    releaseRotation();
+    await rotation;
+    await concurrentSave;
+    expect(writesDuringRotation).toBe(1);
   });
 });
