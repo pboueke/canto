@@ -1,6 +1,6 @@
 import { GDriveRemoteStore } from '../sync/gdrive/store';
 import * as api from '../sync/gdrive/api';
-import type { JournalContent, Page } from 'canto-data';
+import type { Attachment, JournalContent, Page } from 'canto-data';
 
 jest.mock('../sync/gdrive/api');
 
@@ -988,6 +988,60 @@ describe('GDriveRemoteStore', () => {
       const result = await store.downloadAttachment('gdrive://journal-1/attachments/photo.jpg');
       expect(result).toBe('imagedata');
     });
+
+    it('downloads, deletes, and retains the requested immutable chunk generation', async () => {
+      await store.connect({ accessToken: TOKEN });
+      const folder = (id: string, name: string) => ({
+        id,
+        name,
+        mimeType: 'application/vnd.google-apps.folder',
+        modifiedTime: '',
+      });
+      const chunks = [
+        {
+          id: 'old-0',
+          name: 'chunk-v1-att-old-0',
+          mimeType: 'application/octet-stream',
+          modifiedTime: '',
+        },
+        {
+          id: 'keep-0',
+          name: 'chunk-v1-att-keep-0',
+          mimeType: 'application/octet-stream',
+          modifiedTime: '',
+        },
+        {
+          id: 'old-1',
+          name: 'chunk-v1-att-old-1',
+          mimeType: 'application/octet-stream',
+          modifiedTime: '',
+        },
+      ];
+      mockedApi.listFiles.mockImplementation(async (_token, query) => {
+        if (query.includes("name = 'Canto'")) return [folder('root', 'Canto')];
+        if (query.includes("name = 'journal-1'")) return [folder('journal', 'journal-1')];
+        if (query.includes("name = 'attachments'")) return [folder('attachments', 'attachments')];
+        if (query.includes("name = 'chunk-v1-att-keep-0'")) return [chunks[1]];
+        if (query.includes("name = 'chunk-v1-att-missing-0'")) return [];
+        if (query.includes("name contains 'chunk-v1-att-'")) return chunks;
+        return [];
+      });
+      mockedApi.getFileContent.mockResolvedValue('encrypted-chunk');
+
+      await expect(store.downloadAttachmentChunk('journal-1', 'att', 'keep', 0)).resolves.toBe(
+        'encrypted-chunk',
+      );
+      await expect(
+        store.downloadAttachmentChunk('journal-1', 'att', 'missing', 0),
+      ).resolves.toBeNull();
+      await store.deleteAttachmentChunk('journal-1', 'att', 'keep', 0);
+      await store.deleteAttachmentChunk('journal-1', 'att', 'missing', 0);
+      await store.deleteAttachmentGenerationsExcept('journal-1', 'att', 'keep');
+
+      expect(mockedApi.deleteFile).toHaveBeenCalledWith(TOKEN, 'keep-0');
+      expect(mockedApi.deleteFile).toHaveBeenCalledWith(TOKEN, 'old-0');
+      expect(mockedApi.deleteFile).toHaveBeenCalledWith(TOKEN, 'old-1');
+    });
   });
 
   describe('concurrent folder creation dedup (L116)', () => {
@@ -1424,6 +1478,306 @@ describe('GDriveRemoteStore', () => {
 
       const result = await store.downloadSyncIndex('journal-1');
       expect(result).toBeNull();
+    });
+
+    it('prepares immutable chunk uploads from metadata and permits only missing chunks', async () => {
+      await store.connect({ accessToken: TOKEN });
+      const folder = (id: string, name: string) => ({
+        id,
+        name,
+        mimeType: 'application/vnd.google-apps.folder',
+        modifiedTime: '',
+      });
+      mockedApi.listFiles.mockImplementation(async (_token, query) => {
+        if (query.includes("name = 'Canto'")) return [folder('root', 'Canto')];
+        if (query.includes("name = 'journal-1'")) return [folder('journal', 'journal-1')];
+        if (query.includes("name = 'attachments'")) return [folder('attachments', 'attachments')];
+        if (query.includes("name contains 'chunk-v1-'")) {
+          return [
+            {
+              id: 'existing-0',
+              name: 'chunk-v1-video-generation-0',
+              mimeType: 'application/octet-stream',
+              modifiedTime: '',
+            },
+          ];
+        }
+        return [];
+      });
+      mockedApi.createFile.mockResolvedValue({
+        id: 'created-1',
+        name: 'chunk-v1-video-generation-1',
+        mimeType: 'application/octet-stream',
+        modifiedTime: '',
+      });
+      const attachment = {
+        id: 'video',
+        path: '/local/video',
+        name: 'video.bin',
+        type: 'file' as const,
+        encrypted: false,
+        deleted: false,
+        content: {
+          format: 'canto-chunked-v1' as const,
+          byteLength: 2,
+          chunkSize: 1,
+          chunkCount: 2,
+          generation: 'generation',
+        },
+      };
+
+      const prepared = await store.prepareChunkUploads('journal-1', [attachment]);
+      expect(prepared.missingIndexes(attachment)).toEqual([1]);
+      await expect(prepared.uploadMissingChunk(attachment, 0, 'already-present')).rejects.toThrow(
+        'not prepared as missing',
+      );
+      await prepared.uploadMissingChunk(attachment, 1, 'encrypted-frame');
+      expect(prepared.missingIndexes(attachment)).toEqual([]);
+      expect(mockedApi.createFile).toHaveBeenCalledWith(
+        TOKEN,
+        expect.objectContaining({ name: 'chunk-v1-video-generation-1' }),
+        'encrypted-frame',
+        'drive',
+        undefined,
+      );
+    });
+
+    it('lists only canonical immutable chunk indexes and updates prewarmed entries in place', async () => {
+      await store.connect({ accessToken: TOKEN });
+      const folder = (id: string, name: string) => ({
+        id,
+        name,
+        mimeType: 'application/vnd.google-apps.folder',
+        modifiedTime: '',
+      });
+      mockedApi.listFiles.mockImplementation(async (_token, query) => {
+        if (query.includes("name = 'Canto'")) return [folder('root', 'Canto')];
+        if (query.includes("name = 'journal-1'")) return [folder('journal', 'journal-1')];
+        if (query.includes("name = 'attachments'")) return [folder('attachments', 'attachments')];
+        return [
+          folder('zero', 'chunk-v1-video-generation-0'),
+          folder('one', 'chunk-v1-video-generation-1'),
+          folder('fraction', 'chunk-v1-video-generation-1.0'),
+          folder('large', 'chunk-v1-video-generation-2'),
+          folder('other', 'chunk-v1-other-generation-0'),
+        ];
+      });
+      mockedApi.updateFile.mockResolvedValue({
+        id: 'zero',
+        name: 'chunk-v1-video-generation-0',
+        mimeType: 'application/octet-stream',
+        modifiedTime: '',
+      });
+
+      await expect(
+        store.listAttachmentChunkIndexes('journal-1', 'video', 'generation', 2),
+      ).resolves.toEqual(new Set([0, 1]));
+      await store.uploadAttachmentChunk('journal-1', 'video', 'generation', 0, 'replacement');
+      expect(mockedApi.updateFile).toHaveBeenCalledWith(
+        TOKEN,
+        'zero',
+        expect.anything(),
+        'replacement',
+        undefined,
+      );
+    });
+
+    it('rejects invalid prepared chunks and falls back when a prewarmed Drive file was deleted', async () => {
+      await store.connect({ accessToken: TOKEN });
+      const folder = (id: string, name: string) => ({
+        id,
+        name,
+        mimeType: 'application/vnd.google-apps.folder',
+        modifiedTime: '',
+      });
+      const valid: Attachment = {
+        id: 'video',
+        path: '/local/video',
+        name: 'video.bin',
+        type: 'file',
+        encrypted: false,
+        deleted: false,
+        content: {
+          format: 'canto-chunked-v1',
+          byteLength: 1,
+          chunkSize: 1,
+          chunkCount: 1,
+          generation: 'generation',
+        },
+      };
+      const generationless = {
+        ...valid,
+        name: 'legacy.bin',
+        content: { ...valid.content!, generation: undefined },
+      };
+      await expect(store.prepareChunkUploads('journal-1', [generationless])).rejects.toThrow(
+        'Immutable chunk generation required',
+      );
+
+      mockedApi.listFiles.mockImplementation(async (_token, query) => {
+        if (query.includes("name = 'Canto'")) return [folder('root', 'Canto')];
+        if (query.includes("name = 'journal-1'")) return [folder('journal', 'journal-1')];
+        if (query.includes("name = 'attachments'")) return [folder('attachments', 'attachments')];
+        if (query.includes("name contains 'chunk-v1-'")) {
+          return [
+            {
+              id: 'stale',
+              name: 'chunk-v1-video-generation-0',
+              mimeType: 'application/octet-stream',
+              modifiedTime: '',
+            },
+          ];
+        }
+        return [];
+      });
+      await store.prepareAttachmentChunkUploads('journal-1', [valid]);
+      mockedApi.updateFile.mockRejectedValueOnce(
+        Object.assign(new api.GDriveApiError(404), { status: 404 }),
+      );
+      mockedApi.createFile.mockResolvedValue({
+        id: 'replacement',
+        name: 'chunk-v1-video-generation-0',
+        mimeType: 'application/octet-stream',
+        modifiedTime: '',
+      });
+
+      await store.uploadAttachmentChunk('journal-1', 'video', 'generation', 0, 'replacement-data');
+
+      expect(mockedApi.createFile).toHaveBeenCalledWith(
+        TOKEN,
+        expect.objectContaining({ name: 'chunk-v1-video-generation-0' }),
+        'replacement-data',
+      );
+    });
+
+    it('makes an immutable index publication final exactly once and tolerates compaction errors', async () => {
+      await store.connect({ accessToken: TOKEN });
+      const folder = (id: string, name: string) => ({
+        id,
+        name,
+        mimeType: 'application/vnd.google-apps.folder',
+        modifiedTime: '',
+      });
+      let legacyIndexLists = 0;
+      mockedApi.listFiles.mockImplementation(async (_token, query) => {
+        if (query.includes("name = 'Canto'")) return [folder('root', 'Canto')];
+        if (query.includes("name = 'journal-1'")) return [folder('journal', 'journal-1')];
+        if (query.includes("name = 'index.json'")) return [];
+        if (query.includes("name contains 'index-v'")) {
+          legacyIndexLists++;
+          if (legacyIndexLists > 1) throw new Error('Drive unavailable');
+          return [];
+        }
+        if (query.includes('canto-sync-index-v1-journal-1-')) return [];
+        return [];
+      });
+      mockedApi.createFile.mockResolvedValue({
+        id: 'delta',
+        name: 'canto-sync-index-v1-journal-1-index-v2-delta',
+        mimeType: 'application/json',
+        modifiedTime: '',
+      });
+      const warn = jest.spyOn(console, 'warn').mockImplementation();
+      try {
+        const publication = await store.openSyncIndexPublication('journal-1');
+        await publication.publishPage('p1', { modified: 1 });
+        await publication.finalize({ successful: true });
+        await publication.finalize({ successful: true });
+        await expect(publication.publishPage('p2', { modified: 2 })).rejects.toThrow('finalized');
+        expect(warn).toHaveBeenCalledWith(
+          '[GDrive] Sync-index compaction deferred:',
+          expect.any(Error),
+        );
+      } finally {
+        warn.mockRestore();
+      }
+    });
+
+    it('handles optional and invalid immutable-index edge cases without treating metadata as payload', async () => {
+      await store.connect({ accessToken: TOKEN });
+      const folder = (id: string, name: string) => ({
+        id,
+        name,
+        mimeType: 'application/vnd.google-apps.folder',
+        modifiedTime: '',
+      });
+      const chunk: Attachment = {
+        id: 'video',
+        path: '/local/video',
+        name: 'video.bin',
+        type: 'file',
+        encrypted: false,
+        deleted: false,
+        content: {
+          format: 'canto-chunked-v1',
+          byteLength: 1,
+          chunkSize: 1,
+          chunkCount: 1,
+          generation: 'generation',
+        },
+      };
+      mockedApi.listFiles.mockImplementation(async (_token, query) => {
+        if (query.includes("name = 'Canto'")) return [folder('root', 'Canto')];
+        if (query.includes("name = 'journal-1'")) return [folder('journal', 'journal-1')];
+        if (query.includes("name = 'attachments'")) return [folder('attachments', 'attachments')];
+        if (query.includes("name = 'index.json'")) {
+          return [
+            { id: 'index', name: 'index.json', mimeType: 'application/json', modifiedTime: '' },
+          ];
+        }
+        if (query.includes("name contains 'chunk-v1-'")) {
+          return [
+            {
+              id: 'chunk-id',
+              name: 'chunk-v1-video-generation-0',
+              mimeType: 'application/octet-stream',
+              modifiedTime: '',
+            },
+            {
+              id: 'unrelated',
+              name: 'chunk-v1-other-generation-0',
+              mimeType: 'application/octet-stream',
+              modifiedTime: '',
+            },
+          ];
+        }
+        return [];
+      });
+      mockedApi.getFileContentWithEtag.mockResolvedValue({ content: '{}', etag: null });
+      mockedApi.getFileContent.mockResolvedValue('{}');
+      mockedApi.updateFile.mockResolvedValue({
+        id: 'chunk-id',
+        name: 'chunk-v1-video-generation-0',
+        mimeType: 'application/octet-stream',
+        modifiedTime: '',
+      });
+
+      await store.prepareAttachmentChunkUploads('journal-1', []);
+      await store.prepareAttachmentChunkUploads('journal-1', [
+        { ...chunk, content: { ...chunk.content!, generation: undefined } },
+      ]);
+      const prepared = await store.prepareChunkUploads('journal-1', [chunk]);
+      expect(() => prepared.missingIndexes({ ...chunk, id: 'other' })).toThrow('not prepared');
+      await expect(prepared.uploadMissingChunk(chunk, 0, 'already-present')).rejects.toThrow(
+        'not prepared as missing',
+      );
+      await store.uploadAttachmentChunk(
+        'journal-1',
+        'video',
+        'generation',
+        0,
+        'replacement',
+        new AbortController().signal,
+      );
+      await store.uploadSyncIndex('journal-1', { p1: { modified: 1 } });
+
+      expect(mockedApi.updateFile).toHaveBeenCalledWith(
+        TOKEN,
+        'chunk-id',
+        expect.objectContaining({ name: 'chunk-v1-video-generation-0' }),
+        'replacement',
+        expect.any(AbortSignal),
+      );
     });
   });
 });

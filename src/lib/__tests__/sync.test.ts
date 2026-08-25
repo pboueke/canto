@@ -1,7 +1,8 @@
-import { LEGACY_ATTACHMENT_SYNC_LIMIT_BYTES, SyncEngine } from '../sync/engine';
+import { LEGACY_ATTACHMENT_SYNC_LIMIT_BYTES, SyncCancelledError, SyncEngine } from '../sync/engine';
+import { RendererWorkLedger } from '../sync/renderer-work-ledger';
 import type { LocalStore } from '../storage/types';
 import type { RemoteStore, SyncIndex } from '../sync/types';
-import type { Page, JournalContent } from 'canto-data';
+import type { Attachment, Page, JournalContent } from 'canto-data';
 
 // Mock encryption to be passthrough so mock stores work with plain strings
 jest.mock('../encryption/utils', () => ({
@@ -21,6 +22,15 @@ const makePage = (id: string, modified: number, deleted = false): Page => ({
   comments: [],
   modified,
   deleted,
+});
+
+const makeAttachment = (id: string, path: string): Attachment => ({
+  id,
+  path,
+  name: `${id}.bin`,
+  type: 'file',
+  encrypted: false,
+  deleted: false,
 });
 
 const makeJournal = (pages: Page[]): JournalContent => ({
@@ -235,6 +245,341 @@ describe('SyncEngine', () => {
     expect(result.uploaded).toHaveLength(0);
     expect(result.downloaded).toHaveLength(0);
     expect(result.deleted).toHaveLength(0);
+  });
+
+  it.each([0, -1, 1.5, Number.NaN])('rejects an invalid legacy chunk budget: %p', async (limit) => {
+    const local = createMockLocalStore(makeJournal([]));
+    const remote = createMockRemoteStore(makeJournal([]));
+
+    await expect(
+      new SyncEngine(local, remote).sync('journal-1', SYNC_KEY, undefined, undefined, undefined, {
+        newChunkUploadBudget: limit,
+      }),
+    ).rejects.toThrow('newChunkUploadBudget must be a positive integer');
+  });
+
+  it('fails before reading an attachment when its renderer-budget descriptor is invalid', async () => {
+    const attachment = {
+      ...makeAttachment('invalid-chunk', '/local/invalid-chunk'),
+      content: {
+        format: 'canto-chunked-v1' as const,
+        byteLength: 0,
+        chunkSize: 1,
+        chunkCount: 1,
+        generation: 'invalid-generation',
+      },
+    };
+    const page = { ...makePage('p1', 1000), files: [attachment] };
+    const local = createMockLocalStore(makeJournal([page]));
+    const remote = createMockRemoteStore(makeJournal([]));
+    local.forEachAttachmentChunk = jest.fn();
+    remote.listAttachmentChunkIndexes = jest.fn(async () => new Set<number>());
+    remote.uploadAttachmentChunk = jest.fn();
+    const ledger = new RendererWorkLedger({
+      plaintextLimitBytes: 10,
+      nativeAllocationLimitBytes: 60,
+    });
+
+    await expect(
+      new SyncEngine(local, remote).sync('journal-1', SYNC_KEY, undefined, undefined, undefined, {
+        rendererWorkLedger: ledger,
+      }),
+    ).rejects.toThrow('Invalid chunk descriptor for attachment');
+    expect(local.forEachAttachmentChunk).not.toHaveBeenCalled();
+  });
+
+  it('downloads an immutable attachment generation before saving a remote page', async () => {
+    const attachment = {
+      ...makeAttachment('remote-chunk', '/remote/chunk-root'),
+      content: {
+        format: 'canto-chunked-v1' as const,
+        byteLength: 2,
+        chunkSize: 1,
+        chunkCount: 2,
+        generation: 'remote-generation',
+      },
+    };
+    const remotePage = { ...makePage('p1', 1000), files: [attachment] };
+    const local = createMockLocalStore(makeJournal([]));
+    const remote = createMockRemoteStore(makeJournal([remotePage]));
+    const received: string[] = [];
+    remote.downloadAttachmentChunk = jest.fn(
+      async (_journal, _id, _generation, index) => `frame-${index}`,
+    );
+    local.saveAttachmentChunks = jest.fn(async (_journal, _page, _attachment, chunks) => {
+      for await (const chunk of chunks) received.push(chunk);
+      return '/local/chunk-root';
+    });
+
+    const result = await new SyncEngine(local, remote).sync('journal-1', SYNC_KEY);
+
+    expect(result.downloaded).toEqual(['p1']);
+    expect(received).toEqual(['frame-0', 'frame-1']);
+    expect(local.savePage).toHaveBeenCalledWith(
+      'journal-1',
+      expect.objectContaining({ files: [expect.objectContaining({ path: '/local/chunk-root' })] }),
+      SYNC_KEY,
+      true,
+    );
+  });
+
+  it('retains a remote page index when an immutable chunk is missing', async () => {
+    const attachment = {
+      ...makeAttachment('missing-chunk', '/remote/chunk-root'),
+      content: {
+        format: 'canto-chunked-v1' as const,
+        byteLength: 1,
+        chunkSize: 1,
+        chunkCount: 1,
+        generation: 'missing-generation',
+      },
+    };
+    const remotePage = { ...makePage('p1', 1000), files: [attachment] };
+    const local = createMockLocalStore(makeJournal([]));
+    const remote = createMockRemoteStore(makeJournal([remotePage]));
+    remote.downloadAttachmentChunk = jest.fn(async () => null);
+    local.saveAttachmentChunks = jest.fn(async (_journal, _page, _attachment, chunks) => {
+      for await (const _chunk of chunks) {
+        // Consume the lazy remote stream: this is where a missing chunk is detected.
+      }
+      return '/local/chunk-root';
+    });
+    const warn = jest.spyOn(console, 'warn').mockImplementation();
+
+    const result = await new SyncEngine(local, remote).sync('journal-1', SYNC_KEY);
+
+    expect(result.downloaded).toEqual([]);
+    expect(local.savePage).not.toHaveBeenCalled();
+    warn.mockRestore();
+  });
+
+  it('publishes each completed page and finalizes an immutable sync-index publication', async () => {
+    const page = makePage('p1', 1000);
+    const local = createMockLocalStore(makeJournal([page]));
+    const remote = createMockRemoteStore(makeJournal([]));
+    const publishPage = jest.fn();
+    const finalize = jest.fn();
+    remote.openSyncIndexPublication = jest.fn(async () => ({
+      initial: {},
+      publishPage,
+      finalize,
+    }));
+
+    await new SyncEngine(local, remote).sync('journal-1', SYNC_KEY);
+
+    expect(publishPage).toHaveBeenCalledWith('p1', { modified: 1000 }, undefined);
+    expect(finalize).toHaveBeenCalledWith({ successful: true, signal: undefined });
+    expect(remote.uploadSyncIndex).not.toHaveBeenCalled();
+  });
+
+  it('rejects a chunked upload when its local streaming dependency is unavailable', async () => {
+    const attachment = {
+      ...makeAttachment('unavailable', '/local/unavailable'),
+      content: {
+        format: 'canto-chunked-v1' as const,
+        byteLength: 1,
+        chunkSize: 1,
+        chunkCount: 1,
+        generation: 'unavailable-generation',
+      },
+    };
+    const local = createMockLocalStore(
+      makeJournal([{ ...makePage('p1', 1000), files: [attachment] }]),
+    );
+    const remote = createMockRemoteStore(makeJournal([]));
+    local.forEachAttachmentChunk = undefined;
+    remote.uploadAttachmentChunk = jest.fn();
+
+    await expect(new SyncEngine(local, remote).sync('journal-1', SYNC_KEY)).rejects.toThrow(
+      'Chunked attachment transfer is unavailable',
+    );
+  });
+
+  it('rejects a budgeted chunked upload when resume inventory is unavailable', async () => {
+    const attachment = {
+      ...makeAttachment('inventory', '/local/inventory'),
+      content: {
+        format: 'canto-chunked-v1' as const,
+        byteLength: 1,
+        chunkSize: 1,
+        chunkCount: 1,
+        generation: 'inventory-generation',
+      },
+    };
+    const local = createMockLocalStore(
+      makeJournal([{ ...makePage('p1', 1000), files: [attachment] }]),
+    );
+    const remote = createMockRemoteStore(makeJournal([]));
+    local.forEachAttachmentChunk = jest.fn();
+    remote.uploadAttachmentChunk = jest.fn();
+
+    await expect(
+      new SyncEngine(local, remote).sync('journal-1', SYNC_KEY, undefined, undefined, undefined, {
+        newChunkUploadBudget: 1,
+      }),
+    ).rejects.toThrow('Chunked attachment resume inventory is unavailable');
+  });
+
+  it('cancels before reading any local or remote data when passed an aborted signal', async () => {
+    const local = createMockLocalStore(makeJournal([]));
+    const remote = createMockRemoteStore(makeJournal([]));
+    const controller = new AbortController();
+    controller.abort();
+
+    await expect(
+      new SyncEngine(local, remote).sync(
+        'journal-1',
+        SYNC_KEY,
+        undefined,
+        undefined,
+        controller.signal,
+      ),
+    ).rejects.toMatchObject({ name: 'SyncCancelledError' });
+    expect(local.getJournal).not.toHaveBeenCalled();
+  });
+
+  it('aborts a concurrent local and remote password rotation instead of choosing a winner', async () => {
+    const localJournal = { ...makeJournal([]), salt: 'local-rotated' };
+    const remoteJournal = { ...makeJournal([]), salt: 'remote-rotated' };
+    const local = createMockLocalStore(localJournal);
+    const remote = createMockRemoteStore(remoteJournal);
+    (remote.listRemoteJournals as jest.Mock).mockResolvedValue([
+      { id: 'journal-1', title: 'Test Journal', lastModified: 0, salt: 'remote-rotated' },
+    ]);
+    remote.downloadJournalMeta = jest.fn().mockResolvedValue(JSON.stringify(remoteJournal));
+
+    await expect(
+      new SyncEngine(local, remote).sync('journal-1', SYNC_KEY, undefined, 'previous-salt'),
+    ).rejects.toThrow('device AND locally');
+  });
+
+  it('checkpoints a locally newer page before publishing it when its chunk budget is exhausted', async () => {
+    const attachment = {
+      ...makeAttachment('checkpoint', '/local/checkpoint'),
+      content: {
+        format: 'canto-chunked-v1' as const,
+        byteLength: 2,
+        chunkSize: 1,
+        chunkCount: 2,
+        generation: 'checkpoint-generation',
+      },
+    };
+    const localPage = { ...makePage('p1', 2), files: [attachment] };
+    const remotePage = makePage('p1', 1);
+    const local = createMockLocalStore(makeJournal([localPage]));
+    const remote = createMockRemoteStore(makeJournal([remotePage]));
+    local.forEachAttachmentChunk = jest.fn(async (_attachment, visitor, indexes) => {
+      for (const index of indexes ?? []) await visitor(index, `frame-${index}`);
+    });
+    remote.listAttachmentChunkIndexes = jest.fn().mockResolvedValue(new Set<number>());
+    remote.uploadAttachmentChunk = jest.fn();
+
+    const result = await new SyncEngine(local, remote).sync(
+      'journal-1',
+      SYNC_KEY,
+      undefined,
+      undefined,
+      undefined,
+      { newChunkUploadBudget: 1 },
+    );
+
+    expect(result.checkpointed).toBe(true);
+    expect(remote.uploadPage).not.toHaveBeenCalled();
+  });
+
+  it('uses renderer accounting before opening chunks and rejects malformed descriptors', async () => {
+    const valid = {
+      ...makeAttachment('renderer-budget', '/local/renderer-budget'),
+      content: {
+        format: 'canto-chunked-v1' as const,
+        byteLength: 2,
+        chunkSize: 1,
+        chunkCount: 2,
+        generation: 'renderer-generation',
+      },
+    };
+    const local = createMockLocalStore(makeJournal([{ ...makePage('p1', 1), files: [valid] }]));
+    const remote = createMockRemoteStore(makeJournal([]));
+    local.forEachAttachmentChunk = jest.fn(async (_attachment, visitor, indexes) => {
+      for (const index of indexes ?? []) await visitor(index, `frame-${index}`);
+    });
+    remote.listAttachmentChunkIndexes = jest.fn().mockResolvedValue(new Set<number>());
+    remote.uploadAttachmentChunk = jest.fn();
+    const ledger = new RendererWorkLedger({
+      plaintextLimitBytes: 1,
+      nativeAllocationLimitBytes: 6,
+    });
+    const checkpoint = await new SyncEngine(local, remote).sync(
+      'journal-1',
+      SYNC_KEY,
+      undefined,
+      undefined,
+      undefined,
+      { rendererWorkLedger: ledger },
+    );
+    expect(checkpoint.checkpointed).toBe(true);
+    expect(local.forEachAttachmentChunk).toHaveBeenCalledWith(
+      valid,
+      expect.any(Function),
+      new Set([0]),
+    );
+
+    const malformed = {
+      ...valid,
+      id: 'malformed-renderer',
+      content: { ...valid.content, chunkCount: 3 },
+    };
+    const malformedLocal = createMockLocalStore(
+      makeJournal([{ ...makePage('p2', 1), files: [malformed] }]),
+    );
+    malformedLocal.forEachAttachmentChunk = jest.fn();
+    const malformedRemote = createMockRemoteStore(makeJournal([]));
+    malformedRemote.listAttachmentChunkIndexes = jest.fn().mockResolvedValue(new Set<number>());
+    malformedRemote.uploadAttachmentChunk = jest.fn();
+    await expect(
+      new SyncEngine(malformedLocal, malformedRemote).sync(
+        'journal-1',
+        SYNC_KEY,
+        undefined,
+        undefined,
+        undefined,
+        {
+          rendererWorkLedger: new RendererWorkLedger({
+            plaintextLimitBytes: 10,
+            nativeAllocationLimitBytes: 60,
+          }),
+        },
+      ),
+    ).rejects.toThrow('Invalid chunk descriptor');
+  });
+
+  it('fails a remote chunked download when the bounded persistence capability is absent', async () => {
+    const attachment = {
+      ...makeAttachment('remote-unavailable', '/remote/unavailable'),
+      content: {
+        format: 'canto-chunked-v1' as const,
+        byteLength: 1,
+        chunkSize: 1,
+        chunkCount: 1,
+        generation: 'remote-generation',
+      },
+    };
+    const local = createMockLocalStore(makeJournal([]));
+    local.saveAttachmentChunks = undefined;
+    const remote = createMockRemoteStore(
+      makeJournal([{ ...makePage('p1', 2), files: [attachment] }]),
+    );
+    remote.downloadAttachmentChunk = undefined;
+
+    const warn = jest.spyOn(console, 'warn').mockImplementation();
+    const result = await new SyncEngine(local, remote).sync('journal-1', SYNC_KEY);
+    expect(result.downloaded).toEqual([]);
+    expect(local.savePage).not.toHaveBeenCalled();
+    expect(warn).toHaveBeenCalledWith(
+      '[Sync] Failed to download page p1:',
+      expect.objectContaining({ message: 'Chunked attachment transfer is unavailable' }),
+    );
+    warn.mockRestore();
   });
 
   it('syncAll syncs all journals', async () => {
@@ -669,6 +1014,38 @@ describe('SyncEngine', () => {
       expect(remote.uploadAttachmentChunk).toHaveBeenCalledTimes(2);
       expect(remote.uploadAttachment).not.toHaveBeenCalled();
       expect(events).toEqual(['chunk-0', 'chunk-1', 'page']);
+    });
+
+    it('uses a prepared remote inventory to upload only missing immutable chunks', async () => {
+      const att = {
+        ...makeAttachment('prepared-video', '/local/prepared-video'),
+        content: {
+          format: 'canto-chunked-v1' as const,
+          byteLength: 2,
+          chunkSize: 1,
+          chunkCount: 2,
+          generation: 'prepared-generation',
+        },
+      };
+      const local = createMockLocalStore(makeJournal([{ ...makePage('p1', 1000), files: [att] }]));
+      const remote = createMockRemoteStore(makeJournal([]));
+      const uploadMissingChunk = jest.fn();
+      local.forEachAttachmentChunk = jest.fn(async (_attachment, visitor, indexes) => {
+        for (const index of indexes ?? []) await visitor(index, `frame-${index}`);
+      });
+      remote.prepareChunkUploads = jest.fn(async () => ({
+        missingIndexes: () => [1],
+        uploadMissingChunk,
+      }));
+
+      await new SyncEngine(local, remote).sync('journal-1', SYNC_KEY);
+
+      expect(local.forEachAttachmentChunk).toHaveBeenCalledWith(
+        att,
+        expect.any(Function),
+        new Set([1]),
+      );
+      expect(uploadMissingChunk).toHaveBeenCalledWith(att, 1, 'frame-1', undefined);
     });
 
     it('checkpoints a web chunk budget and resumes missing indexes without local reads', async () => {
@@ -1202,5 +1579,323 @@ describe('SyncEngine', () => {
       const result = await engine.sync('journal-1', SYNC_KEY);
       expect(result.uploaded).toContain('p1');
     });
+  });
+
+  it('stops a key rotation before publication when an attachment lacks an immutable generation', async () => {
+    const attachment = {
+      ...makeAttachment('legacy-chunk', '/local/chunk'),
+      content: {
+        format: 'canto-chunked-v1' as const,
+        byteLength: 2,
+        chunkSize: 2,
+        chunkCount: 1,
+      },
+    };
+    const localJournal = {
+      ...makeJournal([{ ...makePage('p1', 10), files: [attachment] }]),
+      salt: 'local-salt',
+    };
+    const local = createMockLocalStore(localJournal);
+    const remote = createMockRemoteStore(makeJournal([]));
+    remote.listRemoteJournals = jest
+      .fn()
+      .mockResolvedValue([
+        { id: 'journal-1', title: 'Test Journal', lastModified: 0, salt: 'remote-salt' },
+      ]);
+
+    const result = await new SyncEngine(local, remote).sync(
+      'journal-1',
+      SYNC_KEY,
+      undefined,
+      'remote-salt',
+    );
+
+    expect(result.warnings).toEqual([
+      expect.objectContaining({ reason: 'chunk-generation-missing', pageId: 'p1' }),
+    ]);
+    expect(remote.uploadJournalMeta).not.toHaveBeenCalled();
+  });
+
+  it('checkpoints before opening a chunk when the configured byte budget has no room', async () => {
+    const attachment = {
+      ...makeAttachment('chunk', '/local/chunk'),
+      content: {
+        format: 'canto-chunked-v1' as const,
+        byteLength: 4,
+        chunkSize: 2,
+        chunkCount: 2,
+        generation: 'generation-1',
+      },
+    };
+    const local = createMockLocalStore(
+      makeJournal([{ ...makePage('p1', 10), files: [attachment] }]),
+    );
+    local.forEachAttachmentChunk = jest.fn();
+    const remote = createMockRemoteStore(makeJournal([]));
+    remote.listAttachmentChunkIndexes = jest.fn().mockResolvedValue(new Set());
+    remote.uploadAttachmentChunk = jest.fn();
+
+    const result = await new SyncEngine(local, remote).sync(
+      'journal-1',
+      SYNC_KEY,
+      undefined,
+      undefined,
+      undefined,
+      {
+        newChunkUploadBudget: 1,
+      },
+    );
+
+    expect(result.checkpointed).toBe(true);
+    expect(local.forEachAttachmentChunk).toHaveBeenCalledWith(
+      attachment,
+      expect.any(Function),
+      new Set([0]),
+    );
+  });
+
+  it('defers a remotely newer generation-less attachment without replacing the local page', async () => {
+    const attachment = {
+      ...makeAttachment('chunk', 'gdrive://journal-1/attachments/chunk'),
+      content: {
+        format: 'canto-chunked-v1' as const,
+        byteLength: 2,
+        chunkSize: 2,
+        chunkCount: 1,
+      },
+    };
+    const localPage = makePage('p1', 10);
+    const remotePage = { ...makePage('p1', 20), files: [attachment] };
+    const local = createMockLocalStore(makeJournal([localPage]));
+    const remote = createMockRemoteStore(makeJournal([remotePage]));
+    remote.downloadPage = jest.fn().mockResolvedValue(JSON.stringify(remotePage));
+
+    const result = await new SyncEngine(local, remote).sync('journal-1', SYNC_KEY);
+
+    expect(result.downloaded).toEqual([]);
+    expect(result.warnings).toEqual([
+      expect.objectContaining({ reason: 'chunk-generation-missing', pageId: 'p1' }),
+    ]);
+    expect(local.savePage).not.toHaveBeenCalled();
+  });
+
+  it('does not open completed chunk indexes when the resume inventory is already complete', async () => {
+    const attachment = {
+      ...makeAttachment('chunk', '/local/chunk'),
+      content: {
+        format: 'canto-chunked-v1' as const,
+        byteLength: 2,
+        chunkSize: 1,
+        chunkCount: 2,
+        generation: 'generation-1',
+      },
+    };
+    const local = createMockLocalStore(
+      makeJournal([{ ...makePage('p1', 10), files: [attachment] }]),
+    );
+    local.forEachAttachmentChunk = jest.fn();
+    const remote = createMockRemoteStore(makeJournal([]));
+    remote.listAttachmentChunkIndexes = jest.fn().mockResolvedValue(new Set([0, 1]));
+    remote.uploadAttachmentChunk = jest.fn();
+
+    const result = await new SyncEngine(local, remote).sync(
+      'journal-1',
+      SYNC_KEY,
+      undefined,
+      undefined,
+      undefined,
+      {
+        newChunkUploadBudget: 2,
+      },
+    );
+
+    expect(result.uploaded).toEqual(['p1']);
+    expect(local.forEachAttachmentChunk).not.toHaveBeenCalled();
+  });
+
+  it('reserves renderer bytes before local reads and skips non-reserved chunk callbacks', async () => {
+    const attachment = {
+      ...makeAttachment('chunk', '/local/chunk'),
+      content: {
+        format: 'canto-chunked-v1' as const,
+        byteLength: 4,
+        chunkSize: 2,
+        chunkCount: 2,
+        generation: 'generation-1',
+      },
+    };
+    const local = createMockLocalStore(
+      makeJournal([{ ...makePage('p1', 10), files: [attachment] }]),
+    );
+    local.forEachAttachmentChunk = jest.fn(async (_attachment, visitor) => {
+      await visitor(0, 'first');
+      await visitor(1, 'second');
+    });
+    const remote = createMockRemoteStore(makeJournal([]));
+    remote.listAttachmentChunkIndexes = jest.fn().mockResolvedValue(new Set());
+    remote.uploadAttachmentChunk = jest.fn();
+    const ledger = new RendererWorkLedger({ plaintextLimitBytes: 1 });
+
+    const result = await new SyncEngine(local, remote).sync(
+      'journal-1',
+      SYNC_KEY,
+      undefined,
+      undefined,
+      undefined,
+      {
+        rendererWorkLedger: ledger,
+      },
+    );
+
+    expect(result.checkpointed).toBe(true);
+    expect(remote.uploadAttachmentChunk).not.toHaveBeenCalled();
+  });
+
+  it('uploads an earlier completed page index before checkpointing a later attachment', async () => {
+    const attachment = {
+      ...makeAttachment('chunk', '/local/chunk'),
+      content: {
+        format: 'canto-chunked-v1' as const,
+        byteLength: 2,
+        chunkSize: 2,
+        chunkCount: 1,
+        generation: 'generation-1',
+      },
+    };
+    const local = createMockLocalStore(
+      makeJournal([makePage('p0', 10), { ...makePage('p1', 20), files: [attachment] }]),
+    );
+    local.forEachAttachmentChunk = jest.fn();
+    const remote = createMockRemoteStore(makeJournal([]));
+    remote.listAttachmentChunkIndexes = jest.fn().mockResolvedValue(new Set());
+    remote.uploadAttachmentChunk = jest.fn();
+    const ledger = new RendererWorkLedger({ plaintextLimitBytes: 1 });
+
+    const result = await new SyncEngine(local, remote).sync(
+      'journal-1',
+      SYNC_KEY,
+      undefined,
+      undefined,
+      undefined,
+      {
+        rendererWorkLedger: ledger,
+      },
+    );
+
+    expect(result.checkpointed).toBe(true);
+    expect(remote.uploadSyncIndex).toHaveBeenCalledWith(
+      'journal-1',
+      expect.objectContaining({ p0: { modified: 10 } }),
+    );
+  });
+
+  it('rejects malformed descriptor byte accounting before opening any local chunk', async () => {
+    const attachment = {
+      ...makeAttachment('bad', '/local/bad'),
+      content: {
+        format: 'canto-chunked-v1' as const,
+        byteLength: 1,
+        chunkSize: 1,
+        chunkCount: 2,
+        generation: 'generation-1',
+      },
+    };
+    const local = createMockLocalStore(
+      makeJournal([{ ...makePage('p1', 10), files: [attachment] }]),
+    );
+    local.forEachAttachmentChunk = jest.fn();
+    const remote = createMockRemoteStore(makeJournal([]));
+    remote.listAttachmentChunkIndexes = jest.fn().mockResolvedValue(new Set());
+    remote.uploadAttachmentChunk = jest.fn();
+
+    await expect(
+      new SyncEngine(local, remote).sync('journal-1', SYNC_KEY, undefined, undefined, undefined, {
+        rendererWorkLedger: new RendererWorkLedger({ plaintextLimitBytes: 1 }),
+      }),
+    ).rejects.toThrow('Invalid chunk descriptor');
+    expect(local.forEachAttachmentChunk).not.toHaveBeenCalled();
+  });
+
+  it('keeps locally newer pages dirty when their attachment transfer is deferred', async () => {
+    const attachment = {
+      ...makeAttachment('generationless', '/local/generationless'),
+      content: {
+        format: 'canto-chunked-v1' as const,
+        byteLength: 1,
+        chunkSize: 1,
+        chunkCount: 1,
+      },
+    };
+    const local = createMockLocalStore(
+      makeJournal([{ ...makePage('p1', 20), files: [attachment] }]),
+    );
+    const remote = createMockRemoteStore(makeJournal([{ ...makePage('p1', 10) }]));
+
+    const result = await new SyncEngine(local, remote).sync('journal-1', SYNC_KEY);
+
+    expect(result.uploaded).toEqual([]);
+    expect(result.warnings).toEqual([
+      expect.objectContaining({ reason: 'chunk-generation-missing', pageId: 'p1' }),
+    ]);
+    expect(remote.uploadPage).not.toHaveBeenCalled();
+  });
+
+  it('propagates cancellation while downloading a remotely newer page', async () => {
+    const local = createMockLocalStore(makeJournal([makePage('p1', 10)]));
+    const remote = createMockRemoteStore(makeJournal([makePage('p1', 20)]));
+    remote.downloadPage = jest.fn().mockRejectedValue(new SyncCancelledError());
+
+    await expect(new SyncEngine(local, remote).sync('journal-1', SYNC_KEY)).rejects.toBeInstanceOf(
+      SyncCancelledError,
+    );
+  });
+
+  it('preflights remote and missing legacy attachments during a key rotation', async () => {
+    const remoteAttachment = makeAttachment('remote', 'gdrive://journal-1/attachments/remote');
+    const missingAttachment = makeAttachment('missing', '/local/missing');
+    const journal = {
+      ...makeJournal([{ ...makePage('p1', 10), files: [remoteAttachment, missingAttachment] }]),
+      salt: 'local',
+    };
+    const local = createMockLocalStore(journal);
+    local.getAttachmentStorageSize = jest.fn().mockResolvedValue({ status: 'missing' });
+    const remote = createMockRemoteStore(makeJournal([]));
+    remote.listRemoteJournals = jest
+      .fn()
+      .mockResolvedValue([
+        { id: 'journal-1', title: 'Test Journal', lastModified: 0, salt: 'previous' },
+      ]);
+
+    await expect(
+      new SyncEngine(local, remote).sync('journal-1', SYNC_KEY, undefined, 'previous'),
+    ).resolves.toBeDefined();
+    expect(local.getAttachmentStorageSize).toHaveBeenCalledWith('/local/missing');
+  });
+
+  it('checkpoints immediately when a renderer is already exhausted', async () => {
+    const attachment = {
+      ...makeAttachment('chunk', '/local/chunk'),
+      content: {
+        format: 'canto-chunked-v1' as const,
+        byteLength: 1,
+        chunkSize: 1,
+        chunkCount: 1,
+        generation: 'g',
+      },
+    };
+    const local = createMockLocalStore(
+      makeJournal([{ ...makePage('p1', 1), files: [attachment] }]),
+    );
+    local.forEachAttachmentChunk = jest.fn();
+    const remote = createMockRemoteStore(makeJournal([]));
+    remote.listAttachmentChunkIndexes = jest.fn().mockResolvedValue(new Set());
+    remote.uploadAttachmentChunk = jest.fn();
+    const ledger = new RendererWorkLedger({ plaintextLimitBytes: 1 });
+    ledger.requireFreshRenderer();
+    await expect(
+      new SyncEngine(local, remote).sync('journal-1', SYNC_KEY, undefined, undefined, undefined, {
+        rendererWorkLedger: ledger,
+      }),
+    ).resolves.toMatchObject({ checkpointed: true });
   });
 });

@@ -1,4 +1,5 @@
 import { SyncManager, type SyncState } from '../sync/manager';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { LocalStore } from '../storage/types';
 import type { RemoteStore } from '../sync/types';
 import type { Page, JournalContent } from 'canto-data';
@@ -208,6 +209,11 @@ describe('SyncManager', () => {
 
         expect(first?.checkpointed).toBe(true);
         expect(manager.getState('j1').status).toBe('checkpointed');
+        manager.scheduleSyncDebounced('j1', 'token');
+        expect(manager.getState('j1')).toMatchObject({
+          status: 'checkpointed',
+          requiresFreshRenderer: true,
+        });
         expect(asyncStore['canto:lastSync:j1']).toBeUndefined();
         expect(asyncStore['canto:lastRemoteSalt:j1']).toBeUndefined();
         // A reload creates a new renderer and frees the browser-native
@@ -621,6 +627,182 @@ describe('SyncManager', () => {
 
       await manager.syncJournal('j1', 'token-2');
       expect(remote.connect).toHaveBeenCalledWith({ accessToken: 'token-2' });
+    });
+
+    it('exposes direct connect, disconnect, and remote-store access', async () => {
+      const remote = createMockRemoteStore();
+      const manager = new SyncManager(createMockLocalStore(null), remote);
+
+      await manager.connectWithToken('direct-token');
+      await manager.disconnect();
+
+      expect(remote.connect).toHaveBeenCalledWith({ accessToken: 'direct-token' });
+      expect(remote.disconnect).toHaveBeenCalledTimes(1);
+      expect(manager.getRemoteStore()).toBe(remote);
+    });
+  });
+
+  describe('cancellation and scheduling cleanup', () => {
+    beforeEach(() => jest.useFakeTimers());
+    afterEach(() => jest.useRealTimers());
+
+    it('restores persisted sync state when cancellation wins after an AsyncStorage write', async () => {
+      const journal = makeJournal([]);
+      const local = createMockLocalStore(journal);
+      const remote = createMockRemoteStore();
+      (remote.listRemoteJournals as jest.Mock)
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([{ id: 'j1', title: 'Test', lastModified: 1, salt: 'remote-salt' }]);
+      const manager = new SyncManager(local, remote);
+      asyncStore['canto:lastRemoteSalt:j1'] = 'previous-salt';
+      const setItem = AsyncStorage.setItem as jest.Mock;
+      const original = setItem.getMockImplementation();
+      setItem.mockImplementation(async (key: string, value: string) => {
+        asyncStore[key] = value;
+        manager.cancelSync('j1');
+      });
+      try {
+        await expect(manager.syncJournal('j1', 'token')).resolves.toBeNull();
+        expect(asyncStore['canto:lastRemoteSalt:j1']).toBe('previous-salt');
+        expect(manager.getState('j1').status).toBe('idle');
+      } finally {
+        setItem.mockImplementation(original!);
+      }
+    });
+
+    it('never starts or retains a persistence write once its run has been cancelled', async () => {
+      const manager = new SyncManager(
+        createMockLocalStore(makeJournal([])),
+        createMockRemoteStore(),
+      );
+      const persistForRun = (
+        manager as unknown as {
+          persistForRun: (
+            key: string,
+            value: string,
+            controller: AbortController,
+            isCurrentRun: () => boolean,
+          ) => Promise<void>;
+        }
+      ).persistForRun.bind(manager);
+      const getItem = AsyncStorage.getItem as jest.Mock;
+      const setItem = AsyncStorage.setItem as jest.Mock;
+      const originalGet = getItem.getMockImplementation();
+      const originalSet = setItem.getMockImplementation();
+      try {
+        const beforeRead = new AbortController();
+        beforeRead.abort();
+        await expect(persistForRun('key', 'value', beforeRead, () => true)).rejects.toThrow(
+          'Sync cancelled',
+        );
+
+        const afterRead = new AbortController();
+        getItem.mockImplementationOnce(async () => {
+          afterRead.abort();
+          return 'previous';
+        });
+        await expect(persistForRun('key', 'value', afterRead, () => true)).rejects.toThrow(
+          'Sync cancelled',
+        );
+
+        asyncStore.key = 'previous';
+        const afterWrite = new AbortController();
+        setItem.mockImplementationOnce(async (key: string, value: string) => {
+          asyncStore[key] = value;
+          afterWrite.abort();
+        });
+        await expect(persistForRun('key', 'value', afterWrite, () => true)).rejects.toThrow(
+          'Sync cancelled',
+        );
+        expect(asyncStore.key).toBe('previous');
+      } finally {
+        getItem.mockImplementation(originalGet!);
+        setItem.mockImplementation(originalSet!);
+      }
+    });
+
+    it('stops cleanly when cancellation occurs during either persisted-state read', async () => {
+      const getItem = AsyncStorage.getItem as jest.Mock;
+      const original = getItem.getMockImplementation();
+      try {
+        for (const cancelOnCall of [1, 2]) {
+          let calls = 0;
+          const manager = new SyncManager(
+            createMockLocalStore(makeJournal([])),
+            createMockRemoteStore(),
+          );
+          getItem.mockImplementation(async () => {
+            calls++;
+            if (calls === cancelOnCall) manager.cancelSync('j1');
+            return null;
+          });
+          await expect(manager.syncJournal('j1', 'token')).resolves.toBeNull();
+          expect(manager.getState('j1').status).toBe('idle');
+        }
+      } finally {
+        getItem.mockImplementation(original!);
+      }
+    });
+
+    it('requires a fresh renderer before starting or scheduling additional browser sync work', async () => {
+      const manager = new SyncManager(
+        createMockLocalStore(makeJournal([])),
+        createMockRemoteStore(),
+        true,
+      );
+      (
+        manager as unknown as { rendererWorkLedger: { requireFreshRenderer(): void } }
+      ).rendererWorkLedger.requireFreshRenderer();
+
+      await expect(manager.syncJournal('j1', 'token')).resolves.toBeNull();
+      expect(manager.getState('j1')).toMatchObject({
+        status: 'checkpointed',
+        requiresFreshRenderer: true,
+      });
+      manager.scheduleSyncDebounced('j1', 'token');
+      expect(manager.getState('j1').status).toBe('checkpointed');
+    });
+
+    it('keeps an otherwise successful sync successful when recording remote salt fails', async () => {
+      const remote = createMockRemoteStore();
+      (remote.listRemoteJournals as jest.Mock)
+        .mockResolvedValueOnce([])
+        .mockRejectedValueOnce(new Error('registry temporarily unavailable'));
+      const warn = jest.spyOn(console, 'warn').mockImplementation();
+      try {
+        await expect(
+          new SyncManager(createMockLocalStore(makeJournal([])), remote).syncJournal('j1', 'token'),
+        ).resolves.toMatchObject({ uploaded: [], downloaded: [] });
+        expect(warn).toHaveBeenCalledWith(
+          '[Canto] Failed to record remote salt for j1:',
+          expect.any(Error),
+        );
+      } finally {
+        warn.mockRestore();
+      }
+    });
+
+    it('cancels scheduled work through cancelSync, dispose, and cancelAllSyncs', () => {
+      const remote = createMockRemoteStore();
+      const manager = new SyncManager(createMockLocalStore(makeJournal([])), remote);
+
+      manager.scheduleSyncDebounced('j1', 'token', undefined, 100);
+      manager.cancelSync('j1');
+      manager.scheduleSyncDebounced('j2', 'token', undefined, 100);
+      manager.dispose();
+      manager.scheduleSyncDebounced('j3', 'token', undefined, 100);
+      manager.cancelAllSyncs();
+      jest.advanceTimersByTime(100);
+
+      expect(remote.connect).not.toHaveBeenCalled();
+    });
+
+    it('reports a missing salt as a sync error', async () => {
+      const journal = { ...makeJournal([]), salt: undefined } as unknown as JournalContent;
+      const manager = new SyncManager(createMockLocalStore(journal), createMockRemoteStore());
+
+      await expect(manager.syncJournal('j1', 'token')).resolves.toBeNull();
+      expect(manager.getState('j1').error).toContain('has no salt');
     });
   });
 

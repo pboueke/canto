@@ -107,4 +107,65 @@ describe('generateImportThumbnail', () => {
       generateImportThumbnail(await imageEntry(PNG_HEADER), PNG_HEADER.length),
     ).resolves.toBeNull();
   });
+
+  it('supports GIF, JPEG, and each WebP image header form without decoding the source', () => {
+    const gif = new Uint8Array([0x47, 0x49, 0x46, 0x38, 0x39, 0x61, 0x34, 0x12, 0x78, 0x56]);
+    const jpeg = new Uint8Array([
+      0xff, 0xd8, 0xff, 0xe0, 0, 2, 0xff, 0xc0, 0, 8, 8, 0, 0x20, 0, 0x10, 3,
+    ]);
+    const vp8x = new Uint8Array(30);
+    vp8x.set([0x52, 0x49, 0x46, 0x46, 0, 0, 0, 0, 0x57, 0x45, 0x42, 0x50, 0x56, 0x50, 0x38, 0x58]);
+    vp8x.set([4, 0, 0], 24);
+    vp8x.set([2, 0, 0], 27);
+    const vp8 = vp8x.slice();
+    vp8.set([0x56, 0x50, 0x38, 0x20], 12);
+    vp8.set([0x9d, 0x01, 0x2a, 0x34, 0x12, 0x78, 0x56], 23);
+    const vp8l = new Uint8Array(30);
+    vp8l.set([0x52, 0x49, 0x46, 0x46, 0, 0, 0, 0, 0x57, 0x45, 0x42, 0x50, 0x56, 0x50, 0x38, 0x4c]);
+    vp8l.set([0x2f, 2, 0, 0, 0], 20);
+
+    expect(imageDimensionsFromHeader(gif)).toEqual({ width: 0x1234, height: 0x5678 });
+    expect(imageDimensionsFromHeader(jpeg)).toEqual({ width: 16, height: 32 });
+    expect(imageDimensionsFromHeader(vp8x)).toEqual({ width: 5, height: 3 });
+    expect(imageDimensionsFromHeader(vp8)).toEqual({ width: 0x1234, height: 0x1678 });
+    expect(imageDimensionsFromHeader(vp8l)).toEqual({ width: 3, height: 1 });
+  });
+
+  it('rejects malformed, zero-sized, non-integer, and excessive dimensions', () => {
+    expect(imageDimensionsFromHeader(new Uint8Array([0xff, 0xd8, 0xff]))).toBeNull();
+    expect(isSafeThumbnailDimensions(null)).toBe(false);
+    expect(isSafeThumbnailDimensions({ width: 0, height: 1 })).toBe(false);
+    expect(isSafeThumbnailDimensions({ width: 1.5, height: 1 })).toBe(false);
+    expect(isSafeThumbnailDimensions({ width: 4096, height: 4096 })).toBe(true);
+  });
+
+  it('rejects truncated JPEG segments and empty decrypted streams without decoding', async () => {
+    // Standalone JPEG markers have no length; each malformed continuation must
+    // be rejected without ever entering the platform image decoder.
+    expect(
+      imageDimensionsFromHeader(new Uint8Array([0xff, 0xd8, 0xff, 0xd0, 0xff, 0xd9, 0, 0, 0, 0])),
+    ).toBeNull();
+    expect(
+      imageDimensionsFromHeader(
+        new Uint8Array([0xff, 0xd8, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff]),
+      ),
+    ).toBeNull();
+    expect(
+      imageDimensionsFromHeader(new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 0, 1, 0, 0, 0, 0])),
+    ).toBeNull();
+    expect(
+      imageDimensionsFromHeader(new Uint8Array([0xff, 0xd8, 0xff, 0xc0, 0, 7, 0, 0, 0, 0])),
+    ).toBeNull();
+
+    await expect(generateImportThumbnail({} as JSZip.JSZipObject, 1, '')).resolves.toBeNull();
+    expect(mockGenerateThumbnailFromChunks).not.toHaveBeenCalled();
+  });
+
+  it('returns null for empty sources and decoder failures', async () => {
+    await expect(generateImportThumbnail({} as JSZip.JSZipObject, 0)).resolves.toBeNull();
+    mockGenerateThumbnailFromChunks.mockRejectedValue(new Error('decoder failed'));
+    await expect(
+      generateImportThumbnail(await imageEntry(PNG_HEADER), PNG_HEADER.length),
+    ).resolves.toBeNull();
+  });
 });

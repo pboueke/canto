@@ -44,4 +44,57 @@ describe('zipAttachmentChunks', () => {
     expect(() => assertEncryptedAttachmentCanBeRead(entry)).not.toThrow();
     expect(asyncSpy).not.toHaveBeenCalled();
   });
+
+  it('rejects invalid central-directory sizes and unavailable incremental readers', () => {
+    expect(() => zipAttachmentByteLength({ name: 'unknown' } as JSZip.JSZipObject)).toThrow(
+      'no valid uncompressed size',
+    );
+    expect(() =>
+      zipAttachmentByteLength({
+        name: 'fractional',
+        _data: { uncompressedSize: 1.5 },
+      } as unknown as JSZip.JSZipObject),
+    ).toThrow('no valid uncompressed size');
+    expect(() =>
+      zipAttachmentChunks({
+        name: 'flat',
+        _data: { uncompressedSize: 1 },
+      } as unknown as JSZip.JSZipObject).next(),
+    ).rejects.toThrow('Incremental ZIP entry reads are unavailable');
+  });
+
+  it.each([
+    ['ended early', undefined, undefined, 1, 'ended early'],
+    ['exceeded size', new Uint8Array([1, 2]), undefined, 1, 'exceeded its declared size'],
+    ['stream error', undefined, new Error('inflate failed'), 1, 'inflate failed'],
+  ])('surfaces %s from the incremental stream', async (_label, data, error, size, message) => {
+    let handlers: Record<string, ((value?: unknown) => void) | undefined> = {};
+    const stream = {} as {
+      on: jest.Mock;
+      pause: jest.Mock;
+      resume: jest.Mock;
+    };
+    stream.on = jest.fn((event: string, callback: (value?: unknown) => void) => {
+      handlers[event] = callback;
+      return stream;
+    });
+    stream.pause = jest.fn(() => stream);
+    stream.resume = jest.fn(() => {
+      if (data) handlers.data?.(data);
+      if (error) handlers.error?.(error);
+      else handlers.end?.();
+      return stream;
+    });
+    const entry = {
+      name: 'broken.bin',
+      _data: { uncompressedSize: size },
+      internalStream: () => stream,
+    } as unknown as JSZip.JSZipObject;
+
+    const chunks = zipAttachmentChunks(entry);
+    if (message === 'exceeded its declared size') {
+      await expect(chunks.next()).resolves.toMatchObject({ value: new Uint8Array([1]) });
+    }
+    await expect(chunks.next()).rejects.toThrow(message);
+  });
 });

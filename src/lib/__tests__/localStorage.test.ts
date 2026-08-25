@@ -1,7 +1,11 @@
 import { createLocalStore } from '../storage/local';
 import type { EncryptionService } from '../encryption';
 import type { JournalContent, Page, Attachment } from 'canto-data';
-import { ATTACHMENT_CHUNK_SIZE, chunkedContentForBase64 } from '../storage/attachment-content';
+import {
+  ATTACHMENT_CHUNK_SIZE,
+  chunkedContentForBase64,
+  encodeChunkFrame,
+} from '../storage/attachment-content';
 
 // In-memory filesystem mock
 const filesystem: Record<string, string> = {};
@@ -22,6 +26,9 @@ jest.mock('expo-file-system', () => {
     }
     get exists() {
       return this.uri in filesystem;
+    }
+    get size() {
+      return Buffer.byteLength(filesystem[this.uri] ?? '', 'utf8');
     }
     create() {
       if (!(this.uri in filesystem)) {
@@ -179,6 +186,56 @@ describe('storage transaction recovery (native)', () => {
 
     expect(filesystem[target]).toBe('new-device-ciphertext');
     expect(filesystem[`${root}/marker.json`]).toBeUndefined();
+  });
+
+  it('discards corrupt markers and replacement roots, and removes old roots after commit', async () => {
+    const corruptRoot = '/mock-docs/canto/.transactions/corrupt';
+    const replacementRoot = '/mock-docs/canto/j1/attachments/chunk-v1-new';
+    filesystem[`${corruptRoot}/marker.json`] = '{not json';
+    const preparedRoot = '/mock-docs/canto/.transactions/prepared-with-root';
+    filesystem[`${preparedRoot}/marker.json`] = JSON.stringify({
+      phase: 'prepared',
+      files: [],
+      newRoots: [replacementRoot],
+    });
+    filesystem[`${replacementRoot}/0`] = 'enc:unpublished';
+
+    const target = '/mock-docs/canto/j1/metadata.json';
+    const committedRoot = '/mock-docs/canto/.transactions/committed-with-old-root';
+    const oldRoot = '/mock-docs/canto/j1/attachments/chunk-v1-old';
+    filesystem[`${committedRoot}/file-0`] = 'enc:new';
+    filesystem[`${committedRoot}/marker.json`] = JSON.stringify({
+      phase: 'committing',
+      files: [{ target, staged: `${committedRoot}/file-0` }],
+      oldRoots: [oldRoot],
+    });
+    filesystem[`${oldRoot}/0`] = 'enc:old';
+
+    await createLocalStore(createMockEncryption()).initialize();
+
+    expect(filesystem[`${corruptRoot}/marker.json`]).toBeUndefined();
+    expect(filesystem[`${replacementRoot}/0`]).toBeUndefined();
+    expect(filesystem[`${oldRoot}/0`]).toBeUndefined();
+    expect(filesystem[target]).toBe('enc:new');
+  });
+
+  it('ignores incomplete transaction directories but refuses a committed transaction without staged data', async () => {
+    const ignoredRoot = '/mock-docs/canto/.transactions/no-marker';
+    // The file makes the mock expose a directory, while marker.json remains absent.
+    filesystem[`${ignoredRoot}/orphan`] = 'unused';
+    filesystem['/mock-docs/canto/.transactions/loose-file'] = 'not a transaction directory';
+
+    await createLocalStore(createMockEncryption()).initialize();
+    expect(filesystem[`${ignoredRoot}/orphan`]).toBeUndefined();
+
+    const brokenRoot = '/mock-docs/canto/.transactions/committed-missing-stage';
+    filesystem[`${brokenRoot}/marker.json`] = JSON.stringify({
+      phase: 'committing',
+      files: [{ target: '/mock-docs/canto/j1/metadata.json', staged: `${brokenRoot}/file-0` }],
+    });
+    await expect(createLocalStore(createMockEncryption()).initialize()).rejects.toThrow(
+      'Incomplete storage transaction staging',
+    );
   });
 });
 
@@ -478,6 +535,315 @@ describe('chunked attachment storage (native)', () => {
     expect(await store.getAttachment(path)).toBe(data);
   });
 
+  it('streams exact chunks into an immutable generation and reads them back on demand', async () => {
+    const store = createLocalStore(createMockEncryption());
+    const attachment: Attachment = {
+      id: 'streamed',
+      path: '',
+      name: 'streamed.bin',
+      type: 'file',
+      encrypted: false,
+      deleted: false,
+      content: {
+        format: 'canto-chunked-v1',
+        byteLength: 3,
+        chunkSize: 2,
+        chunkCount: 2,
+        generation: 'stream-generation',
+      },
+    };
+    async function* source() {
+      yield new Uint8Array([1, 2]);
+      yield new Uint8Array([3]);
+    }
+
+    const path = await store.saveAttachmentStream!('j1', 'p1', attachment, source());
+    attachment.path = path;
+
+    expect(await store.getAttachment(path)).toBe('AQID');
+    const visited: number[] = [];
+    await store.forEachAttachmentChunk!(
+      attachment,
+      async (index) => {
+        visited.push(index);
+      },
+      new Set([1]),
+    );
+    expect(visited).toEqual([1]);
+    await expect(store.saveAttachmentStream!('j1', 'p1', attachment, source())).rejects.toThrow(
+      'Attachment generation already exists',
+    );
+  });
+
+  it('rejects invalid streamed content and removes an incomplete generation', async () => {
+    const store = createLocalStore(createMockEncryption());
+    const attachment: Attachment = {
+      id: 'stream-error',
+      path: '',
+      name: 'stream-error.bin',
+      type: 'file',
+      encrypted: false,
+      deleted: false,
+      content: {
+        format: 'canto-chunked-v1',
+        byteLength: 2,
+        chunkSize: 1,
+        chunkCount: 2,
+        generation: 'stream-error-generation',
+      },
+    };
+    async function* tooLarge() {
+      yield new Uint8Array([1, 2]);
+    }
+    async function* tooFew() {
+      yield new Uint8Array([1]);
+    }
+
+    await expect(store.saveAttachmentStream!('j1', 'p1', attachment, tooLarge())).rejects.toThrow(
+      'Attachment stream chunk exceeds limit',
+    );
+    await expect(store.saveAttachmentStream!('j1', 'p1', attachment, tooFew())).rejects.toThrow(
+      'Attachment stream length mismatch',
+    );
+    await expect(
+      store.forEachAttachmentChunk!({ ...attachment, content: undefined }, async () => undefined),
+    ).rejects.toThrow('Chunked content descriptor required');
+  });
+
+  it('skips empty stream frames before persisting the declared chunk data', async () => {
+    const store = createLocalStore(createMockEncryption());
+    const attachment: Attachment = {
+      id: 'empty-frame',
+      path: '',
+      name: 'empty-frame.bin',
+      type: 'file',
+      encrypted: false,
+      deleted: false,
+      content: {
+        format: 'canto-chunked-v1',
+        byteLength: 1,
+        chunkSize: 1,
+        chunkCount: 1,
+        generation: 'empty-frame-generation',
+      },
+    };
+    async function* source() {
+      yield new Uint8Array();
+      yield new Uint8Array([1]);
+    }
+
+    const path = await store.saveAttachmentStream!('j1', 'p1', attachment, source());
+    attachment.path = path;
+    expect(await store.getAttachment(path)).toBe('AQ==');
+  });
+
+  it('persists downloaded chunk frames atomically and retains a complete immutable generation', async () => {
+    const store = createLocalStore(createMockEncryption());
+    const attachment: Attachment = {
+      id: 'downloaded',
+      path: '',
+      name: 'downloaded.bin',
+      type: 'file',
+      encrypted: false,
+      deleted: false,
+      content: {
+        format: 'canto-chunked-v1',
+        byteLength: 3,
+        chunkSize: 2,
+        chunkCount: 2,
+        generation: 'download-generation',
+      },
+    };
+    async function* frames() {
+      yield encodeChunkFrame('j1', 'p1', attachment, 0, 'AQI=');
+      yield encodeChunkFrame('j1', 'p1', attachment, 1, 'Aw==');
+    }
+
+    const path = await store.saveAttachmentChunks!('j1', 'p1', attachment, frames());
+    attachment.path = path;
+    expect(await store.getAttachment(path)).toBe('AQID');
+    await expect(store.saveAttachmentChunks!('j1', 'p1', attachment, frames())).resolves.toBe(path);
+    await store.deleteAttachment(path);
+    expect(await store.getAttachment(path)).toBeNull();
+  });
+
+  it('rejects incomplete or excessive downloaded chunk streams', async () => {
+    const store = createLocalStore(createMockEncryption());
+    const attachment: Attachment = {
+      id: 'download-error',
+      path: '',
+      name: 'download-error.bin',
+      type: 'file',
+      encrypted: false,
+      deleted: false,
+      content: {
+        format: 'canto-chunked-v1',
+        byteLength: 2,
+        chunkSize: 1,
+        chunkCount: 2,
+        generation: 'download-error-generation',
+      },
+    };
+    async function* tooFew() {
+      yield 'one';
+    }
+    async function* tooMany() {
+      yield 'one';
+      yield 'two';
+      yield 'three';
+    }
+
+    await expect(store.saveAttachmentChunks!('j1', 'p1', attachment, tooFew())).rejects.toThrow(
+      'Missing attachment chunks',
+    );
+    await expect(store.saveAttachmentChunks!('j1', 'p1', attachment, tooMany())).rejects.toThrow(
+      'Too many attachment chunks',
+    );
+  });
+
+  it('rejects duplicate generations and cleans up a failed chunked attachment write', async () => {
+    const encryption = createMockEncryption();
+    const store = createLocalStore(encryption);
+    const attachment: Attachment = {
+      id: 'duplicate',
+      path: '',
+      name: 'duplicate.bin',
+      type: 'file',
+      encrypted: false,
+      deleted: false,
+      content: {
+        format: 'canto-chunked-v1',
+        byteLength: 1,
+        chunkSize: 1,
+        chunkCount: 1,
+        generation: 'duplicate-generation',
+      },
+    };
+    await store.saveAttachment('j1', 'p1', attachment, 'AQ==');
+    await expect(store.saveAttachment('j1', 'p1', attachment, 'AQ==')).rejects.toThrow(
+      'Attachment generation already exists',
+    );
+
+    const failingEncryption = createMockEncryption();
+    (failingEncryption.encrypt as jest.Mock).mockRejectedValue(new Error('device write failed'));
+    const failingStore = createLocalStore(failingEncryption);
+    const failingAttachment = {
+      ...attachment,
+      id: 'failing',
+      content: { ...attachment.content!, generation: 'failing-generation' },
+    };
+    await expect(
+      failingStore.saveAttachment('j1', 'p1', failingAttachment, 'AQ=='),
+    ).rejects.toThrow('device write failed');
+  });
+
+  it('rejects invalid streamed descriptors, excess chunks, and missing local chunks', async () => {
+    const store = createLocalStore(createMockEncryption());
+    const attachment: Attachment = {
+      id: 'validation',
+      path: '/missing/root',
+      name: 'validation.bin',
+      type: 'file',
+      encrypted: false,
+      deleted: false,
+      content: {
+        format: 'canto-chunked-v1',
+        byteLength: 1,
+        chunkSize: 1,
+        chunkCount: 1,
+        generation: 'validation-generation',
+      },
+    };
+    async function* excess() {
+      yield new Uint8Array([1]);
+      yield new Uint8Array([2]);
+    }
+
+    await expect(
+      store.saveAttachmentStream!('j1', 'p1', { ...attachment, content: undefined }, excess()),
+    ).rejects.toThrow('Chunked content descriptor required');
+    await expect(store.saveAttachmentStream!('j1', 'p1', attachment, excess())).rejects.toThrow(
+      'Too many attachment chunks',
+    );
+    await expect(store.forEachAttachmentChunk!(attachment, async () => undefined)).rejects.toThrow(
+      'Attachment chunk missing',
+    );
+    await expect(
+      store.saveAttachmentChunks!(
+        'j1',
+        'p1',
+        { ...attachment, content: undefined },
+        (async function* () {})(),
+      ),
+    ).rejects.toThrow('Chunked content descriptor required');
+  });
+
+  it('cleans up chunked page attachments and rejects incomplete roots on reads and downloads', async () => {
+    const store = createLocalStore(createMockEncryption());
+    const attachment: Attachment = {
+      id: 'missing-root',
+      path: '/mock-docs/canto/j1/attachments/chunk-v1-p1-missing-root-generation',
+      name: 'missing-root.bin',
+      type: 'file',
+      encrypted: false,
+      deleted: false,
+      content: {
+        format: 'canto-chunked-v1',
+        byteLength: 1,
+        chunkSize: 1,
+        chunkCount: 1,
+        generation: 'missing-root-generation',
+      },
+    };
+    filesystem[`${attachment.path}/manifest`] = `enc:${JSON.stringify({
+      journalId: 'j1',
+      pageId: 'p1',
+      attachment,
+    })}`;
+    await expect(store.getAttachment(attachment.path)).rejects.toThrow('Attachment chunk missing');
+
+    const incomplete = {
+      ...attachment,
+      id: 'incomplete-root',
+      content: { ...attachment.content!, generation: 'incomplete-root-generation' },
+    };
+    const incompleteRoot =
+      '/mock-docs/canto/j1/attachments/chunk-v1-p1-incomplete-root-incomplete-root-generation';
+    filesystem[`${incompleteRoot}/0`] = 'enc:partial';
+    await expect(
+      store.saveAttachmentChunks!(
+        'j1',
+        'p1',
+        incomplete,
+        (async function* () {
+          yield 'frame';
+        })(),
+      ),
+    ).rejects.toThrow('Incomplete attachment generation already exists');
+
+    const page = { ...makePage('p1'), files: [attachment] };
+    await store.savePage('j1', page, undefined, true);
+    await store.deletePage('j1', 'p1');
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(filesystem[`${attachment.path}/manifest`]).toBeUndefined();
+  });
+
+  it('decrypts password-protected chunk frames with the journal key', async () => {
+    const store = createLocalStore(createMockEncryption());
+    const key = new Uint8Array(32).fill(7);
+    const attachment: Attachment = {
+      id: 'encrypted-chunk',
+      path: '',
+      name: 'encrypted-chunk.bin',
+      type: 'file',
+      encrypted: true,
+      deleted: false,
+      content: chunkedContentForBase64('QUJD'),
+    };
+    const path = await store.saveAttachment('j1', 'p1', attachment, 'QUJD', key);
+    await expect(store.getAttachment(path, key)).resolves.toBe('QUJD');
+  });
+
   it('keeps the published native generation readable when replacement encryption fails', async () => {
     const encryption = createMockEncryption();
     const store = createLocalStore(encryption);
@@ -519,6 +885,79 @@ describe('chunked attachment storage (native)', () => {
 });
 
 describe('reencryptJournal', () => {
+  it('removes an unreferenced replacement root if page publication cannot be staged', async () => {
+    const encryption = createMockEncryption();
+    const store = createLocalStore(encryption);
+    const attachment: Attachment = {
+      id: 'replacement-cleanup',
+      path: '',
+      name: 'replacement-cleanup.bin',
+      type: 'file',
+      encrypted: false,
+      deleted: false,
+      content: chunkedContentForBase64('QQ=='),
+    };
+    const journal = makeJournalContent('j1', [{ ...makePage('p1'), files: [attachment] }]);
+    await store.saveJournal(journal);
+    attachment.path = await store.saveAttachment('j1', 'p1', attachment, 'QQ==');
+    const loaded = await store.getJournal('j1');
+    loaded!.pages[0].files[0].path = attachment.path;
+    let writes = 0;
+    (encryption.encrypt as jest.Mock).mockImplementation(async (value: string) => {
+      writes++;
+      if (writes === 3) throw new Error('staging failed');
+      return `enc:${value}`;
+    });
+
+    await expect(
+      store.reencryptJournal(loaded!, undefined, new Uint8Array(32).fill(9)),
+    ).rejects.toThrow('staging failed');
+    await expect(store.getAttachment(attachment.path)).resolves.toBe('QQ==');
+  });
+
+  it('keeps unsafe unprotected legacy attachments device-only and rejects protected ones', async () => {
+    const store = createLocalStore(createMockEncryption());
+    const unsafe: Attachment = {
+      id: 'unsafe',
+      path: '/mock-docs/canto/j1/attachments/missing-legacy.bin',
+      name: 'missing-legacy.bin',
+      type: 'file',
+      encrypted: false,
+      deleted: false,
+      size: 1,
+    };
+    const journal = makeJournalContent('j1', [{ ...makePage('p1'), files: [unsafe] }]);
+    const result = await store.reencryptJournal(journal, undefined, new Uint8Array(32).fill(7));
+    expect(result.skippedAttachments).toEqual([{ name: unsafe.name, size: unsafe.size }]);
+
+    await expect(
+      store.reencryptJournal(
+        makeJournalContent('j2', [
+          { ...makePage('p2'), files: [{ ...unsafe, id: 'protected', encrypted: true }] },
+        ]),
+        new Uint8Array(32).fill(1),
+        new Uint8Array(32).fill(2),
+      ),
+    ).rejects.toThrow('Cannot safely re-encrypt legacy attachment');
+  });
+
+  it('reports local attachment size metadata without opening the attachment', async () => {
+    const store = createLocalStore(createMockEncryption());
+    const path = await store.saveAttachment(
+      'j1',
+      'p1',
+      { id: 'sized', path: '', name: 'sized.bin', type: 'file', encrypted: false, deleted: false },
+      'QUJD',
+    );
+    await expect(store.getAttachmentStorageSize!(path)).resolves.toEqual({
+      status: 'known',
+      bytes: 8,
+    });
+    await expect(store.getAttachmentStorageSize!('/missing')).resolves.toEqual({
+      status: 'missing',
+    });
+  });
+
   it('re-encrypts pages and metadata with progress', async () => {
     const encryption = createMockEncryption();
     const store = createLocalStore(encryption);
@@ -717,6 +1156,35 @@ describe('reencryptJournal', () => {
 });
 
 describe('reencryptAll (device key rotation)', () => {
+  it('rejects an oversized legacy attachment before opening it during device-key rotation', async () => {
+    const store = createLocalStore(createMockEncryption());
+    filesystem['/mock-docs/canto/j1/attachments/legacy-large.bin'] = 'x'.repeat(33 * 1024 * 1024);
+    await expect(
+      store.reencryptAll(
+        async (value) => value,
+        async (value) => value,
+        async (value) => `new:${value}`,
+      ),
+    ).rejects.toThrow('Cannot safely rotate device key for legacy attachment');
+  });
+
+  it('removes pre-commit device-key staging when decryption fails', async () => {
+    const store = createLocalStore(createMockEncryption());
+    await store.saveJournal(makeJournalContent('j1'));
+    await expect(
+      store.reencryptAll(
+        async () => {
+          throw new Error('old key unavailable');
+        },
+        async (value) => value,
+        async (value) => `new:${value}`,
+      ),
+    ).rejects.toThrow('old key unavailable');
+    expect(Object.keys(filesystem).some((path) => path.includes('/.transactions/device-'))).toBe(
+      false,
+    );
+  });
+
   it('re-encrypts all data so it is readable with new key', async () => {
     // Simulate two different device keys via prefixed passthrough encryption
     const oldEncryption = createMockEncryption();

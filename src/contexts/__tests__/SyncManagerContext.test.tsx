@@ -6,6 +6,7 @@
 const mockDisconnect = jest.fn().mockResolvedValue(undefined);
 const mockSyncJournal = jest.fn().mockResolvedValue({ pushed: 0, pulled: 0 });
 const mockScheduleSyncDebounced = jest.fn();
+const mockCancelSync = jest.fn();
 const mockGetState = jest.fn();
 const mockSubscribe = jest.fn<() => void, [() => void]>(() => jest.fn());
 
@@ -14,6 +15,7 @@ jest.mock('@/lib/sync/manager', () => ({
     disconnect: mockDisconnect,
     syncJournal: mockSyncJournal,
     scheduleSyncDebounced: mockScheduleSyncDebounced,
+    cancelSync: mockCancelSync,
     getState: mockGetState,
     subscribe: mockSubscribe,
   })),
@@ -137,6 +139,15 @@ describe('SyncManagerContext', () => {
     });
 
     expect(mockAuthValue.getAccessToken).not.toHaveBeenCalled();
+  });
+
+  it('cancels the active journal run through the manager', async () => {
+    const { result } = renderHook(() => useSyncManager(), { wrapper });
+    await act(async () => {});
+
+    act(() => result.current.cancelSync('j1'));
+
+    expect(mockCancelSync).toHaveBeenCalledWith('j1');
   });
 
   it('scheduleSyncDebounced logs error when getAccessToken fails', async () => {

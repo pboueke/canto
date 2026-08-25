@@ -14,6 +14,7 @@ import {
   ATTACHMENT_CHUNK_SIZE,
   chunkedContentForBase64,
   chunkedContentForByteLength,
+  encodeChunkFrame,
 } from '../storage/attachment-content';
 
 // Passthrough encryption mock (no actual encryption for test simplicity)
@@ -132,6 +133,43 @@ describe('storage transaction recovery (web/IndexedDB)', () => {
     await createLocalStore(createMockEncryption()).initialize();
     expect(await getRawStorageRecord(target)).toBe('enc:new');
     expect(await getRawStorageRecord(`${committedRoot}/marker`)).toBeUndefined();
+  });
+
+  it('discards a malformed transaction marker without attempting recovery', async () => {
+    await createLocalStore(createMockEncryption()).initialize();
+    await putRawStorageRecord('canto/.transactions/corrupt/marker', '{invalid');
+    _resetDB();
+    await createLocalStore(createMockEncryption()).initialize();
+    expect(await getRawStorageRecord('canto/.transactions/corrupt/marker')).toBeUndefined();
+  });
+
+  it('cleans abandoned transaction roots and refuses committed records without their staged ciphertext', async () => {
+    await createLocalStore(createMockEncryption()).initialize();
+    const preparedRoot = 'canto/.transactions/prepared-roots';
+    const replacementRoot = 'canto/j1/attachments/chunk-v1-unpublished';
+    await putRawStorageRecord(`${preparedRoot}/orphan`, 'unused');
+    await putRawStorageRecord(`${replacementRoot}/0`, 'enc:unpublished');
+    await putRawStorageRecord(
+      `${preparedRoot}/marker`,
+      JSON.stringify({ phase: 'prepared', files: [], newRoots: [replacementRoot] }),
+    );
+    _resetDB();
+    await createLocalStore(createMockEncryption()).initialize();
+    expect(await getRawStorageRecord(`${preparedRoot}/orphan`)).toBeUndefined();
+    expect(await getRawStorageRecord(`${replacementRoot}/0`)).toBeUndefined();
+
+    const committedRoot = 'canto/.transactions/missing-stage';
+    await putRawStorageRecord(
+      `${committedRoot}/marker`,
+      JSON.stringify({
+        phase: 'committing',
+        files: [{ target: 'canto/j1/metadata.json', staged: `${committedRoot}/file-0` }],
+      }),
+    );
+    _resetDB();
+    await expect(createLocalStore(createMockEncryption()).initialize()).rejects.toThrow(
+      'Incomplete storage transaction staging',
+    );
   });
 });
 
@@ -472,6 +510,20 @@ describe('deletePage attachment cleanup (web)', () => {
 });
 
 describe('reencryptAll (web/IndexedDB)', () => {
+  it('refuses an unknown-size legacy attachment before staging a device-key rotation', async () => {
+    const store = createLocalStore(createMockEncryption());
+    await store.initialize();
+    await putRawStorageRecord('canto/j1/attachments/legacy.bin', 'enc:payload');
+
+    await expect(
+      store.reencryptAll(
+        async (value) => value,
+        async (value) => value,
+        async (value) => `new:${value}`,
+      ),
+    ).rejects.toThrow('Cannot safely rotate device key for legacy attachment');
+  });
+
   it('re-encrypts all data so it is readable with new key', async () => {
     const oldEncryption = createMockEncryption();
     oldEncryption.encrypt = jest.fn((data: string) => Promise.resolve(`old:${data}`));
@@ -682,6 +734,280 @@ describe('chunked attachment storage (web)', () => {
 
     await expect(store.getAttachment(path)).resolves.toBe('QUJDRA==');
   });
+
+  it('atomically persists downloaded chunk frames and deletes failed generations', async () => {
+    const store = createLocalStore(createMockEncryption());
+    await store.initialize();
+    const attachment: Attachment = {
+      id: 'downloaded',
+      path: '',
+      name: 'downloaded.bin',
+      type: 'file',
+      encrypted: false,
+      deleted: false,
+      content: {
+        format: 'canto-chunked-v1',
+        byteLength: 3,
+        chunkSize: 2,
+        chunkCount: 2,
+        generation: 'web-download-generation',
+      },
+    };
+    async function* frames() {
+      yield encodeChunkFrame('j1', 'p1', attachment, 0, 'AQI=');
+      yield encodeChunkFrame('j1', 'p1', attachment, 1, 'Aw==');
+    }
+    const path = await store.saveAttachmentChunks!('j1', 'p1', attachment, frames());
+    attachment.path = path;
+
+    await expect(store.getAttachment(path)).resolves.toBe('AQID');
+    await expect(store.saveAttachmentChunks!('j1', 'p1', attachment, frames())).resolves.toBe(path);
+    await store.deleteAttachment(path);
+    await expect(store.getAttachment(path)).resolves.toBeNull();
+  });
+
+  it('rejects malformed downloaded chunk streams before publishing their manifest', async () => {
+    const store = createLocalStore(createMockEncryption());
+    await store.initialize();
+    const attachment: Attachment = {
+      id: 'download-error',
+      path: '',
+      name: 'download-error.bin',
+      type: 'file',
+      encrypted: false,
+      deleted: false,
+      content: {
+        format: 'canto-chunked-v1',
+        byteLength: 2,
+        chunkSize: 1,
+        chunkCount: 2,
+        generation: 'web-download-error-generation',
+      },
+    };
+    async function* tooFew() {
+      yield 'first';
+    }
+    async function* tooMany() {
+      yield 'first';
+      yield 'second';
+      yield 'third';
+    }
+
+    await expect(store.saveAttachmentChunks!('j1', 'p1', attachment, tooFew())).rejects.toThrow(
+      'Missing attachment chunks',
+    );
+    await expect(store.saveAttachmentChunks!('j1', 'p1', attachment, tooMany())).rejects.toThrow(
+      'Too many attachment chunks',
+    );
+    await expect(
+      store.saveAttachmentChunks!('j1', 'p1', { ...attachment, content: undefined }, tooFew()),
+    ).rejects.toThrow('Chunked content descriptor required');
+  });
+
+  it('rejects duplicate, malformed, and incomplete local chunk generations', async () => {
+    const store = createLocalStore(createMockEncryption());
+    await store.initialize();
+    const attachment: Attachment = {
+      id: 'chunk-boundaries',
+      path: '',
+      name: 'chunk-boundaries.bin',
+      type: 'file',
+      encrypted: false,
+      deleted: false,
+      content: {
+        format: 'canto-chunked-v1',
+        byteLength: 1,
+        chunkSize: 1,
+        chunkCount: 1,
+        generation: 'chunk-boundaries-generation',
+      },
+    };
+    async function* oneByte() {
+      yield new Uint8Array([65]);
+    }
+    async function* oversized() {
+      yield new Uint8Array([65, 66]);
+    }
+    async function* tooMany() {
+      yield new Uint8Array([65]);
+      yield new Uint8Array([66]);
+    }
+
+    await store.saveAttachmentStream!('j1', 'p1', attachment, oneByte());
+    await expect(store.saveAttachmentStream!('j1', 'p1', attachment, oneByte())).rejects.toThrow(
+      'Attachment generation already exists',
+    );
+    await expect(
+      store.saveAttachmentStream!(
+        'j1',
+        'p1',
+        { ...attachment, id: 'no-descriptor', content: undefined },
+        oneByte(),
+      ),
+    ).rejects.toThrow('Chunked content descriptor required');
+    await expect(
+      store.saveAttachmentStream!(
+        'j1',
+        'p1',
+        {
+          ...attachment,
+          id: 'oversized',
+          content: { ...attachment.content!, generation: 'oversized' },
+        },
+        oversized(),
+      ),
+    ).rejects.toThrow('stream chunk exceeds limit');
+    await expect(
+      store.saveAttachmentStream!(
+        'j1',
+        'p1',
+        {
+          ...attachment,
+          id: 'too-many',
+          content: { ...attachment.content!, generation: 'too-many' },
+        },
+        tooMany(),
+      ),
+    ).rejects.toThrow('Too many attachment chunks');
+
+    const incomplete = {
+      ...attachment,
+      id: 'incomplete',
+      content: { ...attachment.content!, generation: 'incomplete' },
+    };
+    await putRawStorageRecord(
+      'canto/j1/attachments/chunk-v1-p1-incomplete-incomplete/0',
+      'enc:partial',
+    );
+    async function* frames() {
+      yield 'frame';
+    }
+    await expect(store.saveAttachmentChunks!('j1', 'p1', incomplete, frames())).rejects.toThrow(
+      'Incomplete attachment generation already exists',
+    );
+
+    const direct = {
+      ...attachment,
+      id: 'direct-duplicate',
+      content: { ...attachment.content!, generation: 'direct-duplicate' },
+    };
+    await store.saveAttachment('j1', 'p1', direct, 'QQ==');
+    await expect(store.saveAttachment('j1', 'p1', direct, 'QQ==')).rejects.toThrow(
+      'Attachment generation already exists',
+    );
+
+    const failingEncryption = createMockEncryption();
+    (failingEncryption.encrypt as jest.Mock).mockRejectedValue(new Error('device write failed'));
+    await expect(
+      createLocalStore(failingEncryption).saveAttachment(
+        'j1',
+        'p1',
+        {
+          ...attachment,
+          id: 'failed-write',
+          content: { ...attachment.content!, generation: 'failed-write' },
+        },
+        'QQ==',
+      ),
+    ).rejects.toThrow('device write failed');
+
+    async function* mismatch() {
+      yield new Uint8Array([]);
+    }
+    await expect(
+      store.saveAttachmentStream!(
+        'j1',
+        'p1',
+        {
+          ...attachment,
+          id: 'mismatch',
+          content: { ...attachment.content!, generation: 'mismatch' },
+        },
+        mismatch(),
+      ),
+    ).rejects.toThrow('Attachment stream length mismatch');
+  });
+
+  it('reports corrupt chunk manifests, missing chunks, and cyclic redirects', async () => {
+    const store = createLocalStore(createMockEncryption());
+    await store.initialize();
+    const invalidRoot = 'canto/j1/attachments/invalid-root';
+    await putRawStorageRecord(
+      `${invalidRoot}/manifest`,
+      `enc:${JSON.stringify({ journalId: 'j1', pageId: 'p1', attachment: { name: 'invalid' } })}`,
+    );
+    await expect(store.getAttachment(invalidRoot)).rejects.toThrow(
+      'Invalid chunked attachment manifest',
+    );
+
+    const missingRoot = 'canto/j1/attachments/missing-root';
+    const missingAttachment: Attachment = {
+      id: 'missing',
+      path: missingRoot,
+      name: 'missing.bin',
+      type: 'file',
+      encrypted: false,
+      deleted: false,
+      content: chunkedContentForByteLength(1),
+    };
+    await putRawStorageRecord(
+      `${missingRoot}/manifest`,
+      `enc:${JSON.stringify({ journalId: 'j1', pageId: 'p1', attachment: missingAttachment })}`,
+    );
+    await expect(store.getAttachment(missingRoot)).rejects.toThrow('Attachment chunk missing');
+    await expect(
+      store.forEachAttachmentChunk!(missingAttachment, async () => undefined),
+    ).rejects.toThrow('Attachment chunk missing');
+    await expect(
+      store.forEachAttachmentChunk!(
+        { ...missingAttachment, content: undefined },
+        async () => undefined,
+      ),
+    ).rejects.toThrow('Chunked content descriptor required');
+
+    for (let index = 0; index < 4; index++) {
+      await putRawStorageRecord(`redirect-${index}.redirect`, `enc:redirect-${index + 1}`);
+    }
+    await expect(store.getAttachment('redirect-0')).rejects.toThrow('redirect chain is too deep');
+  });
+
+  it('reports missing, legacy-unknown, and malformed attachment sizes without reading payloads', async () => {
+    const store = createLocalStore(createMockEncryption());
+    await store.initialize();
+    await putRawStorageRecord('canto/j1/attachments/legacy', 'enc:payload');
+    await putRawStorageRecord('canto/j1/attachments/malformed.size', 'not-a-size');
+
+    await expect(store.getAttachmentStorageSize!('canto/j1/attachments/missing')).resolves.toEqual({
+      status: 'missing',
+    });
+    await expect(store.getAttachmentStorageSize!('canto/j1/attachments/legacy')).resolves.toEqual({
+      status: 'unknown',
+    });
+    await expect(
+      store.getAttachmentStorageSize!('canto/j1/attachments/malformed'),
+    ).resolves.toEqual({
+      status: 'unknown',
+    });
+  });
+
+  it('cleans up a chunk root when its owning page is deleted', async () => {
+    const store = createLocalStore(createMockEncryption());
+    await store.initialize();
+    const attachment: Attachment = {
+      id: 'delete-root',
+      path: '',
+      name: 'delete-root.bin',
+      type: 'file',
+      encrypted: false,
+      deleted: false,
+      content: chunkedContentForByteLength(1),
+    };
+    attachment.path = await store.saveAttachment('j1', 'p1', attachment, 'QQ==');
+    await store.savePage('j1', { ...makePage('p1'), files: [attachment] }, undefined, true);
+    await store.deletePage('j1', 'p1');
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    await expect(store.getAttachment(attachment.path)).resolves.toBeNull();
+  });
 });
 
 describe('reencryptJournal (web/IndexedDB)', () => {
@@ -735,6 +1061,33 @@ describe('reencryptJournal (web/IndexedDB)', () => {
 });
 
 describe('reencryptJournal attachment handling (web)', () => {
+  it('rolls back an unpublished replacement root when a source chunk is missing', async () => {
+    const store = createLocalStore(createMockEncryption());
+    await store.initialize();
+    const attachment: Attachment = {
+      id: 'missing-source',
+      path: 'canto/j1/attachments/chunk-v1-p1-missing-source-old',
+      name: 'missing-source.bin',
+      type: 'file',
+      encrypted: false,
+      deleted: false,
+      content: {
+        format: 'canto-chunked-v1',
+        byteLength: 1,
+        chunkSize: 1,
+        chunkCount: 1,
+        generation: 'old',
+      },
+    };
+    await expect(
+      store.reencryptJournal(
+        makeJournalContent('j1', [{ ...makePage('p1'), files: [attachment] }]),
+        undefined,
+        new Uint8Array(32).fill(1),
+      ),
+    ).rejects.toThrow('Attachment chunk missing');
+  });
+
   it('falls back when attachment is not password-encrypted during reencrypt', async () => {
     const encryption = createMockEncryption();
     const store = createLocalStore(encryption);
@@ -1160,6 +1513,74 @@ describe('IDB error paths (web/IndexedDB)', () => {
     });
   });
 
+  it('surfaces IDB existence-check errors and synchronous write failures', async () => {
+    const { store } = await getInitializedStore();
+    interceptNextTransaction((tx) => {
+      const originalObjectStore = tx.objectStore.bind(tx);
+      tx.objectStore = (name: string) => {
+        const objectStore = originalObjectStore(name);
+        objectStore.getKey = () => {
+          const request = {
+            onsuccess: null as ((event: Event) => void) | null,
+            onerror: null as ((event: Event) => void) | null,
+            error: new DOMException('Check failed'),
+          };
+          queueMicrotask(() => request.onerror?.(new Event('error')));
+          return request as unknown as IDBRequest;
+        };
+        return objectStore;
+      };
+    });
+    await expect(store.hasCompletedDeviceKeyRotation!()).rejects.toThrow('Check failed');
+
+    const { store: writeStore } = await getInitializedStore();
+    interceptNextTransaction((tx) => {
+      const originalObjectStore = tx.objectStore.bind(tx);
+      tx.objectStore = (name: string) => {
+        const objectStore = originalObjectStore(name);
+        objectStore.put = () => {
+          throw new Error('Synchronous write failure');
+        };
+        return objectStore;
+      };
+    });
+    await expect(writeStore.savePage('j1', makePage('p1'))).rejects.toThrow(
+      'Synchronous write failure',
+    );
+  });
+
+  it('surfaces IDB key-list errors while loading a journal', async () => {
+    const { store } = await getInitializedStore();
+    await store.saveJournal(makeJournalContent('j1'));
+    const original = origTransaction;
+    let calls = 0;
+    IDBDatabase.prototype.transaction = function (
+      storeNames: string | string[],
+      mode?: IDBTransactionMode,
+    ) {
+      const tx = original.call(this, storeNames, mode);
+      calls++;
+      if (calls === 2) {
+        const originalObjectStore = tx.objectStore.bind(tx);
+        tx.objectStore = (name: string) => {
+          const objectStore = originalObjectStore(name);
+          objectStore.getAllKeys = () => {
+            const request = {
+              onsuccess: null as ((event: Event) => void) | null,
+              onerror: null as ((event: Event) => void) | null,
+              error: new DOMException('List failed'),
+            };
+            queueMicrotask(() => request.onerror?.(new Event('error')));
+            return request as unknown as IDBRequest;
+          };
+          return objectStore;
+        };
+      }
+      return tx;
+    };
+    await expect(store.getJournal('j1')).rejects.toThrow('List failed');
+  });
+
   describe('attachment reads retry transient transaction aborts', () => {
     it('retries an attachment read after the first transaction aborts', async () => {
       const { store } = await getInitializedStore();
@@ -1413,6 +1834,64 @@ describe('IDB error paths (web/IndexedDB)', () => {
       });
 
       await expect(store.deleteJournal('j1')).rejects.toThrow();
+    });
+  });
+
+  describe('IDB operation timeouts', () => {
+    function stalledTransaction(objectStore: unknown) {
+      return {
+        abort: jest.fn(),
+        error: null,
+        oncomplete: null,
+        onerror: null,
+        onabort: null,
+        objectStore: () => objectStore,
+      } as unknown as IDBTransaction;
+    }
+
+    it('times out stalled read and existence-check transactions', async () => {
+      const { store } = await getInitializedStore();
+      jest.useFakeTimers();
+      const readTx = stalledTransaction({ get: jest.fn(() => ({})) });
+      IDBDatabase.prototype.transaction = (() =>
+        readTx) as typeof IDBDatabase.prototype.transaction;
+      const read = store.getPage('j1', 'p1');
+      const readAssertion = expect(read).rejects.toThrow('Timeout reading');
+      await Promise.resolve();
+      await jest.advanceTimersByTimeAsync(10_000);
+      await readAssertion;
+      expect(readTx.abort).toHaveBeenCalled();
+
+      const hasTx = stalledTransaction({ getKey: jest.fn(() => ({})) });
+      IDBDatabase.prototype.transaction = (() => hasTx) as typeof IDBDatabase.prototype.transaction;
+      const has = store.hasCompletedDeviceKeyRotation!();
+      const hasAssertion = expect(has).rejects.toThrow('Timeout checking');
+      await Promise.resolve();
+      await jest.advanceTimersByTimeAsync(10_000);
+      await hasAssertion;
+      expect(hasTx.abort).toHaveBeenCalled();
+    });
+
+    it('times out stalled delete and prefix-delete transactions', async () => {
+      const { store } = await getInitializedStore();
+      jest.useFakeTimers();
+      const deleteTx = stalledTransaction({ delete: jest.fn() });
+      IDBDatabase.prototype.transaction = (() =>
+        deleteTx) as typeof IDBDatabase.prototype.transaction;
+      const removed = store.clearCompletedDeviceKeyRotation!();
+      const removedAssertion = expect(removed).rejects.toThrow('Timeout deleting');
+      await Promise.resolve();
+      await jest.advanceTimersByTimeAsync(10_000);
+      await removedAssertion;
+
+      const prefixTx = stalledTransaction({ openCursor: jest.fn(() => ({})) });
+      IDBDatabase.prototype.transaction = (() =>
+        prefixTx) as typeof IDBDatabase.prototype.transaction;
+      const journal = store.deleteJournal('j1');
+      const journalAssertion = expect(journal).rejects.toThrow('Timeout deleting prefix');
+      await Promise.resolve();
+      await jest.advanceTimersByTimeAsync(10_000);
+      await journalAssertion;
     });
   });
 });

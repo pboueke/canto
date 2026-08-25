@@ -90,6 +90,36 @@ describe('Google Drive API helper', () => {
       expect(global.fetch).toHaveBeenCalledTimes(2);
       expect((global.fetch as jest.Mock).mock.calls[1][0]).toContain('pageToken=page-2');
     });
+
+    it('refuses malformed and non-Google request URLs before issuing a fetch', async () => {
+      const originalURL = globalThis.URL;
+      try {
+        Object.defineProperty(globalThis, 'URL', {
+          configurable: true,
+          value: class {
+            origin = 'https://example.invalid';
+          },
+        });
+        await expect(listFiles(TOKEN, "name = 'test'")).rejects.toThrow(
+          'Refusing a non-Google Drive request',
+        );
+
+        Object.defineProperty(globalThis, 'URL', {
+          configurable: true,
+          value: class {
+            constructor() {
+              throw new Error('malformed');
+            }
+          },
+        });
+        await expect(listFiles(TOKEN, "name = 'test'")).rejects.toThrow(
+          'Refusing an invalid Google Drive request',
+        );
+        expect(global.fetch).not.toHaveBeenCalled();
+      } finally {
+        Object.defineProperty(globalThis, 'URL', { configurable: true, value: originalURL });
+      }
+    });
   });
 
   describe('getFile', () => {
@@ -291,6 +321,44 @@ describe('Google Drive API helper', () => {
   });
 
   describe('fetchWithRetry network error retry', () => {
+    it('retries a transient Drive response and honours cancellation while waiting', async () => {
+      const originalSetTimeout = globalThis.setTimeout;
+      globalThis.setTimeout = ((fn: () => void) => originalSetTimeout(fn, 0)) as typeof setTimeout;
+      try {
+        (global.fetch as jest.Mock)
+          .mockResolvedValueOnce({
+            ok: false,
+            status: 429,
+            headers: { get: () => '0' },
+            text: () => Promise.resolve('busy'),
+          })
+          .mockResolvedValueOnce({
+            ok: true,
+            status: 200,
+            text: () => Promise.resolve(JSON.stringify({ files: [] })),
+          });
+
+        await expect(listFiles(TOKEN, "name = 'test'")).resolves.toEqual([]);
+        expect(global.fetch).toHaveBeenCalledTimes(2);
+
+        const controller = new AbortController();
+        globalThis.setTimeout = (() => 1) as unknown as typeof setTimeout;
+        (global.fetch as jest.Mock).mockResolvedValueOnce({
+          ok: false,
+          status: 429,
+          headers: { get: () => '60' },
+          text: () => Promise.resolve('busy'),
+        });
+        const pending = listFiles(TOKEN, "name = 'test'", 'drive', controller.signal);
+        await Promise.resolve();
+        await Promise.resolve();
+        controller.abort();
+        await expect(pending).rejects.toMatchObject({ name: 'AbortError' });
+      } finally {
+        globalThis.setTimeout = originalSetTimeout;
+      }
+    });
+
     it('retries on network error (fetch throws) and succeeds', async () => {
       // Speed up the 1s retry delay
       const origSetTimeout = globalThis.setTimeout;

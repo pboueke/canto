@@ -5,7 +5,6 @@ import {
   beginKeyRotation,
   abortKeyRotation,
   commitKeyRotation,
-  finalizeCompletedKeyRotation,
   recoverKeyRotation,
   _resetKeyCreationPromise,
 } from '../encryption/device';
@@ -110,7 +109,7 @@ describe('Device key — prepareKeyRotation / commitKeyRotation', () => {
     const { oldKey, newKey } = await prepareKeyRotation();
 
     await beginKeyRotation(oldKey, newKey);
-    await finalizeCompletedKeyRotation();
+    await recoverKeyRotation(true);
 
     expect(await SecureStore.getItemAsync('canto_device_encryption_key')).toBe(bytesToHex(newKey));
     expect(await SecureStore.getItemAsync('canto_device_encryption_previous_key')).toBeNull();
@@ -180,6 +179,27 @@ describe('createDeviceEncryption — key lifecycle', () => {
     // Should still be able to decrypt after clearing cache (re-reads stored key)
     const decrypted = await device.decrypt(ciphertext);
     expect(decrypted).toBe('test');
+  });
+
+  it('uses the retained previous key to read ciphertext during a durable rotation', async () => {
+    const device = createDeviceEncryption();
+    const ciphertext = await device.encrypt('old committed data');
+    device.clearKey!();
+    const { oldKey, newKey } = await prepareKeyRotation();
+    await beginKeyRotation(oldKey, newKey);
+
+    const rotatingDevice = createDeviceEncryption();
+    await expect(rotatingDevice.decrypt(ciphertext)).resolves.toBe('old committed data');
+  });
+
+  it('does nothing when startup finds no pending key rotation', async () => {
+    await expect(recoverKeyRotation(true)).resolves.toBeUndefined();
+  });
+
+  it('surfaces decryption failures when no previous rotation key exists', async () => {
+    const device = createDeviceEncryption();
+    await device.encrypt('seed');
+    await expect(device.decrypt('not-valid-ciphertext')).rejects.toThrow();
   });
 
   it('resets keyCreationPromise on SecureStore error so retry works', async () => {

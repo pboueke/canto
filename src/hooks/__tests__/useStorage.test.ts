@@ -616,6 +616,55 @@ describe('useAttachment', () => {
 
     expect(mockStore.deleteAttachment).toHaveBeenCalledWith('path/to/file');
   });
+
+  it('fails explicitly when the active store cannot ingest chunk streams', async () => {
+    const attachment = {
+      id: 'stream',
+      path: '',
+      name: 'stream.bin',
+      type: 'file' as const,
+      encrypted: false,
+      deleted: false,
+    };
+    const { result } = renderHook(() => useAttachment());
+
+    await expect(
+      result.current.saveAttachmentStream(
+        'j1',
+        'p1',
+        attachment,
+        (async function* () {
+          yield new Uint8Array([1]);
+        })(),
+      ),
+    ).rejects.toThrow('Chunked attachment ingestion is unavailable');
+  });
+
+  it('forwards chunk streams and encryption keys to stores that support ingestion', async () => {
+    const key = new Uint8Array([1]);
+    const attachment = {
+      id: 'stream',
+      path: '',
+      name: 'stream.bin',
+      type: 'file' as const,
+      encrypted: true,
+      deleted: false,
+    };
+    const chunks = (async function* () {
+      yield new Uint8Array([1]);
+    })();
+    const saveAttachmentStream = jest.fn().mockResolvedValue('attachments/stream');
+    Object.assign(mockStore, { saveAttachmentStream });
+    try {
+      const { result } = renderHook(() => useAttachment(key));
+      await expect(
+        result.current.saveAttachmentStream('j1', 'p1', attachment, chunks),
+      ).resolves.toBe('attachments/stream');
+      expect(saveAttachmentStream).toHaveBeenCalledWith('j1', 'p1', attachment, chunks, key);
+    } finally {
+      delete (mockStore as { saveAttachmentStream?: unknown }).saveAttachmentStream;
+    }
+  });
 });
 
 describe('useJournalTags – null journal', () => {

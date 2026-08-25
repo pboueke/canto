@@ -14,7 +14,7 @@ async function collect(source: AsyncIterable<Uint8Array>): Promise<Uint8Array[]>
 describe('bounded attachment ingestion', () => {
   const largeSize = ATTACHMENT_CHUNK_SIZE * 3 + 17;
 
-  it('reads a web Blob only in 512 KiB slices without a full-file arrayBuffer', async () => {
+  it('reads a web Blob only in 12 MiB slices without a full-file arrayBuffer', async () => {
     const sliceCalls: Array<[number, number]> = [];
     const blob = {
       size: largeSize,
@@ -49,7 +49,7 @@ describe('bounded attachment ingestion', () => {
     ]);
   });
 
-  it('uses native FileHandle.readBytes with a 512 KiB maximum, never File.bytes/readableStream', async () => {
+  it('uses native FileHandle.readBytes with a 12 MiB maximum, never File.bytes/readableStream', async () => {
     const readLengths: number[] = [];
     const handle = {
       readBytes: (length: number) => {
@@ -122,6 +122,31 @@ describe('bounded attachment ingestion', () => {
 
     await expect(collect(nativeAttachmentChunks(file))).rejects.toThrow(
       'Attachment source ended before its declared size',
+    );
+    expect(handle.close).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([-1, 0.5, Number.NaN])('rejects an unavailable native source size: %p', async (size) => {
+    const open = jest.fn();
+
+    await expect(collect(nativeAttachmentChunks({ size, open }))).rejects.toThrow(
+      'Attachment size is unavailable for streamed import',
+    );
+    expect(open).not.toHaveBeenCalled();
+  });
+
+  it('closes a native handle when it returns more bytes than requested', async () => {
+    const handle = {
+      readBytes: () => new Uint8Array(2),
+      close: jest.fn(),
+    };
+    const file = {
+      size: 1,
+      open: () => handle,
+    } as NativeAttachmentFile;
+
+    await expect(collect(nativeAttachmentChunks(file))).rejects.toThrow(
+      'Attachment source returned an invalid chunk length',
     );
     expect(handle.close).toHaveBeenCalledTimes(1);
   });

@@ -199,6 +199,7 @@ describe('JournalKeyContext — default context (no provider)', () => {
     result.current.clearKey('x');
     result.current.clearAll();
     result.current.touchActivity();
+    expect(() => result.current.onAutoLock(() => {})()).not.toThrow();
   });
 });
 
@@ -211,6 +212,39 @@ describe('JournalKeyContext — AppState auto-lock', () => {
 
   afterEach(() => {
     jest.useRealTimers();
+  });
+
+  it('notifies auto-lock listeners and lets them unsubscribe', async () => {
+    mockGetAutoLockTimeout.mockResolvedValue(1);
+    const { result } = renderHook(() => useJournalKeys(), { wrapper });
+    const listener = jest.fn();
+    const unsubscribe = result.current.onAutoLock(listener);
+    const key = new Uint8Array(32).fill(0xaa);
+    act(() => result.current.setKey('listener-key', key));
+
+    await act(async () => {
+      appStateHandler!('background');
+    });
+    jest.advanceTimersByTime(10);
+    await act(async () => {
+      appStateHandler!('active');
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(listener).toHaveBeenCalledTimes(1);
+
+    unsubscribe();
+    act(() => result.current.setKey('listener-key-2', new Uint8Array(32).fill(1)));
+    await act(async () => {
+      appStateHandler!('background');
+    });
+    jest.advanceTimersByTime(10);
+    await act(async () => {
+      appStateHandler!('active');
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(listener).toHaveBeenCalledTimes(1);
   });
 
   it('clears keys when returning from background after timeout', async () => {

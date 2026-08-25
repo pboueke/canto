@@ -80,4 +80,50 @@ describe('device-key rotation read barrier', () => {
     await write;
     expect(futureMutator).toHaveBeenCalledWith('new data');
   });
+
+  it('waits for an active writer and releases queued operations when rotation fails', async () => {
+    const writeStarted = deferred();
+    const releaseWrite = deferred();
+    const rotationStarted = deferred();
+    const write = jest.fn(async () => {
+      writeStarted.resolve();
+      await releaseWrite.promise;
+    });
+    const reencryptAll = jest.fn(async (..._args: unknown[]) => {
+      rotationStarted.resolve();
+      throw new Error('rotation failed');
+    });
+    const laterWrite = jest.fn(async () => 'written');
+    const guarded = serializeDeviceKeyWrites({ write, laterWrite, reencryptAll });
+
+    const activeWrite = guarded.write();
+    await writeStarted.promise;
+    const rotation = guarded.reencryptAll(
+      async () => '',
+      async () => '',
+      async () => '',
+    );
+    await Promise.resolve();
+    expect(reencryptAll).not.toHaveBeenCalled();
+
+    releaseWrite.resolve();
+    await activeWrite;
+    await rotationStarted.promise;
+    const queuedWrite = guarded.laterWrite();
+    await expect(rotation).rejects.toThrow('rotation failed');
+
+    await expect(queuedWrite).resolves.toBe('written');
+    expect(laterWrite).toHaveBeenCalledTimes(1);
+  });
+
+  it('leaves non-function properties untouched and supports stores without rotation', async () => {
+    const getAttachment = jest.fn(async (..._args: unknown[]) => 'attachment');
+    const store = { getAttachment, version: 1 };
+
+    const guarded = serializeDeviceKeyWrites(store);
+
+    expect(guarded).toBe(store);
+    expect(guarded.version).toBe(1);
+    await expect(guarded.getAttachment('j', 'p', 'a')).resolves.toBe('attachment');
+  });
 });

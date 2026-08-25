@@ -32,7 +32,6 @@ import {
   beginKeyRotation,
   abortKeyRotation,
   commitKeyRotation,
-  finalizeCompletedKeyRotation,
   recoverKeyRotation,
   _resetKeyCreationPromise,
 } from '../encryption/device.web';
@@ -145,7 +144,7 @@ describe('Device key web — prepareKeyRotation / commitKeyRotation', () => {
     const { oldKey, newKey } = await prepareKeyRotation();
 
     await beginKeyRotation(oldKey, newKey);
-    await finalizeCompletedKeyRotation();
+    await recoverKeyRotation(true);
 
     expect(localStorageMock.getItem(DEVICE_KEY_ALIAS)).toBe(bytesToHex(newKey));
     expect(localStorageMock.getItem(PREVIOUS_DEVICE_KEY_ALIAS)).toBeNull();
@@ -213,6 +212,27 @@ describe('createDeviceEncryption web — key lifecycle', () => {
     device.clearKey!();
     const decrypted = await device.decrypt(ciphertext);
     expect(decrypted).toBe('test');
+  });
+
+  it('uses the retained previous key to read ciphertext during a durable rotation', async () => {
+    const device = createDeviceEncryption();
+    const ciphertext = await device.encrypt('old committed data');
+    device.clearKey!();
+    const { oldKey, newKey } = await prepareKeyRotation();
+    await beginKeyRotation(oldKey, newKey);
+
+    const rotatingDevice = createDeviceEncryption();
+    await expect(rotatingDevice.decrypt(ciphertext)).resolves.toBe('old committed data');
+  });
+
+  it('does nothing when startup finds no pending key rotation', async () => {
+    await expect(recoverKeyRotation(true)).resolves.toBeUndefined();
+  });
+
+  it('surfaces decryption failures when no previous rotation key exists', async () => {
+    const device = createDeviceEncryption();
+    await device.encrypt('seed');
+    await expect(device.decrypt('not-valid-ciphertext')).rejects.toThrow();
   });
 
   it('resets keyCreationPromise on localStorage error so retry works', async () => {
