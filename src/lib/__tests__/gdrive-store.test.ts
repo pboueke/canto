@@ -353,6 +353,43 @@ describe('GDriveRemoteStore', () => {
       const parsed = JSON.parse(result!);
       expect(parsed.title).toBe('Test Journal');
     });
+
+    it('chooses the newest metadata file when a legacy journal has duplicates', async () => {
+      await store.connect({ accessToken: TOKEN });
+
+      const folder = (id: string, name: string) => ({
+        id,
+        name,
+        mimeType: 'application/vnd.google-apps.folder',
+        modifiedTime: '',
+      });
+      mockedApi.listFiles.mockResolvedValueOnce([folder('root-id', 'Canto')]);
+      mockedApi.listFiles.mockResolvedValueOnce([folder('j-id', 'journal-1')]);
+      // An old concurrent sync could create a second meta.json. Its key no
+      // longer matches the registry, so importing must select the latest one.
+      mockedApi.listFiles.mockResolvedValueOnce([
+        {
+          id: 'old-meta',
+          name: 'meta.json',
+          mimeType: 'application/json',
+          modifiedTime: '2026-01-01T00:00:00.000Z',
+        },
+        {
+          id: 'current-meta',
+          name: 'meta.json',
+          mimeType: 'application/json',
+          modifiedTime: '2026-02-01T00:00:00.000Z',
+        },
+      ]);
+      mockedApi.getFileContent.mockImplementation(async (_token, fileId) =>
+        fileId === 'current-meta' ? 'current-ciphertext' : 'old-ciphertext',
+      );
+
+      await expect(store.downloadJournalMetaCandidates('journal-1')).resolves.toEqual([
+        'current-ciphertext',
+        'old-ciphertext',
+      ]);
+    });
   });
 
   describe('deletePage', () => {

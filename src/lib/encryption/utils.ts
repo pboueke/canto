@@ -70,7 +70,10 @@ export async function aesGcmDecrypt(ciphertext: string, key: Uint8Array): Promis
   }
 
   await yieldThread();
-  const sealed = AESSealedData.fromCombined(ciphertext);
+  // Canto persists the combined cipher payload as base64 text. Decode it here
+  // so both Expo Crypto implementations receive the same raw byte format;
+  // Android does not reliably deserialize the base64 string overload.
+  const sealed = AESSealedData.fromCombined(base64ToUint8(ciphertext));
   const aesKey = await importAesKey(key);
   const result = await aesDecryptAsync(sealed, aesKey);
 

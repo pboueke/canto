@@ -114,6 +114,34 @@ describe('retryWithBackoff', () => {
     expect(fn).toHaveBeenCalledTimes(3);
   });
 
+  it('waits for asynchronous recovery before retrying', async () => {
+    let token = 'expired';
+    const fn = jest.fn(async () => {
+      if (token === 'expired') throw new Error('Drive API error (401)');
+      return 'ok';
+    });
+    const refreshToken = jest.fn(
+      () =>
+        new Promise<void>((resolve) => {
+          setTimeout(() => {
+            token = 'fresh';
+            resolve();
+          }, 500);
+        }),
+    );
+
+    const promise = retryWithBackoff(fn, {
+      attempts: 2,
+      delaysMs: [100],
+      onAttempt: refreshToken,
+    });
+
+    await jest.advanceTimersByTimeAsync(600);
+    await expect(promise).resolves.toBe('ok');
+    expect(refreshToken).toHaveBeenCalledTimes(1);
+    expect(fn).toHaveBeenCalledTimes(2);
+  });
+
   it('reuses last delay if delaysMs is shorter than attempts-1 — all 4 waits use 50ms', async () => {
     const fn = jest.fn().mockImplementation(async () => {
       throw new Error('fail');

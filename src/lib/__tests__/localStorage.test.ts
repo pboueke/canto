@@ -844,6 +844,25 @@ describe('chunked attachment storage (native)', () => {
     await expect(store.getAttachment(path, key)).resolves.toBe('QUJD');
   });
 
+  it('reads legacy device-only chunk frames when metadata retains encrypted', async () => {
+    const store = createLocalStore(createMockEncryption());
+    const attachment: Attachment = {
+      id: 'legacy-device-only-chunk',
+      path: '',
+      name: 'legacy-device-only-chunk.bin',
+      type: 'file',
+      encrypted: true,
+      deleted: false,
+      content: chunkedContentForBase64('QUJD'),
+    };
+
+    // Pre-19.2 content can retain encrypted metadata while lacking the
+    // password layer. Import turns it into a chunked generation.
+    const path = await store.saveAttachment('j1', 'p1', attachment, 'QUJD');
+
+    await expect(store.getAttachment(path, new Uint8Array(32).fill(7))).resolves.toBe('QUJD');
+  });
+
   it('keeps the published native generation readable when replacement encryption fails', async () => {
     const encryption = createMockEncryption();
     const store = createLocalStore(encryption);

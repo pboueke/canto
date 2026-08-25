@@ -32,6 +32,7 @@ import { useGoogleAuth } from '@/contexts/GoogleAuthContext';
 import { useSyncManager } from '@/contexts/SyncManagerContext';
 import type { JournalContent, Page } from 'canto-data';
 import type { RemoteJournalMeta, DownloadFailure } from '@/lib/sync';
+import { GDriveApiError } from '@/lib/sync/gdrive/api';
 import { downloadCloudPageAttachments } from '@/lib/sync/cloud-attachment-import';
 import { safeJsonParse } from '@/lib/utils/json';
 import { DataIntegrityWarningModal } from '@/components/common/DataIntegrityWarningModal';
@@ -80,7 +81,7 @@ export function NewJournalModal({
   const { t, lang } = useI18n();
   const insets = useSafeAreaInsets();
   const isWeb = Platform.OS === 'web';
-  const { isSignedIn, accessToken } = useGoogleAuth();
+  const { isSignedIn, accessToken, getAccessToken } = useGoogleAuth();
   const { manager } = useSyncManager();
 
   const [title, setTitle] = useState('');
@@ -133,6 +134,7 @@ export function NewJournalModal({
 
   const passwordsMatch = password === '' || password === confirmPassword;
   const canCreate = title.trim().length > 0 && passwordsMatch && !busy;
+  const isImportBusy = busy || importing || cloudLoading || cloudImportPhase !== 'idle';
 
   async function handleCreate() {
     if (!canCreate) return;
@@ -159,7 +161,7 @@ export function NewJournalModal({
   }
 
   function handleClose() {
-    if (busy || importing || cloudImportPhase !== 'idle') return;
+    if (isImportBusy) return;
     resetForm();
     onClose();
   }
@@ -182,8 +184,12 @@ export function NewJournalModal({
     if (!manager || !accessToken) return;
     setCloudError(null);
     setCloudLoading(true);
+    // Let React show feedback before a potentially slow Drive request starts.
+    await new Promise((resolve) => setTimeout(resolve, 100));
     try {
-      await manager.connectWithToken(accessToken);
+      const token = await getAccessToken();
+      if (!token) throw new Error('Google Drive session expired. Please sign in again.');
+      await manager.connectWithToken(token);
       const store = manager.getRemoteStore();
       const remoteJournals = await store.listRemoteJournals();
       setCloudLocalIds(new Set(existingIds));
@@ -214,8 +220,13 @@ export function NewJournalModal({
   async function executeCloudImport(remote: RemoteJournalMeta, password: string) {
     setCloudImportPhase('preparing');
     setImportProgress(null);
+    // PBKDF2 can be expensive on Android. Paint the loading state before key
+    // derivation so submitting a password never appears to do nothing.
+    await new Promise((resolve) => setTimeout(resolve, 100));
     try {
-      await manager!.connectWithToken(accessToken!);
+      const token = await getAccessToken();
+      if (!token) throw new Error('Google Drive session expired. Please sign in again.');
+      await manager!.connectWithToken(token);
       const store = manager!.getRemoteStore();
 
       // Derive sync key from salt
@@ -225,9 +236,31 @@ export function NewJournalModal({
       const syncKey = await deriveKey(password, saltBytes, iterations);
 
       // Download and decrypt journal metadata
-      const encryptedMeta = await store.downloadJournalMeta(remote.id);
-      if (!encryptedMeta) throw new Error('Journal not found on remote');
-      const metaJson = await aesGcmDecrypt(encryptedMeta, syncKey);
+      const encryptedMetaCandidates = store.downloadJournalMetaCandidates
+        ? await store.downloadJournalMetaCandidates(remote.id)
+        : [await store.downloadJournalMeta(remote.id)].filter((value): value is string => !!value);
+      if (encryptedMetaCandidates.length === 0) throw new Error('Journal not found on remote');
+      let metaJson: string | undefined;
+      let metaDecryptError: unknown;
+      for (const encryptedMeta of encryptedMetaCandidates) {
+        try {
+          metaJson = await aesGcmDecrypt(encryptedMeta, syncKey);
+          break;
+        } catch (err) {
+          metaDecryptError = err;
+        }
+      }
+      if (!metaJson) {
+        throw new Error(
+          `Cloud metadata cannot be decrypted (journal ${remote.id}; ${encryptedMetaCandidates.length} candidate(s); ` +
+            `encrypted=${remote.encrypted ?? false}; KDF ${iterations}). ` +
+            `The remote sync key does not match the registry metadata: ${
+              metaDecryptError instanceof Error
+                ? metaDecryptError.message
+                : String(metaDecryptError)
+            }`,
+        );
+      }
       const meta = safeJsonParse<JournalContent>(metaJson, 'cloud-import-meta');
       const journal: JournalContent = { ...meta, pages: [] };
 
@@ -274,7 +307,14 @@ export function NewJournalModal({
           const page = await retryWithBackoff(() => downloadOnePage(pageId), {
             attempts: CLOUD_IMPORT_RETRY_ATTEMPTS,
             delaysMs: CLOUD_IMPORT_RETRY_DELAYS_MS,
-            onAttempt: (attempt, err) => {
+            onAttempt: async (attempt, err) => {
+              if (err instanceof GDriveApiError && err.status === 401) {
+                const refreshedToken = await getAccessToken();
+                if (!refreshedToken) {
+                  throw new Error('Google Drive session expired. Please sign in again.');
+                }
+                await manager!.connectWithToken(refreshedToken);
+              }
               console.warn('[Canto] Cloud import page retry', { pageId, attempt, err });
             },
           });
@@ -572,7 +612,7 @@ export function NewJournalModal({
             <View style={{ width: 30 }} />
           </View>
 
-          {busy || importing || cloudImportPhase !== 'idle' ? (
+          {isImportBusy ? (
             <View style={styles.busyContainer}>
               <ActivityIndicator size="large" color={theme.colors.primary} />
               <Text
@@ -581,11 +621,13 @@ export function NewJournalModal({
                   { color: theme.colors.textSecondary, fontFamily: theme.fonts.regular },
                 ]}
               >
-                {cloudImportPhase === 'preparing'
-                  ? t.sync.preparingImport
-                  : importing || cloudImportPhase === 'downloading'
-                    ? t.backup.importing
-                    : t.common.loading}
+                {cloudLoading
+                  ? t.common.loading
+                  : cloudImportPhase === 'preparing'
+                    ? t.sync.preparingImport
+                    : importing || cloudImportPhase === 'downloading'
+                      ? t.backup.importing
+                      : t.common.loading}
               </Text>
               {importProgress && cloudImportPhase !== 'preparing' && (
                 <>

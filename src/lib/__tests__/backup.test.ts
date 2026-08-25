@@ -1088,6 +1088,41 @@ describe('importJournal', () => {
     expect(loaded).not.toBeNull();
   });
 
+  it('opens a legacy encrypted-marked attachment imported without a salt', async () => {
+    const attachment = makeAttachment('legacy', {
+      encrypted: true,
+      name: 'legacy.jpg',
+      path: 'image-legacy.jpg',
+    });
+    const page = makePage('p1', { images: [attachment] });
+    // 0.19.1 backups can preserve this attachment flag without a journal salt
+    // or attachment password layer.
+    const journal = { ...makeJournal('j1', { title: 'Legacy no salt' }), salt: undefined };
+    const uri = await buildZip({
+      manifest: {
+        version: 1,
+        appVersion: '0.19.1',
+        exportDate: '2026-03-13T00:00:00Z',
+        encrypted: false,
+        journalTitle: journal.title,
+      },
+      journalJson: JSON.stringify(journal),
+      pages: [{ id: page.id, json: JSON.stringify(page) }],
+      attachments: [{ filename: 'image-legacy.jpg', data: new Uint8Array([65, 66, 67]) }],
+    });
+
+    const result = await importJournal(uri, 'Legacy no salt');
+    const imported = await mockStore.getJournal(result.journalId);
+    const importedAttachment = imported!.pages[0].images[0];
+
+    // Import creates a salt for the non-secure journal, so opening it supplies
+    // an auto-derived key even though the legacy chunk is device-only.
+    expect(imported!.salt).toBeTruthy();
+    await expect(
+      mockStore.getAttachment(importedAttachment.path, new Uint8Array(32).fill(7)),
+    ).resolves.toBe('QUJD');
+  });
+
   it('persists a bounded thumbnail while importing a chunked image', async () => {
     const imageAtt = makeAttachment('i1', {
       path: 'image-i1.jpg',

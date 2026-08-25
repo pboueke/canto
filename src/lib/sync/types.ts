@@ -83,6 +83,12 @@ export interface RemoteStore {
   /** Download raw (encrypted) journal metadata string from remote. */
   downloadJournalMeta(journalId: string): Promise<string | null>;
 
+  /**
+   * Return every metadata candidate, newest first, when a provider permits
+   * duplicate names. Cloud import authenticates each candidate before use.
+   */
+  downloadJournalMetaCandidates?(journalId: string): Promise<string[]>;
+
   /** Upload an encrypted page blob. */
   uploadPage(journalId: string, pageId: string, encryptedContent: string): Promise<void>;
 

@@ -9,6 +9,7 @@ import {
   base64ToUint8,
 } from '../encryption/utils';
 import { createPasswordEncryption } from '../encryption/password';
+import { AESSealedData } from 'expo-crypto';
 
 describe('AES-256-GCM encryption', () => {
   const key = new Uint8Array(32); // 256-bit zero key (test only)
@@ -23,6 +24,19 @@ describe('AES-256-GCM encryption', () => {
 
     const decrypted = await aesGcmDecrypt(ciphertext, key);
     expect(decrypted).toBe(plaintext);
+  });
+
+  it('passes decoded combined bytes to the native sealed-data parser', async () => {
+    const ciphertext = await aesGcmEncrypt('Native-compatible input', key);
+    const fromCombined = jest.spyOn(AESSealedData, 'fromCombined');
+
+    try {
+      await aesGcmDecrypt(ciphertext, key);
+
+      expect(fromCombined).toHaveBeenCalledWith(base64ToUint8(ciphertext));
+    } finally {
+      fromCombined.mockRestore();
+    }
   });
 
   it('produces different ciphertexts for the same plaintext (unique nonce)', async () => {

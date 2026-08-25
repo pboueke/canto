@@ -134,6 +134,25 @@ async function readEncrypted(
   }
 }
 
+/**
+ * Older journals can retain an encrypted attachment flag after their password
+ * layer was removed. Chunk manifests preserve that flag, so treat a failed
+ * password decrypt as device-only data and let frame validation decide whether
+ * the chunk is otherwise valid.
+ */
+async function decryptAttachmentFrame(
+  frame: string,
+  encrypted: boolean,
+  derivedKey?: Uint8Array,
+): Promise<string> {
+  if (!encrypted || !derivedKey) return frame;
+  try {
+    return await aesGcmDecrypt(frame, derivedKey);
+  } catch {
+    return frame;
+  }
+}
+
 async function writeEncrypted(
   file: File,
   data: string,
@@ -575,9 +594,11 @@ export function createLocalStore(encryption: EncryptionService): LocalStore {
         const chunk = getChunkFile(root, index);
         if (!chunk.exists)
           throw new Error(`Attachment chunk missing: ${manifest.attachment.name} #${index}`);
-        let frame = await encryption.decrypt(await chunk.text());
-        if (manifest.attachment.encrypted && derivedKey)
-          frame = await aesGcmDecrypt(frame, derivedKey);
+        const frame = await decryptAttachmentFrame(
+          await encryption.decrypt(await chunk.text()),
+          manifest.attachment.encrypted,
+          derivedKey,
+        );
         chunks.push(
           decodeChunkFrame(frame, manifest.journalId, manifest.pageId, manifest.attachment, index),
         );
@@ -751,8 +772,11 @@ export function createLocalStore(encryption: EncryptionService): LocalStore {
                   const oldChunk = getChunkFile(oldRoot, index);
                   if (!oldChunk.exists)
                     throw new Error(`Attachment chunk missing: ${oldAttachment.name} #${index}`);
-                  let frame = await encryption.decrypt(await oldChunk.text());
-                  if (oldAttachment.encrypted && oldKey) frame = await aesGcmDecrypt(frame, oldKey);
+                  const frame = await decryptAttachmentFrame(
+                    await encryption.decrypt(await oldChunk.text()),
+                    oldAttachment.encrypted,
+                    oldKey,
+                  );
                   const data = decodeChunkFrame(
                     frame,
                     journal.id,

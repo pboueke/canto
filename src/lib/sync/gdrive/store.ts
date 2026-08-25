@@ -19,6 +19,13 @@ function escapeQuery(value: string): string {
 const REGISTRY_FILE = 'canto-journals.json';
 const ROOT_FOLDER = 'Canto';
 
+/** Drive permits duplicate names; its list order is not a revision order. */
+function newestDriveFile<T extends { modifiedTime: string }>(files: readonly T[]): T {
+  return files.reduce((newest, candidate) =>
+    candidate.modifiedTime > newest.modifiedTime ? candidate : newest,
+  );
+}
+
 function isDriveNotFound(error: unknown): boolean {
   return (
     typeof error === 'object' &&
@@ -149,8 +156,9 @@ export class GDriveRemoteStore implements RemoteStore {
       'appDataFolder',
     );
     if (files.length > 0) {
-      this.fileIdCache.set(REGISTRY_FILE, files[0].id);
-      return files[0].id;
+      const newest = newestDriveFile(files);
+      this.fileIdCache.set(REGISTRY_FILE, newest.id);
+      return newest.id;
     }
     return null;
   }
@@ -209,8 +217,9 @@ export class GDriveRemoteStore implements RemoteStore {
       `name = '${escapeQuery(name)}' and mimeType = 'application/vnd.google-apps.folder' and trashed = false${parentQuery}`,
     );
     if (files.length > 0) {
-      this.fileIdCache.set(cacheKey, files[0].id);
-      return files[0].id;
+      const newest = newestDriveFile(files);
+      this.fileIdCache.set(cacheKey, newest.id);
+      return newest.id;
     }
 
     const created = await api.createFile(
@@ -261,8 +270,9 @@ export class GDriveRemoteStore implements RemoteStore {
       `name = '${escapeQuery(name)}' and '${escapeQuery(parentId)}' in parents and trashed = false`,
     );
     if (files.length > 0) {
-      this.fileIdCache.set(cacheKey, files[0].id);
-      return files[0].id;
+      const newest = newestDriveFile(files);
+      this.fileIdCache.set(cacheKey, newest.id);
+      return newest.id;
     }
     return null;
   }
@@ -378,10 +388,17 @@ export class GDriveRemoteStore implements RemoteStore {
   }
 
   async downloadJournalMeta(journalId: string): Promise<string | null> {
+    return (await this.downloadJournalMetaCandidates(journalId))[0] ?? null;
+  }
+
+  async downloadJournalMetaCandidates(journalId: string): Promise<string[]> {
     const journalFolderId = await this.getJournalFolderId(journalId);
-    const metaFileId = await this.findFile('meta.json', journalFolderId);
-    if (!metaFileId) return null;
-    return api.getFileContent(this.token(), metaFileId);
+    const files = await api.listFiles(
+      this.token(),
+      `name = 'meta.json' and '${escapeQuery(journalFolderId)}' in parents and trashed = false`,
+    );
+    const newestFirst = [...files].sort((a, b) => b.modifiedTime.localeCompare(a.modifiedTime));
+    return Promise.all(newestFirst.map((file) => api.getFileContent(this.token(), file.id)));
   }
 
   async uploadPage(journalId: string, pageId: string, encryptedContent: string): Promise<void> {
