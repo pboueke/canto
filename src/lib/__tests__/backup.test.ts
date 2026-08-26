@@ -695,6 +695,15 @@ describe('inspectBackup', () => {
 // IMPORT
 // ===================================================================
 describe('importJournal', () => {
+  it('stops an already-cancelled import before reading the archive', async () => {
+    const controller = new AbortController();
+    controller.abort();
+
+    await expect(
+      importJournal('file:///never-read.zip', 'Cancelled', undefined, undefined, controller.signal),
+    ).rejects.toThrow('Backup import cancelled');
+  });
+
   it('imports an unencrypted backup and creates a new journal', async () => {
     const page = makePage('orig-p1');
     const journal = makeJournal('orig-j1', { title: 'Original', pages: [page] });
@@ -1471,7 +1480,7 @@ describe('importJournal', () => {
       pages: [{ id: 'source-page', json: JSON.stringify(makePage('source-page')) }],
     });
 
-    jest.spyOn(mockStore, 'getJournal').mockRejectedValue(new Error('unreadable metadata'));
+    jest.spyOn(mockStore, 'getJournalOverview').mockRejectedValue(new Error('unreadable metadata'));
     const deleteSpy = jest.spyOn(mockStore, 'deleteJournal');
 
     await expect(importJournal(uri, 'Imported journal', key)).rejects.toThrow(
@@ -1481,7 +1490,7 @@ describe('importJournal', () => {
     expect(deleteSpy).toHaveBeenCalledTimes(1);
     const importedId = deleteSpy.mock.calls[0][0];
     expect(importedId).not.toBe('source-journal');
-    expect(mockStore.getJournal).toHaveBeenCalledWith(importedId, key);
+    expect(mockStore.getJournalOverview).toHaveBeenCalledWith(importedId, key);
     expect(await mockStore.listJournals()).toEqual([]);
   });
 

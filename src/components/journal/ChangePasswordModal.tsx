@@ -26,6 +26,12 @@ function formatBytes(bytes: number, locale: string): string {
   return `${new Intl.NumberFormat(locale, { minimumFractionDigits: 1, maximumFractionDigits: 1 }).format(bytes / (1024 * 1024))} MB`;
 }
 
+export interface ReencryptionProgress {
+  label: string;
+  current?: number;
+  total?: number;
+}
+
 interface ChangePasswordModalProps {
   visible: boolean;
   isSecure: boolean;
@@ -36,7 +42,7 @@ interface ChangePasswordModalProps {
     kdfIterations?: number,
   ) => Promise<ReencryptionResult>;
   onCancel: () => void;
-  progress?: string;
+  progress?: ReencryptionProgress | null;
   error?: string;
   result?: ReencryptionResult | null;
 }
@@ -98,6 +104,10 @@ export function ChangePasswordModal({
 
   const displayError = error || localError;
   const skippedAttachments = result?.skippedAttachments ?? [];
+  const progressPercent =
+    progress?.current !== undefined && progress.total && progress.total > 0
+      ? Math.min(100, Math.round((progress.current / progress.total) * 100))
+      : null;
 
   return (
     <Modal visible={visible} animationType="fade" transparent>
@@ -122,8 +132,33 @@ export function ChangePasswordModal({
                   { color: theme.colors.textSecondary, fontFamily: theme.fonts.regular },
                 ]}
               >
-                {progress || t.common.loading}
+                {progress?.label || t.common.loading}
               </Text>
+              {progressPercent !== null && (
+                <View style={styles.progressContainer}>
+                  <View
+                    testID="reencryption-progress"
+                    accessibilityRole="progressbar"
+                    accessibilityValue={{ min: 0, max: 100, now: progressPercent }}
+                    style={[styles.progressTrack, { backgroundColor: theme.colors.surface }]}
+                  >
+                    <View
+                      style={[
+                        styles.progressFill,
+                        { width: `${progressPercent}%`, backgroundColor: theme.colors.primary },
+                      ]}
+                    />
+                  </View>
+                  <Text
+                    style={[
+                      styles.progressPercent,
+                      { color: theme.colors.textSecondary, fontFamily: theme.fonts.regular },
+                    ]}
+                  >
+                    {progressPercent}%
+                  </Text>
+                </View>
+              )}
             </View>
           ) : result ? (
             <View style={styles.resultContainer}>
@@ -376,6 +411,24 @@ const styles = StyleSheet.create({
   },
   busyText: {
     fontSize: 14,
+  },
+  progressContainer: {
+    width: '100%',
+    alignItems: 'center',
+    gap: 6,
+  },
+  progressTrack: {
+    width: '100%',
+    height: 8,
+    borderRadius: 4,
+    overflow: 'hidden',
+  },
+  progressFill: {
+    height: '100%',
+    borderRadius: 4,
+  },
+  progressPercent: {
+    fontSize: 12,
   },
   resultContainer: {
     alignItems: 'center',

@@ -9,6 +9,9 @@ export const WEB_SYNC_PLAINTEXT_BUDGET_BYTES = 75 * 1024 * 1024;
 export const WEB_SYNC_NATIVE_ALLOCATION_MULTIPLIER = 6;
 export const WEB_SYNC_NATIVE_ALLOCATION_BUDGET_BYTES =
   WEB_SYNC_PLAINTEXT_BUDGET_BYTES * WEB_SYNC_NATIVE_ALLOCATION_MULTIPLIER;
+const SESSION_STORAGE_KEY = 'canto:sync:renderer-work-ledger:v1';
+
+type SessionStorageLike = Pick<Storage, 'getItem' | 'setItem'>;
 
 export interface RendererWorkLedgerSnapshot {
   version: 1;
@@ -21,6 +24,8 @@ export interface RendererWorkLedgerOptions {
   plaintextLimitBytes?: number;
   nativeAllocationLimitBytes?: number;
   nativeAllocationMultiplier?: number;
+  /** Test seam; production defaults to sessionStorage when the browser exposes it. */
+  storage?: SessionStorageLike | null;
 }
 
 function emptySnapshot(): RendererWorkLedgerSnapshot {
@@ -41,6 +46,7 @@ export class RendererWorkLedger {
   private readonly plaintextLimitBytes: number;
   private readonly nativeAllocationLimitBytes: number;
   private readonly nativeAllocationMultiplier: number;
+  private readonly storage: SessionStorageLike | null;
   private snapshotValue: RendererWorkLedgerSnapshot;
 
   constructor(options: RendererWorkLedgerOptions = {}) {
@@ -49,6 +55,7 @@ export class RendererWorkLedger {
       options.nativeAllocationMultiplier ?? WEB_SYNC_NATIVE_ALLOCATION_MULTIPLIER;
     this.nativeAllocationLimitBytes =
       options.nativeAllocationLimitBytes ?? WEB_SYNC_NATIVE_ALLOCATION_BUDGET_BYTES;
+    this.storage = options.storage === undefined ? this.getSessionStorage() : options.storage;
     if (
       !Number.isSafeInteger(this.plaintextLimitBytes) ||
       this.plaintextLimitBytes < 1 ||
@@ -59,7 +66,7 @@ export class RendererWorkLedger {
     ) {
       throw new Error('Renderer work ledger limits must be positive');
     }
-    this.snapshotValue = emptySnapshot();
+    this.snapshotValue = this.readPersistedSnapshot() ?? emptySnapshot();
   }
 
   get snapshot(): Readonly<RendererWorkLedgerSnapshot> {
@@ -106,5 +113,45 @@ export class RendererWorkLedger {
 
   private persist(next: RendererWorkLedgerSnapshot): void {
     this.snapshotValue = next;
+    if (!this.storage) return;
+    try {
+      this.storage.setItem(SESSION_STORAGE_KEY, JSON.stringify(next));
+    } catch {
+      // Storage can be unavailable in a private or quota-constrained browser.
+      // The in-memory ledger still protects the active renderer in that case.
+    }
+  }
+
+  private getSessionStorage(): SessionStorageLike | null {
+    try {
+      return typeof globalThis.sessionStorage === 'undefined' ? null : globalThis.sessionStorage;
+    } catch {
+      return null;
+    }
+  }
+
+  private readPersistedSnapshot(): RendererWorkLedgerSnapshot | null {
+    if (!this.storage) return null;
+    try {
+      const raw = this.storage.getItem(SESSION_STORAGE_KEY);
+      if (!raw) return null;
+      const candidate = JSON.parse(raw) as Partial<RendererWorkLedgerSnapshot>;
+      const { plaintextBytes, nativeAllocationBytes } = candidate;
+      if (
+        candidate.version !== 1 ||
+        typeof plaintextBytes !== 'number' ||
+        !Number.isSafeInteger(plaintextBytes) ||
+        plaintextBytes < 0 ||
+        typeof nativeAllocationBytes !== 'number' ||
+        !Number.isSafeInteger(nativeAllocationBytes) ||
+        nativeAllocationBytes < 0 ||
+        typeof candidate.requiresFreshRenderer !== 'boolean'
+      ) {
+        return null;
+      }
+      return candidate as RendererWorkLedgerSnapshot;
+    } catch {
+      return null;
+    }
   }
 }

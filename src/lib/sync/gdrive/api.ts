@@ -10,6 +10,48 @@ export class GDriveApiError extends Error {
   }
 }
 
+export class GDriveAuthenticationError extends Error {
+  constructor(message = 'Drive authentication could not be refreshed') {
+    super(message);
+    this.name = 'GDriveAuthenticationError';
+  }
+}
+
+type AccessTokenRefresher = () => Promise<string | null>;
+
+/**
+ * A store registers its credential source for the lifetime of a connected
+ * token. The request layer owns the one allowed replay after a 401, so every
+ * Drive operation gets the same behavior rather than each call site deciding
+ * whether authentication errors are retryable.
+ */
+const tokenRefreshers = new Map<string, AccessTokenRefresher>();
+const tokenRefreshesInFlight = new Map<string, Promise<string | null>>();
+
+export function registerAccessTokenRefresher(
+  accessToken: string,
+  refresher: AccessTokenRefresher,
+): void {
+  tokenRefreshers.set(accessToken, refresher);
+}
+
+export function unregisterAccessTokenRefresher(accessToken: string): void {
+  tokenRefreshers.delete(accessToken);
+  tokenRefreshesInFlight.delete(accessToken);
+}
+
+function refreshAccessToken(
+  accessToken: string,
+  refresher: AccessTokenRefresher,
+): Promise<string | null> {
+  let inFlight = tokenRefreshesInFlight.get(accessToken);
+  if (!inFlight) {
+    inFlight = refresher().finally(() => tokenRefreshesInFlight.delete(accessToken));
+    tokenRefreshesInFlight.set(accessToken, inFlight);
+  }
+  return inFlight;
+}
+
 function generateBoundary(): string {
   const random = Array.from(crypto.getRandomValues(new Uint8Array(16)))
     .map((b) => b.toString(16).padStart(2, '0'))
@@ -61,11 +103,11 @@ function multipartBody(
 
 function abortableDelay(ms: number, signal?: AbortSignal): Promise<void> {
   return new Promise((resolve, reject) => {
-    const timeout = setTimeout(resolve, ms);
+    const timeout = globalThis.setTimeout(resolve, ms);
     signal?.addEventListener(
       'abort',
       () => {
-        clearTimeout(timeout);
+        globalThis.clearTimeout(timeout);
         reject(new DOMException('Sync cancelled', 'AbortError'));
       },
       { once: true },
@@ -90,30 +132,51 @@ function assertGoogleDriveUrl(input: string): void {
 async function fetchWithRetry(input: string, init?: RequestInit): Promise<Response> {
   assertGoogleDriveUrl(input);
   const signal = init?.signal ?? undefined;
-  const attempt = async (): Promise<Response> => {
+  const attempt = async (requestInit = init): Promise<Response> => {
     const startedAt = performance.now();
     try {
-      const response = await fetch(input, init);
-      recordDriveRequestTrace(input, init, startedAt, response);
+      const response = await fetch(input, requestInit);
+      recordDriveRequestTrace(input, requestInit, startedAt, response);
       return response;
     } catch (error) {
-      recordDriveRequestTrace(input, init, startedAt);
+      recordDriveRequestTrace(input, requestInit, startedAt);
       throw error;
     }
   };
-  try {
-    const res = await attempt();
-    if (res.status >= 500 || res.status === 408 || res.status === 429) {
-      const retryAfter = Number(res.headers.get('Retry-After'));
-      await abortableDelay(Number.isFinite(retryAfter) ? retryAfter * 1000 : 1000, signal);
-      return attempt();
+
+  const retryUnauthorizedOnce = async (response: Response): Promise<Response> => {
+    if (response.status !== 401) return response;
+
+    const headers = new Headers(init?.headers);
+    const auth = headers.get('Authorization');
+    const token = auth?.match(/^Bearer (.+)$/)?.[1];
+    const refresh = token ? tokenRefreshers.get(token) : undefined;
+    if (!token || !refresh) return response;
+
+    const nextToken = await refreshAccessToken(token, refresh);
+    if (!nextToken || nextToken === token) {
+      throw new GDriveAuthenticationError();
     }
-    return res;
+    headers.set('Authorization', `Bearer ${nextToken}`);
+    return attempt({ ...init, headers });
+  };
+
+  let response: Response;
+  try {
+    response = await attempt();
   } catch (error) {
     if (signal?.aborted) throw error;
     await abortableDelay(1000, signal);
     return attempt();
   }
+
+  const authenticated = response.status === 401 ? await retryUnauthorizedOnce(response) : response;
+  if (authenticated.status >= 500 || authenticated.status === 408 || authenticated.status === 429) {
+    const retryAfter = Number(authenticated.headers?.get?.('Retry-After'));
+    await abortableDelay(Number.isFinite(retryAfter) ? retryAfter * 1000 : 1000, signal);
+    return attempt();
+  }
+  return authenticated;
 }
 
 async function handleResponse<T>(response: Response): Promise<T> {

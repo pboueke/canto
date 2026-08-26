@@ -4,7 +4,8 @@
 
 // Mock dependencies before imports
 const mockDisconnect = jest.fn().mockResolvedValue(undefined);
-const mockSyncJournal = jest.fn().mockResolvedValue({ pushed: 0, pulled: 0 });
+const mockDispose = jest.fn();
+const mockRunJournalSync = jest.fn().mockResolvedValue({ kind: 'completed', result: {} });
 const mockScheduleSyncDebounced = jest.fn();
 const mockCancelSync = jest.fn();
 const mockGetState = jest.fn();
@@ -13,7 +14,8 @@ const mockSubscribe = jest.fn<() => void, [() => void]>(() => jest.fn());
 jest.mock('@/lib/sync/manager', () => ({
   SyncManager: jest.fn().mockImplementation(() => ({
     disconnect: mockDisconnect,
-    syncJournal: mockSyncJournal,
+    dispose: mockDispose,
+    runJournalSync: mockRunJournalSync,
     scheduleSyncDebounced: mockScheduleSyncDebounced,
     cancelSync: mockCancelSync,
     getState: mockGetState,
@@ -42,6 +44,7 @@ jest.mock('../GoogleAuthContext', () => ({
 import React from 'react';
 import type { ReactNode } from 'react';
 import { renderHook, act } from '@testing-library/react-native';
+import type { SyncState } from '@/lib/sync/manager';
 import { SyncManagerProvider, useSyncManager, useSyncState } from '../SyncManagerContext';
 
 const wrapper = ({ children }: { children: ReactNode }) => (
@@ -76,8 +79,13 @@ describe('SyncManagerContext', () => {
       syncResult = await result.current.syncJournal('j1');
     });
     expect(mockAuthValue.getAccessToken).toHaveBeenCalled();
-    expect(mockSyncJournal).toHaveBeenCalledWith('j1', 'fresh-token', undefined);
-    expect(syncResult).toEqual({ pushed: 0, pulled: 0 });
+    expect(mockRunJournalSync).toHaveBeenCalledWith(
+      'j1',
+      'fresh-token',
+      undefined,
+      expect.any(Function),
+    );
+    expect(syncResult).toEqual({ kind: 'completed', result: {} });
   });
 
   it('syncJournal passes derivedKey through', async () => {
@@ -88,7 +96,7 @@ describe('SyncManagerContext', () => {
     await act(async () => {
       await result.current.syncJournal('j1', key);
     });
-    expect(mockSyncJournal).toHaveBeenCalledWith('j1', 'fresh-token', key);
+    expect(mockRunJournalSync).toHaveBeenCalledWith('j1', 'fresh-token', key, expect.any(Function));
   });
 
   it('syncJournal returns null when not signed in (no accessToken)', async () => {
@@ -100,8 +108,8 @@ describe('SyncManagerContext', () => {
     await act(async () => {
       syncResult = await result.current.syncJournal('j1');
     });
-    expect(syncResult).toBeNull();
-    expect(mockSyncJournal).not.toHaveBeenCalled();
+    expect(syncResult).toEqual({ kind: 'authentication-required' });
+    expect(mockRunJournalSync).not.toHaveBeenCalled();
   });
 
   it('syncJournal returns null when getAccessToken returns null', async () => {
@@ -113,7 +121,7 @@ describe('SyncManagerContext', () => {
     await act(async () => {
       syncResult = await result.current.syncJournal('j1');
     });
-    expect(syncResult).toBeNull();
+    expect(syncResult).toEqual({ kind: 'authentication-required' });
   });
 
   it('scheduleSyncDebounced calls through to manager', async () => {
@@ -223,10 +231,10 @@ describe('SyncManagerContext', () => {
 });
 
 describe('useSyncManager default context (no provider)', () => {
-  it('default syncJournal returns null', async () => {
+  it('default syncJournal reports that the provider is not ready', async () => {
     const { result } = renderHook(() => useSyncManager());
     const res = await result.current.syncJournal('j1');
-    expect(res).toBeNull();
+    expect(res).toEqual({ kind: 'not-ready' });
   });
 
   it('default scheduleSyncDebounced is a noop', () => {
@@ -255,10 +263,15 @@ describe('useSyncState', () => {
     expect(result.current).toEqual({ status: 'idle', lastSynced: null });
   });
 
-  it('returns DEFAULT_STATE from provider (manager captured before async init)', async () => {
+  it('subscribes to the manager after asynchronous provider initialization', async () => {
+    const state = { status: 'syncing' as const, lastSynced: 500 };
+    mockGetState.mockReturnValue(state);
+    mockSubscribe.mockImplementation((_cb: () => void) => () => {});
+
     const { result } = renderHook(() => useSyncState('j1'), { wrapper });
     await act(async () => {});
-    expect(result.current).toEqual({ status: 'idle', lastSynced: null });
+    expect(result.current).toEqual(state);
+    expect(mockSubscribe).toHaveBeenCalled();
   });
 
   it('maintains same reference across re-renders', async () => {
@@ -270,9 +283,7 @@ describe('useSyncState', () => {
     expect(result.current).toBe(first);
   });
 
-  it('returns state from manager after useMemo re-evaluates with non-null manager', async () => {
-    // After async init, managerRef.current is set. Changing a useMemo dep forces
-    // re-evaluation which captures the non-null managerRef.current.
+  it('returns state from manager without an unrelated provider re-render', async () => {
     const state = { status: 'syncing' as const, lastSynced: 500 };
     mockGetState.mockReturnValue(state);
     mockSubscribe.mockImplementation((_cb: () => void) => () => {});
@@ -280,13 +291,9 @@ describe('useSyncState', () => {
     const { result, rerender } = renderHook(() => useSyncState('j1'), { wrapper });
     await act(async () => {}); // Wait for async init (getLocalStore + new SyncManager)
 
-    // Toggle isSignedIn to change currentProvider, which is a useMemo dep.
-    // This forces useMemo to recalculate, capturing the now-set managerRef.current.
-    mockAuthValue.isSignedIn = false;
     rerender({});
     await act(async () => {});
 
-    // Now useSyncState has a non-null manager and calls getState
     expect(result.current).toEqual(state);
   });
 
@@ -324,12 +331,8 @@ describe('useSyncState', () => {
   });
 
   it('returns new reference when manager state changes', async () => {
-    let callCount = 0;
-    mockGetState.mockImplementation(() => {
-      callCount++;
-      if (callCount <= 3) return { status: 'idle' as const, lastSynced: 100 };
-      return { status: 'syncing' as const, lastSynced: 100 };
-    });
+    let state: SyncState = { status: 'idle', lastSynced: 100 };
+    mockGetState.mockImplementation(() => state);
 
     let subscribeCb: (() => void) | null = null;
     mockSubscribe.mockImplementation((cb: () => void) => {
@@ -337,24 +340,18 @@ describe('useSyncState', () => {
       return () => {};
     });
 
-    const { result, rerender } = renderHook(() => useSyncState('j1'), { wrapper });
-    await act(async () => {});
-
-    // Force manager into context
-    mockAuthValue.isSignedIn = false;
-    rerender({});
+    const { result } = renderHook(() => useSyncState('j1'), { wrapper });
     await act(async () => {});
 
     const first = result.current;
+    state = { status: 'syncing', lastSynced: 100 };
 
-    // Trigger subscribe - now getState returns different status
     await act(async () => {
       subscribeCb?.();
     });
 
-    if (result.current.status === 'syncing') {
-      expect(result.current).not.toBe(first);
-    }
+    expect(result.current).toEqual(state);
+    expect(result.current).not.toBe(first);
   });
 
   it('getSnapshot returns lastRef when manager returns undefined after having state', async () => {

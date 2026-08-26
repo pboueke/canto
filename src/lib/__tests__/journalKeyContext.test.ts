@@ -3,6 +3,13 @@ import { renderHook, act } from '@testing-library/react-native';
 import { JournalKeyProvider, useJournalKeys } from '@/contexts/JournalKeyContext';
 import { deriveKey, DEFAULT_KDF_ITERATIONS } from '@/lib/encryption/password';
 
+const mockPurgeAttachmentDisplayCache = jest.fn();
+const mockPurgeEncryptedAttachmentDisplayCache = jest.fn();
+jest.mock('@/lib/attachment-display', () => ({
+  purgeAttachmentDisplayCache: () => mockPurgeAttachmentDisplayCache(),
+  purgeEncryptedAttachmentDisplayCache: () => mockPurgeEncryptedAttachmentDisplayCache(),
+}));
+
 // Mock SecuritySettingsModal's getAutoLockTimeout
 const mockGetAutoLockTimeout = jest.fn(async () => 0); // disabled by default
 jest.mock('@/components/home/SecuritySettingsModal', () => ({
@@ -32,6 +39,10 @@ function wrapper({ children }: { children: React.ReactNode }) {
 const SALT_B64 = btoa(String.fromCharCode(...new Uint8Array(16).fill(0xab)));
 
 describe('JournalKeyContext', () => {
+  beforeEach(() => {
+    mockPurgeAttachmentDisplayCache.mockClear();
+    mockPurgeEncryptedAttachmentDisplayCache.mockClear();
+  });
   it('deriveAndCache returns 32-byte key', async () => {
     const { result } = renderHook(() => useJournalKeys(), { wrapper });
 
@@ -125,6 +136,7 @@ describe('JournalKeyContext', () => {
     expect(result.current.getKey('j6')).toBeNull();
     // Key should be zeroed
     expect(key.every((b) => b === 0)).toBe(true);
+    expect(mockPurgeAttachmentDisplayCache).toHaveBeenCalledTimes(1);
   });
 
   it('clearAll zeros all stored keys', async () => {
@@ -145,6 +157,7 @@ describe('JournalKeyContext', () => {
     expect(result.current.getKey('j7b')).toBeNull();
     expect(k1.every((b) => b === 0)).toBe(true);
     expect(k2.every((b) => b === 0)).toBe(true);
+    expect(mockPurgeAttachmentDisplayCache).toHaveBeenCalledTimes(1);
   });
 
   it('clearKey on non-existent key does nothing', () => {
@@ -208,6 +221,8 @@ describe('JournalKeyContext — AppState auto-lock', () => {
     jest.useFakeTimers();
     appStateHandler = null;
     mockGetAutoLockTimeout.mockReset();
+    mockPurgeAttachmentDisplayCache.mockClear();
+    mockPurgeEncryptedAttachmentDisplayCache.mockClear();
   });
 
   afterEach(() => {
@@ -245,6 +260,18 @@ describe('JournalKeyContext — AppState auto-lock', () => {
       await Promise.resolve();
     });
     expect(listener).toHaveBeenCalledTimes(1);
+  });
+
+  it('purges encrypted display files immediately on background even before auto-lock', async () => {
+    mockGetAutoLockTimeout.mockResolvedValue(60_000);
+    renderHook(() => useJournalKeys(), { wrapper });
+
+    await act(async () => {
+      appStateHandler!('background');
+    });
+
+    expect(mockPurgeEncryptedAttachmentDisplayCache).toHaveBeenCalledTimes(1);
+    expect(mockPurgeAttachmentDisplayCache).not.toHaveBeenCalled();
   });
 
   it('clears keys when returning from background after timeout', async () => {

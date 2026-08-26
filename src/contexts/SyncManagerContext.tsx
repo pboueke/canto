@@ -5,6 +5,7 @@ import {
   useEffect,
   useMemo,
   useRef,
+  useState,
   useSyncExternalStore,
 } from 'react';
 import type { ReactNode } from 'react';
@@ -13,10 +14,10 @@ import { useJournalKeys } from './JournalKeyContext';
 import { SyncManager, type SyncState } from '@/lib/sync/manager';
 import { GDriveRemoteStore } from '@/lib/sync/gdrive';
 import { getLocalStore } from '@/hooks/useStorage';
-import type { SyncProvider, SyncResult } from '@/lib/sync';
+import type { SyncProvider, SyncRunOutcome } from '@/lib/sync';
 
 interface SyncManagerCtxValue {
-  syncJournal: (journalId: string, derivedKey?: Uint8Array) => Promise<SyncResult | null>;
+  syncJournal: (journalId: string, derivedKey?: Uint8Array) => Promise<SyncRunOutcome>;
   cancelSync: (journalId: string) => void;
   scheduleSyncDebounced: (journalId: string, derivedKey?: Uint8Array) => void;
   getSyncState: (journalId: string) => SyncState;
@@ -27,7 +28,7 @@ interface SyncManagerCtxValue {
 const DEFAULT_STATE: SyncState = { status: 'idle', lastSynced: null };
 
 const SyncManagerCtx = createContext<SyncManagerCtxValue>({
-  syncJournal: async () => null,
+  syncJournal: async () => ({ kind: 'not-ready' }),
   cancelSync: () => {},
   scheduleSyncDebounced: () => {},
   getSyncState: () => DEFAULT_STATE,
@@ -77,15 +78,28 @@ export function SyncManagerProvider({ children }: { children: ReactNode }) {
   const { accessToken, getAccessToken, isSignedIn } = useGoogleAuth();
   const { onAutoLock } = useJournalKeys();
   const managerRef = useRef<SyncManager | null>(null);
+  const [manager, setManager] = useState<SyncManager | null>(null);
 
   useEffect(() => {
-    (async () => {
+    let disposed = false;
+    void (async () => {
       const store = await getLocalStore();
-      managerRef.current = new SyncManager(store, new GDriveRemoteStore());
+      const nextManager = new SyncManager(store, new GDriveRemoteStore());
+      if (disposed) {
+        nextManager.dispose();
+        await nextManager.disconnect();
+        return;
+      }
+      managerRef.current = nextManager;
+      setManager(nextManager);
     })();
     return () => {
-      managerRef.current?.dispose?.();
-      managerRef.current?.disconnect();
+      disposed = true;
+      const activeManager = managerRef.current;
+      managerRef.current = null;
+      setManager(null);
+      activeManager?.dispose();
+      void activeManager?.disconnect();
     };
   }, []);
 
@@ -105,10 +119,12 @@ export function SyncManagerProvider({ children }: { children: ReactNode }) {
 
   const syncJournal = useCallback(
     async (journalId: string, derivedKey?: Uint8Array) => {
-      if (!accessToken || !managerRef.current) return null;
+      const activeManager = managerRef.current;
+      if (!activeManager) return { kind: 'not-ready' } as const;
+      if (!accessToken) return { kind: 'authentication-required' } as const;
       const token = await getAccessToken();
-      if (!token) return null;
-      return managerRef.current.syncJournal(journalId, token, derivedKey);
+      if (!token) return { kind: 'authentication-required' } as const;
+      return activeManager.runJournalSync(journalId, token, derivedKey, getAccessToken);
     },
     [accessToken, getAccessToken],
   );
@@ -146,10 +162,10 @@ export function SyncManagerProvider({ children }: { children: ReactNode }) {
       cancelSync,
       scheduleSyncDebounced,
       getSyncState,
-      manager: managerRef.current,
+      manager,
       provider: currentProvider,
     }),
-    [syncJournal, cancelSync, scheduleSyncDebounced, getSyncState, currentProvider],
+    [syncJournal, cancelSync, scheduleSyncDebounced, getSyncState, manager, currentProvider],
   );
 
   return <SyncManagerCtx.Provider value={value}>{children}</SyncManagerCtx.Provider>;

@@ -16,6 +16,7 @@ import {
   chunkedContentForByteLength,
   encodeChunkFrame,
 } from '../storage/attachment-content';
+import { getStorageIoCounters, resetStorageIoCounters } from '../storage/io-counters';
 
 // Passthrough encryption mock (no actual encryption for test simplicity)
 function createMockEncryption(): EncryptionService {
@@ -143,6 +144,36 @@ describe('storage transaction recovery (web/IndexedDB)', () => {
     expect(await getRawStorageRecord('canto/.transactions/corrupt/marker')).toBeUndefined();
   });
 
+  it('replays a verified publishing import after the journals index was interrupted', async () => {
+    const journalId = 'publishing-import';
+    const first = createLocalStore(createMockEncryption());
+    await first.initialize();
+    await first.saveJournal(makeJournalContent(journalId, [makePage('p1')]));
+    await putRawStorageRecord('canto/journals.json', 'enc:{"journals":[]}');
+    await putRawStorageRecord(
+      `canto/.imports/${journalId}`,
+      JSON.stringify({
+        version: 2,
+        journalId,
+        phase: 'publishing',
+        expectedPageCount: 1,
+      }),
+    );
+
+    _resetDB();
+    const recovered = createLocalStore(createMockEncryption());
+    await recovered.initialize();
+
+    expect(await recovered.listJournals()).toEqual([
+      expect.objectContaining({ id: journalId, title: `Journal ${journalId}` }),
+    ]);
+    expect(await recovered.getJournalOverview?.(journalId)).toMatchObject({
+      metadata: { id: journalId },
+      pages: [expect.objectContaining({ id: 'p1' })],
+    });
+    expect(await getRawStorageRecord(`canto/.imports/${journalId}`)).toBeUndefined();
+  });
+
   it('cleans abandoned transaction roots and refuses committed records without their staged ciphertext', async () => {
     await createLocalStore(createMockEncryption()).initialize();
     const preparedRoot = 'canto/.transactions/prepared-roots';
@@ -209,6 +240,40 @@ describe('createLocalStore (web/IndexedDB)', () => {
     expect(result!.pages[0].id).toBe('p1');
   });
 
+  it('reads a saved journal overview from the encrypted page catalog', async () => {
+    const store = createLocalStore(createMockEncryption());
+    await store.initialize();
+    const page = { ...makePage('p1'), tags: ['travel', 'test'], modified: 42 };
+    await store.saveJournal(makeJournalContent('j1', [page]));
+
+    const overview = await store.getJournalOverview?.('j1');
+
+    expect(overview).toMatchObject({
+      metadata: { id: 'j1', title: 'Journal j1' },
+      pages: [expect.objectContaining({ id: 'p1' })],
+      tags: ['test', 'travel'],
+      latestModified: 42,
+    });
+    await expect(getRawStorageRecord('canto/j1/page-catalog.json')).resolves.toMatch(/^enc:/);
+  });
+
+  it('reads only metadata and catalog for a warm overview', async () => {
+    const store = createLocalStore(createMockEncryption());
+    await store.initialize();
+    await store.saveJournal(makeJournalContent('j1', [makePage('p1')]));
+    resetStorageIoCounters();
+
+    await store.getJournalOverview?.('j1');
+
+    expect(getStorageIoCounters()).toEqual({
+      metadataReads: 1,
+      catalogReads: 1,
+      pageReads: 0,
+      decryptions: 2,
+      catalogRebuilds: 0,
+    });
+  });
+
   it('getJournal returns null for non-existent journal', async () => {
     const store = createLocalStore(createMockEncryption());
     await store.initialize();
@@ -234,6 +299,39 @@ describe('createLocalStore (web/IndexedDB)', () => {
     const result = await store.getPage('j1', 'p1');
     expect(result).not.toBeNull();
     expect(result!.text).toBe('Page p1 content');
+  });
+
+  it('updates a warm page catalog without reading the full journal', async () => {
+    const store = createLocalStore(createMockEncryption());
+    await store.initialize();
+    await store.saveJournal(makeJournalContent('j1', [makePage('p1')]));
+    const readJournal = jest.spyOn(store, 'getJournal');
+
+    await store.savePage(
+      'j1',
+      { ...makePage('p1'), text: 'Updated', modified: 9 },
+      undefined,
+      true,
+    );
+
+    expect(readJournal).not.toHaveBeenCalled();
+    await expect(store.getJournalOverview?.('j1')).resolves.toMatchObject({
+      pages: [expect.objectContaining({ id: 'p1', previewText: 'Updated' })],
+    });
+  });
+
+  it('saves an edit when a legacy journal has a malformed unrelated page', async () => {
+    const store = createLocalStore(createMockEncryption());
+    await store.initialize();
+    await store.saveJournal(makeJournalContent('j1', [makePage('p1'), makePage('p2')]));
+    await putRawStorageRecord('canto/j1/page-catalog.json', '');
+    await putRawStorageRecord('canto/j1/pages/p2.json', 'enc:local corruption');
+
+    await expect(
+      store.savePage('j1', { ...makePage('p1'), text: 'Saved edit' }, undefined, true),
+    ).resolves.toBeUndefined();
+
+    await expect(store.getPage('j1', 'p1')).resolves.toMatchObject({ text: 'Saved edit' });
   });
 
   it('getPage returns null for non-existent page', async () => {
@@ -786,6 +884,48 @@ describe('chunked attachment storage (web)', () => {
     await expect(store.getAttachment(path)).resolves.toBeNull();
   });
 
+  it('streams validated display chunks and rejects a mismatched browser manifest', async () => {
+    const store = createLocalStore(createMockEncryption());
+    await store.initialize();
+    const attachment: Attachment = {
+      id: 'web-display',
+      path: '',
+      name: 'web-display.jpg',
+      type: 'image',
+      encrypted: false,
+      deleted: false,
+      content: {
+        format: 'canto-chunked-v1',
+        byteLength: 3,
+        chunkSize: 2,
+        chunkCount: 2,
+        generation: 'web-display-generation',
+      },
+    };
+    async function* frames() {
+      yield encodeChunkFrame('j1', 'p1', attachment, 0, 'AQI=');
+      yield encodeChunkFrame('j1', 'p1', attachment, 1, 'Aw==');
+    }
+    attachment.path = await store.saveAttachmentChunks!('j1', 'p1', attachment, frames());
+    const chunks: string[] = [];
+    await store.forEachAttachmentDisplayChunk!(attachment, async (_index, data) => {
+      chunks.push(data);
+    });
+    expect(chunks).toEqual(['AQI=', 'Aw==']);
+    await expect(
+      store.forEachAttachmentDisplayChunk!(
+        { ...attachment, content: { ...attachment.content!, generation: 'wrong-generation' } },
+        async () => undefined,
+      ),
+    ).rejects.toThrow('manifest identity mismatch');
+    await expect(
+      store.forEachAttachmentDisplayChunk!(
+        { ...attachment, content: undefined, size: undefined },
+        async () => undefined,
+      ),
+    ).rejects.toThrow('Legacy attachment is too large');
+  });
+
   it('rejects malformed downloaded chunk streams before publishing their manifest', async () => {
     const store = createLocalStore(createMockEncryption());
     await store.initialize();
@@ -1008,6 +1148,30 @@ describe('chunked attachment storage (web)', () => {
     ).resolves.toEqual({
       status: 'unknown',
     });
+  });
+
+  it('updates journal metadata without rewriting pages or the catalog', async () => {
+    const encryption = createMockEncryption();
+    const store = createLocalStore(encryption);
+    await store.initialize();
+    const page = makePage('p1');
+    await store.saveJournal(makeJournalContent('j1', [page]));
+    const pagePath = 'canto/j1/pages/p1.json';
+    const catalogPath = 'canto/j1/page-catalog.json';
+    const pageBefore = await getRawStorageRecord(pagePath);
+    const catalogBefore = await getRawStorageRecord(catalogPath);
+    const encryptSpy = encryption.encrypt as jest.Mock;
+    encryptSpy.mockClear();
+
+    await store.saveJournalMetadata?.({
+      ...makeJournalContent('j1', [page]),
+      title: 'Renamed',
+      pages: undefined,
+    } as Omit<JournalContent, 'pages'>);
+
+    expect(await getRawStorageRecord(pagePath)).toBe(pageBefore);
+    expect(await getRawStorageRecord(catalogPath)).toBe(catalogBefore);
+    expect(encryptSpy).toHaveBeenCalledTimes(2);
   });
 
   it('cleans up a chunk root when its owning page is deleted', async () => {
@@ -1405,7 +1569,10 @@ describe('IDB error paths (web/IndexedDB)', () => {
     return { store, encryption };
   }
 
-  function interceptNextTransaction(patchTx: (tx: IDBTransaction) => void) {
+  function interceptNextTransaction(
+    patchTx: (tx: IDBTransaction) => void,
+    when: (tx: IDBTransaction) => boolean = () => true,
+  ) {
     const orig = origTransaction;
     let intercepted = false;
     IDBDatabase.prototype.transaction = function (
@@ -1413,7 +1580,7 @@ describe('IDB error paths (web/IndexedDB)', () => {
       mode?: IDBTransactionMode,
     ) {
       const tx = orig.call(this, storeNames, mode);
-      if (!intercepted) {
+      if (!intercepted && when(tx)) {
         intercepted = true;
         patchTx(tx);
       }
@@ -1554,16 +1721,19 @@ describe('IDB error paths (web/IndexedDB)', () => {
     await expect(store.hasCompletedDeviceKeyRotation!()).rejects.toThrow('Check failed');
 
     const { store: writeStore } = await getInitializedStore();
-    interceptNextTransaction((tx) => {
-      const originalObjectStore = tx.objectStore.bind(tx);
-      tx.objectStore = (name: string) => {
-        const objectStore = originalObjectStore(name);
-        objectStore.put = () => {
-          throw new Error('Synchronous write failure');
+    interceptNextTransaction(
+      (tx) => {
+        const originalObjectStore = tx.objectStore.bind(tx);
+        tx.objectStore = (name: string) => {
+          const objectStore = originalObjectStore(name);
+          objectStore.put = () => {
+            throw new Error('Synchronous write failure');
+          };
+          return objectStore;
         };
-        return objectStore;
-      };
-    });
+      },
+      (tx) => tx.mode === 'readwrite',
+    );
     await expect(writeStore.savePage('j1', makePage('p1'))).rejects.toThrow(
       'Synchronous write failure',
     );
@@ -1614,23 +1784,26 @@ describe('IDB error paths (web/IndexedDB)', () => {
       };
       const path = await store.saveAttachment('j1', 'p1', attachment, 'attachment-data');
 
-      interceptNextTransaction((tx) => {
-        const origOS = tx.objectStore.bind(tx);
-        tx.objectStore = (name: string) => {
-          const os = origOS(name);
-          os.get = () => {
-            queueMicrotask(() => {
-              try {
-                tx.abort();
-              } catch {
-                /* The transaction may already have settled. */
-              }
-            });
-            return { onsuccess: null, onerror: null } as unknown as IDBRequest;
+      interceptNextTransaction(
+        (tx) => {
+          const origOS = tx.objectStore.bind(tx);
+          tx.objectStore = (name: string) => {
+            const os = origOS(name);
+            os.get = () => {
+              queueMicrotask(() => {
+                try {
+                  tx.abort();
+                } catch {
+                  /* The transaction may already have settled. */
+                }
+              });
+              return { onsuccess: null, onerror: null } as unknown as IDBRequest;
+            };
+            return os;
           };
-          return os;
-        };
-      });
+        },
+        (tx) => tx.mode === 'readwrite',
+      );
 
       await expect(store.getAttachment(path)).resolves.toBe('attachment-data');
     });
@@ -1640,28 +1813,31 @@ describe('IDB error paths (web/IndexedDB)', () => {
     it('rejects when IDB put transaction errors', async () => {
       const { store } = await getInitializedStore();
 
-      interceptNextTransaction((tx) => {
-        const origOS = tx.objectStore.bind(tx);
-        tx.objectStore = (name: string) => {
-          const os = origOS(name);
-          os.put = () => {
-            queueMicrotask(() => {
-              Object.defineProperty(tx, 'error', {
-                value: new DOMException('Write failed'),
-                configurable: true,
+      interceptNextTransaction(
+        (tx) => {
+          const origOS = tx.objectStore.bind(tx);
+          tx.objectStore = (name: string) => {
+            const os = origOS(name);
+            os.put = () => {
+              queueMicrotask(() => {
+                Object.defineProperty(tx, 'error', {
+                  value: new DOMException('Write failed'),
+                  configurable: true,
+                });
+                if (tx.onerror) tx.onerror(new Event('error'));
               });
-              if (tx.onerror) tx.onerror(new Event('error'));
-            });
-            return { onsuccess: null, onerror: null } as unknown as IDBRequest;
+              return { onsuccess: null, onerror: null } as unknown as IDBRequest;
+            };
+            return os;
           };
-          return os;
-        };
-        Object.defineProperty(tx, 'oncomplete', {
-          set: () => {},
-          get: () => null,
-          configurable: true,
-        });
-      });
+          Object.defineProperty(tx, 'oncomplete', {
+            set: () => {},
+            get: () => null,
+            configurable: true,
+          });
+        },
+        (tx) => tx.mode === 'readwrite',
+      );
 
       await expect(store.savePage('j1', makePage('p1'))).rejects.toThrow();
     });
@@ -1671,28 +1847,31 @@ describe('IDB error paths (web/IndexedDB)', () => {
     it('rejects when IDB put transaction is aborted', async () => {
       const { store } = await getInitializedStore();
 
-      interceptNextTransaction((tx) => {
-        const origOS = tx.objectStore.bind(tx);
-        tx.objectStore = (name: string) => {
-          const os = origOS(name);
-          os.put = () => {
-            queueMicrotask(() => {
-              try {
-                tx.abort();
-              } catch (error) {
-                void error;
-              }
-            });
-            return { onsuccess: null, onerror: null } as unknown as IDBRequest;
+      interceptNextTransaction(
+        (tx) => {
+          const origOS = tx.objectStore.bind(tx);
+          tx.objectStore = (name: string) => {
+            const os = origOS(name);
+            os.put = () => {
+              queueMicrotask(() => {
+                try {
+                  tx.abort();
+                } catch (error) {
+                  void error;
+                }
+              });
+              return { onsuccess: null, onerror: null } as unknown as IDBRequest;
+            };
+            return os;
           };
-          return os;
-        };
-        Object.defineProperty(tx, 'oncomplete', {
-          set: () => {},
-          get: () => null,
-          configurable: true,
-        });
-      });
+          Object.defineProperty(tx, 'oncomplete', {
+            set: () => {},
+            get: () => null,
+            configurable: true,
+          });
+        },
+        (tx) => tx.mode === 'readwrite',
+      );
 
       await expect(store.savePage('j1', makePage('p1'))).rejects.toThrow();
     });
@@ -2090,6 +2269,7 @@ describe('device-key rotation write barrier (web)', () => {
     releaseRotation();
     await rotation;
     await concurrentSave;
-    expect(writesDuringRotation).toBe(1);
+    // A page mutation commits both the authoritative page and its catalog projection.
+    expect(writesDuringRotation).toBe(2);
   });
 });

@@ -6,14 +6,21 @@ import type { Attachment } from 'canto-data';
 
 const mockEnqueue = jest.fn();
 const mockCancelAll = jest.fn();
+const mockRetry = jest.fn();
+const mockOnAutoLock = jest.fn();
+let mockAutoLockCallback: (() => void) | undefined;
 let mockLoadedImages: Record<string, string> = { 'img-1': 'data:image/jpeg;base64,abc' };
+let mockFailedImages: Record<string, boolean> = {};
 
 jest.mock('@/hooks/useImageQueue', () => ({
   useImageQueue: () => ({
     loadedImages: mockLoadedImages,
     loadingImages: {},
+    failedImages: mockFailedImages,
     enqueue: mockEnqueue,
     cancelAll: mockCancelAll,
+    prioritize: jest.fn(),
+    retry: mockRetry,
   }),
 }));
 
@@ -37,6 +44,7 @@ jest.mock('@/hooks/useI18n', () => ({
   useI18n: () => ({
     t: {
       page: { decrypting: 'Decrypting...' },
+      dataIntegrity: { retry: 'Retry' },
       a11y: {
         imageNofM: 'Image {n} of {m}',
         downloadImage: 'Download image',
@@ -46,6 +54,10 @@ jest.mock('@/hooks/useI18n', () => ({
       },
     },
   }),
+}));
+
+jest.mock('@/contexts/JournalKeyContext', () => ({
+  useJournalKeys: () => ({ onAutoLock: mockOnAutoLock }),
 }));
 
 jest.mock('../ImageViewing', () => {
@@ -79,11 +91,17 @@ const defaultProps = {
 describe('ImageCarousel', () => {
   beforeEach(() => {
     mockLoadedImages = { 'img-1': 'data:image/jpeg;base64,abc' };
+    mockFailedImages = {};
     mockEnqueue.mockClear();
     mockCancelAll.mockClear();
+    mockRetry.mockClear();
+    mockOnAutoLock.mockImplementation((callback: () => void) => {
+      mockAutoLockCallback = callback;
+      return jest.fn();
+    });
   });
 
-  it('does not automatically queue chunked originals', () => {
+  it('automatically queues a chunked original through the display materializer', () => {
     const image = {
       ...makeImage('chunked-image'),
       content: {
@@ -95,18 +113,12 @@ describe('ImageCarousel', () => {
       },
     };
 
-    const { getAllByLabelText } = render(<ImageCarousel {...defaultProps} images={[image]} />);
+    render(<ImageCarousel {...defaultProps} images={[image]} />);
 
-    expect(mockEnqueue).toHaveBeenCalledWith([]);
-    const chunkedPlaceholder = getAllByLabelText('Image 1 of 1').find(
-      (node) => node.props.accessibilityRole === 'button',
-    );
-    expect(chunkedPlaceholder).toBeDefined();
-    fireEvent.press(chunkedPlaceholder!);
-    expect(mockEnqueue).toHaveBeenLastCalledWith([image]);
+    expect(mockEnqueue).toHaveBeenCalledWith([image]);
   });
 
-  it('renders a persisted import thumbnail for a chunked original without loading it', () => {
+  it('renders a persisted import thumbnail while automatically loading a chunked original', () => {
     const image = {
       ...makeImage('chunked-preview'),
       content: {
@@ -123,7 +135,7 @@ describe('ImageCarousel', () => {
       <ImageCarousel {...defaultProps} images={[image]} thumbnail="dGh1bWJuYWls" />,
     );
 
-    expect(mockEnqueue).toHaveBeenCalledWith([]);
+    expect(mockEnqueue).toHaveBeenCalledWith([image]);
     expect(UNSAFE_getAllByType(Image)).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
@@ -133,25 +145,59 @@ describe('ImageCarousel', () => {
         }),
       ]),
     );
-    fireEvent.press(getByTestId('carousel-image-chunked-preview'));
-    expect(mockEnqueue).toHaveBeenLastCalledWith([image]);
+    expect(getByTestId('carousel-image-chunked-preview')).toBeTruthy();
   });
 
-  it('does not automatically queue unknown or oversized legacy originals and lets the user tap to load', () => {
+  it('automatically queues unknown and oversized legacy originals', () => {
     const unknown = { ...makeImage('unknown'), size: undefined };
     const large = { ...makeImage('large'), size: 512 * 1024 + 1 };
 
-    const { getAllByLabelText } = render(
-      <ImageCarousel {...defaultProps} images={[unknown, large]} />,
+    render(<ImageCarousel {...defaultProps} images={[unknown, large]} />);
+
+    expect(mockEnqueue).toHaveBeenCalledWith([unknown, large]);
+  });
+
+  it('requeues when the attachment generation changes', () => {
+    const first = {
+      ...makeImage('same-id'),
+      content: {
+        format: 'canto-chunked-v1' as const,
+        byteLength: 1,
+        chunkSize: 1,
+        chunkCount: 1,
+        generation: 'old',
+      },
+    };
+    const { rerender } = render(<ImageCarousel {...defaultProps} images={[first]} />);
+    mockEnqueue.mockClear();
+
+    rerender(
+      <ImageCarousel
+        {...defaultProps}
+        images={[{ ...first, content: { ...first.content, generation: 'new' } }]}
+      />,
     );
 
-    expect(mockEnqueue).toHaveBeenCalledWith([]);
-    const placeholders = getAllByLabelText(/Image \d+ of 2/).filter(
-      (node) => node.props.accessibilityRole === 'button',
-    );
-    expect(placeholders).toHaveLength(2);
-    fireEvent.press(placeholders[0]);
-    expect(mockEnqueue).toHaveBeenLastCalledWith([unknown]);
+    expect(mockCancelAll).toHaveBeenCalled();
+    expect(mockEnqueue).toHaveBeenCalledTimes(1);
+  });
+
+  it('cancels image materialization on auto-lock', () => {
+    render(<ImageCarousel {...defaultProps} />);
+
+    mockAutoLockCallback?.();
+
+    expect(mockCancelAll).toHaveBeenCalled();
+  });
+
+  it('shows retry only for a materialization failure', () => {
+    mockLoadedImages = {};
+    mockFailedImages = { 'img-1': true };
+    const { getByTestId, getByLabelText } = render(<ImageCarousel {...defaultProps} />);
+
+    expect(getByTestId('carousel-retry-img-1')).toBeTruthy();
+    fireEvent.press(getByLabelText('Retry'));
+    expect(mockRetry).toHaveBeenCalledWith(defaultProps.images[0]);
   });
 
   it('renders download button when not editing and onDownload is provided', () => {

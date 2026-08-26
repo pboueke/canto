@@ -23,6 +23,7 @@ import {
   FONT_SIZES,
   applyFontPrefs,
 } from '@/lib/font';
+import { scavengeAttachmentDisplayCache } from '@/lib/attachment-display';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -52,6 +53,10 @@ export default function RootLayout() {
     'Lora-Bold': require('@/assets/fonts/Lora-Bold.ttf'),
     'Lora-Italic': require('@/assets/fonts/Lora-Italic.ttf'),
   });
+
+  useEffect(() => {
+    scavengeAttachmentDisplayCache();
+  }, []);
 
   useEffect(() => {
     const loadPreferences = async () => {

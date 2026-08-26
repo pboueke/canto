@@ -409,6 +409,15 @@ describe('inspectBackup (web)', () => {
 });
 
 describe('importJournal (web)', () => {
+  it('stops an already-cancelled import before fetching the archive', async () => {
+    const controller = new AbortController();
+    controller.abort();
+
+    await expect(
+      importJournal('blob:never-read', 'Cancelled', undefined, undefined, controller.signal),
+    ).rejects.toThrow('Backup import cancelled');
+  });
+
   it('imports unencrypted journal with pages', async () => {
     const zip = new JSZip();
     zip.file(
@@ -1348,7 +1357,9 @@ describe('importJournal (web)', () => {
     const key = new Uint8Array(32).fill(0xab);
     await prepareTransactionalImportZip(true);
 
-    jest.spyOn(mockTestStore, 'getJournal').mockRejectedValue(new Error('unreadable metadata'));
+    jest
+      .spyOn(mockTestStore, 'getJournalOverview')
+      .mockRejectedValue(new Error('unreadable metadata'));
     const deleteSpy = jest.spyOn(mockTestStore, 'deleteJournal');
 
     await expect(importJournal('blob:mock', 'Imported journal', key)).rejects.toThrow(
@@ -1358,7 +1369,7 @@ describe('importJournal (web)', () => {
     expect(deleteSpy).toHaveBeenCalledTimes(1);
     const importedId = deleteSpy.mock.calls[0][0];
     expect(importedId).not.toBe('source-journal');
-    expect(mockTestStore.getJournal).toHaveBeenCalledWith(importedId, key);
+    expect(mockTestStore.getJournalOverview).toHaveBeenCalledWith(importedId, key);
     expect(await mockTestStore.listJournals()).toEqual([]);
   });
 

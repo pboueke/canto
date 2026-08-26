@@ -1280,6 +1280,9 @@ describe('GDriveRemoteStore', () => {
       });
       mockedApi.getFileContent.mockImplementation(async (_token, fileId) => {
         const file = [...legacyFiles, ...hiddenFiles].find((candidate) => candidate.id === fileId);
+        // The compatibility projection is intentionally outside this fixture's
+        // immutable-index collections, but is cached across the second run.
+        if (fileId === 'file-2') return '{}';
         if (!file) throw new Error('missing hidden index file');
         return file.content;
       });
@@ -1289,6 +1292,7 @@ describe('GDriveRemoteStore', () => {
         const legacyIndex = legacyFiles.findIndex((file) => file.id === fileId);
         if (legacyIndex >= 0) legacyFiles.splice(legacyIndex, 1);
       });
+      mockedApi.getFileContentWithEtag.mockResolvedValue({ content: '{}', etag: null });
 
       const publication = await store.openSyncIndexPublication('journal-1');
       await publication.publishPage('p1', { modified: 1000 });
@@ -1303,6 +1307,22 @@ describe('GDriveRemoteStore', () => {
       });
       expect(legacyFiles).toHaveLength(0);
       expect(mockedApi.deleteFile).toHaveBeenCalledTimes(2);
+
+      // A later compaction folds the first v3 snapshot and a new immutable
+      // delta into a replacement. Every deleted input must be named by the
+      // replacement's coverage list; otherwise readers cannot prove that the
+      // deleted v3 snapshot remains represented after a crash or retry.
+      const secondPublication = await store.openSyncIndexPublication('journal-1');
+      await secondPublication.publishPage('p2', { modified: 2000 });
+      await secondPublication.finalize({ successful: true });
+
+      expect(hiddenFiles).toHaveLength(1);
+      expect(JSON.parse(hiddenFiles[0].content)).toMatchObject({
+        version: 3,
+        entries: { remote: { modified: 500 }, p1: { modified: 1000 }, p2: { modified: 2000 } },
+        coveredFileIds: expect.arrayContaining(['file-3', 'file-4']),
+      });
+      expect(mockedApi.deleteFile).toHaveBeenCalledTimes(4);
     });
 
     it('keeps fewer than 128 deltas at a checkpoint', async () => {
@@ -1728,6 +1748,73 @@ describe('GDriveRemoteStore', () => {
       } finally {
         warn.mockRestore();
       }
+    });
+
+    it('re-lists immutable index inputs once when a concurrent compactor removes one', async () => {
+      await store.connect({ accessToken: TOKEN });
+      const folder = (id: string, name: string) => ({
+        id,
+        name,
+        mimeType: 'application/vnd.google-apps.folder',
+        modifiedTime: '',
+      });
+      let hiddenLists = 0;
+      mockedApi.listFiles.mockImplementation(async (_token, query) => {
+        if (query.includes("name = 'Canto'")) return [folder('root', 'Canto')];
+        if (query.includes("name = 'journal-1'")) return [folder('journal', 'journal-1')];
+        if (query.includes("name = 'index.json'")) return [];
+        if (query.includes("name contains 'index-v'")) return [];
+        if (query.includes('canto-sync-index-v1-journal-1-')) {
+          hiddenLists++;
+          if (hiddenLists === 1) return []; // initial downloadSyncIndex()
+          if (hiddenLists === 2) {
+            return [
+              {
+                id: 'gone-delta',
+                name: 'canto-sync-index-v1-journal-1-index-v2-00000000-0000-4000-8000-000000000001.json',
+                mimeType: 'application/json',
+                modifiedTime: '',
+              },
+            ];
+          }
+          return [
+            {
+              id: 'surviving-delta',
+              name: 'canto-sync-index-v1-journal-1-index-v2-00000000-0000-4000-8000-000000000002.json',
+              mimeType: 'application/json',
+              modifiedTime: '',
+            },
+          ];
+        }
+        return [];
+      });
+      mockedApi.getFileContent.mockImplementation(async (_token, id) => {
+        if (id === 'gone-delta') {
+          throw Object.assign(new api.GDriveApiError(404), { status: 404 });
+        }
+        if (id === 'surviving-delta') return JSON.stringify({ remote: { modified: 4 } });
+        throw new Error(`unexpected index read: ${id}`);
+      });
+      mockedApi.createFile.mockImplementation(async (_token, metadata) => ({
+        id: `created-${metadata.name}`,
+        name: metadata.name,
+        mimeType: metadata.mimeType ?? 'application/json',
+        modifiedTime: '',
+      }));
+
+      const publication = await store.openSyncIndexPublication('journal-1');
+      await publication.publishPage('local', { modified: 8 });
+      await publication.finalize({ successful: true });
+
+      expect(hiddenLists).toBe(3);
+      expect(mockedApi.deleteFile).toHaveBeenCalledWith(TOKEN, 'surviving-delta');
+      expect(mockedApi.createFile).toHaveBeenCalledWith(
+        TOKEN,
+        expect.objectContaining({ name: expect.stringMatching(/index-v3-/) }),
+        expect.stringContaining('"remote":{"modified":4}'),
+        'appDataFolder',
+        undefined,
+      );
     });
 
     it('handles optional and invalid immutable-index edge cases without treating metadata as payload', async () => {

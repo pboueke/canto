@@ -6,6 +6,8 @@ import {
   createFile,
   updateFile,
   deleteFile,
+  registerAccessTokenRefresher,
+  unregisterAccessTokenRefresher,
 } from '../sync/gdrive/api';
 
 const TOKEN = 'test-access-token';
@@ -15,6 +17,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  unregisterAccessTokenRefresher(TOKEN);
   jest.restoreAllMocks();
 });
 
@@ -154,6 +157,76 @@ describe('Google Drive API helper', () => {
     it('throws on expired token (401)', async () => {
       mockFetchError(401, 'Unauthorized');
       await expect(getFileContent(TOKEN, 'f1')).rejects.toThrow('Drive API error (401)');
+    });
+
+    it('refreshes a rejected token once and replays the failed request', async () => {
+      const refresh = jest.fn().mockResolvedValue('fresh-access-token');
+      registerAccessTokenRefresher(TOKEN, refresh);
+      (global.fetch as jest.Mock)
+        .mockResolvedValueOnce({
+          ok: false,
+          status: 401,
+          text: () => Promise.resolve('Unauthorized'),
+        })
+        .mockResolvedValueOnce({ ok: true, status: 200, text: () => Promise.resolve('content') });
+
+      await expect(getFileContent(TOKEN, 'f1')).resolves.toBe('content');
+      expect(refresh).toHaveBeenCalledTimes(1);
+      expect(global.fetch).toHaveBeenCalledTimes(2);
+      expect(
+        new Headers((global.fetch as jest.Mock).mock.calls[1][1].headers).get('Authorization'),
+      ).toBe('Bearer fresh-access-token');
+    });
+
+    it('shares one refresh across concurrent 401 responses', async () => {
+      let resolveRefresh!: (token: string) => void;
+      const refresh = jest.fn(
+        () =>
+          new Promise<string>((resolve) => {
+            resolveRefresh = resolve;
+          }),
+      );
+      registerAccessTokenRefresher(TOKEN, refresh);
+      (global.fetch as jest.Mock)
+        .mockResolvedValueOnce({
+          ok: false,
+          status: 401,
+          text: () => Promise.resolve('Unauthorized'),
+        })
+        .mockResolvedValueOnce({
+          ok: false,
+          status: 401,
+          text: () => Promise.resolve('Unauthorized'),
+        })
+        .mockResolvedValueOnce({ ok: true, status: 200, text: () => Promise.resolve('first') })
+        .mockResolvedValueOnce({ ok: true, status: 200, text: () => Promise.resolve('second') });
+
+      const first = getFileContent(TOKEN, 'first');
+      const second = getFileContent(TOKEN, 'second');
+      await Promise.resolve();
+      await Promise.resolve();
+      expect(refresh).toHaveBeenCalledTimes(1);
+
+      resolveRefresh('fresh-access-token');
+      await expect(Promise.all([first, second])).resolves.toEqual(['first', 'second']);
+      expect(global.fetch).toHaveBeenCalledTimes(4);
+      for (const [, init] of (global.fetch as jest.Mock).mock.calls.slice(2)) {
+        expect(new Headers(init.headers).get('Authorization')).toBe('Bearer fresh-access-token');
+      }
+    });
+
+    it('fails instead of treating an unchanged rejected token as refreshed', async () => {
+      registerAccessTokenRefresher(TOKEN, jest.fn().mockResolvedValue(TOKEN));
+      (global.fetch as jest.Mock).mockResolvedValueOnce({
+        ok: false,
+        status: 401,
+        text: () => Promise.resolve('Unauthorized'),
+      });
+
+      await expect(getFileContent(TOKEN, 'f1')).rejects.toThrow(
+        'Drive authentication could not be refreshed',
+      );
+      expect(global.fetch).toHaveBeenCalledTimes(1);
     });
 
     it('returns the ETag required for conditional updates', async () => {

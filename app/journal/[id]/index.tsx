@@ -5,7 +5,7 @@ import { useLocalSearchParams, router, useFocusEffect } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ThemeContext, useTheme } from '@/hooks/useTheme';
 import { useI18n } from '@/hooks/useI18n';
-import { useJournal, useCreatePage } from '@/hooks/useStorage';
+import { useJournalOverview, useCreatePage } from '@/hooks/useStorage';
 import { useJournalKeys } from '@/contexts/JournalKeyContext';
 import { useFilter } from '@/hooks/useFilter';
 import { JournalHeader } from '@/components/journal/JournalHeader';
@@ -17,7 +17,6 @@ import { SyncModal } from '@/components/journal/SyncModal';
 import { FloatingActionButton } from '@/components/common/FloatingActionButton';
 import { useGoogleAuth } from '@/contexts/GoogleAuthContext';
 import { useSyncManager, useSyncState } from '@/contexts/SyncManagerContext';
-import { pageToListPreview } from '@/lib/pagePreview';
 import { type ThemeName, themes } from '@/styles/themes';
 import { useFontPrefs } from '@/contexts/FontPrefsContext';
 import { applyFontPrefs } from '@/lib/font';
@@ -45,14 +44,21 @@ export default function JournalScreen() {
   }).current;
 
   const derivedKey = id ? getKey(id) : null;
-  const { journal, loading, refresh } = useJournal(id, derivedKey);
+  const {
+    overview,
+    loading,
+    status: overviewStatus,
+    migrationProgress,
+    refresh,
+  } = useJournalOverview(id, derivedKey);
+  const journal = overview?.metadata ?? null;
+  const [showSettings, setShowSettings] = useState(false);
+  const [showExportModal, setShowExportModal] = useState(false);
+  const [showSyncModal, setShowSyncModal] = useState(false);
   const { create: createPage } = useCreatePage(id, derivedKey);
   const { isSignedIn } = useGoogleAuth();
   const { syncJournal } = useSyncManager();
   const syncState = useSyncState(id ?? '');
-  const [showSettings, setShowSettings] = useState(false);
-  const [showExportModal, setShowExportModal] = useState(false);
-  const [showSyncModal, setShowSyncModal] = useState(false);
 
   const lastSyncedModified = useRef<number | null>(null);
 
@@ -87,8 +93,8 @@ export default function JournalScreen() {
   const isDark = theme.isDark;
 
   const pages = useMemo(() => {
-    if (!journal) return [];
-    const sorted = journal.pages
+    if (!journal || !overview) return [];
+    const sorted = overview.pages
       .filter((p) => !p.deleted)
       .sort((a, b) => {
         if (journal.settings.sort === 'ascending') {
@@ -98,10 +104,9 @@ export default function JournalScreen() {
           return new Date(b.date).getTime() - new Date(a.date).getTime();
         }
         return 0;
-      })
-      .map(pageToListPreview);
+      });
     return sorted;
-  }, [journal]);
+  }, [overview, journal?.settings.sort]);
 
   const hasAnniversaries = useMemo(
     () => getAnniversaryPages(pages, new Date()).length > 0,
@@ -109,17 +114,8 @@ export default function JournalScreen() {
   );
 
   const availableTags = useMemo(() => {
-    if (!journal) return [];
-    const tagSet = new Set<string>();
-    for (const page of journal.pages) {
-      if (!page.deleted) {
-        for (const tag of page.tags) {
-          tagSet.add(tag.toLowerCase());
-        }
-      }
-    }
-    return Array.from(tagSet).sort();
-  }, [journal]);
+    return overview?.tags ?? [];
+  }, [overview]);
 
   const {
     filter,
@@ -151,23 +147,21 @@ export default function JournalScreen() {
 
   useFocusEffect(
     useCallback(() => {
-      refresh();
       if (!journal?.settings.autoSync || !journal.settings.remoteSync || !isSignedIn) return;
       // Do not race a queued InteractionManager callback. Every initially
       // visible legacy thumbnail has called into its actual loader first.
       if (!initialThumbnailIds.every((pageId) => thumbnailStarts.current.has(pageId))) return;
 
-      const latestModified = journal.pages.reduce((max, page) => Math.max(max, page.modified), 0);
+      const latestModified = overview?.latestModified ?? 0;
       if (lastSyncedModified.current === latestModified) return;
       lastSyncedModified.current = latestModified;
       void syncJournal(journal.id, derivedKey ?? undefined);
     }, [
-      refresh,
       journal?.settings.autoSync,
       journal?.settings.remoteSync,
       journal?.settings.previewThumbnail,
       journal?.id,
-      journal?.pages,
+      overview?.latestModified,
       isSignedIn,
       initialThumbnailIds,
       thumbnailStartVersion,
@@ -192,6 +186,11 @@ export default function JournalScreen() {
           ]}
         >
           <ActivityIndicator size="large" color={theme.colors.primary} />
+          {overviewStatus === 'migrating' && migrationProgress && (
+            <Text style={[styles.optimizing, { color: theme.colors.textSecondary }]}>
+              {t.common.loading} {migrationProgress.current}/{migrationProgress.total}
+            </Text>
+          )}
         </View>
       </ThemeContext.Provider>
     );
@@ -213,11 +212,12 @@ export default function JournalScreen() {
     );
   }
 
-  if (showSettings) {
+  if (showSettings && journal) {
     return (
       <ThemeContext.Provider value={themeContextValue}>
         <JournalSettings
           journal={journal}
+          pageCount={pages.length}
           derivedKey={derivedKey}
           onClose={() => setShowSettings(false)}
           onJournalChanged={refresh}
@@ -238,8 +238,7 @@ export default function JournalScreen() {
           syncStatus={syncState.status}
           isSyncEnabled={journal.settings.syncProvider === 'gdrive'}
           hasUnsyncedChanges={
-            syncState.lastSynced == null ||
-            journal.pages.some((p) => p.modified > syncState.lastSynced!)
+            syncState.lastSynced == null || (overview?.latestModified ?? 0) > syncState.lastSynced
           }
           hasAnniversaries={hasAnniversaries}
         />
@@ -275,7 +274,10 @@ export default function JournalScreen() {
         ) : (
           <FlatList
             data={visiblePages}
-            initialNumToRender={visiblePages.length}
+            initialNumToRender={15}
+            maxToRenderPerBatch={10}
+            windowSize={5}
+            removeClippedSubviews
             keyExtractor={(item) => item.id}
             contentContainerStyle={styles.list}
             onEndReached={loadMore}
@@ -355,6 +357,10 @@ const styles = StyleSheet.create({
   },
   loadingMore: {
     paddingVertical: 20,
+  },
+  optimizing: {
+    marginTop: 12,
+    fontSize: 14,
   },
   anniversaryBanner: {
     paddingHorizontal: 12,

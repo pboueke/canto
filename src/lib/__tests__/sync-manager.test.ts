@@ -165,7 +165,30 @@ describe('SyncManager', () => {
       expect(states[states.length - 1].lastSynced).toBeGreaterThan(0);
     });
 
-    it('resumes a checkpointed sync after a browser page reload', async () => {
+    it('returns a discriminated user-facing outcome for completed and failed runs', async () => {
+      const completedManager = new SyncManager(
+        createMockLocalStore(makeJournal([])),
+        createMockRemoteStore(),
+      );
+      await expect(completedManager.runJournalSync('j1', 'token')).resolves.toMatchObject({
+        kind: 'completed',
+        result: expect.any(Object),
+      });
+
+      const failedLocal = createMockLocalStore(makeJournal([]));
+      (failedLocal.getJournal as jest.Mock).mockRejectedValueOnce(new Error('read failure'));
+      const failedManager = new SyncManager(failedLocal, createMockRemoteStore());
+      const consoleSpy = jest.spyOn(console, 'error').mockImplementation();
+      try {
+        await expect(failedManager.runJournalSync('j1', 'token')).resolves.toEqual({
+          kind: 'failed',
+        });
+      } finally {
+        consoleSpy.mockRestore();
+      }
+    });
+
+    it('keeps a checkpoint across normal reload and resumes only after a new tab', async () => {
       const originalSessionStorage = Object.getOwnPropertyDescriptor(globalThis, 'sessionStorage');
       const session = new Map<string, string>();
       Object.defineProperty(globalThis, 'sessionStorage', {
@@ -216,15 +239,25 @@ describe('SyncManager', () => {
         });
         expect(asyncStore['canto:lastSync:j1']).toBeUndefined();
         expect(asyncStore['canto:lastRemoteSalt:j1']).toBeUndefined();
-        // A reload creates a new renderer and frees the browser-native
-        // allocations that caused the checkpoint. It must retain the durable
-        // Drive chunks, but not the in-memory renderer budget.
+        // sessionStorage survives a normal reload. The next manager must keep
+        // the renderer-safety stop rather than reopening native-heavy work.
         const reloadedManager = new SyncManager(local, remote, true);
-        const resumed = await reloadedManager.syncJournal('j1', 'token');
+        await expect(reloadedManager.syncJournal('j1', 'token')).resolves.toBeNull();
+        expect(reloadedManager.getState('j1')).toMatchObject({
+          status: 'checkpointed',
+          requiresFreshRenderer: true,
+        });
+        expect(persisted.size).toBeLessThan(80);
+
+        // A closed tab starts a new sessionStorage lifetime and can use the
+        // immutable chunks published before the checkpoint to finish safely.
+        session.clear();
+        const newTabManager = new SyncManager(local, remote, true);
+        const resumed = await newTabManager.syncJournal('j1', 'token');
 
         expect(resumed?.checkpointed).toBeFalsy();
         expect(persisted.size).toBe(80);
-        expect(reloadedManager.getState('j1').status).toBe('idle');
+        expect(newTabManager.getState('j1').status).toBe('idle');
       } finally {
         if (originalSessionStorage) {
           Object.defineProperty(globalThis, 'sessionStorage', originalSessionStorage);

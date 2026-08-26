@@ -4,6 +4,7 @@ export type {
   PreparedChunkUploads,
   RemoteJournalMeta,
   SyncResult,
+  SyncRunOutcome,
   SyncConflict,
   SyncIndex,
   SyncIndexPublication,

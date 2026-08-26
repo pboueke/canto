@@ -15,8 +15,9 @@ import { Feather } from '@expo/vector-icons';
 import { useTheme } from '@/hooks/useTheme';
 import { useI18n } from '@/hooks/useI18n';
 import { useImageQueue } from '@/hooks/useImageQueue';
+import { useJournalKeys } from '@/contexts/JournalKeyContext';
 import type { Attachment } from 'canto-data';
-import { canGenerateThumbnailFromAttachment } from '@/lib/pagePreview';
+import type { AttachmentDisplayLease } from '@/lib/attachment-display';
 
 const HORIZONTAL_PADDING = 10;
 const IMAGE_HEIGHT = 250;
@@ -32,7 +33,10 @@ interface ImageCarouselProps {
   onDownload?: (image: Attachment) => void;
   /** Persisted small preview for the first image; never a reconstructed original. */
   thumbnail?: string;
-  loadImage: (path: string) => Promise<string | null>;
+  loadImage: (
+    attachment: Attachment,
+    signal: AbortSignal,
+  ) => Promise<string | AttachmentDisplayLease | null>;
 }
 
 export function ImageCarousel({
@@ -48,10 +52,12 @@ export function ImageCarousel({
 }: ImageCarouselProps) {
   const { theme } = useTheme();
   const { t } = useI18n();
+  const { onAutoLock } = useJournalKeys();
   const [currentIndex, setCurrentIndex] = useState(0);
   const [viewerVisible, setViewerVisible] = useState(false);
   const [containerWidth, setContainerWidth] = useState(DEFAULT_WIDTH);
-  const { loadedImages, loadingImages, enqueue, cancelAll } = useImageQueue(loadImage);
+  const { loadedImages, loadingImages, failedImages, enqueue, cancelAll, prioritize, retry } =
+    useImageQueue(loadImage);
 
   const IMAGE_WIDTH = containerWidth - HORIZONTAL_PADDING * 4;
 
@@ -62,15 +68,20 @@ export function ImageCarousel({
 
   const activeImages = images.filter((img) => !img.deleted);
 
-  const activeImagesKey = activeImages.map((img) => img.id).join(',');
+  // Generation changes replace the immutable attachment source even when the
+  // descriptor id is retained by an imported or synced page.
+  const activeImagesKey = activeImages
+    .map((img) => `${img.id}:${img.path}:${img.content?.generation ?? 'legacy'}`)
+    .join(',');
 
   useEffect(() => {
-    // Automatic carousel work follows the list-preview memory contract:
-    // only a declared, bounded legacy value may be reconstructed. Chunked,
-    // unknown-size, and large legacy images require an explicit tap.
-    enqueue(activeImages.filter(canGenerateThumbnailFromAttachment));
+    // Page display uses the URI materializer, so every source format may be
+    // queued without reconstructing a full base64 original in the JS heap.
+    enqueue(activeImages);
     return () => cancelAll();
   }, [activeImagesKey, enqueue, cancelAll]);
+
+  useEffect(() => onAutoLock(cancelAll), [onAutoLock, cancelAll]);
 
   if (activeImages.length === 0) return null;
 
@@ -78,6 +89,11 @@ export function ImageCarousel({
   const viewerImages = activeImages
     .filter((img) => loadedImages[img.id])
     .map((img) => ({ uri: loadedImages[img.id] }));
+  const viewerIndex = viewerImages.length
+    ? activeImages
+        .filter((img) => loadedImages[img.id])
+        .findIndex((img) => img.id === activeImages[currentIndex]?.id)
+    : 0;
 
   return (
     <View style={styles.container} onLayout={onContainerLayout}>
@@ -110,6 +126,7 @@ export function ImageCarousel({
             e.nativeEvent.contentOffset.x / (IMAGE_WIDTH + HORIZONTAL_PADDING),
           );
           setCurrentIndex(index);
+          if (activeImages[index]) prioritize(activeImages[index]);
         }}
         renderItem={({ item, index }) => {
           const imageUri = loadedImages[item.id];
@@ -118,6 +135,7 @@ export function ImageCarousel({
               ? `data:image/jpeg;base64,${thumbnail}`
               : undefined;
           const isLoading = loadingImages[item.id];
+          const failed = failedImages[item.id];
 
           return (
             <View
@@ -132,10 +150,6 @@ export function ImageCarousel({
                     setCurrentIndex(index);
                     if (imageUri) {
                       setViewerVisible(true);
-                    } else {
-                      // A persisted thumbnail is intentionally not passed to the
-                      // full viewer. Opening the original is explicit user work.
-                      enqueue([item]);
                     }
                   }}
                   accessibilityRole={imageUri ? 'image' : 'button'}
@@ -147,24 +161,24 @@ export function ImageCarousel({
                     resizeMode="contain"
                   />
                 </Pressable>
-              ) : !canGenerateThumbnailFromAttachment(item) ? (
-                <Pressable
-                  onPress={() => enqueue([item])}
-                  accessibilityLabel={t.a11y.imageNofM
-                    .replace('{n}', String(index + 1))
-                    .replace('{m}', String(activeImages.length))}
-                  accessibilityRole="button"
-                  style={[styles.imagePlaceholder, { backgroundColor: theme.colors.surface }]}
-                >
-                  {isLoading ? (
-                    <ActivityIndicator size="large" color={theme.colors.primary} />
-                  ) : (
-                    <Feather name="image" size={40} color={theme.colors.textSecondary} />
-                  )}
-                </Pressable>
               ) : (
                 <View style={[styles.imagePlaceholder, { backgroundColor: theme.colors.surface }]}>
-                  {isLoading || encrypted ? (
+                  {failed ? (
+                    <Pressable
+                      onPress={() => retry(item)}
+                      style={styles.retryButton}
+                      accessibilityLabel={t.dataIntegrity.retry}
+                      accessibilityRole="button"
+                      testID={`carousel-retry-${item.id}`}
+                    >
+                      <Feather name="refresh-cw" size={18} color={theme.colors.primary} />
+                      <Text
+                        style={{ color: theme.colors.primary, fontFamily: theme.fonts.regular }}
+                      >
+                        {t.dataIntegrity.retry}
+                      </Text>
+                    </Pressable>
+                  ) : isLoading || encrypted ? (
                     <ActivityIndicator size="large" color={theme.colors.primary} />
                   ) : (
                     <Feather name="image" size={40} color={theme.colors.textSecondary} />
@@ -240,7 +254,7 @@ export function ImageCarousel({
 
       <ImageViewing
         images={viewerImages}
-        imageIndex={currentIndex}
+        imageIndex={Math.max(0, viewerIndex)}
         visible={viewerVisible}
         onRequestClose={() => setViewerVisible(false)}
       />
@@ -279,6 +293,10 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  retryButton: {
+    alignItems: 'center',
+    gap: 6,
   },
   downloadOverlay: {
     position: 'absolute',

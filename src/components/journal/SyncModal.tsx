@@ -9,10 +9,11 @@ import { useSaveJournal } from '@/hooks/useStorage';
 import type { JournalContent, JournalSettings } from 'canto-data';
 import { webModalContent } from '@/styles/web';
 import { formatSyncWarning } from '@/lib/sync/warnings';
+import type { SyncRunOutcome } from '@/lib/sync';
 
 interface SyncModalProps {
   visible: boolean;
-  journal: JournalContent;
+  journal: Omit<JournalContent, 'pages'>;
   derivedKey: Uint8Array | null;
   onClose: () => void;
   onJournalChanged: () => void;
@@ -59,9 +60,9 @@ export function SyncModal({
   const { theme } = useTheme();
   const { t, lang } = useI18n();
   const { isSignedIn, signIn } = useGoogleAuth();
-  const { syncJournal, cancelSync, getSyncState } = useSyncManager();
+  const { syncJournal, cancelSync, manager } = useSyncManager();
   const syncState = useSyncState(journal.id);
-  const { saveJournal } = useSaveJournal();
+  const { saveJournalMetadata } = useSaveJournal();
 
   const [feedback, setFeedback] = useState<string | null>(null);
 
@@ -82,37 +83,31 @@ export function SyncModal({
 
   const updateSettings = useCallback(
     async (patch: Partial<JournalSettings>) => {
-      const updated: JournalContent = {
+      const updated = {
         ...journal,
         settings: { ...journal.settings, ...patch },
       };
-      await saveJournal(updated, derivedKey ?? undefined);
+      await saveJournalMetadata(updated, derivedKey ?? undefined);
       onJournalChanged();
     },
-    [journal, derivedKey, saveJournal, onJournalChanged],
+    [journal, derivedKey, saveJournalMetadata, onJournalChanged],
   );
 
   const formatResultFeedback = useCallback(
-    (result: Awaited<ReturnType<typeof syncJournal>>) => {
-      if (!result) {
-        const state = getSyncState(journal.id);
-        if (state.status === 'error') {
-          return state.requiresFreshRenderer
-            ? `${t.sync.syncError}\n${t.sync.syncCheckpointed}`
-            : t.sync.syncError;
-        }
-        return null;
-      }
-      const primary = result.checkpointed
-        ? t.sync.syncCheckpointed
-        : result.warnings.length > 0
-          ? formatWarnings(result.warnings)
-          : t.sync.syncComplete;
-      return result.requiresFreshRenderer && !result.checkpointed
-        ? `${primary}\n${t.sync.syncCheckpointed}`
-        : primary;
+    (outcome: SyncRunOutcome) => {
+      if (outcome.kind === 'cancelled') return null;
+      if (outcome.kind === 'not-ready' || outcome.kind === 'already-running')
+        return t.common.loading;
+      if (outcome.kind === 'authentication-required') return t.sync.signInToGoogle;
+      if (outcome.kind === 'failed') return t.sync.syncError;
+      if (outcome.kind === 'checkpointed') return t.sync.syncCheckpointed;
+
+      const result = outcome.result;
+      const primary =
+        result.warnings.length > 0 ? formatWarnings(result.warnings) : t.sync.syncComplete;
+      return result.requiresFreshRenderer ? `${primary}\n${t.sync.syncCheckpointed}` : primary;
     },
-    [formatWarnings, getSyncState, journal.id, syncJournal, t],
+    [formatWarnings, t],
   );
 
   const handleEnableSync = useCallback(async () => {
@@ -156,7 +151,7 @@ export function SyncModal({
   const isSyncing = syncState.status === 'syncing';
   const isCheckpointed = syncState.status === 'checkpointed';
   const requiresFreshRenderer = syncState.requiresFreshRenderer === true;
-  const syncBlocked = isCheckpointed || requiresFreshRenderer;
+  const syncBlocked = isCheckpointed || requiresFreshRenderer || !manager;
 
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
@@ -271,8 +266,10 @@ export function SyncModal({
 
                   {/* Sync now */}
                   <Pressable
+                    testID="sync-now-button"
                     onPress={handleSyncNow}
                     disabled={isSyncing || syncBlocked}
+                    accessibilityState={{ disabled: isSyncing || syncBlocked }}
                     style={[
                       styles.actionBtn,
                       {
@@ -291,6 +288,17 @@ export function SyncModal({
                       {isSyncing ? t.sync.syncing : t.sync.syncNow}
                     </Text>
                   </Pressable>
+
+                  {!manager && (
+                    <Text
+                      style={[
+                        styles.feedback,
+                        { color: theme.colors.textSecondary, fontFamily: theme.fonts.regular },
+                      ]}
+                    >
+                      {t.common.loading}
+                    </Text>
+                  )}
 
                   {/* Disable */}
                   <Pressable onPress={handleDisableSync} style={styles.disableRow}>
@@ -320,17 +328,6 @@ export function SyncModal({
               ]}
             >
               {feedback ?? t.sync.syncCheckpointed}
-            </Text>
-          )}
-
-          {syncState.error && (
-            <Text
-              style={[
-                styles.feedback,
-                { color: theme.colors.error, fontFamily: theme.fonts.regular },
-              ]}
-            >
-              {syncState.error}
             </Text>
           )}
 

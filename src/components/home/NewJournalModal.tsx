@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import {
   ActivityIndicator,
   Modal,
@@ -101,6 +101,7 @@ export function NewJournalModal({
   const [importError, setImportError] = useState<string | null>(null);
   // Import sub-flow state
   const [importFileUri, setImportFileUri] = useState<string | null>(null);
+  const [importSourceFingerprint, setImportSourceFingerprint] = useState<string | undefined>();
   const [importNeedsPassword, setImportNeedsPassword] = useState(false);
   const [importPassword, setImportPassword] = useState('');
   const [importSalt, setImportSalt] = useState<string | null>(null);
@@ -119,6 +120,8 @@ export function NewJournalModal({
   const [importProgress, setImportProgress] = useState<{ current: number; total: number } | null>(
     null,
   );
+  const [canCancelFileImport, setCanCancelFileImport] = useState(false);
+  const fileImportAbortRef = useRef<AbortController | null>(null);
   // Data integrity warning state
   const [integrityWarning, setIntegrityWarning] = useState<{
     type: 'sync' | 'import';
@@ -135,6 +138,31 @@ export function NewJournalModal({
   const passwordsMatch = password === '' || password === confirmPassword;
   const canCreate = title.trim().length > 0 && passwordsMatch && !busy;
   const isImportBusy = busy || importing || cloudLoading || cloudImportPhase !== 'idle';
+
+  function formatImportError(error: unknown): string {
+    const message =
+      error instanceof Error ? error.message.toLowerCase() : String(error).toLowerCase();
+    if (message.includes('cancelled')) return t.common.cancel;
+    if (message.includes('password') || message.includes('ghash') || message.includes('decrypt')) {
+      return t.home.wrongPassword;
+    }
+    if (
+      message.includes('google drive') ||
+      message.includes('authentication') ||
+      message.includes('401')
+    ) {
+      return t.sync.signInToGoogle;
+    }
+    if (
+      message.includes('invalid backup') ||
+      message.includes('missing manifest') ||
+      message.includes('unsupported') ||
+      message.includes('fingerprint')
+    ) {
+      return t.backup.invalidFile;
+    }
+    return t.backup.importError;
+  }
 
   async function handleCreate() {
     if (!canCreate) return;
@@ -196,7 +224,7 @@ export function NewJournalModal({
       setCloudJournals(remoteJournals);
       setShowCloudImport(true);
     } catch (err) {
-      setCloudError((err instanceof Error ? err.message : String(err)) || 'Unknown error');
+      setCloudError(formatImportError(err));
     } finally {
       setCloudLoading(false);
     }
@@ -277,6 +305,11 @@ export function NewJournalModal({
       const localStore = await getLocalStore();
       const importWarnings: { name: string; size?: number; reason: string; pageId: string }[] = [];
       const downloadFailures: DownloadFailure[] = [];
+      // Cloud attachment downloads write into the destination journal root as
+      // they stream. Keep that root invisible and recoverable until the final
+      // metadata/pages/catalog publication has been verified.
+      await localStore.beginJournalImport?.(journal.id);
+      await localStore.updateJournalImport?.(journal.id, 'writing');
 
       setCloudImportPhase('downloading');
       setImportProgress({ current: 0, total });
@@ -331,6 +364,11 @@ export function NewJournalModal({
 
       // Show integrity warning if some pages failed
       if (downloadFailures.length > 0) {
+        try {
+          await localStore.abortJournalImport?.(journal.id);
+        } catch (cleanupErr) {
+          console.warn('[Canto] Cleanup of incomplete cloud import failed:', cleanupErr);
+        }
         setCloudImportPhase('idle');
         setIntegrityWarning({
           type: 'sync',
@@ -342,17 +380,19 @@ export function NewJournalModal({
       }
 
       const importKey = remote.encrypted && password ? syncKey : undefined;
-      // Save journal + pages with rollback on failure: if any save throws after
-      // some data has been written, remove the partial journal so the user
-      // doesn't end up with corrupt/half-imported data.
+      // saveJournal publishes pages and their catalog together. Writing each
+      // page a second time would both duplicate I/O and invalidate imported
+      // modification timestamps.
       try {
+        await localStore.updateJournalImport?.(journal.id, 'publishing', {
+          expectedPageCount: journal.pages.length,
+        });
         await localStore.saveJournal(journal, importKey);
-        for (const page of journal.pages) {
-          await localStore.savePage(journal.id, page, importKey, true);
-        }
+        await localStore.updateJournalImport?.(journal.id, 'committed');
+        await localStore.completeJournalImport?.(journal.id);
       } catch (saveErr) {
         try {
-          await localStore.deleteJournal(journal.id);
+          await localStore.abortJournalImport?.(journal.id);
         } catch (cleanupErr) {
           console.warn('[Canto] Cleanup of partial cloud import failed:', cleanupErr);
         }
@@ -390,7 +430,7 @@ export function NewJournalModal({
       onImportComplete?.(journal.id);
     } catch (err) {
       console.error('[Canto] Cloud import failed:', err);
-      setImportError((err instanceof Error ? err.message : String(err)) || 'Unknown error');
+      setImportError(formatImportError(err));
     } finally {
       setCloudImportPhase('idle');
       setImportProgress(null);
@@ -399,6 +439,7 @@ export function NewJournalModal({
 
   function resetImportState() {
     setImportFileUri(null);
+    setImportSourceFingerprint(undefined);
     setImportNeedsPassword(false);
     setImportPasswordOptional(false);
     setImportPassword('');
@@ -407,6 +448,8 @@ export function NewJournalModal({
     setImportOriginalTitle('');
     setImportRenameNeeded(false);
     setImportNewTitle('');
+    setImportProgress(null);
+    setCanCancelFileImport(false);
   }
 
   async function handleImport() {
@@ -424,6 +467,7 @@ export function NewJournalModal({
 
       const info = await inspectBackup(fileUri);
       setImportFileUri(fileUri);
+      setImportSourceFingerprint(info.sourceFingerprint);
       setImportOriginalTitle(info.manifest.journalTitle);
 
       if (info.needsPassword || info.canProvidePassword) {
@@ -445,10 +489,10 @@ export function NewJournalModal({
       }
 
       // No password, no conflict — import directly
-      await finishImport(fileUri, info.manifest.journalTitle);
+      await finishImport(fileUri, info.manifest.journalTitle, undefined, info.sourceFingerprint);
     } catch (err) {
       console.error('[Canto] Import failed:', err);
-      setImportError((err instanceof Error ? err.message : String(err)) || 'Unknown error');
+      setImportError(formatImportError(err));
       setImporting(false);
     }
   }
@@ -468,10 +512,10 @@ export function NewJournalModal({
     setImporting(true);
     await new Promise((r) => setTimeout(r, 100));
     try {
-      await finishImport(importFileUri, importOriginalTitle);
+      await finishImport(importFileUri, importOriginalTitle, undefined, importSourceFingerprint);
     } catch (err) {
       console.error('[Canto] Import failed:', err);
-      setImportError((err instanceof Error ? err.message : String(err)) || 'Unknown error');
+      setImportError(formatImportError(err));
       setImporting(false);
     }
   }
@@ -510,10 +554,10 @@ export function NewJournalModal({
         return;
       }
 
-      await finishImport(importFileUri, importOriginalTitle, key);
+      await finishImport(importFileUri, importOriginalTitle, key, importSourceFingerprint);
     } catch (err) {
       console.error('[Canto] Import failed:', err);
-      setImportError((err instanceof Error ? err.message : String(err)) || 'Unknown error');
+      setImportError(formatImportError(err));
       setImporting(false);
     }
   }
@@ -532,17 +576,32 @@ export function NewJournalModal({
         key = await deriveKey(importPassword, saltBytes, iterations);
       }
 
-      await finishImport(importFileUri, importNewTitle.trim(), key);
+      await finishImport(importFileUri, importNewTitle.trim(), key, importSourceFingerprint);
     } catch (err) {
       console.error('[Canto] Import failed:', err);
-      setImportError((err instanceof Error ? err.message : String(err)) || 'Unknown error');
+      setImportError(formatImportError(err));
       setImporting(false);
     }
   }
 
-  async function finishImport(fileUri: string, titleToUse: string, key?: Uint8Array) {
+  async function finishImport(
+    fileUri: string,
+    titleToUse: string,
+    key?: Uint8Array,
+    expectedSourceFingerprint?: string,
+  ) {
+    const controller = new AbortController();
+    fileImportAbortRef.current = controller;
+    setCanCancelFileImport(true);
     try {
-      const imported = await importJournal(fileUri, titleToUse, key);
+      const imported = await importJournal(
+        fileUri,
+        titleToUse,
+        key,
+        (progress) => setImportProgress({ current: progress.current, total: progress.total }),
+        controller.signal,
+        expectedSourceFingerprint,
+      );
 
       if (imported.attachmentErrors && imported.attachmentErrors.length > 0) {
         // Show warning but still complete the import
@@ -561,10 +620,16 @@ export function NewJournalModal({
       }
     } catch (err) {
       console.error('[Canto] Import failed:', err);
-      setImportError((err instanceof Error ? err.message : String(err)) || 'Unknown error');
+      setImportError(formatImportError(err));
     } finally {
+      if (fileImportAbortRef.current === controller) fileImportAbortRef.current = null;
+      setCanCancelFileImport(false);
       setImporting(false);
     }
+  }
+
+  function cancelFileImport() {
+    fileImportAbortRef.current?.abort();
   }
 
   return (
@@ -629,7 +694,7 @@ export function NewJournalModal({
                       ? t.backup.importing
                       : t.common.loading}
               </Text>
-              {importProgress && cloudImportPhase !== 'preparing' && (
+              {importProgress && importProgress.total > 0 && cloudImportPhase !== 'preparing' && (
                 <>
                   <View style={[styles.progressTrack, { backgroundColor: theme.colors.border }]}>
                     <View
@@ -651,6 +716,21 @@ export function NewJournalModal({
                     {importProgress.current} / {importProgress.total}
                   </Text>
                 </>
+              )}
+              {importing && canCancelFileImport && (
+                <Pressable
+                  onPress={cancelFileImport}
+                  style={[styles.cancelImport, { borderColor: theme.colors.border }]}
+                >
+                  <Text
+                    style={[
+                      styles.cancelImportText,
+                      { color: theme.colors.text, fontFamily: theme.fonts.regular },
+                    ]}
+                  >
+                    {t.common.cancel}
+                  </Text>
+                </Pressable>
               )}
             </View>
           ) : (
@@ -1488,6 +1568,16 @@ const styles = StyleSheet.create({
   },
   progressText: {
     fontSize: 12,
+  },
+  cancelImport: {
+    marginTop: 18,
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+  },
+  cancelImportText: {
+    fontSize: 15,
   },
   body: {
     flex: 1,

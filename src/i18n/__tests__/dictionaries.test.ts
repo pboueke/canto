@@ -1,4 +1,11 @@
-import { dictionaries } from '../dictionaries';
+import { dictionaries, langCodes } from '../dictionaries';
+
+function dictionaryKeyPaths(value: unknown, prefix = ''): string[] {
+  if (!value || typeof value !== 'object') return [prefix];
+  return Object.entries(value as Record<string, unknown>)
+    .flatMap(([key, child]) => dictionaryKeyPaths(child, prefix ? `${prefix}.${key}` : key))
+    .sort();
+}
 
 describe('Dictionaries', () => {
   it('has English and Portuguese translations', () => {
@@ -107,6 +114,13 @@ describe('Dictionaries', () => {
       const enKeys = Object.keys(dictionaries.en[section]).sort();
       const ptKeys = Object.keys(dictionaries.pt[section]).sort();
       expect(enKeys).toEqual(ptKeys);
+    }
+  });
+
+  it('keeps every supported language structurally complete', () => {
+    const englishPaths = dictionaryKeyPaths(dictionaries.en);
+    for (const language of langCodes) {
+      expect(dictionaryKeyPaths(dictionaries[language])).toEqual(englishPaths);
     }
   });
 });

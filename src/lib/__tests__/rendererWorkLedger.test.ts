@@ -24,10 +24,16 @@ describe('RendererWorkLedger', () => {
     expect(ledger.reserve(1)).toBe(false);
   });
 
-  it('starts a fresh allowance in a new browser renderer', () => {
+  it('retains the allowance across reloads and resets only with a new tab storage session', () => {
+    const values = new Map<string, string>();
+    const storage = {
+      getItem: (key: string) => values.get(key) ?? null,
+      setItem: (key: string, value: string) => values.set(key, value),
+    };
     const first = new RendererWorkLedger({
       plaintextLimitBytes: 10,
       nativeAllocationLimitBytes: 60,
+      storage,
     });
     expect(first.reserve(10)).toBe(true);
     expect(first.requiresFreshRenderer).toBe(true);
@@ -35,8 +41,19 @@ describe('RendererWorkLedger', () => {
     const afterReload = new RendererWorkLedger({
       plaintextLimitBytes: 10,
       nativeAllocationLimitBytes: 60,
+      storage,
     });
-    expect(afterReload.reserve(1)).toBe(true);
+    expect(afterReload.reserve(1)).toBe(false);
+
+    const newTab = new RendererWorkLedger({
+      plaintextLimitBytes: 10,
+      nativeAllocationLimitBytes: 60,
+      storage: {
+        getItem: () => null,
+        setItem: () => {},
+      },
+    });
+    expect(newTab.reserve(1)).toBe(true);
   });
 
   it('uses the native-allocation limit when it is reached before the plaintext limit', () => {

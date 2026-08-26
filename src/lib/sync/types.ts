@@ -58,6 +58,9 @@ export interface RemoteStore {
   /** Establish connection to the remote provider. */
   connect(credentials: unknown): Promise<void>;
 
+  /** Optional credential-refresh boundary for providers that can replay a rejected request. */
+  setAccessTokenRefresher?(refresher: (() => Promise<string | null>) | undefined): void;
+
   /** Disconnect from the remote provider. */
   disconnect(): Promise<void>;
 
@@ -218,3 +221,17 @@ export interface SyncResult {
   /** Native-heavy work has consumed the tab-lifetime renderer allowance. */
   requiresFreshRenderer?: boolean;
 }
+
+/**
+ * The user-facing result of one requested sync. Unlike the engine result, this
+ * keeps cancellation, readiness, authentication, and failure distinct so UI
+ * code never has to guess what a null value meant.
+ */
+export type SyncRunOutcome =
+  | { kind: 'completed'; result: SyncResult }
+  | { kind: 'checkpointed'; result?: SyncResult }
+  | { kind: 'cancelled' }
+  | { kind: 'already-running' }
+  | { kind: 'not-ready' }
+  | { kind: 'authentication-required' }
+  | { kind: 'failed' };

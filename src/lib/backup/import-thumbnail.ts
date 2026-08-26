@@ -151,7 +151,7 @@ export function isSafeThumbnailDimensions(dimensions: ImageDimensions | null): b
   );
 }
 
-async function* base64Chunks(base64: string): AsyncGenerator<Uint8Array> {
+export async function* base64AttachmentChunks(base64: string): AsyncGenerator<Uint8Array> {
   // Decode in independently padded quanta; do not make a Uint8Array for the
   // entire decrypted flat-v1 attachment just to create its preview.
   const charsPerChunk = Math.floor((ATTACHMENT_CHUNK_SIZE * 4) / 3 / 4) * 4;
@@ -186,19 +186,34 @@ export async function generateImportThumbnail(
   byteLength: number,
   decryptedBase64?: string,
 ): Promise<string | null> {
+  const source =
+    decryptedBase64 === undefined
+      ? zipAttachmentChunks(entry, byteLength)
+      : base64AttachmentChunks(decryptedBase64);
+  return generateImportThumbnailFromChunks(source, byteLength, entry.name);
+}
+
+/**
+ * Native archive import supplies a disk-backed byte stream rather than a
+ * JSZip entry. Keep thumbnail validation and decoding identical on both paths.
+ */
+export async function generateImportThumbnailFromChunks(
+  source: AsyncIterable<Uint8Array>,
+  byteLength: number,
+  sourceName?: string,
+): Promise<string | null> {
   if (byteLength <= 0 || byteLength > IMPORT_THUMBNAIL_SOURCE_LIMIT_BYTES) return null;
 
   try {
-    const source =
-      decryptedBase64 === undefined
-        ? zipAttachmentChunks(entry, byteLength)
-        : base64Chunks(decryptedBase64);
-    const prepared = await takeFirstChunk(source);
+    async function* chunks(): AsyncGenerator<Uint8Array> {
+      yield* source;
+    }
+    const prepared = await takeFirstChunk(chunks());
     if (!prepared || !isSafeThumbnailDimensions(imageDimensionsFromHeader(prepared.first))) {
       return null;
     }
 
-    const thumbnail = await generateThumbnailFromChunks(prepared.replay, entry.name);
+    const thumbnail = await generateThumbnailFromChunks(prepared.replay, sourceName);
     return base64ByteLength(thumbnail) <= IMPORT_THUMBNAIL_MAX_BYTES ? thumbnail : null;
   } catch {
     return null;

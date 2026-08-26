@@ -1,15 +1,44 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import type { Journal, JournalContent, Page, Attachment } from 'canto-data';
+import type { JournalOverview } from '@/lib/journal-overview';
 import { DEFAULT_JOURNAL_SETTINGS, SCHEMA_VERSION } from 'canto-data';
 import { createEncryptionService } from '@/lib/encryption';
 import { recoverKeyRotation } from '@/lib/encryption/device';
 import { createLocalStore } from '@/lib/storage';
 import type { LocalStore } from '@/lib/storage';
 import { generateUUID, uint8ToBase64 } from '@/lib/encryption/utils';
+import {
+  materializeAttachmentDisplay,
+  type AttachmentDisplayLease,
+} from '@/lib/attachment-display';
 
 let storeInstance: LocalStore | null = null;
 let encryptionInstance: ReturnType<typeof createEncryptionService> | null = null;
 let initPromise: Promise<LocalStore> | null = null;
+const journalOverviewListeners = new Map<string, Set<() => void>>();
+const journalOverviewRequests = new Map<string, Promise<JournalOverview | null>>();
+
+export type JournalOverviewStatus = 'initial' | 'migrating' | 'ready' | 'error';
+export interface JournalOverviewMigrationProgress {
+  current: number;
+  total: number;
+}
+
+/** Notify active overview readers after a committed journal mutation. */
+export function invalidateJournalOverview(journalId: string): void {
+  for (const listener of journalOverviewListeners.get(journalId) ?? []) listener();
+}
+
+function subscribeToJournalOverview(journalId: string, listener: () => void): () => void {
+  const listeners = journalOverviewListeners.get(journalId) ?? new Set<() => void>();
+  listeners.add(listener);
+  journalOverviewListeners.set(journalId, listeners);
+
+  return () => {
+    listeners.delete(listener);
+    if (listeners.size === 0) journalOverviewListeners.delete(journalId);
+  };
+}
 
 function getStore(): LocalStore {
   if (!storeInstance) {
@@ -45,6 +74,35 @@ async function ensureInitialized(): Promise<LocalStore> {
       });
   }
   return initPromise;
+}
+
+function journalOverviewRequestKey(id: string, derivedKey?: Uint8Array | null): string {
+  return `${id}:${derivedKey ? uint8ToBase64(derivedKey) : 'device'}`;
+}
+
+async function loadJournalOverview(
+  id: string,
+  derivedKey?: Uint8Array | null,
+  force = false,
+  onRebuildProgress?: (progress: JournalOverviewMigrationProgress) => void,
+): Promise<JournalOverview | null> {
+  const key = journalOverviewRequestKey(id, derivedKey);
+  const existing = journalOverviewRequests.get(key);
+  if (existing && !force) return existing;
+
+  const request = (async () => {
+    const store = await ensureInitialized();
+    if (!store.getJournalOverview) {
+      throw new Error('Local storage does not support journal overview reads');
+    }
+    return store.getJournalOverview(id, derivedKey ?? undefined, { onRebuildProgress });
+  })();
+  journalOverviewRequests.set(key, request);
+  try {
+    return await request;
+  } finally {
+    if (journalOverviewRequests.get(key) === request) journalOverviewRequests.delete(key);
+  }
 }
 
 export function getEncryptionService() {
@@ -122,6 +180,71 @@ export function useJournal(id: string | undefined, derivedKey?: Uint8Array | nul
   return { journal, loading, error, refresh: load };
 }
 
+/** Read-oriented journal views use the encrypted preview catalog, not every page file. */
+export function useJournalOverview(id: string | undefined, derivedKey?: Uint8Array | null) {
+  const [overview, setOverview] = useState<JournalOverview | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<Error | null>(null);
+  const [status, setStatus] = useState<JournalOverviewStatus>('initial');
+  const [migrationProgress, setMigrationProgress] =
+    useState<JournalOverviewMigrationProgress | null>(null);
+  const requestVersionRef = useRef(0);
+
+  const load = useCallback(
+    async (force = false) => {
+      const requestVersion = ++requestVersionRef.current;
+      if (!id) {
+        if (requestVersion === requestVersionRef.current) {
+          setOverview(null);
+          setLoading(false);
+          setStatus('ready');
+          setMigrationProgress(null);
+        }
+        return;
+      }
+
+      try {
+        setLoading(true);
+        setStatus('initial');
+        setMigrationProgress(null);
+        const result = await loadJournalOverview(id, derivedKey, force, (progress) => {
+          if (requestVersion === requestVersionRef.current) {
+            setStatus('migrating');
+            setMigrationProgress(progress);
+          }
+        });
+        if (requestVersion === requestVersionRef.current) {
+          setOverview(result);
+          setError(null);
+          setStatus('ready');
+          setMigrationProgress(null);
+        }
+      } catch (err) {
+        if (requestVersion === requestVersionRef.current) {
+          setError(err instanceof Error ? err : new Error(String(err)));
+          setStatus('error');
+        }
+      } finally {
+        if (requestVersion === requestVersionRef.current) setLoading(false);
+      }
+    },
+    [id, derivedKey],
+  );
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  useEffect(() => {
+    if (!id) return;
+    return subscribeToJournalOverview(id, () => {
+      void load(true);
+    });
+  }, [id, load]);
+
+  return { overview, loading, error, status, migrationProgress, refresh: () => load(true) };
+}
+
 export function usePage(
   journalId: string | undefined,
   pageId: string | undefined,
@@ -170,6 +293,7 @@ export function useSavePage(journalId: string | undefined, derivedKey?: Uint8Arr
         setSaving(true);
         const store = await ensureInitialized();
         await store.savePage(journalId, page, derivedKey ?? undefined);
+        invalidateJournalOverview(journalId);
         setError(null);
       } catch (err) {
         setError(err instanceof Error ? err : new Error(String(err)));
@@ -285,6 +409,7 @@ export function useCreatePage(journalId: string | undefined, derivedKey?: Uint8A
       };
 
       await store.savePage(journalId, page, derivedKey ?? undefined);
+      invalidateJournalOverview(journalId);
       setError(null);
       return pageId;
     } catch (err) {
@@ -311,6 +436,7 @@ export function useDeletePage(journalId: string | undefined, derivedKey?: Uint8A
         setDeleting(true);
         const store = await ensureInitialized();
         await store.deletePage(journalId, pageId, derivedKey ?? undefined);
+        invalidateJournalOverview(journalId);
         setError(null);
       } catch (err) {
         setError(err instanceof Error ? err : new Error(String(err)));
@@ -326,46 +452,8 @@ export function useDeletePage(journalId: string | undefined, derivedKey?: Uint8A
 }
 
 export function useJournalTags(journalId: string | undefined, derivedKey?: Uint8Array | null) {
-  const [tags, setTags] = useState<string[]>([]);
-  const [loading, setLoading] = useState(true);
-
-  const load = useCallback(async () => {
-    if (!journalId) {
-      setTags([]);
-      setLoading(false);
-      return;
-    }
-
-    try {
-      setLoading(true);
-      const store = await ensureInitialized();
-      const journal = await store.getJournal(journalId, derivedKey ?? undefined);
-      if (!journal) {
-        setTags([]);
-        return;
-      }
-
-      const allTags = new Set<string>();
-      for (const page of journal.pages) {
-        if (!page.deleted) {
-          for (const tag of page.tags) {
-            allTags.add(tag.toLowerCase());
-          }
-        }
-      }
-      setTags(Array.from(allTags).sort());
-    } catch {
-      setTags([]);
-    } finally {
-      setLoading(false);
-    }
-  }, [journalId, derivedKey]);
-
-  useEffect(() => {
-    load();
-  }, [load]);
-
-  return { tags, loading, refresh: load };
+  const { overview, loading, error, refresh } = useJournalOverview(journalId, derivedKey);
+  return { tags: overview?.tags ?? [], loading, error, refresh };
 }
 
 export function useDeleteJournal() {
@@ -377,6 +465,7 @@ export function useDeleteJournal() {
       setDeleting(true);
       const store = await ensureInitialized();
       await store.deleteJournal(id);
+      invalidateJournalOverview(id);
       setError(null);
     } catch (err) {
       const e = err instanceof Error ? err : new Error(String(err));
@@ -399,6 +488,7 @@ export function useSaveJournal() {
       setSaving(true);
       const store = await ensureInitialized();
       await store.saveJournal(journal, derivedKey);
+      invalidateJournalOverview(journal.id);
       setError(null);
     } catch (err) {
       const e = err instanceof Error ? err : new Error(String(err));
@@ -409,7 +499,35 @@ export function useSaveJournal() {
     }
   }, []);
 
-  return { saveJournal, saving, error };
+  const saveJournalMetadata = useCallback(
+    async (metadata: Omit<JournalContent, 'pages'>, derivedKey?: Uint8Array) => {
+      try {
+        setSaving(true);
+        const store = await ensureInitialized();
+        if (store.saveJournalMetadata) {
+          await store.saveJournalMetadata(metadata, derivedKey);
+        } else {
+          // Older adapters only expose the heavyweight write. Preserve their
+          // existing page files rather than treating metadata-only callers as
+          // an empty journal update.
+          const journal = await store.getJournal(metadata.id, derivedKey);
+          if (!journal) throw new Error(`Journal not found: ${metadata.id}`);
+          await store.saveJournal({ ...metadata, pages: journal.pages }, derivedKey);
+        }
+        invalidateJournalOverview(metadata.id);
+        setError(null);
+      } catch (err) {
+        const e = err instanceof Error ? err : new Error(String(err));
+        setError(e);
+        throw e;
+      } finally {
+        setSaving(false);
+      }
+    },
+    [],
+  );
+
+  return { saveJournal, saveJournalMetadata, saving, error };
 }
 
 export function useAttachment(derivedKey?: Uint8Array | null) {
@@ -467,5 +585,24 @@ export function useAttachment(derivedKey?: Uint8Array | null) {
     return store.deleteAttachment(path);
   }, []);
 
-  return { saveAttachment, saveAttachmentStream, getAttachment, deleteAttachment };
+  const materializeImage = useCallback(
+    async (attachment: Attachment, signal?: AbortSignal): Promise<AttachmentDisplayLease> => {
+      const store = await ensureInitialized();
+      return materializeAttachmentDisplay(
+        store,
+        attachment,
+        attachment.encrypted ? (derivedKey ?? undefined) : undefined,
+        signal,
+      );
+    },
+    [derivedKey],
+  );
+
+  return {
+    saveAttachment,
+    saveAttachmentStream,
+    getAttachment,
+    deleteAttachment,
+    materializeImage,
+  };
 }

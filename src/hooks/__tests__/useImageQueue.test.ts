@@ -23,7 +23,7 @@ describe('useImageQueue', () => {
 
   it('returns empty state initially', () => {
     const loadImage = jest.fn();
-    const { result } = renderHook(() => useImageQueue(loadImage));
+    const { result, unmount } = renderHook(() => useImageQueue(loadImage));
     expect(result.current.loadedImages).toEqual({});
     expect(result.current.loadingImages).toEqual({});
   });
@@ -39,7 +39,10 @@ describe('useImageQueue', () => {
       await Promise.resolve();
     });
 
-    expect(loadImage).toHaveBeenCalledWith('attachments/img1.jpg');
+    expect(loadImage).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'img1', path: 'attachments/img1.jpg' }),
+      expect.any(AbortSignal),
+    );
     expect(result.current.loadedImages).toHaveProperty('img1', 'data:image/png;base64,abc');
   });
 
@@ -74,12 +77,44 @@ describe('useImageQueue', () => {
     });
 
     expect(result.current.loadedImages).toEqual({});
+    expect(result.current.failedImages).toEqual({ img1: true });
+  });
+
+  it('retries only after a real load failure', async () => {
+    const attachment = makeAttachment('img1');
+    const loadImage = jest
+      .fn()
+      .mockRejectedValueOnce(new Error('failed'))
+      .mockResolvedValueOnce('data:recovered');
+    const { result } = renderHook(() => useImageQueue(loadImage));
+
+    await act(async () => {
+      result.current.enqueue([attachment]);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(result.current.failedImages).toEqual({ img1: true });
+
+    await act(async () => {
+      result.current.enqueue([attachment]);
+      await Promise.resolve();
+    });
+    expect(loadImage).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      result.current.retry(attachment);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(loadImage).toHaveBeenCalledTimes(2);
+    expect(result.current.loadedImages).toEqual({ img1: 'data:recovered' });
+    expect(result.current.failedImages).toEqual({});
   });
 
   it('skips already-loading attachments when enqueuing', async () => {
     // Use a load that never resolves so the image stays in "loading" state
     const loadImage = jest.fn().mockImplementation(() => new Promise<string | null>(() => {}));
-    const { result } = renderHook(() => useImageQueue(loadImage));
+    const { result, unmount } = renderHook(() => useImageQueue(loadImage));
 
     await act(async () => {
       result.current.enqueue([makeAttachment('dup1')]);
@@ -95,12 +130,13 @@ describe('useImageQueue', () => {
 
     // Should not have been called again since it's already loading
     expect(loadImage).not.toHaveBeenCalled();
+    unmount();
   });
 
   it('skips duplicate entries already queued but not yet started', async () => {
     // Use a load that never resolves so processNext stays blocked on the first item
     const loadImage = jest.fn().mockImplementation(() => new Promise<string | null>(() => {}));
-    const { result } = renderHook(() => useImageQueue(loadImage));
+    const { result, unmount } = renderHook(() => useImageQueue(loadImage));
 
     // Enqueue two different images — first starts loading, second sits in queue
     await act(async () => {
@@ -116,6 +152,38 @@ describe('useImageQueue', () => {
 
     // loadImage should only have been called once (for q1)
     expect(loadImage).toHaveBeenCalledTimes(1);
+    unmount();
+  });
+
+  it('serializes materialization across separate carousel queues', async () => {
+    let releaseFirst: (value: string) => void;
+    const firstLoad = jest
+      .fn()
+      .mockImplementation(() => new Promise<string>((resolve) => (releaseFirst = resolve)));
+    const secondLoad = jest.fn().mockResolvedValue('data:second');
+    const first = renderHook(() => useImageQueue(firstLoad));
+    const second = renderHook(() => useImageQueue(secondLoad));
+
+    await act(async () => {
+      first.result.current.enqueue([makeAttachment('plain')]);
+      second.result.current.enqueue([makeAttachment('encrypted')]);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(firstLoad).toHaveBeenCalledTimes(1);
+    expect(secondLoad).not.toHaveBeenCalled();
+
+    await act(async () => {
+      releaseFirst!('data:first');
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(secondLoad).toHaveBeenCalledTimes(1);
+    first.unmount();
+    second.unmount();
   });
 
   it('does not update state after unmount during enqueue callback', async () => {
@@ -191,6 +259,72 @@ describe('useImageQueue', () => {
 
     // img2 was still in queue when cancelled, so it should never load
     expect(result.current.loadedImages).not.toHaveProperty('img2');
+  });
+
+  it('releases materialized display leases when sources are replaced', async () => {
+    const release = jest.fn();
+    const lease = { uri: 'file:///cache/image', release };
+    const loadImage = jest.fn().mockResolvedValue(lease);
+    const { result } = renderHook(() => useImageQueue(loadImage));
+
+    await act(async () => {
+      result.current.enqueue([makeAttachment('img1')]);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    act(() => result.current.cancelAll());
+    expect(release).toHaveBeenCalledTimes(1);
+    expect(result.current.loadedImages).toEqual({});
+  });
+
+  it('does not mark a null materialization as loaded or failed', async () => {
+    const loadImage = jest.fn().mockResolvedValue(null);
+    const { result } = renderHook(() => useImageQueue(loadImage));
+
+    await act(async () => {
+      result.current.enqueue([makeAttachment('empty')]);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(result.current.loadedImages).toEqual({});
+    expect(result.current.failedImages).toEqual({});
+    expect(result.current.loadingImages).toEqual({ empty: false });
+  });
+
+  it('releases a late materialized lease after cancellation and ignores retries for loaded work', async () => {
+    let resolveLoad!: (value: { uri: string; release(): void }) => void;
+    const release = jest.fn();
+    const attachment = makeAttachment('late-lease');
+    const loadImage = jest.fn(
+      () => new Promise<{ uri: string; release(): void }>((resolve) => (resolveLoad = resolve)),
+    );
+    const { result } = renderHook(() => useImageQueue(loadImage));
+
+    await act(async () => {
+      result.current.enqueue([attachment]);
+      await Promise.resolve();
+    });
+    act(() => result.current.cancelAll());
+    await act(async () => {
+      resolveLoad({ uri: 'file:///late', release });
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(release).toHaveBeenCalledTimes(1);
+
+    const loaded = renderHook(() => useImageQueue(jest.fn().mockResolvedValue('data:loaded')));
+    await act(async () => {
+      loaded.result.current.enqueue([attachment]);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    await act(async () => {
+      loaded.result.current.retry(attachment);
+      await Promise.resolve();
+    });
+    expect(loaded.result.current.loadedImages).toHaveProperty('late-lease');
   });
 });
 

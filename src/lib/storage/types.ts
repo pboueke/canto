@@ -1,4 +1,5 @@
 import type { Journal, JournalContent, Page, Attachment } from 'canto-data';
+import type { JournalOverview } from '@/lib/journal-overview';
 
 export interface ReencryptionSkippedAttachment {
   name: string;
@@ -7,6 +8,22 @@ export interface ReencryptionSkippedAttachment {
 
 export interface ReencryptionResult {
   skippedAttachments: ReencryptionSkippedAttachment[];
+}
+
+/** Progress emitted only while a legacy journal is rebuilding its page catalog. */
+export interface JournalOverviewReadOptions {
+  onRebuildProgress?: (progress: { current: number; total: number }) => void;
+  /** Checked between page reads and before catalog publication. */
+  signal?: AbortSignal;
+}
+
+/**
+ * Keyless evidence recorded with an in-progress import. It lets startup verify
+ * a completed, non-password-protected content root before replaying the final
+ * journal-index publication.
+ */
+export interface JournalImportRecoveryInfo {
+  expectedPageCount: number;
 }
 
 /**
@@ -28,8 +45,34 @@ export interface LocalStore {
   /** Get full journal content including pages. derivedKey for password-protected journals. */
   getJournal(id: string, derivedKey?: Uint8Array): Promise<JournalContent | null>;
 
+  /** Read encrypted metadata plus the rebuildable preview catalog without opening page files. */
+  getJournalOverview?(
+    id: string,
+    derivedKey?: Uint8Array,
+    options?: JournalOverviewReadOptions,
+  ): Promise<JournalOverview | null>;
+
   /** Save or update journal metadata and settings. derivedKey for password-protected journals. */
   saveJournal(journal: JournalContent, derivedKey?: Uint8Array): Promise<void>;
+
+  /** Update journal fields/settings without opening or rewriting any page file. */
+  saveJournalMetadata?(
+    metadata: Omit<JournalContent, 'pages'>,
+    derivedKey?: Uint8Array,
+  ): Promise<void>;
+
+  /**
+   * Keep a new-journal import invisible until metadata, pages, catalog, and
+   * index have all been committed. Startup rolls back an unfinished import.
+   */
+  beginJournalImport?(id: string): Promise<void>;
+  updateJournalImport?(
+    id: string,
+    phase: 'writing' | 'publishing' | 'committed',
+    recovery?: JournalImportRecoveryInfo,
+  ): Promise<void>;
+  completeJournalImport?(id: string): Promise<void>;
+  abortJournalImport?(id: string): Promise<void>;
 
   /** Delete a journal and all its contents. */
   deleteJournal(id: string): Promise<void>;
@@ -88,6 +131,17 @@ export interface LocalStore {
     visitor: (index: number, data: string) => Promise<void>,
     /** When supplied, skip every other index before reading or decrypting it. */
     indexes?: ReadonlySet<number>,
+  ): Promise<void>;
+
+  /**
+   * Visit display bytes one decoded base64 chunk at a time. Unlike the sync
+   * visitor, this removes both device and (when supplied) password layers, but
+   * never assembles the attachment into one JS value.
+   */
+  forEachAttachmentDisplayChunk?(
+    attachment: Attachment,
+    visitor: (index: number, base64: string) => Promise<void>,
+    derivedKey?: Uint8Array,
   ): Promise<void>;
 
   /** Write sync-decrypted chunk values without reassembling the attachment. */

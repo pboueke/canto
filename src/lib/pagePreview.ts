@@ -3,11 +3,15 @@ import type { Attachment, Page, PagePreview } from 'canto-data';
 import { LEGACY_ATTACHMENT_MEMORY_LIMIT_BYTES } from '@/lib/storage/attachment-content';
 
 export interface ListPagePreview extends PagePreview {
+  /** Retained in the catalog for sync/local consistency; list views filter it out. */
+  deleted?: boolean;
   firstImageEncrypted?: boolean;
   /** Metadata-only size used to keep automatic legacy previews bounded. */
   firstImageSize?: number;
   /** A list must never reconstruct a chunked original merely to make a preview. */
   firstImageChunked?: boolean;
+  /** Used by the encrypted catalog for incremental invalidation and sync state. */
+  modified?: number;
 }
 
 /**
@@ -32,6 +36,8 @@ export function pageToListPreview(page: Page): ListPagePreview {
   const firstImage = page.images.find((image) => !image.deleted);
   return {
     ...pageToPreview(page),
+    modified: page.modified,
+    deleted: page.deleted,
     firstImage: firstImage?.path,
     firstImageEncrypted: firstImage?.encrypted,
     firstImageSize: firstImage?.size,

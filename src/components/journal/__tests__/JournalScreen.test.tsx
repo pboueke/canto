@@ -1,9 +1,14 @@
 import React from 'react';
-import { act, render } from '@testing-library/react-native';
+import { act, fireEvent, render } from '@testing-library/react-native';
 import { InteractionManager } from 'react-native';
 
 const mockEvents: string[] = [];
 const mockRefresh = jest.fn();
+const mockUseJournal = jest.fn((..._args: unknown[]) => ({
+  journal: mockJournal,
+  loading: false,
+  refresh: mockRefresh,
+}));
 const mockSyncJournal = jest.fn(() => {
   mockEvents.push('sync-start');
   return Promise.resolve(null);
@@ -55,7 +60,15 @@ jest.mock('@/hooks/useI18n', () => ({
 }));
 
 jest.mock('@/hooks/useStorage', () => ({
-  useJournal: () => ({ journal: mockJournal, loading: false, refresh: mockRefresh }),
+  useJournal: (...args: unknown[]) => mockUseJournal(...args),
+  useJournalOverview: () => {
+    const { pages, ...metadata } = mockJournal;
+    return {
+      overview: { metadata, pages, tags: [], latestModified: 1 },
+      loading: false,
+      refresh: mockRefresh,
+    };
+  },
   useCreatePage: () => ({ create: jest.fn() }),
   useAttachment: () => ({ getAttachment: mockGetAttachment }),
 }));
@@ -101,7 +114,20 @@ jest.mock('@/contexts/FontPrefsContext', () => ({ useFontPrefs: () => ({}) }));
 jest.mock('@/lib/font', () => ({ applyFontPrefs: (theme: unknown) => theme }));
 jest.mock('@/styles/themes', () => ({ themes: {} }));
 
-jest.mock('@/components/journal/JournalHeader', () => ({ JournalHeader: () => null }));
+jest.mock('@/components/journal/JournalHeader', () => {
+  const React = require('react');
+  const { Pressable } = require('react-native');
+  return {
+    JournalHeader: ({ onPressSettings, onPressExport, onPressSync }: Record<string, () => void>) =>
+      React.createElement(
+        React.Fragment,
+        null,
+        React.createElement(Pressable, { testID: 'open-settings', onPress: onPressSettings }),
+        React.createElement(Pressable, { testID: 'open-export', onPress: onPressExport }),
+        React.createElement(Pressable, { testID: 'open-sync', onPress: onPressSync }),
+      ),
+  };
+});
 jest.mock('@/components/journal/FilterBar', () => ({ FilterBar: () => null }));
 jest.mock('@/components/journal/JournalSettings', () => ({ JournalSettings: () => null }));
 jest.mock('@/components/journal/ExportJournalModal', () => ({ ExportJournalModal: () => null }));
@@ -162,6 +188,7 @@ describe('JournalScreen open scheduling', () => {
     mockRefresh.mockClear();
     mockSyncJournal.mockClear();
     mockGetAttachment.mockClear();
+    mockUseJournal.mockClear();
     jest.spyOn(InteractionManager, 'runAfterInteractions').mockImplementation((task) => {
       if (typeof task === 'function') {
         task();
@@ -189,6 +216,7 @@ describe('JournalScreen open scheduling', () => {
     });
 
     expect(mockEvents).toEqual(['thumbnail-load-start', 'sync-start']);
+    expect(mockRefresh).not.toHaveBeenCalled();
   });
 
   it('cancels a scheduled automatic sync when the journal screen closes', () => {
@@ -197,5 +225,25 @@ describe('JournalScreen open scheduling', () => {
     act(() => jest.runOnlyPendingTimers());
 
     expect(mockSyncJournal).not.toHaveBeenCalled();
+  });
+
+  it('opens settings, sync, and export from the overview without a page scan', () => {
+    const { getByTestId, unmount } = render(<JournalScreen />);
+    expect(mockUseJournal).not.toHaveBeenCalled();
+
+    fireEvent.press(getByTestId('open-sync'));
+    expect(mockUseJournal).not.toHaveBeenCalled();
+    unmount();
+
+    mockUseJournal.mockClear();
+    const settings = render(<JournalScreen />);
+    fireEvent.press(settings.getByTestId('open-settings'));
+    expect(mockUseJournal).not.toHaveBeenCalled();
+    settings.unmount();
+
+    mockUseJournal.mockClear();
+    const exportModal = render(<JournalScreen />);
+    fireEvent.press(exportModal.getByTestId('open-export'));
+    expect(mockUseJournal).not.toHaveBeenCalled();
   });
 });

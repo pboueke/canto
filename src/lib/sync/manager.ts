@@ -2,7 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Platform } from 'react-native';
 import { SyncEngine, isSyncCancelledError, SyncCancelledError } from './engine';
 import type { LocalStore } from '@/lib/storage/types';
-import type { RemoteStore, SyncResult } from './types';
+import type { RemoteStore, SyncResult, SyncRunOutcome } from './types';
 import { deriveKey, DEFAULT_KDF_ITERATIONS } from '@/lib/encryption/password';
 import { base64ToUint8 } from '@/lib/encryption/utils';
 import { RendererWorkLedger } from './renderer-work-ledger';
@@ -306,6 +306,39 @@ export class SyncManager {
     } finally {
       if (isCurrentRun()) this.abortControllers.delete(journalId);
       this.locks.delete(journalId);
+    }
+  }
+
+  /**
+   * Classify every user-requested run without exposing the nullable legacy
+   * result to UI callers. The raw `syncJournal` API remains available to
+   * background scheduling and existing integrations.
+   */
+  async runJournalSync(
+    journalId: string,
+    accessToken: string,
+    derivedKey?: Uint8Array,
+    refreshAccessToken?: () => Promise<string | null>,
+  ): Promise<SyncRunOutcome> {
+    if (this.locks.has(journalId)) return { kind: 'already-running' };
+
+    this.store.setAccessTokenRefresher?.(refreshAccessToken);
+    try {
+      const result = await this.syncJournal(journalId, accessToken, derivedKey);
+      if (result) {
+        return result.checkpointed
+          ? { kind: 'checkpointed', result }
+          : { kind: 'completed', result };
+      }
+
+      const state = this.getState(journalId);
+      if (state.status === 'checkpointed' || state.requiresFreshRenderer) {
+        return { kind: 'checkpointed' };
+      }
+      if (state.status === 'error') return { kind: 'failed' };
+      return { kind: 'cancelled' };
+    } finally {
+      this.store.setAccessTokenRefresher?.(undefined);
     }
   }
 

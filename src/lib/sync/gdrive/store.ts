@@ -97,6 +97,8 @@ export class GDriveRemoteStore implements RemoteStore {
   readonly provider = 'gdrive' as const;
 
   private accessToken: string | null = null;
+  private accessTokenRefresher: (() => Promise<string | null>) | undefined;
+  private refreshInFlight: Promise<string | null> | undefined;
 
   /** In-memory cache: file name path → Drive file ID */
   private fileIdCache = new Map<string, string>();
@@ -121,6 +123,7 @@ export class GDriveRemoteStore implements RemoteStore {
     }
     const isFirstConnect = this.accessToken === null;
     this.accessToken = credentials.accessToken;
+    this.registerTokenRefresher();
     // Clear cache on first connection (stale entries from previous session)
     if (isFirstConnect) {
       this.fileIdCache.clear();
@@ -128,11 +131,42 @@ export class GDriveRemoteStore implements RemoteStore {
   }
 
   async disconnect(): Promise<void> {
+    if (this.accessToken) api.unregisterAccessTokenRefresher(this.accessToken);
     this.accessToken = null;
+    this.accessTokenRefresher = undefined;
+    this.refreshInFlight = undefined;
     this.fileIdCache.clear();
     this.folderInflight.clear();
     this.prewarmedChunkKeys.clear();
     this.syncIndexSnapshots.clear();
+  }
+
+  setAccessTokenRefresher(refresher: (() => Promise<string | null>) | undefined): void {
+    if (this.accessToken) api.unregisterAccessTokenRefresher(this.accessToken);
+    this.accessTokenRefresher = refresher;
+    this.registerTokenRefresher();
+  }
+
+  private registerTokenRefresher(): void {
+    const token = this.accessToken;
+    if (!token || !this.accessTokenRefresher) return;
+    api.registerAccessTokenRefresher(token, () => this.refreshAccessToken(token));
+  }
+
+  private async refreshAccessToken(rejectedToken: string): Promise<string | null> {
+    if (!this.accessTokenRefresher) return null;
+    if (!this.refreshInFlight) {
+      this.refreshInFlight = this.accessTokenRefresher().finally(() => {
+        this.refreshInFlight = undefined;
+      });
+    }
+    const nextToken = await this.refreshInFlight;
+    if (!nextToken || nextToken === rejectedToken) return nextToken;
+
+    if (this.accessToken) api.unregisterAccessTokenRefresher(this.accessToken);
+    this.accessToken = nextToken;
+    this.registerTokenRefresher();
+    return nextToken;
   }
 
   isConnected(): boolean {
@@ -491,102 +525,119 @@ export class GDriveRemoteStore implements RemoteStore {
     canDeleteLegacyArtifacts: boolean,
     signal?: AbortSignal,
   ): Promise<void> {
-    const legacyFiles =
-      (await api.listFiles(
-        this.token(),
-        `name contains 'index-v' and '${escapeQuery(journalFolderId)}' in parents and trashed = false`,
-        'drive',
-        signal,
-      )) ?? [];
-    const hiddenFiles =
-      (await api.listFiles(
-        this.token(),
-        `name contains '${escapeQuery(`${HIDDEN_INDEX_FILE_PREFIX}${journalId}-`)}'`,
-        'appDataFolder',
-        signal,
-      )) ?? [];
-    const legacyV2Files = legacyFiles.filter((file) => SYNC_INDEX_SNAPSHOT_NAME.test(file.name));
-    const hiddenV2Files = hiddenFiles.filter((file) =>
-      isHiddenIndexName(journalId, file.name, SYNC_INDEX_SNAPSHOT_NAME),
-    );
-    const legacyCompactFiles = legacyFiles.filter((file) =>
-      SYNC_INDEX_COMPACT_NAME.test(file.name),
-    );
-    const hiddenCompactFiles = hiddenFiles.filter((file) =>
-      isHiddenIndexName(journalId, file.name, SYNC_INDEX_COMPACT_NAME),
-    );
-    const v2Files = [...legacyV2Files, ...hiddenV2Files];
-    const compactFiles = [...legacyCompactFiles, ...hiddenCompactFiles];
-    const shouldCompact = forceAfterSuccessfulSync
-      ? v2Files.length > 0 || compactFiles.length > 1
-      : v2Files.length >= SYNC_INDEX_COMPACTION_THRESHOLD;
-    if (!shouldCompact) return;
+    // A concurrent compactor can delete an input after our central-directory
+    // listing but before we read it. Re-list once in that precise case, then
+    // merge the authoritative surviving set. Immutable deltas make a second
+    // attempt safe; repeating indefinitely would hide a persistent Drive fault.
+    for (let listAttempt = 0; listAttempt < 2; listAttempt++) {
+      try {
+        const legacyFiles =
+          (await api.listFiles(
+            this.token(),
+            `name contains 'index-v' and '${escapeQuery(journalFolderId)}' in parents and trashed = false`,
+            'drive',
+            signal,
+          )) ?? [];
+        const hiddenFiles =
+          (await api.listFiles(
+            this.token(),
+            `name contains '${escapeQuery(`${HIDDEN_INDEX_FILE_PREFIX}${journalId}-`)}'`,
+            'appDataFolder',
+            signal,
+          )) ?? [];
+        const legacyV2Files = legacyFiles.filter((file) =>
+          SYNC_INDEX_SNAPSHOT_NAME.test(file.name),
+        );
+        const hiddenV2Files = hiddenFiles.filter((file) =>
+          isHiddenIndexName(journalId, file.name, SYNC_INDEX_SNAPSHOT_NAME),
+        );
+        const legacyCompactFiles = legacyFiles.filter((file) =>
+          SYNC_INDEX_COMPACT_NAME.test(file.name),
+        );
+        const hiddenCompactFiles = hiddenFiles.filter((file) =>
+          isHiddenIndexName(journalId, file.name, SYNC_INDEX_COMPACT_NAME),
+        );
+        const v2Files = [...legacyV2Files, ...hiddenV2Files];
+        const compactFiles = [...legacyCompactFiles, ...hiddenCompactFiles];
+        const shouldCompact = forceAfterSuccessfulSync
+          ? v2Files.length > 0 || compactFiles.length > 1
+          : v2Files.length >= SYNC_INDEX_COMPACTION_THRESHOLD;
+        if (!shouldCompact) return;
 
-    let merged: SyncIndex = {};
-    for (const file of compactFiles) {
-      const compact = safeJsonParse<CompactSyncIndex>(
-        await api.getFileContent(this.token(), file.id, signal),
-        'sync-index-compact',
-      );
-      if (
-        compact.version !== 3 ||
-        !compact.entries ||
-        !Array.isArray(compact.coveredFileIds) ||
-        !compact.coveredFileIds.every((id) => typeof id === 'string')
-      ) {
-        throw new Error('Invalid compact sync index');
-      }
-      merged = mergeSyncIndexes(merged, compact.entries);
-    }
-    for (const file of v2Files) {
-      merged = mergeSyncIndexes(
-        merged,
-        safeJsonParse<SyncIndex>(
-          await api.getFileContent(this.token(), file.id, signal),
-          'sync-index-delta',
-        ),
-      );
-    }
-    await api.createFile(
-      this.token(),
-      {
-        name: hiddenIndexName(journalId, SYNC_INDEX_COMPACT_PREFIX),
-        mimeType: 'application/json',
-        parents: ['appDataFolder'],
-      },
-      JSON.stringify({
-        version: 3,
-        entries: merged,
-        coveredFileIds: v2Files.map((file) => file.id),
-      } satisfies CompactSyncIndex),
-      'appDataFolder',
-      signal,
-    );
-
-    // Every listed source is represented in the just-created snapshot. Delete
-    // only after that durable publication; a concurrent writer can add new
-    // files, but it cannot make us delete a file we did not list.
-    const sources = [
-      ...hiddenV2Files,
-      ...hiddenCompactFiles,
-      ...(canDeleteLegacyArtifacts ? [...legacyV2Files, ...legacyCompactFiles] : []),
-    ];
-    const workers = Math.min(4, sources.length);
-    let next = 0;
-    await Promise.all(
-      Array.from({ length: workers }, async () => {
-        while (next < sources.length) {
-          const source = sources[next++];
-          try {
-            await api.deleteFile(this.token(), source.id);
-          } catch (error) {
-            // The new snapshot is already authoritative. A failed permanent
-            // deletion is harmless and will be retried by a later compaction.
-            console.warn('[GDrive] Deferred compacted sync-index cleanup:', error);
+        let merged: SyncIndex = {};
+        for (const file of compactFiles) {
+          const compact = safeJsonParse<CompactSyncIndex>(
+            await api.getFileContent(this.token(), file.id, signal),
+            'sync-index-compact',
+          );
+          if (
+            compact.version !== 3 ||
+            !compact.entries ||
+            !Array.isArray(compact.coveredFileIds) ||
+            !compact.coveredFileIds.every((id) => typeof id === 'string')
+          ) {
+            throw new Error('Invalid compact sync index');
           }
+          merged = mergeSyncIndexes(merged, compact.entries);
         }
-      }),
-    );
+        for (const file of v2Files) {
+          merged = mergeSyncIndexes(
+            merged,
+            safeJsonParse<SyncIndex>(
+              await api.getFileContent(this.token(), file.id, signal),
+              'sync-index-delta',
+            ),
+          );
+        }
+        await api.createFile(
+          this.token(),
+          {
+            name: hiddenIndexName(journalId, SYNC_INDEX_COMPACT_PREFIX),
+            mimeType: 'application/json',
+            parents: ['appDataFolder'],
+          },
+          JSON.stringify({
+            version: 3,
+            entries: merged,
+            // This snapshot is authoritative for every input that its cleanup may
+            // delete, including prior compact snapshots. Keeping that lineage is
+            // what makes a crash between publication and cleanup recoverable.
+            coveredFileIds: [...v2Files, ...compactFiles].map((file) => file.id),
+          } satisfies CompactSyncIndex),
+          'appDataFolder',
+          signal,
+        );
+
+        // Every listed source is represented in the just-created snapshot. Delete
+        // only after that durable publication; a concurrent writer can add new
+        // files, but it cannot make us delete a file we did not list.
+        const sources = [
+          ...hiddenV2Files,
+          ...hiddenCompactFiles,
+          ...(canDeleteLegacyArtifacts ? [...legacyV2Files, ...legacyCompactFiles] : []),
+        ];
+        const workers = Math.min(4, sources.length);
+        let next = 0;
+        await Promise.all(
+          Array.from({ length: workers }, async () => {
+            while (next < sources.length) {
+              const source = sources[next++];
+              try {
+                await api.deleteFile(this.token(), source.id);
+              } catch (error) {
+                // The new snapshot is already authoritative. A failed permanent
+                // deletion is harmless and will be retried by a later compaction.
+                console.warn('[GDrive] Deferred compacted sync-index cleanup:', error);
+              }
+            }
+          }),
+        );
+        return;
+      } catch (error) {
+        if (listAttempt === 0 && isDriveNotFound(error)) continue;
+        throw error;
+      }
+    }
   }
 
   async openSyncIndexPublication(

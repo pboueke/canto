@@ -10,7 +10,9 @@ const mockStore = {
   initialize: jest.fn().mockResolvedValue(undefined),
   listJournals: jest.fn().mockResolvedValue([]),
   getJournal: jest.fn().mockResolvedValue(null),
+  getJournalOverview: jest.fn().mockResolvedValue(null),
   saveJournal: jest.fn().mockResolvedValue(undefined),
+  saveJournalMetadata: jest.fn().mockResolvedValue(undefined),
   deleteJournal: jest.fn().mockResolvedValue(undefined),
   getPage: jest.fn().mockResolvedValue(null),
   savePage: jest.fn().mockResolvedValue(undefined),
@@ -42,6 +44,7 @@ jest.mock('@/lib/encryption', () => ({
 import {
   useJournals,
   useJournal,
+  useJournalOverview,
   usePage,
   useSavePage,
   useCreateJournal,
@@ -55,6 +58,7 @@ import {
   getLocalStore,
   tryLoadJournal,
   finalizeCompletedDeviceKeyRotationIfReady,
+  invalidateJournalOverview,
 } from '../useStorage';
 
 beforeEach(() => {
@@ -223,6 +227,137 @@ describe('useJournal', () => {
     const { result } = renderHook(() => useJournal('j1'));
     await waitFor(() => expect(result.current.loading).toBe(false));
     expect(result.current.error?.message).toBe('nope');
+  });
+});
+
+describe('useJournalOverview', () => {
+  it('loads the catalog-backed overview without calling getJournal', async () => {
+    const overview = {
+      metadata: { ...makeJournal(), settings: { ...DEFAULT_JOURNAL_SETTINGS }, version: 1 },
+      pages: [],
+      tags: [],
+      latestModified: 0,
+    };
+    mockStore.getJournalOverview.mockResolvedValueOnce(overview);
+
+    const { result } = renderHook(() => useJournalOverview('j1'));
+
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    expect(result.current.overview).toEqual(overview);
+    expect(mockStore.getJournalOverview).toHaveBeenCalledWith(
+      'j1',
+      undefined,
+      expect.objectContaining({ onRebuildProgress: expect.any(Function) }),
+    );
+    expect(mockStore.getJournal).not.toHaveBeenCalled();
+  });
+
+  it('refreshes only when its journal is invalidated', async () => {
+    const overview = {
+      metadata: { ...makeJournal(), settings: { ...DEFAULT_JOURNAL_SETTINGS }, version: 1 },
+      pages: [],
+      tags: [],
+      latestModified: 0,
+    };
+    mockStore.getJournalOverview.mockResolvedValue(overview);
+
+    const { result } = renderHook(() => useJournalOverview('j1'));
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    await act(async () => {
+      invalidateJournalOverview('j2');
+    });
+    expect(mockStore.getJournalOverview).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      invalidateJournalOverview('j1');
+    });
+    await waitFor(() => expect(mockStore.getJournalOverview).toHaveBeenCalledTimes(2));
+    expect(mockStore.getJournal).not.toHaveBeenCalled();
+  });
+
+  it('does not let a stale overview request overwrite a newer journal selection', async () => {
+    let resolveFirst: ((value: unknown) => void) | undefined;
+    const first = new Promise((resolve) => {
+      resolveFirst = resolve;
+    });
+    const second = {
+      metadata: { ...makeJournal('j2'), settings: { ...DEFAULT_JOURNAL_SETTINGS }, version: 1 },
+      pages: [],
+      tags: [],
+      latestModified: 0,
+    };
+    mockStore.getJournalOverview.mockReturnValueOnce(first).mockResolvedValueOnce(second);
+
+    let selectedId = 'j1';
+    const { result, rerender } = renderHook(() => useJournalOverview(selectedId));
+    selectedId = 'j2';
+    rerender({});
+    await waitFor(() => expect(result.current.overview).toEqual(second));
+
+    await act(async () => {
+      resolveFirst?.({
+        metadata: { ...makeJournal('j1'), settings: { ...DEFAULT_JOURNAL_SETTINGS }, version: 1 },
+        pages: [],
+        tags: [],
+        latestModified: 0,
+      });
+    });
+    expect(result.current.overview).toEqual(second);
+  });
+
+  it('shares one in-flight catalog read between consumers of the same journal', async () => {
+    let resolveOverview: ((value: unknown) => void) | undefined;
+    mockStore.getJournalOverview.mockReturnValueOnce(
+      new Promise((resolve) => {
+        resolveOverview = resolve;
+      }),
+    );
+
+    const { result } = renderHook(() => ({
+      first: useJournalOverview('j1'),
+      second: useJournalOverview('j1'),
+    }));
+    await waitFor(() => expect(mockStore.getJournalOverview).toHaveBeenCalledTimes(1));
+
+    const overview = {
+      metadata: { ...makeJournal('j1'), settings: { ...DEFAULT_JOURNAL_SETTINGS }, version: 1 },
+      pages: [],
+      tags: [],
+      latestModified: 0,
+    };
+    await act(async () => resolveOverview?.(overview));
+    await waitFor(() => expect(result.current.first.overview).toEqual(overview));
+    expect(result.current.second.overview).toEqual(overview);
+  });
+
+  it('exposes page-count progress while a legacy catalog is rebuilding', async () => {
+    let resolveOverview: ((value: unknown) => void) | undefined;
+    mockStore.getJournalOverview.mockImplementationOnce(async (_id, _key, options) => {
+      options?.onRebuildProgress?.({ current: 0, total: 2 });
+      options?.onRebuildProgress?.({ current: 1, total: 2 });
+      return new Promise((resolve) => {
+        resolveOverview = resolve;
+      });
+    });
+    const { result } = renderHook(() => useJournalOverview('j1'));
+
+    await waitFor(() =>
+      expect(result.current).toMatchObject({
+        status: 'migrating',
+        migrationProgress: { current: 1, total: 2 },
+      }),
+    );
+    await act(async () =>
+      resolveOverview?.({
+        metadata: { ...makeJournal('j1'), settings: { ...DEFAULT_JOURNAL_SETTINGS }, version: 1 },
+        pages: [],
+        tags: [],
+        latestModified: 0,
+      }),
+    );
+    await waitFor(() => expect(result.current.status).toBe('ready'));
+    expect(result.current.migrationProgress).toBeNull();
   });
 });
 
@@ -484,6 +619,68 @@ describe('useSaveJournal', () => {
     expect(mockStore.saveJournal).toHaveBeenCalledWith(jc, key);
   });
 
+  it('saves metadata without loading or rewriting pages', async () => {
+    const metadata = { ...makeJournalContent() } as Partial<JournalContent>;
+    delete metadata.pages;
+    const { result } = renderHook(() => useSaveJournal());
+
+    await act(async () => {
+      await result.current.saveJournalMetadata(metadata as Omit<JournalContent, 'pages'>);
+    });
+
+    expect(mockStore.saveJournalMetadata).toHaveBeenCalledWith(metadata, undefined);
+    expect(mockStore.getJournal).not.toHaveBeenCalled();
+    expect(mockStore.saveJournal).not.toHaveBeenCalled();
+  });
+
+  it('preserves pages through the compatibility fallback when metadata-only writes are unavailable', async () => {
+    const metadata = { ...makeJournalContent() } as Partial<JournalContent>;
+    delete metadata.pages;
+    const existing = { ...makeJournalContent(), pages: [makePage('preserved-page')] };
+    const metadataWriter = mockStore.saveJournalMetadata;
+    (
+      mockStore as { saveJournalMetadata?: typeof mockStore.saveJournalMetadata }
+    ).saveJournalMetadata = undefined;
+    mockStore.getJournal.mockResolvedValueOnce(existing);
+    const { result } = renderHook(() => useSaveJournal());
+    try {
+      await act(async () => {
+        await result.current.saveJournalMetadata(metadata as Omit<JournalContent, 'pages'>);
+      });
+      expect(mockStore.saveJournal).toHaveBeenCalledWith(
+        expect.objectContaining({ pages: existing.pages }),
+        undefined,
+      );
+    } finally {
+      mockStore.saveJournalMetadata = metadataWriter;
+    }
+  });
+
+  it('reports a missing journal from the metadata compatibility fallback', async () => {
+    const metadata = { ...makeJournalContent() } as Partial<JournalContent>;
+    delete metadata.pages;
+    const metadataWriter = mockStore.saveJournalMetadata;
+    (
+      mockStore as { saveJournalMetadata?: typeof mockStore.saveJournalMetadata }
+    ).saveJournalMetadata = undefined;
+    mockStore.getJournal.mockResolvedValueOnce(null);
+    const { result } = renderHook(() => useSaveJournal());
+    try {
+      let thrown: Error | undefined;
+      await act(async () => {
+        try {
+          await result.current.saveJournalMetadata(metadata as Omit<JournalContent, 'pages'>);
+        } catch (error) {
+          thrown = error as Error;
+        }
+      });
+      expect(thrown?.message).toBe('Journal not found: j1');
+      expect(result.current.error?.message).toBe('Journal not found: j1');
+    } finally {
+      mockStore.saveJournalMetadata = metadataWriter;
+    }
+  });
+
   it('sets error on failure', async () => {
     mockStore.saveJournal.mockRejectedValueOnce(new Error('save fail'));
     const { result } = renderHook(() => useSaveJournal());
@@ -502,31 +699,19 @@ describe('useSaveJournal', () => {
 });
 
 describe('useJournalTags', () => {
-  it('collects unique tags from journal pages', async () => {
-    const jc = makeJournalContent();
-    jc.pages = [
-      { ...makePage('p1'), tags: ['Work', 'travel'] },
-      { ...makePage('p2'), tags: ['WORK', 'personal'] },
-    ];
-    mockStore.getJournal.mockResolvedValueOnce(jc);
+  it('returns catalog tags without calling getJournal', async () => {
+    mockStore.getJournalOverview.mockResolvedValueOnce({
+      metadata: { ...makeJournal(), settings: { ...DEFAULT_JOURNAL_SETTINGS }, version: 1 },
+      pages: [],
+      tags: ['personal', 'travel', 'work'],
+      latestModified: 0,
+    });
 
     const { result } = renderHook(() => useJournalTags('j1'));
     await waitFor(() => expect(result.current.loading).toBe(false));
 
     expect(result.current.tags).toEqual(['personal', 'travel', 'work']);
-  });
-
-  it('excludes deleted pages', async () => {
-    const jc = makeJournalContent();
-    jc.pages = [
-      { ...makePage('p1'), tags: ['active'] },
-      { ...makePage('p2'), tags: ['deleted-tag'], deleted: true },
-    ];
-    mockStore.getJournal.mockResolvedValueOnce(jc);
-
-    const { result } = renderHook(() => useJournalTags('j1'));
-    await waitFor(() => expect(result.current.loading).toBe(false));
-    expect(result.current.tags).toEqual(['active']);
+    expect(mockStore.getJournal).not.toHaveBeenCalled();
   });
 
   it('returns empty for undefined journalId', async () => {
@@ -535,8 +720,8 @@ describe('useJournalTags', () => {
     expect(result.current.tags).toEqual([]);
   });
 
-  it('returns empty on error', async () => {
-    mockStore.getJournal.mockRejectedValueOnce(new Error('oops'));
+  it('returns empty on overview error', async () => {
+    mockStore.getJournalOverview.mockRejectedValueOnce(new Error('oops'));
     const { result } = renderHook(() => useJournalTags('j1'));
     await waitFor(() => expect(result.current.loading).toBe(false));
     expect(result.current.tags).toEqual([]);
@@ -669,7 +854,7 @@ describe('useAttachment', () => {
 
 describe('useJournalTags – null journal', () => {
   it('returns empty tags when journal is null', async () => {
-    mockStore.getJournal.mockResolvedValueOnce(null);
+    mockStore.getJournalOverview.mockResolvedValueOnce(null);
     const { result } = renderHook(() => useJournalTags('j-null'));
     await waitFor(() => expect(result.current.loading).toBe(false));
     expect(result.current.tags).toEqual([]);

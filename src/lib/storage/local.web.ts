@@ -2,8 +2,16 @@ import type { Journal, JournalContent, Page, Attachment } from 'canto-data';
 import type { EncryptionService } from '@/lib/encryption';
 import { aesGcmEncrypt, aesGcmDecrypt, generateUUID, uint8ToBase64 } from '@/lib/encryption/utils';
 import { safeJsonParse } from '@/lib/utils/json';
-import type { LocalStore } from './types';
+import {
+  catalogToOverview,
+  createPageCatalog,
+  isPageCatalogV1,
+  withCatalogPage,
+  type PageCatalogV1,
+} from '@/lib/journal-overview';
+import type { JournalImportRecoveryInfo, JournalOverviewReadOptions, LocalStore } from './types';
 import { serializeDeviceKeyWrites } from './write-barrier';
+import { recordStorageIo } from './io-counters';
 import {
   base64ByteLength,
   decodeChunkFrame,
@@ -20,6 +28,7 @@ const STORE_NAME = 'files';
 const BASE_PATH = 'canto';
 const JOURNALS_INDEX_PATH = `${BASE_PATH}/journals.json`;
 const DEVICE_KEY_ROTATION_COMPLETE_PATH = `${BASE_PATH}/.device-key-rotation-complete`;
+const IMPORTS_PREFIX = `${BASE_PATH}/.imports/`;
 
 function getJournalPath(journalId: string): string {
   return `${BASE_PATH}/${journalId}`;
@@ -27,6 +36,10 @@ function getJournalPath(journalId: string): string {
 
 function getMetadataPath(journalId: string): string {
   return `${getJournalPath(journalId)}/metadata.json`;
+}
+
+function getPageCatalogPath(journalId: string): string {
+  return `${getJournalPath(journalId)}/page-catalog.json`;
 }
 
 function getPagePath(journalId: string, pageId: string): string {
@@ -72,6 +85,10 @@ function getChunkPath(root: string, index: number): string {
 
 function getChunkManifestPath(root: string): string {
   return `${root}/manifest`;
+}
+
+function getImportMarkerPath(id: string): string {
+  return `${IMPORTS_PREFIX}${id}`;
 }
 
 // ---------------------------------------------------------------------------
@@ -435,6 +452,10 @@ async function readEncrypted(
   encryption: EncryptionService,
   derivedKey?: Uint8Array,
 ): Promise<string | null> {
+  recordStorageIo('decryptions');
+  if (path.endsWith('/metadata.json')) recordStorageIo('metadataReads');
+  else if (path.endsWith('/page-catalog.json')) recordStorageIo('catalogReads');
+  else if (path.includes('/pages/') && path.endsWith('.json')) recordStorageIo('pageReads');
   const ciphertext = await idbGet(path);
   if (!ciphertext) return null;
   try {
@@ -491,6 +512,35 @@ interface JournalIndex {
   journals: Journal[];
 }
 
+type JournalImportPhase = 'prepared' | 'writing' | 'publishing' | 'committed';
+interface JournalImportMarker {
+  version: 1 | 2;
+  journalId: string;
+  phase: JournalImportPhase;
+  expectedPageCount?: number;
+}
+
+function parseJournalImportMarker(value: string, id: string): JournalImportMarker | null {
+  try {
+    const marker = JSON.parse(value) as Partial<JournalImportMarker>;
+    if (
+      (marker.version === 1 || marker.version === 2) &&
+      marker.journalId === id &&
+      (marker.phase === 'prepared' ||
+        marker.phase === 'writing' ||
+        marker.phase === 'publishing' ||
+        marker.phase === 'committed') &&
+      (marker.expectedPageCount === undefined ||
+        (Number.isSafeInteger(marker.expectedPageCount) && marker.expectedPageCount >= 0))
+    ) {
+      return marker as JournalImportMarker;
+    }
+  } catch {
+    // Unknown/corrupt markers are never publication authority.
+  }
+  return null;
+}
+
 export function createLocalStore(encryption: EncryptionService): LocalStore {
   async function readIndex(): Promise<JournalIndex> {
     const raw = await readEncrypted(JOURNALS_INDEX_PATH, encryption);
@@ -502,10 +552,223 @@ export function createLocalStore(encryption: EncryptionService): LocalStore {
     await writeEncrypted(JOURNALS_INDEX_PATH, JSON.stringify(index), encryption);
   }
 
+  function journalIndexEntry(metadata: Omit<JournalContent, 'pages'>): Journal {
+    return {
+      id: metadata.id,
+      title: metadata.title,
+      icon: metadata.icon,
+      date: metadata.date,
+      secure: metadata.secure,
+      salt: metadata.salt,
+      biometric: metadata.biometric,
+      kdfIterations: metadata.kdfIterations,
+      themeOverride: metadata.settings.themeOverride,
+    };
+  }
+
+  async function recoveredImportIndexEntry(marker: JournalImportMarker): Promise<Journal | null> {
+    if (marker.phase !== 'publishing' || marker.expectedPageCount === undefined) return null;
+    const metadataRaw = await readEncrypted(getMetadataPath(marker.journalId), encryption);
+    if (!metadataRaw) return null;
+    try {
+      const metadata = safeJsonParse<Omit<JournalContent, 'pages'>>(
+        metadataRaw,
+        `journal:${marker.journalId} import metadata`,
+      );
+      if (metadata.id !== marker.journalId || metadata.secure) return null;
+      const catalog = await readPageCatalog(marker.journalId);
+      const pageCount = (await idbListKeys(getPagesPrefix(marker.journalId))).filter((path) =>
+        path.endsWith('.json'),
+      ).length;
+      if (
+        !catalog ||
+        catalog.pageCount !== marker.expectedPageCount ||
+        pageCount !== marker.expectedPageCount
+      ) {
+        return null;
+      }
+      return journalIndexEntry(metadata);
+    } catch {
+      return null;
+    }
+  }
+
+  async function recoverIncompleteJournalImports(): Promise<void> {
+    const index = await readIndex();
+    const committedIds = new Set(index.journals.map((journal) => journal.id));
+    for (const markerPath of await idbListKeys(IMPORTS_PREFIX)) {
+      const id = markerPath.slice(IMPORTS_PREFIX.length);
+      if (!id) continue;
+      const raw = await idbGet(markerPath);
+      const marker = raw ? parseJournalImportMarker(raw, id) : null;
+      const journalId = marker?.journalId ?? id;
+      if (!committedIds.has(journalId) && marker) {
+        const recovered = await recoveredImportIndexEntry(marker);
+        if (recovered) {
+          index.journals.push(recovered);
+          await writeIndex(index);
+          committedIds.add(journalId);
+        }
+      }
+      if (!committedIds.has(journalId)) await idbDeletePrefix(`${getJournalPath(journalId)}/`);
+      await idbDelete(markerPath);
+    }
+  }
+
+  async function writePageCatalog(
+    journalId: string,
+    pages: readonly Page[],
+    derivedKey?: Uint8Array,
+  ): Promise<void> {
+    await writeEncrypted(
+      getPageCatalogPath(journalId),
+      JSON.stringify(createPageCatalog(journalId, pages)),
+      encryption,
+      derivedKey,
+    );
+  }
+
+  async function readPageCatalog(
+    journalId: string,
+    derivedKey?: Uint8Array,
+  ): Promise<PageCatalogV1 | null> {
+    const raw = await readEncrypted(getPageCatalogPath(journalId), encryption, derivedKey);
+    if (!raw) return null;
+    try {
+      const parsed = safeJsonParse<unknown>(raw, `journal:${journalId} page catalog`);
+      return isPageCatalogV1(parsed, journalId) ? parsed : null;
+    } catch {
+      return null;
+    }
+  }
+
+  async function readJournalPages(
+    journalId: string,
+    derivedKey?: Uint8Array,
+    options?: JournalOverviewReadOptions,
+    skipMalformedPages = false,
+  ): Promise<Page[]> {
+    if (options?.signal?.aborted) throw new Error('Journal catalog rebuild cancelled');
+    const pageKeys = (await idbListKeys(getPagesPrefix(journalId))).filter((key) =>
+      key.endsWith('.json'),
+    );
+    const pages: Page[] = [];
+    options?.onRebuildProgress?.({ current: 0, total: pageKeys.length });
+    for (const [index, key] of pageKeys.entries()) {
+      if (options?.signal?.aborted) throw new Error('Journal catalog rebuild cancelled');
+      const pageRaw = await readEncrypted(key, encryption, derivedKey);
+      if (pageRaw) {
+        try {
+          pages.push(safeJsonParse<Page>(pageRaw, `page:${key}`));
+        } catch (error) {
+          if (!skipMalformedPages) throw error;
+        }
+      }
+      options?.onRebuildProgress?.({ current: index + 1, total: pageKeys.length });
+    }
+    return pages;
+  }
+
+  async function encryptForStorage(data: string, derivedKey?: Uint8Array): Promise<string> {
+    const inner = derivedKey ? await aesGcmEncrypt(data, derivedKey) : data;
+    return encryption.encrypt(inner);
+  }
+
+  async function commitPageAndCatalog(
+    journalId: string,
+    page: Page,
+    catalog: PageCatalogV1,
+    derivedKey?: Uint8Array,
+  ): Promise<void> {
+    const root = transactionRoot(`page-${generateUUID()}`);
+    const transaction: StorageTransaction = { phase: 'prepared', files: [] };
+    try {
+      transaction.files.push(
+        await stageRawFile(
+          root,
+          0,
+          getPagePath(journalId, page.id),
+          await encryptForStorage(JSON.stringify(page), derivedKey),
+        ),
+        await stageRawFile(
+          root,
+          1,
+          getPageCatalogPath(journalId),
+          await encryptForStorage(JSON.stringify(catalog), derivedKey),
+        ),
+      );
+      await writeTransactionMarker(root, transaction);
+      transaction.phase = 'committing';
+      await writeTransactionMarker(root, transaction);
+      await applyStorageTransaction(transaction);
+      await idbDeletePrefix(`${root}/`);
+    } catch (error) {
+      if (transaction.phase === 'prepared') await idbDeletePrefix(`${root}/`);
+      throw error;
+    }
+  }
+
+  async function commitJournalAndIndex(
+    journal: JournalContent,
+    metadata: Omit<JournalContent, 'pages'>,
+    index: JournalIndex,
+    derivedKey?: Uint8Array,
+  ): Promise<void> {
+    const root = transactionRoot(`journal-${generateUUID()}`);
+    const transaction: StorageTransaction = { phase: 'prepared', files: [] };
+    try {
+      let fileIndex = 0;
+      transaction.files.push(
+        await stageRawFile(
+          root,
+          fileIndex++,
+          getMetadataPath(journal.id),
+          await encryptForStorage(JSON.stringify(metadata), derivedKey),
+        ),
+      );
+      for (const page of journal.pages) {
+        transaction.files.push(
+          await stageRawFile(
+            root,
+            fileIndex++,
+            getPagePath(journal.id, page.id),
+            await encryptForStorage(JSON.stringify(page), derivedKey),
+          ),
+        );
+      }
+      transaction.files.push(
+        await stageRawFile(
+          root,
+          fileIndex++,
+          getPageCatalogPath(journal.id),
+          await encryptForStorage(
+            JSON.stringify(createPageCatalog(journal.id, journal.pages)),
+            derivedKey,
+          ),
+        ),
+        await stageRawFile(
+          root,
+          fileIndex,
+          JOURNALS_INDEX_PATH,
+          await encryptForStorage(JSON.stringify(index)),
+        ),
+      );
+      await writeTransactionMarker(root, transaction);
+      transaction.phase = 'committing';
+      await writeTransactionMarker(root, transaction);
+      await applyStorageTransaction(transaction);
+      await idbDeletePrefix(`${root}/`);
+    } catch (error) {
+      if (transaction.phase === 'prepared') await idbDeletePrefix(`${root}/`);
+      throw error;
+    }
+  }
+
   const store: LocalStore = {
     async initialize(): Promise<void> {
       await openDB();
       await recoverTransactions();
+      await recoverIncompleteJournalImports();
     },
 
     async listJournals(): Promise<Journal[]> {
@@ -519,59 +782,92 @@ export function createLocalStore(encryption: EncryptionService): LocalStore {
 
       const metadata = safeJsonParse<Omit<JournalContent, 'pages'>>(raw, `journal:${id} metadata`);
 
-      const pageKeys = await idbListKeys(getPagesPrefix(id));
-      const pages: Page[] = [];
-
-      for (const key of pageKeys) {
-        if (key.endsWith('.json')) {
-          const pageRaw = await readEncrypted(key, encryption, derivedKey);
-          if (pageRaw) {
-            pages.push(safeJsonParse<Page>(pageRaw, `page:${key}`));
-          }
-        }
-      }
-
+      const pages = await readJournalPages(id, derivedKey);
       return { ...metadata, pages };
     },
 
-    async saveJournal(journal: JournalContent, derivedKey?: Uint8Array): Promise<void> {
-      const { pages, ...metadata } = journal;
-      await writeEncrypted(
-        getMetadataPath(journal.id),
-        JSON.stringify(metadata),
-        encryption,
-        derivedKey,
+    async getJournalOverview(
+      id: string,
+      derivedKey?: Uint8Array,
+      options?: JournalOverviewReadOptions,
+    ) {
+      const metadataRaw = await readEncrypted(getMetadataPath(id), encryption, derivedKey);
+      if (!metadataRaw) return null;
+      const metadata = safeJsonParse<Omit<JournalContent, 'pages'>>(
+        metadataRaw,
+        `journal:${id} metadata`,
       );
+      const catalog = await readPageCatalog(id, derivedKey);
+      if (catalog) return catalogToOverview(metadata, catalog);
 
-      for (const page of pages) {
-        await writeEncrypted(
-          getPagePath(journal.id, page.id),
-          JSON.stringify(page),
-          encryption,
-          derivedKey,
-        );
-      }
+      recordStorageIo('catalogRebuilds');
+      // A malformed legacy page must not prevent the journal catalog from
+      // reopening. The raw page is retained for recovery; sync remains strict
+      // and therefore cannot overwrite it with an incomplete local snapshot.
+      const pages = await readJournalPages(id, derivedKey, options, true);
+      if (options?.signal?.aborted) throw new Error('Journal catalog rebuild cancelled');
+      await writePageCatalog(id, pages, derivedKey);
+      return catalogToOverview(metadata, createPageCatalog(id, pages));
+    },
 
+    async saveJournal(journal: JournalContent, derivedKey?: Uint8Array): Promise<void> {
+      const metadata = { ...journal } as Partial<JournalContent>;
+      delete metadata.pages;
+      const journalMetadata = metadata as Omit<JournalContent, 'pages'>;
       const index = await readIndex();
-      const entry: Journal = {
-        id: journal.id,
-        title: journal.title,
-        icon: journal.icon,
-        date: journal.date,
-        secure: journal.secure,
-        salt: journal.salt,
-        biometric: journal.biometric,
-        kdfIterations: journal.kdfIterations,
-        themeOverride: journal.settings.themeOverride,
-      };
-
+      const entry = journalIndexEntry(journalMetadata);
       const existing = index.journals.findIndex((j) => j.id === journal.id);
       if (existing >= 0) {
         index.journals[existing] = entry;
       } else {
         index.journals.push(entry);
       }
+      await commitJournalAndIndex(journal, journalMetadata, index, derivedKey);
+    },
+
+    async saveJournalMetadata(metadata, derivedKey): Promise<void> {
+      await writeEncrypted(
+        getMetadataPath(metadata.id),
+        JSON.stringify(metadata),
+        encryption,
+        derivedKey,
+      );
+      const index = await readIndex();
+      const entry = journalIndexEntry(metadata);
+      const existing = index.journals.findIndex((journal) => journal.id === metadata.id);
+      if (existing >= 0) index.journals[existing] = entry;
+      else index.journals.push(entry);
       await writeIndex(index);
+    },
+
+    async beginJournalImport(id: string): Promise<void> {
+      await idbPut(
+        getImportMarkerPath(id),
+        JSON.stringify({ version: 2, journalId: id, phase: 'prepared' }),
+      );
+    },
+
+    async updateJournalImport(id, phase, recovery?: JournalImportRecoveryInfo): Promise<void> {
+      const path = getImportMarkerPath(id);
+      if (!(await idbHas(path))) throw new Error(`Journal import marker is missing: ${id}`);
+      await idbPut(
+        path,
+        JSON.stringify({
+          version: 2,
+          journalId: id,
+          phase,
+          ...(recovery ? { expectedPageCount: recovery.expectedPageCount } : {}),
+        }),
+      );
+    },
+
+    async completeJournalImport(id: string): Promise<void> {
+      await idbDelete(getImportMarkerPath(id));
+    },
+
+    async abortJournalImport(id: string): Promise<void> {
+      await this.deleteJournal(id);
+      await idbDelete(getImportMarkerPath(id));
     },
 
     async hasCompletedDeviceKeyRotation(): Promise<boolean> {
@@ -607,12 +903,14 @@ export function createLocalStore(encryption: EncryptionService): LocalStore {
       preserveModified?: boolean,
     ): Promise<void> {
       const updated = preserveModified ? page : { ...page, modified: Date.now() };
-      await writeEncrypted(
-        getPagePath(journalId, page.id),
-        JSON.stringify(updated),
-        encryption,
-        derivedKey,
-      );
+      let catalog = await readPageCatalog(journalId, derivedKey);
+      if (!catalog) {
+        catalog = createPageCatalog(
+          journalId,
+          await readJournalPages(journalId, derivedKey, undefined, true),
+        );
+      }
+      await commitPageAndCatalog(journalId, updated, withCatalogPage(catalog, updated), derivedKey);
     },
 
     async deletePage(journalId: string, pageId: string, derivedKey?: Uint8Array): Promise<void> {
@@ -620,12 +918,21 @@ export function createLocalStore(encryption: EncryptionService): LocalStore {
       if (!page) return;
 
       const deleted = { ...page, deleted: true, modified: Date.now() };
-      await writeEncrypted(
-        getPagePath(journalId, pageId),
-        JSON.stringify(deleted),
-        encryption,
-        derivedKey,
-      );
+      let catalog = await readPageCatalog(journalId, derivedKey);
+      if (!catalog) {
+        catalog = createPageCatalog(
+          journalId,
+          await readJournalPages(journalId, derivedKey, undefined, true),
+        );
+      }
+      if (catalog) {
+        await commitPageAndCatalog(
+          journalId,
+          deleted,
+          withCatalogPage(catalog, deleted),
+          derivedKey,
+        );
+      }
 
       // Clean up attachment entries from IDB (non-blocking)
       const attachments = [...(page.images ?? []), ...(page.files ?? [])];
@@ -812,6 +1119,65 @@ export function createLocalStore(encryption: EncryptionService): LocalStore {
       }
     },
 
+    async forEachAttachmentDisplayChunk(attachment, visitor, derivedKey): Promise<void> {
+      if (attachment.content?.format !== 'canto-chunked-v1') {
+        if (
+          attachment.size === undefined ||
+          attachment.size > LEGACY_ATTACHMENT_MEMORY_LIMIT_BYTES
+        ) {
+          throw new Error(
+            `Legacy attachment is too large to materialize safely: ${attachment.name}`,
+          );
+        }
+        const data = await this.getAttachment(
+          attachment.path,
+          attachment.encrypted ? derivedKey : undefined,
+        );
+        if (!data) throw new Error(`Attachment not found: ${attachment.name}`);
+        await visitor(0, data);
+        return;
+      }
+
+      const root = attachment.path;
+      const manifestRaw = await idbGetAttachment(getChunkManifestPath(root));
+      if (!manifestRaw) throw new Error(`Attachment manifest missing: ${attachment.name}`);
+      const manifest = safeJsonParse<{
+        journalId: string;
+        pageId: string;
+        attachment: Attachment;
+      }>(await encryption.decrypt(manifestRaw), `attachment manifest:${attachment.path}`);
+      if (
+        manifest.attachment.id !== attachment.id ||
+        manifest.attachment.content?.generation !== attachment.content.generation ||
+        manifest.attachment.content?.chunkCount !== attachment.content.chunkCount
+      ) {
+        throw new Error(`Attachment manifest identity mismatch: ${attachment.name}`);
+      }
+
+      let written = 0;
+      for (let index = 0; index < attachment.content.chunkCount; index++) {
+        const raw = await idbGetAttachment(getChunkPath(root, index));
+        if (!raw) throw new Error(`Attachment chunk missing: ${attachment.name} #${index}`);
+        const frame = await decryptAttachmentFrame(
+          await encryption.decrypt(raw),
+          attachment.encrypted,
+          derivedKey,
+        );
+        const data = decodeChunkFrame(
+          frame,
+          manifest.journalId,
+          manifest.pageId,
+          attachment,
+          index,
+        );
+        written += base64ByteLength(data);
+        await visitor(index, data);
+      }
+      if (written !== attachment.content.byteLength) {
+        throw new Error(`Attachment display length mismatch: ${attachment.name}`);
+      }
+    },
+
     async saveAttachmentChunks(journalId, pageId, attachment, chunks): Promise<string> {
       if (!attachment.content || attachment.content.format !== 'canto-chunked-v1') {
         throw new Error(`Chunked content descriptor required for attachment: ${attachment.name}`);
@@ -923,10 +1289,36 @@ export function createLocalStore(encryption: EncryptionService): LocalStore {
           images: remapAttachments(p.images),
           files: remapAttachments(p.files),
         }));
+      const chunkFrames = pages
+        .flatMap((page) => [...(page.images ?? []), ...(page.files ?? [])])
+        .reduce(
+          (count, attachment) =>
+            count +
+            (attachment.content?.format === 'canto-chunked-v1' ? attachment.content.chunkCount : 0),
+          0,
+        );
+      const attachKeys = await idbListKeys(getAttachmentsPrefix(journal.id));
+      const encryptedAttachmentKeys: string[] = [];
+      const safeLegacyPaths = new Set(
+        legacyAttachments
+          .filter((attachment) => !unsafeLegacyPaths.has(attachment.path))
+          .map((attachment) => attachment.path),
+      );
+      for (const key of attachKeys) {
+        if (
+          safeLegacyPaths.has(key) &&
+          !(await isAttachmentSizeSidecar(key)) &&
+          !isChunkManifest(key) &&
+          !key.includes('/chunk-v1-')
+        )
+          encryptedAttachmentKeys.push(key);
+      }
+      const total = chunkFrames + pages.length + encryptedAttachmentKeys.length + 1;
 
       const replacementRoots: { oldRoot: string; newRoot: string }[] = [];
       const transactionRootPath = transactionRoot(`password-${generateUUID()}`);
       const transaction: StorageTransaction = { phase: 'prepared', files: [] };
+      let progress = 0;
       try {
         // Create every chunked replacement generation before modifying pages.
         // If any bounded frame fails, the published page still points to its
@@ -982,6 +1374,7 @@ export function createLocalStore(encryption: EncryptionService): LocalStore {
                       ? await aesGcmEncrypt(nextFrame, newKey)
                       : nextFrame;
                   await idbPut(getChunkPath(newRoot, chunkIndex), await encryption.encrypt(inner));
+                  onProgress?.(++progress, total);
                 }
                 await idbPut(
                   getChunkManifestPath(newRoot),
@@ -1003,25 +1396,6 @@ export function createLocalStore(encryption: EncryptionService): LocalStore {
           }
         }
 
-        const attachKeys = await idbListKeys(getAttachmentsPrefix(journal.id));
-        const encryptedAttachmentKeys: string[] = [];
-        const safeLegacyPaths = new Set(
-          legacyAttachments
-            .filter((attachment) => !unsafeLegacyPaths.has(attachment.path))
-            .map((attachment) => attachment.path),
-        );
-        for (const key of attachKeys) {
-          if (
-            safeLegacyPaths.has(key) &&
-            !(await isAttachmentSizeSidecar(key)) &&
-            !isChunkManifest(key) &&
-            !key.includes('/chunk-v1-')
-          )
-            encryptedAttachmentKeys.push(key);
-        }
-        const total = pages.length + encryptedAttachmentKeys.length + 1;
-
-        let progress = 0;
         for (const page of pages) {
           onProgress?.(++progress, total);
           const payload = JSON.stringify(page);
