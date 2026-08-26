@@ -160,7 +160,8 @@ export function AccountButton() {
       setDeleteTarget(null);
     } catch (err) {
       // Only report failures before the remote deletion completes.
-      setManageError(err instanceof Error ? err.message : String(err));
+      const detail = err instanceof Error ? err.message : String(err);
+      setManageError(`Could not delete "${deleteTarget.title}" from Google Drive. ${detail}`);
       setDeleteTarget(null);
     } finally {
       setDeleting(false);

@@ -16,7 +16,7 @@ interface SyncModalProps {
   journal: Omit<JournalContent, 'pages'>;
   derivedKey: Uint8Array | null;
   onClose: () => void;
-  onJournalChanged: () => void;
+  onJournalChanged: () => void | Promise<unknown>;
 }
 
 function ProgressBar({ current, total }: { current: number; total: number }) {
@@ -99,6 +99,9 @@ export function SyncModal({
       if (outcome.kind === 'not-ready' || outcome.kind === 'already-running')
         return t.common.loading;
       if (outcome.kind === 'authentication-required') return t.sync.signInToGoogle;
+      if (outcome.kind === 'failed' && outcome.errorCode === 'password-changed-elsewhere') {
+        return t.sync.passwordChangedElsewhere;
+      }
       if (outcome.kind === 'failed') return t.sync.syncError;
       if (outcome.kind === 'checkpointed') return t.sync.syncCheckpointed;
 
@@ -119,7 +122,16 @@ export function SyncModal({
     setFeedback(t.sync.syncing);
     const result = await syncJournal(journal.id, derivedKey ?? undefined);
     setFeedback(formatResultFeedback(result));
-  }, [updateSettings, syncJournal, journal.id, derivedKey, t, formatResultFeedback]);
+    if (result.kind === 'completed') await onJournalChanged();
+  }, [
+    updateSettings,
+    syncJournal,
+    journal.id,
+    derivedKey,
+    t,
+    formatResultFeedback,
+    onJournalChanged,
+  ]);
 
   const handleDisableSync = useCallback(async () => {
     // Invalidate the active run before changing settings so it cannot write a
@@ -137,7 +149,8 @@ export function SyncModal({
     setFeedback(t.sync.syncing);
     const result = await syncJournal(journal.id, derivedKey ?? undefined);
     setFeedback(formatResultFeedback(result));
-  }, [syncJournal, journal.id, derivedKey, t, formatResultFeedback]);
+    if (result.kind === 'completed') await onJournalChanged();
+  }, [syncJournal, journal.id, derivedKey, formatResultFeedback, onJournalChanged]);
 
   const handleAutoSyncToggle = useCallback(
     (val: boolean) => updateSettings({ autoSync: val }),
@@ -152,6 +165,9 @@ export function SyncModal({
   const isCheckpointed = syncState.status === 'checkpointed';
   const requiresFreshRenderer = syncState.requiresFreshRenderer === true;
   const syncBlocked = isCheckpointed || requiresFreshRenderer || !manager;
+  const recoveryFeedback =
+    syncState.errorCode === 'password-changed-elsewhere' ? t.sync.passwordChangedElsewhere : null;
+  const visibleFeedback = feedback ?? recoveryFeedback;
 
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
@@ -317,17 +333,20 @@ export function SyncModal({
           )}
 
           {/* Feedback */}
-          {(feedback || syncBlocked) && !isSyncing && (
+          {(visibleFeedback || syncBlocked) && !isSyncing && (
             <Text
               style={[
                 styles.feedback,
                 {
-                  color: feedback === t.sync.syncError ? theme.colors.error : theme.colors.primary,
+                  color:
+                    visibleFeedback === t.sync.syncError || recoveryFeedback
+                      ? theme.colors.error
+                      : theme.colors.primary,
                   fontFamily: theme.fonts.regular,
                 },
               ]}
             >
-              {feedback ?? t.sync.syncCheckpointed}
+              {visibleFeedback ?? t.sync.syncCheckpointed}
             </Text>
           )}
 

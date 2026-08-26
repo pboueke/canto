@@ -158,6 +158,7 @@ describe('Cross-device password change', () => {
     expect(resultA2).toBeNull();
     expect(deviceA.manager.getState(journalA.id).status).toBe('error');
     expect(deviceA.manager.getState(journalA.id).error).toMatch(/changed on another device/i);
+    expect(deviceA.manager.getState(journalA.id).errorCode).toBe('password-changed-elsewhere');
 
     // Critical: remote registry is UNCHANGED — A's sync did not corrupt it
     const registryAfter = JSON.parse(

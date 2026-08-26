@@ -200,7 +200,7 @@ export function useJournalOverview(id: string | undefined, derivedKey?: Uint8Arr
           setStatus('ready');
           setMigrationProgress(null);
         }
-        return;
+        return null;
       }
 
       try {
@@ -219,11 +219,13 @@ export function useJournalOverview(id: string | undefined, derivedKey?: Uint8Arr
           setStatus('ready');
           setMigrationProgress(null);
         }
+        return result;
       } catch (err) {
         if (requestVersion === requestVersionRef.current) {
           setError(err instanceof Error ? err : new Error(String(err)));
           setStatus('error');
         }
+        return null;
       } finally {
         if (requestVersion === requestVersionRef.current) setLoading(false);
       }
@@ -242,7 +244,9 @@ export function useJournalOverview(id: string | undefined, derivedKey?: Uint8Arr
     });
   }, [id, load]);
 
-  return { overview, loading, error, status, migrationProgress, refresh: () => load(true) };
+  const refresh = useCallback(() => load(true), [load]);
+
+  return { overview, loading, error, status, migrationProgress, refresh };
 }
 
 export function usePage(

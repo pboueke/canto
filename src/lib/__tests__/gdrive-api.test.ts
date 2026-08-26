@@ -389,7 +389,16 @@ describe('Google Drive API helper', () => {
 
     it('throws on other errors', async () => {
       mockFetchError(500, 'Server error');
-      await expect(deleteFile(TOKEN, 'f1')).rejects.toThrow('Drive API error (500)');
+      await expect(deleteFile(TOKEN, 'f1')).rejects.toThrow(
+        'Drive API error (500): Google Drive returned no usable error details',
+      );
+    });
+
+    it('identifies a body-less deletion failure', async () => {
+      mockFetchError(500);
+      await expect(deleteFile(TOKEN, 'f1')).rejects.toThrow(
+        'Drive API error (500): Google Drive returned no usable error details',
+      );
     });
   });
 

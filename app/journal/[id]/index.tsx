@@ -155,7 +155,20 @@ export default function JournalScreen() {
       const latestModified = overview?.latestModified ?? 0;
       if (lastSyncedModified.current === latestModified) return;
       lastSyncedModified.current = latestModified;
-      void syncJournal(journal.id, derivedKey ?? undefined);
+      void (async () => {
+        const outcome = await syncJournal(journal.id, derivedKey ?? undefined);
+        if (outcome.kind === 'completed') {
+          // Sync writes remote pages directly through LocalStore, bypassing the
+          // hook mutation helpers that normally invalidate this overview.
+          // Reload it now so newly downloaded entries appear without leaving
+          // and reopening the journal.
+          const refreshed = await refresh();
+          if (refreshed) lastSyncedModified.current = refreshed.latestModified;
+        }
+        if (outcome.kind === 'failed' && outcome.errorCode === 'password-changed-elsewhere') {
+          setShowSyncModal(true);
+        }
+      })();
     }, [
       journal?.settings.autoSync,
       journal?.settings.remoteSync,
@@ -167,6 +180,7 @@ export default function JournalScreen() {
       thumbnailStartVersion,
       derivedKey,
       syncJournal,
+      refresh,
     ]),
   );
 

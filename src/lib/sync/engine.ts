@@ -110,6 +110,23 @@ export function isSyncCancelledError(error: unknown): error is SyncCancelledErro
   return error instanceof SyncCancelledError;
 }
 
+/** The remote key changed while this device still holds the previous key. */
+export class SyncPasswordChangedElsewhereError extends Error {
+  constructor(title: string) {
+    super(
+      `Sync aborted: the password for "${title}" was changed on another device. ` +
+        'Remove this journal locally and re-import it from cloud to continue syncing.',
+    );
+    this.name = 'SyncPasswordChangedElsewhereError';
+  }
+}
+
+export function isSyncPasswordChangedElsewhereError(
+  error: unknown,
+): error is SyncPasswordChangedElsewhereError {
+  return error instanceof SyncPasswordChangedElsewhereError;
+}
+
 function assertNotCancelled(signal?: AbortSignal): void {
   if (signal?.aborted) throw new SyncCancelledError();
 }
@@ -525,10 +542,7 @@ export class SyncEngine {
           // Local hasn't changed since last sync, but remote differs — another
           // device rotated the key. Aborting prevents us from clobbering the
           // remote with our stale data.
-          throw new Error(
-            `Sync aborted: the password for "${localJournal.title}" was changed on another ` +
-              `device. Remove this journal locally and re-import it from cloud to continue syncing.`,
-          );
+          throw new SyncPasswordChangedElsewhereError(localJournal.title);
         }
         if (localChanged && remoteChanged) {
           // Both sides diverged from the last-known state — conflict, can't auto-resolve.
@@ -544,27 +558,6 @@ export class SyncEngine {
       // If it does occur, we fall through to push behaviour (no worse than the original
       // engine, and this corner case is not the one the cross-device bug exposes).
       const keyChanged = saltMismatch;
-      // Password/key changes must stay atomic. A bounded web run is permitted
-      // only when it cannot publish pages under a new registry salt.
-      const chunkBudget =
-        !keyChanged && options?.rendererWorkLedger
-          ? new RendererChunkUploadBudget(options.rendererWorkLedger)
-          : !keyChanged && options?.newChunkUploadBudget != null
-            ? new NewChunkUploadBudget(options.newChunkUploadBudget)
-            : undefined;
-
-      // A changed password/sync key is an all-or-nothing remote transition. Do
-      // this metadata-only preflight before uploading *any* page/chunk so an old
-      // key remains published when a legacy/generation-less attachment is
-      // deferred. The user can then resolve the warning without losing peer
-      // access to the previously published journal.
-      if (keyChanged) {
-        for (const page of localJournal.pages) {
-          if (page.deleted) continue;
-          if (!(await this.canUploadPageAttachments(page, result.warnings))) return result;
-        }
-      }
-
       // Build local page map
       const localPages = new Map(localJournal.pages.map((p) => [p.id, p]));
 
@@ -577,12 +570,65 @@ export class SyncEngine {
         publication?.initial ?? (await this.remote.downloadSyncIndex(journalId)) ?? {};
       assertNotCancelled(signal);
 
+      // Older clients could publish new registry metadata before every page
+      // was re-encrypted. Salt comparison alone cannot spot that historical
+      // half-rotation: both registries now agree, but a cloud import gets an
+      // AES-GCM authentication error for every unchanged page. Verify one
+      // unchanged page before trusting that agreement. If it cannot be
+      // decrypted, this source device can repair the remote copy by
+      // re-uploading its complete local snapshot below.
+      let requiresRemoteKeyRepair = false;
+      if (!keyChanged && previousRemoteSalt != null) {
+        const canary = Object.entries(remoteIndex).find(([pageId, entry]) => {
+          const localPage = localPages.get(pageId);
+          return (
+            !entry.deleted &&
+            !!localPage &&
+            !localPage.deleted &&
+            localPage.modified === entry.modified
+          );
+        });
+        if (canary) {
+          const [pageId] = canary;
+          const encryptedPage = await this.remote.downloadPage(journalId, pageId);
+          if (encryptedPage) {
+            try {
+              safeJsonParse<Page>(
+                await aesGcmDecrypt(encryptedPage, syncKey),
+                `page:${pageId} key verification`,
+              );
+            } catch {
+              requiresRemoteKeyRepair = true;
+            }
+          }
+          assertNotCancelled(signal);
+        }
+      }
+
+      const requiresFullRemoteReupload = keyChanged || requiresRemoteKeyRepair;
+      // Key rotation and repair must not be checkpointed: mixed page keys would
+      // make the remote journal impossible to import.
+      const chunkBudget =
+        !requiresFullRemoteReupload && options?.rendererWorkLedger
+          ? new RendererChunkUploadBudget(options.rendererWorkLedger)
+          : !requiresFullRemoteReupload && options?.newChunkUploadBudget != null
+            ? new NewChunkUploadBudget(options.newChunkUploadBudget)
+            : undefined;
+
+      // Preflight every attachment before publishing any repaired page/chunk.
+      if (requiresFullRemoteReupload) {
+        for (const page of localJournal.pages) {
+          if (page.deleted) continue;
+          if (!(await this.canUploadPageAttachments(page, result.warnings))) return result;
+        }
+      }
+
       // A key rotation cannot publish a new salt while a non-deleted remote-only
       // page remains encrypted with the old key. Fetching it with the new key
       // would fail, and publishing the registry would strand it for peers.
       // This check is deliberately after the index download but before any page
       // or metadata write, so the previous remote key remains authoritative.
-      if (keyChanged && previousRemoteSalt != null) {
+      if ((keyChanged && previousRemoteSalt != null) || requiresRemoteKeyRepair) {
         const remoteOnlyPageId = Object.entries(remoteIndex).find(
           ([pageId, entry]) => !localPages.has(pageId) && !entry.deleted,
         )?.[0];
@@ -600,7 +646,8 @@ export class SyncEngine {
           return (
             !page.deleted &&
             (!remoteEntry ||
-              (!remoteEntry.deleted && (keyChanged || page.modified > remoteEntry.modified)))
+              (!remoteEntry.deleted &&
+                (requiresFullRemoteReupload || page.modified > remoteEntry.modified)))
           );
         })
         .flatMap((page) => pageAttachments(page))
@@ -611,10 +658,14 @@ export class SyncEngine {
             !this.remote.isRemotePath(attachment.path),
         );
       const preparedChunkUploads =
-        !keyChanged && this.remote.prepareChunkUploads
+        !requiresFullRemoteReupload && this.remote.prepareChunkUploads
           ? await this.remote.prepareChunkUploads(journalId, attachmentsToUpload, signal)
           : undefined;
-      if (!keyChanged && !preparedChunkUploads && this.remote.prepareAttachmentChunkUploads) {
+      if (
+        !requiresFullRemoteReupload &&
+        !preparedChunkUploads &&
+        this.remote.prepareAttachmentChunkUploads
+      ) {
         if (attachmentsToUpload.length > 0) {
           await this.remote.prepareAttachmentChunkUploads(journalId, attachmentsToUpload, signal);
           assertNotCancelled(signal);
@@ -782,9 +833,9 @@ export class SyncEngine {
             await this.local.deletePage(journalId, pageId, syncKey);
             assertNotCancelled(signal);
             result.deleted.push(pageId);
-          } else if (keyChanged) {
-            // Key changed: force re-upload with new encryption key. Batching
-            // is intentionally disabled for this all-or-nothing transition.
+          } else if (requiresFullRemoteReupload) {
+            // A key change or repaired historical half-rotation requires every
+            // page to be re-uploaded with the verified local encryption key.
             const attachmentOutcome = await this.uploadPageAttachments(
               journalId,
               localPage,

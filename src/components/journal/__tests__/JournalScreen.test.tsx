@@ -1,6 +1,7 @@
 import React from 'react';
 import { act, fireEvent, render } from '@testing-library/react-native';
 import { InteractionManager } from 'react-native';
+import type { SyncRunOutcome } from '@/lib/sync';
 
 const mockEvents: string[] = [];
 const mockRefresh = jest.fn();
@@ -11,7 +12,7 @@ const mockUseJournal = jest.fn((..._args: unknown[]) => ({
 }));
 const mockSyncJournal = jest.fn(() => {
   mockEvents.push('sync-start');
-  return Promise.resolve(null);
+  return Promise.resolve({ kind: 'completed', result: {} } as SyncRunOutcome);
 });
 const mockGetAttachment = jest.fn(async () => {
   mockEvents.push('thumbnail-load-start');
@@ -131,7 +132,14 @@ jest.mock('@/components/journal/JournalHeader', () => {
 jest.mock('@/components/journal/FilterBar', () => ({ FilterBar: () => null }));
 jest.mock('@/components/journal/JournalSettings', () => ({ JournalSettings: () => null }));
 jest.mock('@/components/journal/ExportJournalModal', () => ({ ExportJournalModal: () => null }));
-jest.mock('@/components/journal/SyncModal', () => ({ SyncModal: () => null }));
+jest.mock('@/components/journal/SyncModal', () => {
+  const React = require('react');
+  const { Text } = require('react-native');
+  return {
+    SyncModal: ({ visible }: { visible: boolean }) =>
+      visible ? React.createElement(Text, { testID: 'sync-modal' }, 'Sync modal') : null,
+  };
+});
 jest.mock('@/components/common/FloatingActionButton', () => ({ FloatingActionButton: () => null }));
 
 // Mirrors the actual queue's deferred InteractionManager scheduling: the thumbnail
@@ -208,7 +216,7 @@ describe('JournalScreen open scheduling', () => {
     jest.useRealTimers();
   });
 
-  it('starts a visible thumbnail load before automatic sync on journal open', async () => {
+  it('starts a visible thumbnail load before automatic sync and refreshes the overview', async () => {
     render(<JournalScreen />);
     await act(async () => {
       jest.runOnlyPendingTimers();
@@ -216,7 +224,7 @@ describe('JournalScreen open scheduling', () => {
     });
 
     expect(mockEvents).toEqual(['thumbnail-load-start', 'sync-start']);
-    expect(mockRefresh).not.toHaveBeenCalled();
+    expect(mockRefresh).toHaveBeenCalledTimes(1);
   });
 
   it('cancels a scheduled automatic sync when the journal screen closes', () => {
@@ -225,6 +233,21 @@ describe('JournalScreen open scheduling', () => {
     act(() => jest.runOnlyPendingTimers());
 
     expect(mockSyncJournal).not.toHaveBeenCalled();
+  });
+
+  it('opens sync recovery guidance when auto-sync detects a remote password change', async () => {
+    mockSyncJournal.mockResolvedValueOnce({
+      kind: 'failed',
+      errorCode: 'password-changed-elsewhere',
+    });
+    const screen = render(<JournalScreen />);
+
+    await act(async () => {
+      jest.runOnlyPendingTimers();
+      await Promise.resolve();
+    });
+
+    expect(screen.getByTestId('sync-modal')).toBeTruthy();
   });
 
   it('opens settings, sync, and export from the overview without a page scan', () => {

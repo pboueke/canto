@@ -32,17 +32,39 @@ import { useGoogleAuth } from '@/contexts/GoogleAuthContext';
 import { useSyncManager } from '@/contexts/SyncManagerContext';
 import type { JournalContent, Page } from 'canto-data';
 import type { RemoteJournalMeta, DownloadFailure } from '@/lib/sync';
-import { GDriveApiError } from '@/lib/sync/gdrive/api';
+import { GDriveApiError, GDriveAuthenticationError } from '@/lib/sync/gdrive/api';
 import { downloadCloudPageAttachments } from '@/lib/sync/cloud-attachment-import';
 import { safeJsonParse } from '@/lib/utils/json';
 import { DataIntegrityWarningModal } from '@/components/common/DataIntegrityWarningModal';
 import { retryWithBackoff } from '@/lib/sync/retry';
 import { formatSyncWarning } from '@/lib/sync/warnings';
+import { describeError } from '@/lib/utils/error';
 
 type CloudImportPhase = 'idle' | 'preparing' | 'downloading';
 
 const CLOUD_IMPORT_RETRY_DELAYS_MS = [1000, 2000, 4000, 8000];
 const CLOUD_IMPORT_RETRY_ATTEMPTS = 5;
+
+class CloudImportAuthenticationError extends Error {
+  constructor() {
+    super('Google Drive session expired. Please sign in again.');
+    this.name = 'CloudImportAuthenticationError';
+  }
+}
+
+/**
+ * A page attempt also writes attachments to local storage. Retrying a parse,
+ * quota, or other local error cannot repair it and made a failed large import
+ * spend the full backoff budget once for every page. Drive's request layer
+ * already retries transient transport failures once; this outer retry is only
+ * for a recoverable HTTP response.
+ */
+function shouldRetryCloudImportPage(error: unknown): boolean {
+  if (!(error instanceof GDriveApiError)) return false;
+  return (
+    error.status === 401 || error.status === 408 || error.status === 429 || error.status >= 500
+  );
+}
 
 interface NewJournalModalProps {
   visible: boolean;
@@ -217,7 +239,7 @@ export function NewJournalModal({
     try {
       const token = await getAccessToken();
       if (!token) throw new Error('Google Drive session expired. Please sign in again.');
-      await manager.connectWithToken(token);
+      await manager.connectWithToken(token, getAccessToken);
       const store = manager.getRemoteStore();
       const remoteJournals = await store.listRemoteJournals();
       setCloudLocalIds(new Set(existingIds));
@@ -246,6 +268,7 @@ export function NewJournalModal({
   }
 
   async function executeCloudImport(remote: RemoteJournalMeta, password: string) {
+    let incompleteJournalId: string | null = null;
     setCloudImportPhase('preparing');
     setImportProgress(null);
     // PBKDF2 can be expensive on Android. Paint the loading state before key
@@ -254,7 +277,7 @@ export function NewJournalModal({
     try {
       const token = await getAccessToken();
       if (!token) throw new Error('Google Drive session expired. Please sign in again.');
-      await manager!.connectWithToken(token);
+      await manager!.connectWithToken(token, getAccessToken);
       const store = manager!.getRemoteStore();
 
       // Derive sync key from salt
@@ -309,6 +332,7 @@ export function NewJournalModal({
       // they stream. Keep that root invisible and recoverable until the final
       // metadata/pages/catalog publication has been verified.
       await localStore.beginJournalImport?.(journal.id);
+      incompleteJournalId = journal.id;
       await localStore.updateJournalImport?.(journal.id, 'writing');
 
       setCloudImportPhase('downloading');
@@ -340,22 +364,25 @@ export function NewJournalModal({
           const page = await retryWithBackoff(() => downloadOnePage(pageId), {
             attempts: CLOUD_IMPORT_RETRY_ATTEMPTS,
             delaysMs: CLOUD_IMPORT_RETRY_DELAYS_MS,
+            shouldRetry: shouldRetryCloudImportPage,
             onAttempt: async (attempt, err) => {
-              if (err instanceof GDriveApiError && err.status === 401) {
-                const refreshedToken = await getAccessToken();
-                if (!refreshedToken) {
-                  throw new Error('Google Drive session expired. Please sign in again.');
-                }
-                await manager!.connectWithToken(refreshedToken);
-              }
               console.warn('[Canto] Cloud import page retry', { pageId, attempt, err });
             },
           });
           if (page) journal.pages.push(page);
         } catch (err) {
+          // Continuing after authentication has failed turns one expired
+          // session into a warning for every page and can keep a large import
+          // running for hours. The outer handler rolls back its staging root.
+          if (
+            err instanceof CloudImportAuthenticationError ||
+            err instanceof GDriveAuthenticationError
+          ) {
+            throw new CloudImportAuthenticationError();
+          }
           downloadFailures.push({
             name: `${pageId}.json`,
-            reason: err instanceof Error ? err.message : String(err),
+            reason: describeError(err),
           });
         }
         current++;
@@ -366,13 +393,14 @@ export function NewJournalModal({
       if (downloadFailures.length > 0) {
         try {
           await localStore.abortJournalImport?.(journal.id);
+          incompleteJournalId = null;
         } catch (cleanupErr) {
           console.warn('[Canto] Cleanup of incomplete cloud import failed:', cleanupErr);
         }
         setCloudImportPhase('idle');
         setIntegrityWarning({
           type: 'sync',
-          details: downloadFailures.map((f) => f.name),
+          details: downloadFailures.map((f) => `${f.name}: ${f.reason}`),
           syncFailures: downloadFailures,
           retryRemote: remote,
         });
@@ -390,9 +418,11 @@ export function NewJournalModal({
         await localStore.saveJournal(journal, importKey);
         await localStore.updateJournalImport?.(journal.id, 'committed');
         await localStore.completeJournalImport?.(journal.id);
+        incompleteJournalId = null;
       } catch (saveErr) {
         try {
           await localStore.abortJournalImport?.(journal.id);
+          incompleteJournalId = null;
         } catch (cleanupErr) {
           console.warn('[Canto] Cleanup of partial cloud import failed:', cleanupErr);
         }
@@ -429,6 +459,15 @@ export function NewJournalModal({
       onClose();
       onImportComplete?.(journal.id);
     } catch (err) {
+      if (incompleteJournalId) {
+        try {
+          const { getLocalStore } = await import('@/hooks/useStorage');
+          const localStore = await getLocalStore();
+          await localStore.abortJournalImport?.(incompleteJournalId);
+        } catch (cleanupErr) {
+          console.warn('[Canto] Cleanup of interrupted cloud import failed:', cleanupErr);
+        }
+      }
       console.error('[Canto] Cloud import failed:', err);
       setImportError(formatImportError(err));
     } finally {

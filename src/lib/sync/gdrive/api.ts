@@ -4,8 +4,11 @@ const DRIVE_API = 'https://www.googleapis.com/drive/v3';
 const UPLOAD_API = 'https://www.googleapis.com/upload/drive/v3';
 
 export class GDriveApiError extends Error {
-  constructor(readonly status: number) {
-    super(`Drive API error (${status})`);
+  constructor(
+    readonly status: number,
+    detail?: string,
+  ) {
+    super(`Drive API error (${status})${detail ? `: ${detail}` : ''}`);
     this.name = 'GDriveApiError';
   }
 }
@@ -318,6 +321,9 @@ export async function deleteFile(accessToken: string, fileId: string): Promise<v
     headers: authHeaders(accessToken),
   });
   if (!res.ok && res.status !== 404) {
-    throw new Error(`Drive API error (${res.status})`);
+    // Drive's raw error body can include implementation details or user data.
+    // Keep the UI diagnostic stable and safe while still distinguishing an
+    // opaque provider failure from a successful/absent delete.
+    throw new GDriveApiError(res.status, 'Google Drive returned no usable error details');
   }
 }

@@ -253,6 +253,7 @@ export interface Dictionary {
     syncDeferredChunkGeneration: string;
     syncDeferredAttachmentNotFound: string;
     syncError: string;
+    passwordChangedElsewhere: string;
     enableGDriveSync: string;
     disableSync: string;
     autoSync: string;
@@ -545,6 +546,8 @@ const en: Dictionary = {
     syncDeferredChunkGeneration: 'Attachment uses an older chunk format and was not synced',
     syncDeferredAttachmentNotFound: 'Attachment was not found in cloud storage',
     syncError: 'Sync failed',
+    passwordChangedElsewhere:
+      'The password was changed on another device. Save any unsynced local changes elsewhere, remove this local journal, then re-import it from Google Drive using the new password.',
     enableGDriveSync: 'Enable Google Drive sync',
     disableSync: 'Disable sync',
     autoSync: 'Auto-sync',
@@ -855,6 +858,8 @@ const pt: Dictionary = {
     syncDeferredChunkGeneration: 'O anexo usa um formato de bloco antigo e não foi sincronizado',
     syncDeferredAttachmentNotFound: 'O anexo não foi encontrado no armazenamento em nuvem',
     syncError: 'Falha na sincronização',
+    passwordChangedElsewhere:
+      'A senha foi alterada em outro dispositivo. Salve separadamente quaisquer alterações locais não sincronizadas, remova este diário deste dispositivo e importe-o novamente do Google Drive usando a nova senha.',
     enableGDriveSync: 'Ativar sincronização com Google Drive',
     disableSync: 'Desativar sincronização',
     autoSync: 'Sincronização automática',
@@ -1168,6 +1173,8 @@ const es: Dictionary = {
     syncDeferredAttachmentNotFound:
       'No se encontró el archivo adjunto en el almacenamiento en la nube',
     syncError: 'Error de sincronización',
+    passwordChangedElsewhere:
+      'La contraseña se cambió en otro dispositivo. Guarda por separado cualquier cambio local sin sincronizar, elimina este diario de este dispositivo y vuelve a importarlo desde Google Drive con la nueva contraseña.',
     enableGDriveSync: 'Activar sincronización con Google Drive',
     disableSync: 'Desactivar sincronización',
     autoSync: 'Sincronización automática',
@@ -1480,6 +1487,8 @@ const de: Dictionary = {
       'Der Anhang verwendet ein älteres Chunk-Format und wurde nicht synchronisiert',
     syncDeferredAttachmentNotFound: 'Der Anhang wurde nicht im Cloud-Speicher gefunden',
     syncError: 'Synchronisierung fehlgeschlagen',
+    passwordChangedElsewhere:
+      'Das Passwort wurde auf einem anderen Gerät geändert. Speichere alle nicht synchronisierten lokalen Änderungen separat, entferne dieses lokale Journal und importiere es mit dem neuen Passwort erneut aus Google Drive.',
     enableGDriveSync: 'Google Drive-Synchronisierung aktivieren',
     disableSync: 'Synchronisierung deaktivieren',
     autoSync: 'Automatische Synchronisierung',
@@ -1793,6 +1802,8 @@ const fr: Dictionary = {
       'La pièce jointe utilise un ancien format de blocs et n’a pas été synchronisée',
     syncDeferredAttachmentNotFound: 'La pièce jointe est introuvable dans le stockage cloud',
     syncError: 'Échec de la synchronisation',
+    passwordChangedElsewhere:
+      'Le mot de passe a été modifié sur un autre appareil. Enregistrez séparément les modifications locales non synchronisées, supprimez ce journal local, puis réimportez-le depuis Google Drive avec le nouveau mot de passe.',
     enableGDriveSync: 'Activer la synchronisation Google Drive',
     disableSync: 'Désactiver la synchronisation',
     autoSync: 'Synchronisation automatique',
@@ -2105,6 +2116,8 @@ const ru: Dictionary = {
       'Вложение использует старый формат частей и не было синхронизировано',
     syncDeferredAttachmentNotFound: 'Вложение не найдено в облачном хранилище',
     syncError: 'Ошибка синхронизации',
+    passwordChangedElsewhere:
+      'Пароль был изменён на другом устройстве. Отдельно сохраните все несинхронизированные локальные изменения, удалите этот локальный дневник, затем импортируйте его заново из Google Drive с новым паролем.',
     enableGDriveSync: 'Включить синхронизацию с Google Drive',
     disableSync: 'Отключить синхронизацию',
     autoSync: 'Автоматическая синхронизация',
@@ -2412,6 +2425,8 @@ const zh: Dictionary = {
     syncDeferredChunkGeneration: '附件使用较旧的分块格式，未同步',
     syncDeferredAttachmentNotFound: '未在云存储中找到附件',
     syncError: '同步失败',
+    passwordChangedElsewhere:
+      '密码已在另一台设备上更改。请先单独保存所有未同步的本地更改，删除此本地日记，然后使用新密码从 Google Drive 重新导入。',
     enableGDriveSync: '启用Google Drive同步',
     disableSync: '禁用同步',
     autoSync: '自动同步',
@@ -2720,6 +2735,8 @@ const it: Dictionary = {
       "L'allegato usa un vecchio formato a blocchi e non è stato sincronizzato",
     syncDeferredAttachmentNotFound: "L'allegato non è stato trovato nell'archivio cloud",
     syncError: 'Sincronizzazione fallita',
+    passwordChangedElsewhere:
+      'La password è stata modificata su un altro dispositivo. Salva separatamente le modifiche locali non sincronizzate, rimuovi questo diario locale e poi importalo di nuovo da Google Drive usando la nuova password.',
     enableGDriveSync: 'Attiva sincronizzazione Google Drive',
     disableSync: 'Disattiva sincronizzazione',
     autoSync: 'Sincronizzazione automatica',

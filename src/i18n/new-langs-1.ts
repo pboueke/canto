@@ -229,6 +229,8 @@ export const ja: Dictionary = {
       '添付ファイルは古いチャンク形式を使用しているため同期されませんでした',
     syncDeferredAttachmentNotFound: '添付ファイルがクラウドストレージに見つかりませんでした',
     syncError: '同期に失敗しました',
+    passwordChangedElsewhere:
+      'パスワードが別のデバイスで変更されました。未同期のローカル変更を別途保存し、このローカルジャーナルを削除してから、新しいパスワードで Google Drive から再インポートしてください。',
     enableGDriveSync: 'Googleドライブ同期を有効にする',
     disableSync: '同期を無効にする',
     autoSync: '自動同期',
@@ -538,6 +540,8 @@ export const ko: Dictionary = {
     syncDeferredChunkGeneration: '첨부 파일이 이전 청크 형식을 사용하여 동기화되지 않았습니다',
     syncDeferredAttachmentNotFound: '클라우드 저장소에서 첨부 파일을 찾을 수 없습니다',
     syncError: '동기화 실패',
+    passwordChangedElsewhere:
+      '다른 기기에서 비밀번호가 변경되었습니다. 동기화되지 않은 로컬 변경 사항을 별도로 저장하고 이 로컬 저널을 삭제한 뒤, 새 비밀번호로 Google Drive에서 다시 가져오세요.',
     enableGDriveSync: 'Google 드라이브 동기화 활성화',
     disableSync: '동기화 비활성화',
     autoSync: '자동 동기화',
@@ -847,6 +851,8 @@ export const ar: Dictionary = {
     syncDeferredChunkGeneration: 'يستخدم المرفق تنسيق أجزاء قديماً ولم تتم مزامنته',
     syncDeferredAttachmentNotFound: 'لم يتم العثور على المرفق في التخزين السحابي',
     syncError: 'فشلت المزامنة',
+    passwordChangedElsewhere:
+      'تم تغيير كلمة المرور على جهاز آخر. احفظ أي تغييرات محلية غير متزامنة بشكل منفصل، واحذف هذه المذكرة المحلية، ثم أعد استيرادها من Google Drive باستخدام كلمة المرور الجديدة.',
     enableGDriveSync: 'تفعيل مزامنة Google Drive',
     disableSync: 'تعطيل المزامنة',
     autoSync: 'مزامنة تلقائية',
@@ -1157,6 +1163,8 @@ export const hi: Dictionary = {
       'अनुलग्नक पुराने खंड प्रारूप का उपयोग करता है और सिंक नहीं किया गया',
     syncDeferredAttachmentNotFound: 'क्लाउड संग्रहण में अनुलग्नक नहीं मिला',
     syncError: 'सिंक विफल',
+    passwordChangedElsewhere:
+      'पासवर्ड किसी अन्य डिवाइस पर बदला गया था। बिना सिंक किए गए स्थानीय बदलावों को अलग से सहेजें, इस स्थानीय जर्नल को हटाएँ, फिर नए पासवर्ड से इसे Google Drive से दोबारा आयात करें।',
     enableGDriveSync: 'Google Drive सिंक सक्षम करें',
     disableSync: 'सिंक अक्षम करें',
     autoSync: 'ऑटो-सिंक',
@@ -1467,6 +1475,8 @@ export const tr: Dictionary = {
     syncDeferredChunkGeneration: 'Ek, eski bir parça biçimi kullandığı için eşitlenmedi',
     syncDeferredAttachmentNotFound: 'Ek bulut depolamada bulunamadı',
     syncError: 'Senkronizasyon başarısız',
+    passwordChangedElsewhere:
+      'Parola başka bir cihazda değiştirildi. Senkronize edilmemiş yerel değişiklikleri ayrı olarak kaydedin, bu yerel günlüğü kaldırın ve ardından yeni parolayla Google Drive’dan yeniden içe aktarın.',
     enableGDriveSync: 'Google Drive senkronizasyonunu etkinleştir',
     disableSync: 'Senkronizasyonu devre dışı bırak',
     autoSync: 'Otomatik senkronizasyon',
@@ -1778,6 +1788,8 @@ export const nl: Dictionary = {
       'Bijlage gebruikt een oudere chunkindeling en is niet gesynchroniseerd',
     syncDeferredAttachmentNotFound: 'Bijlage is niet gevonden in cloudopslag',
     syncError: 'Synchronisatie mislukt',
+    passwordChangedElsewhere:
+      'Het wachtwoord is op een ander apparaat gewijzigd. Sla niet-gesynchroniseerde lokale wijzigingen apart op, verwijder dit lokale dagboek en importeer het daarna opnieuw uit Google Drive met het nieuwe wachtwoord.',
     enableGDriveSync: 'Google Drive-synchronisatie inschakelen',
     disableSync: 'Synchronisatie uitschakelen',
     autoSync: 'Automatische synchronisatie',

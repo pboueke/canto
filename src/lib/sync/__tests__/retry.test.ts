@@ -142,6 +142,20 @@ describe('retryWithBackoff', () => {
     expect(fn).toHaveBeenCalledTimes(2);
   });
 
+  it('does not retry an error rejected by the retry policy', async () => {
+    const error = new Error('IndexedDB quota exceeded');
+    const fn = jest.fn().mockRejectedValue(error);
+
+    const promise = retryWithBackoff(fn, {
+      attempts: 5,
+      delaysMs: [100, 200, 400, 800],
+      shouldRetry: () => false,
+    });
+
+    await expect(promise).rejects.toBe(error);
+    expect(fn).toHaveBeenCalledTimes(1);
+  });
+
   it('reuses last delay if delaysMs is shorter than attempts-1 — all 4 waits use 50ms', async () => {
     const fn = jest.fn().mockImplementation(async () => {
       throw new Error('fail');

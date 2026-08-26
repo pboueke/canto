@@ -1,5 +1,6 @@
 export type {
   SyncProvider,
+  SyncErrorCode,
   RemoteStore,
   PreparedChunkUploads,
   RemoteJournalMeta,

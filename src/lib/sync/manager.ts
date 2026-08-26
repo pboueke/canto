@@ -1,8 +1,13 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Platform } from 'react-native';
-import { SyncEngine, isSyncCancelledError, SyncCancelledError } from './engine';
+import {
+  SyncEngine,
+  isSyncCancelledError,
+  isSyncPasswordChangedElsewhereError,
+  SyncCancelledError,
+} from './engine';
 import type { LocalStore } from '@/lib/storage/types';
-import type { RemoteStore, SyncResult, SyncRunOutcome } from './types';
+import type { RemoteStore, SyncErrorCode, SyncResult, SyncRunOutcome } from './types';
 import { deriveKey, DEFAULT_KDF_ITERATIONS } from '@/lib/encryption/password';
 import { base64ToUint8 } from '@/lib/encryption/utils';
 import { RendererWorkLedger } from './renderer-work-ledger';
@@ -21,6 +26,7 @@ export interface SyncState {
   status: SyncStatus;
   lastSynced: number | null; // unix ms
   error?: string;
+  errorCode?: SyncErrorCode;
   errorStack?: string;
   progress?: SyncProgress;
   requiresFreshRenderer?: boolean;
@@ -70,7 +76,13 @@ export class SyncManager {
     this.notify();
   }
 
-  async connectWithToken(accessToken: string): Promise<void> {
+  async connectWithToken(
+    accessToken: string,
+    refreshAccessToken?: () => Promise<string | null>,
+  ): Promise<void> {
+    // `runJournalSync` installs its refresher before reconnecting through this
+    // method. An ordinary reconnect must not clear that in-flight protection.
+    if (refreshAccessToken) this.store.setAccessTokenRefresher?.(refreshAccessToken);
     await this.store.connect({ accessToken });
   }
 
@@ -294,11 +306,15 @@ export class SyncManager {
 
       const message = err instanceof Error ? err.message : String(err);
       const stack = err instanceof Error ? err.stack : undefined;
+      const errorCode: SyncErrorCode | undefined = isSyncPasswordChangedElsewhereError(err)
+        ? 'password-changed-elsewhere'
+        : undefined;
       console.error(`[Canto] Sync failed for ${journalId}:`, err);
       this.setState(journalId, {
         status: 'error',
         lastSynced: lastSynced ?? null,
         error: message,
+        errorCode,
         errorStack: stack,
         requiresFreshRenderer: this.hasWebCheckpoint(),
       });
@@ -335,7 +351,7 @@ export class SyncManager {
       if (state.status === 'checkpointed' || state.requiresFreshRenderer) {
         return { kind: 'checkpointed' };
       }
-      if (state.status === 'error') return { kind: 'failed' };
+      if (state.status === 'error') return { kind: 'failed', errorCode: state.errorCode };
       return { kind: 'cancelled' };
     } finally {
       this.store.setAccessTokenRefresher?.(undefined);

@@ -116,6 +116,7 @@ import { AccountButton } from '../AccountButton';
 describe('AccountButton remote deletion', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    mockDeleteRemoteJournal.mockResolvedValue(undefined);
     mockCachedKey = new Uint8Array(32).fill(42);
     mockGetJournal.mockResolvedValue({ ...localJournal, settings: { ...localJournal.settings } });
   });
@@ -164,5 +165,22 @@ describe('AccountButton remote deletion', () => {
     expect(mockGetJournal).not.toHaveBeenCalled();
     expect(mockSaveJournal).not.toHaveBeenCalled();
     expect(screen.queryByText(/Invalid JSON in journal:4a5f8cc3/)).toBeNull();
+  });
+
+  it('shows an actionable error when Google Drive rejects remote deletion', async () => {
+    mockDeleteRemoteJournal.mockRejectedValueOnce(
+      new Error('Drive API error (500): Google Drive returned no usable error details'),
+    );
+    const screen = render(<AccountButton />);
+
+    fireEvent.press(screen.getByText('Logged in with Google'));
+    fireEvent.press(screen.getByText('Manage journals'));
+    await screen.findByText('Remote Journal');
+    fireEvent.press(screen.getByTestId('icon-trash-2'));
+    fireEvent.press(screen.getByText('Delete'));
+
+    await screen.findByText(
+      'Could not delete "Remote Journal" from Google Drive. Drive API error (500): Google Drive returned no usable error details',
+    );
   });
 });

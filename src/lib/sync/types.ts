@@ -222,6 +222,9 @@ export interface SyncResult {
   requiresFreshRenderer?: boolean;
 }
 
+/** Stable, user-actionable failure classifications exposed by the sync manager. */
+export type SyncErrorCode = 'password-changed-elsewhere';
+
 /**
  * The user-facing result of one requested sync. Unlike the engine result, this
  * keeps cancellation, readiness, authentication, and failure distinct so UI
@@ -234,4 +237,4 @@ export type SyncRunOutcome =
   | { kind: 'already-running' }
   | { kind: 'not-ready' }
   | { kind: 'authentication-required' }
-  | { kind: 'failed' };
+  | { kind: 'failed'; errorCode?: SyncErrorCode };

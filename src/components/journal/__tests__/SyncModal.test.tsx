@@ -112,6 +112,45 @@ describe('SyncModal', () => {
     expect(onClose).not.toHaveBeenCalled();
   });
 
+  it('explains how to recover when another device changed the password', async () => {
+    mockSyncJournal.mockResolvedValue({
+      kind: 'failed',
+      errorCode: 'password-changed-elsewhere',
+    });
+    const { getByText } = renderModal();
+
+    fireEvent.press(getByText('Sync now'));
+
+    await waitFor(() =>
+      expect(
+        getByText(
+          'The password was changed on another device. Save any unsynced local changes elsewhere, remove this local journal, then re-import it from Google Drive using the new password.',
+        ),
+      ).toBeTruthy(),
+    );
+  });
+
+  it('refreshes the journal overview after a completed manual sync', async () => {
+    const onJournalChanged = jest.fn();
+    mockSyncJournal.mockResolvedValue({
+      kind: 'completed',
+      result: { warnings: [], requiresFreshRenderer: false },
+    });
+    const { getByText } = render(
+      <SyncModal
+        visible
+        journal={journal}
+        derivedKey={null}
+        onClose={jest.fn()}
+        onJournalChanged={onJournalChanged}
+      />,
+    );
+
+    fireEvent.press(getByText('Sync now'));
+
+    await waitFor(() => expect(onJournalChanged).toHaveBeenCalledTimes(1));
+  });
+
   it.each([
     [
       'completed',

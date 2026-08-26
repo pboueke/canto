@@ -35,6 +35,7 @@ function createMockRemoteStore(): RemoteStore {
   return {
     provider: 'gdrive',
     connect: jest.fn(),
+    setAccessTokenRefresher: jest.fn(),
     disconnect: jest.fn(),
     isConnected: jest.fn().mockReturnValue(true),
     isRemotePath: jest.fn((path: string) => path.startsWith('gdrive://')),
@@ -115,6 +116,29 @@ beforeEach(() => {
 });
 
 describe('SyncManager', () => {
+  it('registers a Drive token refresher for a direct connection', async () => {
+    const remote = createMockRemoteStore();
+    const manager = new SyncManager(createMockLocalStore(null), remote);
+    const refresh = jest.fn().mockResolvedValue('fresh-token');
+
+    await manager.connectWithToken('expired-token', refresh);
+
+    expect(remote.setAccessTokenRefresher).toHaveBeenCalledWith(refresh);
+    expect(remote.connect).toHaveBeenCalledWith({ accessToken: 'expired-token' });
+  });
+
+  it('keeps a run refresher installed while the sync reconnects', async () => {
+    const remote = createMockRemoteStore();
+    const manager = new SyncManager(createMockLocalStore(makeJournal([])), remote);
+    const refresh = jest.fn().mockResolvedValue('fresh-token');
+
+    await manager.runJournalSync('j1', 'token', undefined, refresh);
+
+    expect(remote.setAccessTokenRefresher).toHaveBeenNthCalledWith(1, refresh);
+    expect(remote.setAccessTokenRefresher).toHaveBeenNthCalledWith(2, undefined);
+    expect(remote.setAccessTokenRefresher).toHaveBeenCalledTimes(2);
+  });
+
   describe('state management', () => {
     it('returns idle state by default', () => {
       const local = createMockLocalStore(null);

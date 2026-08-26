@@ -229,6 +229,8 @@ export const pl: Dictionary = {
       'Załącznik używa starszego formatu fragmentów i nie został zsynchronizowany',
     syncDeferredAttachmentNotFound: 'Nie znaleziono załącznika w magazynie chmurowym',
     syncError: 'Synchronizacja nie powiodła się',
+    passwordChangedElsewhere:
+      'Hasło zostało zmienione na innym urządzeniu. Zapisz osobno wszystkie niezsynchronizowane lokalne zmiany, usuń ten lokalny dziennik, a następnie zaimportuj go ponownie z Google Drive przy użyciu nowego hasła.',
     enableGDriveSync: 'Włącz synchronizację z Dyskiem Google',
     disableSync: 'Wyłącz synchronizację',
     autoSync: 'Automatyczna synchronizacja',
@@ -540,6 +542,8 @@ export const sv: Dictionary = {
       'Bilagan använder ett äldre segmentformat och synkroniserades inte',
     syncDeferredAttachmentNotFound: 'Bilagan hittades inte i molnlagringen',
     syncError: 'Synkroniseringen misslyckades',
+    passwordChangedElsewhere:
+      'Lösenordet ändrades på en annan enhet. Spara osynkroniserade lokala ändringar separat, ta bort den här lokala dagboken och importera sedan igen från Google Drive med det nya lösenordet.',
     enableGDriveSync: 'Aktivera Google Drive-synkronisering',
     disableSync: 'Inaktivera synkronisering',
     autoSync: 'Automatisk synkronisering',
@@ -851,6 +855,8 @@ export const vi: Dictionary = {
     syncDeferredChunkGeneration: 'Tệp đính kèm dùng định dạng đoạn cũ và chưa được đồng bộ',
     syncDeferredAttachmentNotFound: 'Không tìm thấy tệp đính kèm trong bộ nhớ đám mây',
     syncError: 'Đồng bộ thất bại',
+    passwordChangedElsewhere:
+      'Mật khẩu đã được thay đổi trên một thiết bị khác. Hãy lưu riêng mọi thay đổi cục bộ chưa đồng bộ, xóa nhật ký cục bộ này rồi nhập lại từ Google Drive bằng mật khẩu mới.',
     enableGDriveSync: 'Bật đồng bộ Google Drive',
     disableSync: 'Tắt đồng bộ',
     autoSync: 'Tự động đồng bộ',
@@ -1159,6 +1165,8 @@ export const th: Dictionary = {
     syncDeferredChunkGeneration: 'ไฟล์แนบใช้รูปแบบชิ้นส่วนเก่าและไม่ได้ซิงค์',
     syncDeferredAttachmentNotFound: 'ไม่พบไฟล์แนบในที่เก็บข้อมูลบนคลาวด์',
     syncError: 'ซิงค์ล้มเหลว',
+    passwordChangedElsewhere:
+      'รหัสผ่านถูกเปลี่ยนบนอุปกรณ์เครื่องอื่น บันทึกการเปลี่ยนแปลงในเครื่องที่ยังไม่ได้ซิงค์แยกไว้ ลบสมุดบันทึกในเครื่องนี้ แล้วนำเข้าจาก Google Drive อีกครั้งด้วยรหัสผ่านใหม่',
     enableGDriveSync: 'เปิดใช้ซิงค์ Google Drive',
     disableSync: 'ปิดการซิงค์',
     autoSync: 'ซิงค์อัตโนมัติ',
@@ -1468,6 +1476,8 @@ export const id: Dictionary = {
     syncDeferredChunkGeneration: 'Lampiran menggunakan format potongan lama dan tidak disinkronkan',
     syncDeferredAttachmentNotFound: 'Lampiran tidak ditemukan di penyimpanan cloud',
     syncError: 'Sinkronisasi gagal',
+    passwordChangedElsewhere:
+      'Kata sandi diubah di perangkat lain. Simpan perubahan lokal yang belum disinkronkan secara terpisah, hapus jurnal lokal ini, lalu impor kembali dari Google Drive dengan kata sandi baru.',
     enableGDriveSync: 'Aktifkan sinkronisasi Google Drive',
     disableSync: 'Nonaktifkan sinkronisasi',
     autoSync: 'Sinkronisasi otomatis',
@@ -1779,6 +1789,8 @@ export const uk: Dictionary = {
       'Вкладення використовує старіший формат фрагментів і не було синхронізовано',
     syncDeferredAttachmentNotFound: 'Вкладення не знайдено у хмарному сховищі',
     syncError: 'Помилка синхронізації',
+    passwordChangedElsewhere:
+      'Пароль було змінено на іншому пристрої. Окремо збережіть усі несинхронізовані локальні зміни, видаліть цей локальний щоденник, а потім повторно імпортуйте його з Google Drive за допомогою нового пароля.',
     enableGDriveSync: 'Увімкнути синхронізацію з Google Диском',
     disableSync: 'Вимкнути синхронізацію',
     autoSync: 'Автосинхронізація',
