@@ -144,4 +144,18 @@ describe('browser attachment display materializer', () => {
     second.release();
     expect(store.forEachAttachmentDisplayChunk).toHaveBeenCalledTimes(1);
   });
+
+  it('propagates source stream failures without creating a Blob URL', async () => {
+    const store = {
+      forEachAttachmentDisplayChunk: jest.fn(async (_attachment, visitor) => {
+        await visitor(0, 'AQI=');
+        throw new Error('source disappeared');
+      }),
+    } as unknown as LocalStore;
+
+    await expect(materializeAttachmentDisplay(store, attachment)).rejects.toThrow(
+      'source disappeared',
+    );
+    expect(createObjectURL).not.toHaveBeenCalled();
+  });
 });

@@ -25,6 +25,7 @@ import {
   nativeArchiveAvailableBytes,
   openNativeArchive,
   readNativeArchiveText,
+  supportsNativeArchive,
 } from '../backup/native-archive';
 
 const archive = {
@@ -164,5 +165,33 @@ describe('native archive extraction cancellation', () => {
     await expect(
       extractNativeArchiveEntry(archive, 'manifest.json', 'file:///cache/entry', aborted.signal),
     ).rejects.toThrow('Archive extraction cancelled');
+  });
+
+  it('rejects an archive open that was cancelled before native work begins', async () => {
+    const controller = new AbortController();
+    controller.abort();
+
+    await expect(openNativeArchive('content://backup', controller.signal)).rejects.toThrow(
+      'Archive opening cancelled',
+    );
+    expect(mockOpen).not.toHaveBeenCalled();
+    expect(supportsNativeArchive()).toBe(true);
+  });
+
+  it('accepts cancellation implementations that reject after receiving an abort', async () => {
+    let resolveOpen!: (value: typeof archive) => void;
+    mockOpen.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          resolveOpen = resolve;
+        }),
+    );
+    mockCancel.mockRejectedValueOnce(new Error('already finished'));
+    const controller = new AbortController();
+    const opening = openNativeArchive('content://backup', controller.signal);
+    controller.abort();
+    resolveOpen(archive);
+
+    await expect(opening).resolves.toEqual(archive);
   });
 });

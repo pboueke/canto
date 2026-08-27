@@ -144,6 +144,18 @@ describe('storage transaction recovery (web/IndexedDB)', () => {
     expect(await getRawStorageRecord('canto/.transactions/corrupt/marker')).toBeUndefined();
   });
 
+  it('discards malformed journal-import markers without publishing their roots', async () => {
+    await createLocalStore(createMockEncryption()).initialize();
+    await putRawStorageRecord('canto/.imports/broken', '{not-json');
+    await putRawStorageRecord('canto/broken/metadata.json', 'enc:{"id":"broken"}');
+    _resetDB();
+
+    await createLocalStore(createMockEncryption()).initialize();
+
+    await expect(getRawStorageRecord('canto/.imports/broken')).resolves.toBeUndefined();
+    await expect(getRawStorageRecord('canto/broken/metadata.json')).resolves.toBeUndefined();
+  });
+
   it('replays a verified publishing import after the journals index was interrupted', async () => {
     const journalId = 'publishing-import';
     const first = createLocalStore(createMockEncryption());
@@ -337,6 +349,17 @@ describe('createLocalStore (web/IndexedDB)', () => {
     expect(result).toBeNull();
   });
 
+  it('opens a metadata-only journal when no page records exist yet', async () => {
+    const store = createLocalStore(createMockEncryption());
+    await store.initialize();
+    await store.saveJournal(makeJournalContent('metadata-only'));
+
+    await expect(store.getJournal('metadata-only')).resolves.toMatchObject({
+      id: 'metadata-only',
+      pages: [],
+    });
+  });
+
   it('deleteJournal removes journal from listing', async () => {
     const store = createLocalStore(createMockEncryption());
     await store.initialize();
@@ -510,6 +533,31 @@ describe('createLocalStore (web/IndexedDB)', () => {
     const journals = await store.listJournals();
     expect(journals).toHaveLength(1);
     expect(journals[0].title).toBe('Updated Title');
+  });
+
+  it('persists journal metadata and tracks import and device-key recovery markers', async () => {
+    const store = createLocalStore(createMockEncryption());
+    await store.initialize();
+    const source = makeJournalContent('j1');
+    const { pages, ...metadata } = source;
+    void pages;
+
+    await store.saveJournalMetadata!(metadata);
+    await expect(store.listJournals()).resolves.toEqual([
+      expect.objectContaining({ id: 'j1', title: 'Journal j1' }),
+    ]);
+    await store.beginJournalImport?.('j1');
+    await store.updateJournalImport?.('j1', 'writing');
+    await store.updateJournalImport?.('j1', 'publishing', { expectedPageCount: 0 });
+    await store.completeJournalImport?.('j1');
+    await expect(store.updateJournalImport?.('j1', 'committed')).rejects.toThrow(
+      'marker is missing',
+    );
+
+    await putRawStorageRecord('canto/.device-key-rotation-complete', 'complete');
+    await expect(store.hasCompletedDeviceKeyRotation?.()).resolves.toBe(true);
+    await store.clearCompletedDeviceKeyRotation?.();
+    await expect(store.hasCompletedDeviceKeyRotation?.()).resolves.toBe(false);
   });
 
   it('savePage updates modified timestamp', async () => {

@@ -326,6 +326,61 @@ describe('useImageQueue', () => {
     });
     expect(loaded.result.current.loadedImages).toHaveProperty('late-lease');
   });
+
+  it('prioritizes a queued attachment without duplicating active work', async () => {
+    let resolveFirst!: (value: string) => void;
+    const loadImage = jest
+      .fn()
+      .mockImplementationOnce(() => new Promise<string>((resolve) => (resolveFirst = resolve)))
+      .mockResolvedValueOnce('data:third')
+      .mockResolvedValueOnce('data:second');
+    const first = makeAttachment('first');
+    const second = makeAttachment('second');
+    const third = makeAttachment('third');
+    const { result } = renderHook(() => useImageQueue(loadImage));
+
+    await act(async () => {
+      result.current.enqueue([first, second, third]);
+      await Promise.resolve();
+    });
+    result.current.prioritize(third);
+    result.current.retry(first); // active entries must not be queued a second time
+
+    await act(async () => {
+      resolveFirst('data:first');
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+      await jest.runOnlyPendingTimersAsync();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(loadImage.mock.calls.map(([attachment]) => attachment.id)).toEqual(['first', 'third']);
+  });
+
+  it('ignores a rejection that arrives after its active materialization was cancelled', async () => {
+    let rejectLoad!: (error: Error) => void;
+    const attachment = makeAttachment('cancelled-rejection');
+    const loadImage = jest.fn(
+      () => new Promise<string>((_resolve, reject) => (rejectLoad = reject)),
+    );
+    const { result } = renderHook(() => useImageQueue(loadImage));
+
+    await act(async () => {
+      result.current.enqueue([attachment]);
+      await Promise.resolve();
+    });
+    act(() => result.current.cancelAll());
+    await act(async () => {
+      rejectLoad(new Error('cancelled source'));
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(result.current.failedImages).toEqual({});
+  });
 });
 
 describe('enqueueThumbnail', () => {
@@ -442,5 +497,24 @@ describe('enqueueThumbnail', () => {
     // Drain the finally setTimeout
     jest.runAllTimers();
     await Promise.resolve();
+  });
+
+  it('does not begin a thumbnail task cancelled before interaction work runs', async () => {
+    const runAfterInteractions = jest.spyOn(InteractionManager, 'runAfterInteractions');
+    let start!: () => void;
+    runAfterInteractions.mockImplementationOnce((callback) => {
+      start = callback as () => void;
+      return { cancel: jest.fn(), then: jest.fn() } as never;
+    });
+    const load = jest.fn().mockResolvedValue('data:thumbnail');
+    const onLoaded = jest.fn();
+
+    const cancel = enqueueThumbnail('cancel-before-start', load, onLoaded);
+    cancel();
+    start();
+    await Promise.resolve();
+
+    expect(load).not.toHaveBeenCalled();
+    expect(onLoaded).not.toHaveBeenCalled();
   });
 });

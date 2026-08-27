@@ -87,6 +87,49 @@ describe('GDriveRemoteStore', () => {
     it('throws when access token is empty', async () => {
       await expect(store.connect({ accessToken: '' })).rejects.toThrow('Access token is required');
     });
+
+    it('refreshes an expired token once and registers the replacement', async () => {
+      const refresh = jest.fn().mockResolvedValue('fresh-token');
+      store.setAccessTokenRefresher(refresh);
+      await store.connect({ accessToken: TOKEN });
+
+      const rejectedTokenCallback = mockedApi.registerAccessTokenRefresher.mock.calls.find(
+        ([token]) => token === TOKEN,
+      )?.[1];
+      expect(rejectedTokenCallback).toBeDefined();
+
+      await expect(rejectedTokenCallback!()).resolves.toBe('fresh-token');
+
+      expect(refresh).toHaveBeenCalledTimes(1);
+      expect(mockedApi.unregisterAccessTokenRefresher).toHaveBeenCalledWith(TOKEN);
+      expect(mockedApi.registerAccessTokenRefresher).toHaveBeenCalledWith(
+        'fresh-token',
+        expect.any(Function),
+      );
+    });
+
+    it('shares an in-flight refresh and retains the current token when no replacement arrives', async () => {
+      let resolveRefresh: ((token: string | null) => void) | undefined;
+      const refresh = jest.fn(
+        () =>
+          new Promise<string | null>((resolve) => {
+            resolveRefresh = resolve;
+          }),
+      );
+      store.setAccessTokenRefresher(refresh);
+      await store.connect({ accessToken: TOKEN });
+      const rejectedTokenCallback = mockedApi.registerAccessTokenRefresher.mock.calls.find(
+        ([token]) => token === TOKEN,
+      )?.[1];
+
+      const first = rejectedTokenCallback!();
+      const second = rejectedTokenCallback!();
+      expect(refresh).toHaveBeenCalledTimes(1);
+      resolveRefresh?.(null);
+
+      await expect(Promise.all([first, second])).resolves.toEqual([null, null]);
+      expect(mockedApi.unregisterAccessTokenRefresher).not.toHaveBeenCalled();
+    });
   });
 
   describe('listRemoteJournals', () => {

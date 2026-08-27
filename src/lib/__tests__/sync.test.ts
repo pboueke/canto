@@ -167,6 +167,22 @@ describe('SyncEngine', () => {
     expect(remote.uploadPage).toHaveBeenCalledWith('journal-1', 'p1', expect.any(String));
   });
 
+  it('merges an index entry published by another device immediately before its index write', async () => {
+    const localPage = makePage('p1', 1000);
+    const local = createMockLocalStore(makeJournal([localPage]));
+    const remote = createMockRemoteStore(makeJournal([]));
+    (remote.downloadSyncIndex as jest.Mock)
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce({ p2: { modified: 2000 } });
+
+    await new SyncEngine(local, remote).sync('journal-1', SYNC_KEY);
+
+    expect(remote.uploadSyncIndex).toHaveBeenCalledWith('journal-1', {
+      p1: { modified: 1000 },
+      p2: { modified: 2000 },
+    });
+  });
+
   it('downloads remote-only pages', async () => {
     const remotePage = makePage('p2', 2000);
     const local = createMockLocalStore(makeJournal([]));

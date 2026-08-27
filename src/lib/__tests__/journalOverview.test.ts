@@ -27,4 +27,10 @@ describe('PageCatalogV1 validation', () => {
     expect(isPageCatalogV1({ ...catalog, tags: ['wrong'] }, 'journal-1')).toBe(false);
     expect(isPageCatalogV1({ ...catalog, latestModified: 999 }, 'journal-1')).toBe(false);
   });
+
+  it('rejects non-catalog values and incomplete catalog shapes before using previews', () => {
+    expect(isPageCatalogV1(null, 'journal-1')).toBe(false);
+    expect(isPageCatalogV1('not a catalog', 'journal-1')).toBe(false);
+    expect(isPageCatalogV1({ version: 1, journalId: 'journal-1' }, 'journal-1')).toBe(false);
+  });
 });

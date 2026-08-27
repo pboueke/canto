@@ -124,4 +124,36 @@ describe('RendererWorkLedger', () => {
       );
     },
   );
+
+  it('continues in memory when browser storage cannot be inspected or updated', () => {
+    const original = Object.getOwnPropertyDescriptor(globalThis, 'sessionStorage');
+    Object.defineProperty(globalThis, 'sessionStorage', {
+      configurable: true,
+      get() {
+        throw new Error('storage unavailable');
+      },
+    });
+    try {
+      const ledger = new RendererWorkLedger({
+        plaintextLimitBytes: 10,
+        nativeAllocationLimitBytes: 60,
+      });
+      expect(ledger.reserve(1)).toBe(true);
+    } finally {
+      if (original) Object.defineProperty(globalThis, 'sessionStorage', original);
+      else delete (globalThis as { sessionStorage?: unknown }).sessionStorage;
+    }
+
+    const ledger = new RendererWorkLedger({
+      plaintextLimitBytes: 10,
+      nativeAllocationLimitBytes: 60,
+      storage: {
+        getItem: () => '{bad json',
+        setItem: () => {
+          throw new Error('quota');
+        },
+      },
+    });
+    expect(ledger.reserve(1)).toBe(true);
+  });
 });

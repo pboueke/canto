@@ -195,6 +195,19 @@ describe('tryLoadJournalOverview', () => {
     );
     expect(mockStore.getJournal).not.toHaveBeenCalled();
   });
+
+  it('fails explicitly when an older storage adapter has no overview API', async () => {
+    const overviewReader = mockStore.getJournalOverview;
+    mockStore.getJournalOverview = undefined as never;
+
+    try {
+      await expect(tryLoadJournalOverview('j1')).rejects.toThrow(
+        'Local storage does not support journal overview reads',
+      );
+    } finally {
+      mockStore.getJournalOverview = overviewReader;
+    }
+  });
 });
 
 describe('useJournals', () => {

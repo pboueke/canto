@@ -227,8 +227,6 @@ describe('importNativeJournal', () => {
       JSON.stringify({ ...makeJournal(), secure: true }),
       key,
     );
-    const uri = 'file:///cache/encrypted-journal';
-    mockExtractedBytes.set(uri, encryptedJournal);
     mockOpenNativeArchive.mockResolvedValueOnce({
       id: 'encrypted-archive',
       entries: [
@@ -239,7 +237,10 @@ describe('importNativeJournal', () => {
     mockReadNativeArchiveText.mockImplementationOnce(async () =>
       JSON.stringify({ ...manifest, encrypted: true }),
     );
-    mockExtractNativeArchiveEntry.mockResolvedValueOnce({ uri, size: encryptedJournal.length });
+    mockExtractNativeArchiveEntry.mockImplementationOnce(async (_archive, _entry, destination) => {
+      mockExtractedBytes.set(destination, encryptedJournal);
+      return { uri: destination, size: encryptedJournal.length };
+    });
 
     const result = await importNativeJournal('content://backup', 'Imported', key);
 
@@ -253,6 +254,53 @@ describe('importNativeJournal', () => {
       expect.any(String),
       undefined,
     );
+    expect(mockExtractedBytes.has(mockExtractNativeArchiveEntry.mock.calls[0][2])).toBe(false);
+  });
+
+  it('stops after page parsing when an attachment import has been cancelled', async () => {
+    const controller = new AbortController();
+    const page = {
+      ...makePage(),
+      files: [
+        {
+          id: 'file-1',
+          path: 'file-1.bin',
+          name: 'file.bin',
+          type: 'file' as const,
+          encrypted: false,
+          deleted: false,
+        },
+      ],
+    };
+    mockOpenNativeArchive.mockResolvedValueOnce({
+      id: 'cancelled-archive',
+      entries: [
+        { name: 'manifest.json', size: 100, directory: false },
+        { name: 'journal.json', size: 100, directory: false },
+        { name: 'pages/source-page.json', size: 100, directory: false },
+        { name: 'attachments/file-file-1.bin', size: 3, directory: false },
+      ],
+    });
+    mockReadNativeArchiveText.mockImplementation(async (_archive, name: string) => {
+      if (name === 'manifest.json') return JSON.stringify(manifest);
+      if (name === 'journal.json') return JSON.stringify(makeJournal());
+      if (name === 'pages/source-page.json') return JSON.stringify(page);
+      throw new Error(`unexpected entry ${name}`);
+    });
+
+    await expect(
+      importNativeJournal(
+        'content://backup',
+        'Imported',
+        undefined,
+        (progress) => {
+          if (progress.phase === 'pages') controller.abort();
+        },
+        controller.signal,
+      ),
+    ).rejects.toThrow('Backup import cancelled');
+    expect(mockStore.abortJournalImport).toHaveBeenCalled();
+    expect(mockStore.saveAttachmentStream).not.toHaveBeenCalled();
   });
 
   it('rolls back the marker when final publication fails', async () => {
@@ -395,6 +443,40 @@ describe('importNativeJournal', () => {
     await expect(importNativeJournal('content://backup', 'Imported')).rejects.toThrow(
       'Encrypted backup requires a password',
     );
+    expect(mockStore.beginJournalImport).not.toHaveBeenCalled();
+  });
+
+  it('rejects missing and oversized encrypted metadata before beginning a local import', async () => {
+    mockOpenNativeArchive.mockResolvedValueOnce({
+      id: 'missing-journal',
+      entries: [{ name: 'manifest.json', size: 100, directory: false }],
+    });
+    mockReadNativeArchiveText.mockImplementationOnce(async () =>
+      JSON.stringify({ ...manifest, encrypted: true }),
+    );
+
+    await expect(
+      importNativeJournal('content://backup', 'Imported', new Uint8Array(32)),
+    ).rejects.toThrow('missing journal.json');
+
+    mockOpenNativeArchive.mockResolvedValueOnce({
+      id: 'oversized-journal',
+      entries: [
+        { name: 'manifest.json', size: 100, directory: false },
+        {
+          name: 'journal.json',
+          size: MAX_LEGACY_ENCRYPTED_ENTRY_BYTES + 1,
+          directory: false,
+        },
+      ],
+    });
+    mockReadNativeArchiveText.mockImplementationOnce(async () =>
+      JSON.stringify({ ...manifest, encrypted: true }),
+    );
+
+    await expect(
+      importNativeJournal('content://backup', 'Imported', new Uint8Array(32)),
+    ).rejects.toThrow('entry too large to import safely: journal.json');
     expect(mockStore.beginJournalImport).not.toHaveBeenCalled();
   });
 

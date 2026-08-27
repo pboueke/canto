@@ -233,4 +233,27 @@ describe('attachment display materializer', () => {
     purgeEncryptedAttachmentDisplayCache();
     purgeAttachmentDisplayCache();
   });
+
+  it('removes a partial native file when the streaming reader fails', async () => {
+    const store = {
+      forEachAttachmentDisplayChunk: jest.fn(async (_attachment, visitor) => {
+        await visitor(0, 'AQI=');
+        throw new Error('source disappeared');
+      }),
+    } as unknown as LocalStore;
+
+    await expect(materializeAttachmentDisplay(store, attachment)).rejects.toThrow(
+      'source disappeared',
+    );
+    expect(mockClose).toHaveBeenCalled();
+    expect(mockDeleteFile).toHaveBeenCalled();
+  });
+
+  it('does not let a failed native cache scavenger interrupt journal startup', () => {
+    mockDirectoryList.mockImplementationOnce(() => {
+      throw new Error('cache unavailable');
+    });
+
+    expect(() => scavengeAttachmentDisplayCache()).not.toThrow();
+  });
 });

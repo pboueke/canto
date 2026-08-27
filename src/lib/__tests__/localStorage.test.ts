@@ -176,6 +176,17 @@ describe('storage transaction recovery (native)', () => {
     expect(await store.listJournals()).toEqual([]);
   });
 
+  it('discards malformed import markers without granting them publication authority', async () => {
+    filesystem['/mock-docs/canto/.imports/broken'] = '{not-json';
+    filesystem['/mock-docs/canto/broken/metadata.json'] = 'enc:{"id":"broken"}';
+
+    const store = createLocalStore(createMockEncryption());
+    await store.initialize();
+
+    expect(filesystem['/mock-docs/canto/.imports/broken']).toBeUndefined();
+    expect(filesystem['/mock-docs/canto/broken/metadata.json']).toBeUndefined();
+  });
+
   it('removes a committed marker while retaining its durable journal', async () => {
     const journalId = 'committed-import';
     const first = createLocalStore(createMockEncryption());
@@ -473,6 +484,17 @@ describe('createLocalStore', () => {
     expect(getStorageIoCounters()).toMatchObject({ pageReads: 2, catalogRebuilds: 1 });
   });
 
+  it('treats an invalid encrypted page catalog as rebuildable legacy data', async () => {
+    const store = createLocalStore(createMockEncryption());
+    await store.saveJournal(makeJournalContent('j1', [makePage('p1')]));
+    filesystem['/mock-docs/canto/j1/page-catalog.json'] = 'enc:not-json';
+
+    await expect(store.getJournalOverview?.('j1')).resolves.toMatchObject({
+      pages: [expect.objectContaining({ id: 'p1' })],
+    });
+    expect(filesystem['/mock-docs/canto/j1/page-catalog.json']).not.toBe('enc:not-json');
+  });
+
   it('reads a password-protected sync snapshot only with its derived key', async () => {
     const store = createLocalStore(createMockEncryption());
     const key = new Uint8Array(32).fill(7);
@@ -533,6 +555,16 @@ describe('createLocalStore', () => {
     const store = createLocalStore(createMockEncryption());
     const result = await store.getJournal('nonexistent');
     expect(result).toBeNull();
+  });
+
+  it('opens a metadata-only journal when no pages directory exists yet', async () => {
+    const store = createLocalStore(createMockEncryption());
+    await store.saveJournal(makeJournalContent('metadata-only'));
+
+    await expect(store.getJournal('metadata-only')).resolves.toMatchObject({
+      id: 'metadata-only',
+      pages: [],
+    });
   });
 
   it('deleteJournal removes journal from listing', async () => {

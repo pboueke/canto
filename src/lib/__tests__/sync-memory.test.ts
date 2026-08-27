@@ -78,6 +78,9 @@ describe('SyncEngine bounded chunk reference loop', () => {
 
     const local = {
       getJournal: jest.fn().mockResolvedValue(journal),
+      getPage: jest.fn().mockImplementation((_journalId: string, pageId: string) => {
+        return Promise.resolve(journal.pages.find((page) => page.id === pageId) ?? null);
+      }),
       forEachAttachmentChunk: jest.fn(async (_attachment, visitor) => {
         for (let index = 0; index < CHUNK_COUNT; index++) {
           // Buffer creates a flat, materialized string (rather than a V8 rope),
