@@ -505,20 +505,40 @@ export class SyncEngine {
         warnings: [],
       };
 
-      const loadedJournal = await this.local.getJournal(journalId, syncKey);
-      recordSyncDebugPhase('local-journal-loaded');
+      // Production stores provide this compact catalog-backed snapshot. Keep a
+      // compatibility path for third-party/test stores that have not adopted
+      // the optional seam yet; native and Web stores never take this path.
+      const loadedSnapshot = this.local.getJournalSyncSnapshot
+        ? await this.local.getJournalSyncSnapshot(journalId, syncKey)
+        : await (async () => {
+            const journal = await this.local.getJournal(journalId, syncKey);
+            if (!journal) return null;
+            const { pages, ...metadata } = journal;
+            return {
+              metadata,
+              pages: new Map(
+                pages.map((page) => [
+                  page.id,
+                  { modified: page.modified, ...(page.deleted ? { deleted: true } : {}) },
+                ]),
+              ),
+            };
+          })();
+      recordSyncDebugPhase('local-sync-snapshot-loaded');
       assertNotCancelled(signal);
-      if (!loadedJournal) {
+      if (!loadedSnapshot) {
         traceOutcome = 'completed';
         return result;
       }
-      // A sync must use one immutable view of local metadata/pages. In particular,
-      // do not rebuild the final index from a second getJournal call: a page saved
-      // while attachment/page upload is in flight was not uploaded by this run and
-      // must remain dirty for the next one.
-      const localJournal = safeJsonParse<JournalContent>(
-        JSON.stringify(loadedJournal),
-        `journal:${journalId} sync snapshot`,
+      // A sync uses one immutable view of metadata and page revisions. A body
+      // which changes or disappears after this catalog read is left for the
+      // next run instead of publishing an index entry for unuploaded data.
+      const localMetadata = safeJsonParse<Omit<JournalContent, 'pages'>>(
+        JSON.stringify(loadedSnapshot.metadata),
+        `journal:${journalId} sync metadata snapshot`,
+      );
+      const localPages = new Map(
+        [...loadedSnapshot.pages].map(([pageId, state]) => [pageId, { ...state }]),
       );
 
       // Compare local salt and encrypted-flag with remote registry. When they differ
@@ -530,24 +550,24 @@ export class SyncEngine {
       const saltMismatch =
         remoteJournal != null &&
         remoteJournal.salt != null &&
-        localJournal.salt != null &&
-        remoteJournal.salt !== localJournal.salt;
+        localMetadata.salt != null &&
+        remoteJournal.salt !== localMetadata.salt;
 
       if (saltMismatch && previousRemoteSalt != null) {
         // We have history. Use it to disambiguate who changed the salt.
-        const localChanged = localJournal.salt !== previousRemoteSalt;
+        const localChanged = localMetadata.salt !== previousRemoteSalt;
         const remoteChanged = remoteJournal!.salt !== previousRemoteSalt;
 
         if (!localChanged && remoteChanged) {
           // Local hasn't changed since last sync, but remote differs — another
           // device rotated the key. Aborting prevents us from clobbering the
           // remote with our stale data.
-          throw new SyncPasswordChangedElsewhereError(localJournal.title);
+          throw new SyncPasswordChangedElsewhereError(localMetadata.title);
         }
         if (localChanged && remoteChanged) {
           // Both sides diverged from the last-known state — conflict, can't auto-resolve.
           throw new Error(
-            `Sync aborted: the password for "${localJournal.title}" was changed on another ` +
+            `Sync aborted: the password for "${localMetadata.title}" was changed on another ` +
               `device AND locally (conflict). Remove this journal locally and re-import.`,
           );
         }
@@ -558,9 +578,6 @@ export class SyncEngine {
       // If it does occur, we fall through to push behaviour (no worse than the original
       // engine, and this corner case is not the one the cross-device bug exposes).
       const keyChanged = saltMismatch;
-      // Build local page map
-      const localPages = new Map(localJournal.pages.map((p) => [p.id, p]));
-
       // Download remote sync index exactly once for timestamp comparison and
       // publication. The provider owns immutable delta merging thereafter.
       const publication = this.remote.openSyncIndexPublication
@@ -615,10 +632,37 @@ export class SyncEngine {
             ? new NewChunkUploadBudget(options.newChunkUploadBudget)
             : undefined;
 
+      const loadedLocalPages = new Map<string, Page | null>();
+      const loadLocalPage = async (pageId: string): Promise<Page | null> => {
+        if (loadedLocalPages.has(pageId)) return loadedLocalPages.get(pageId)!;
+        const expected = localPages.get(pageId);
+        if (!expected) return null;
+        const page = await this.local.getPage(journalId, pageId, syncKey);
+        assertNotCancelled(signal);
+        // Do not let a page saved after the catalog snapshot be published by
+        // this run. It was not the revision used for sync planning.
+        if (
+          !page ||
+          page.modified !== expected.modified ||
+          Boolean(page.deleted) !== Boolean(expected.deleted)
+        ) {
+          loadedLocalPages.set(pageId, null);
+          return null;
+        }
+        loadedLocalPages.set(pageId, page);
+        return page;
+      };
+
       // Preflight every attachment before publishing any repaired page/chunk.
       if (requiresFullRemoteReupload) {
-        for (const page of localJournal.pages) {
-          if (page.deleted) continue;
+        for (const [pageId, state] of localPages) {
+          if (state.deleted) continue;
+          const page = await loadLocalPage(pageId);
+          if (!page) {
+            throw new Error(
+              `Sync aborted: local page ${pageId} changed while preparing password rotation.`,
+            );
+          }
           if (!(await this.canUploadPageAttachments(page, result.warnings))) return result;
         }
       }
@@ -640,34 +684,42 @@ export class SyncEngine {
         }
       }
 
-      const attachmentsToUpload = localJournal.pages
-        .filter((page) => {
-          const remoteEntry = remoteIndex[page.id];
-          return (
-            !page.deleted &&
-            (!remoteEntry ||
-              (!remoteEntry.deleted &&
-                (requiresFullRemoteReupload || page.modified > remoteEntry.modified)))
-          );
-        })
-        .flatMap((page) => pageAttachments(page))
-        .filter(
-          (attachment) =>
-            attachment.content?.format === 'canto-chunked-v1' &&
-            !!attachment.content.generation &&
-            !this.remote.isRemotePath(attachment.path),
-        );
+      const attachmentsToUpload: Attachment[] = [];
+      for (const [pageId, state] of localPages) {
+        const remoteEntry = remoteIndex[pageId];
+        if (
+          state.deleted ||
+          (remoteEntry &&
+            (remoteEntry.deleted ||
+              (!requiresFullRemoteReupload && state.modified <= remoteEntry.modified)))
+        ) {
+          continue;
+        }
+        const page = await loadLocalPage(pageId);
+        // A disappearing page must not make its old catalog entry visible.
+        if (page) attachmentsToUpload.push(...pageAttachments(page));
+      }
+      const chunkedAttachmentsToUpload = attachmentsToUpload.filter(
+        (attachment) =>
+          attachment.content?.format === 'canto-chunked-v1' &&
+          !!attachment.content.generation &&
+          !this.remote.isRemotePath(attachment.path),
+      );
       const preparedChunkUploads =
         !requiresFullRemoteReupload && this.remote.prepareChunkUploads
-          ? await this.remote.prepareChunkUploads(journalId, attachmentsToUpload, signal)
+          ? await this.remote.prepareChunkUploads(journalId, chunkedAttachmentsToUpload, signal)
           : undefined;
       if (
         !requiresFullRemoteReupload &&
         !preparedChunkUploads &&
         this.remote.prepareAttachmentChunkUploads
       ) {
-        if (attachmentsToUpload.length > 0) {
-          await this.remote.prepareAttachmentChunkUploads(journalId, attachmentsToUpload, signal);
+        if (chunkedAttachmentsToUpload.length > 0) {
+          await this.remote.prepareAttachmentChunkUploads(
+            journalId,
+            chunkedAttachmentsToUpload,
+            signal,
+          );
           assertNotCancelled(signal);
         }
       }
@@ -679,18 +731,24 @@ export class SyncEngine {
       // also retains remote pages whose payload or attachments could not be
       // downloaded, instead of incorrectly removing/overwriting their index row.
       const nextIndex: SyncIndex = { ...remoteIndex };
-      const publishSnapshotEntry = (page: Page) => {
+      const publishSnapshotEntry = (
+        pageId: string,
+        state: { modified: number; deleted?: boolean },
+      ) => {
         const entry = {
-          modified: page.modified,
-          ...(page.deleted ? { deleted: true } : {}),
+          modified: state.modified,
+          ...(state.deleted ? { deleted: true } : {}),
         };
-        nextIndex[page.id] = entry;
+        nextIndex[pageId] = entry;
         return entry;
       };
-      const publishCompletedPage = async (page: Page) => {
-        const entry = publishSnapshotEntry(page);
+      const publishCompletedPage = async (
+        pageId: string,
+        state: { modified: number; deleted?: boolean },
+      ) => {
+        const entry = publishSnapshotEntry(pageId, state);
         if (publication) {
-          await publication.publishPage(page.id, entry, signal);
+          await publication.publishPage(pageId, entry, signal);
           assertNotCancelled(signal);
         }
       };
@@ -759,12 +817,14 @@ export class SyncEngine {
         if (localPage && !remoteEntry) {
           // Local only: retain an unsynced deletion marker but never upload its page.
           if (localPage.deleted) {
-            await publishCompletedPage(localPage);
+            await publishCompletedPage(pageId, localPage);
             continue;
           }
+          const page = await loadLocalPage(pageId);
+          if (!page) continue;
           const attachmentOutcome = await this.uploadPageAttachments(
             journalId,
-            localPage,
+            page,
             syncKey,
             result.warnings,
             signal,
@@ -781,11 +841,11 @@ export class SyncEngine {
             continue;
           }
           assertNotCancelled(signal);
-          const encrypted = await aesGcmEncrypt(JSON.stringify(localPage), syncKey);
+          const encrypted = await aesGcmEncrypt(JSON.stringify(page), syncKey);
           assertNotCancelled(signal);
           await this.remote.uploadPage(journalId, pageId, encrypted);
           assertNotCancelled(signal);
-          await publishCompletedPage(localPage);
+          await publishCompletedPage(pageId, localPage);
           result.uploaded.push(pageId);
           if (await checkpointCompletedPage()) return result;
         } else if (!localPage && remoteEntry) {
@@ -820,13 +880,13 @@ export class SyncEngine {
           // Both exist: compare timestamps
           if (localPage.deleted && remoteEntry.deleted) {
             // Both deleted — retain the snapshot deletion marker.
-            await publishCompletedPage(localPage);
+            await publishCompletedPage(pageId, localPage);
             result.deleted.push(pageId);
           } else if (localPage.deleted) {
             // Locally deleted, remote still exists: propagate deletion
             await this.remote.deletePage(journalId, pageId);
             assertNotCancelled(signal);
-            await publishCompletedPage(localPage);
+            await publishCompletedPage(pageId, localPage);
             result.deleted.push(pageId);
           } else if (remoteEntry.deleted) {
             // Remotely deleted, local still exists: propagate deletion
@@ -836,28 +896,36 @@ export class SyncEngine {
           } else if (requiresFullRemoteReupload) {
             // A key change or repaired historical half-rotation requires every
             // page to be re-uploaded with the verified local encryption key.
+            const page = await loadLocalPage(pageId);
+            if (!page) {
+              throw new Error(
+                `Sync aborted: local page ${pageId} changed while repairing remote encryption.`,
+              );
+            }
             const attachmentOutcome = await this.uploadPageAttachments(
               journalId,
-              localPage,
+              page,
               syncKey,
               result.warnings,
               signal,
             );
             if (!attachmentOutcome.complete) continue;
             assertNotCancelled(signal);
-            const encrypted = await aesGcmEncrypt(JSON.stringify(localPage), syncKey);
+            const encrypted = await aesGcmEncrypt(JSON.stringify(page), syncKey);
             assertNotCancelled(signal);
             await this.remote.uploadPage(journalId, pageId, encrypted);
             assertNotCancelled(signal);
-            await publishCompletedPage(localPage);
+            await publishCompletedPage(pageId, localPage);
             result.uploaded.push(pageId);
           } else if (localPage.modified === remoteEntry.modified) {
             // In sync, nothing to do
           } else if (localPage.modified > remoteEntry.modified) {
             // Local is newer: upload
+            const page = await loadLocalPage(pageId);
+            if (!page) continue;
             const attachmentOutcome = await this.uploadPageAttachments(
               journalId,
-              localPage,
+              page,
               syncKey,
               result.warnings,
               signal,
@@ -874,11 +942,11 @@ export class SyncEngine {
               continue;
             }
             assertNotCancelled(signal);
-            const encrypted = await aesGcmEncrypt(JSON.stringify(localPage), syncKey);
+            const encrypted = await aesGcmEncrypt(JSON.stringify(page), syncKey);
             assertNotCancelled(signal);
             await this.remote.uploadPage(journalId, pageId, encrypted);
             assertNotCancelled(signal);
-            await publishCompletedPage(localPage);
+            await publishCompletedPage(pageId, localPage);
             // Retain prior published generations: see the race-safety note above.
             result.uploaded.push(pageId);
             if (await checkpointCompletedPage()) return result;
@@ -920,15 +988,13 @@ export class SyncEngine {
       // registry first would leave the remote in a corrupted state (registry
       // says "use new key" but pages are still encrypted with the old key).
       assertNotCancelled(signal);
-      const { pages, ...metaWithoutPages } = localJournal;
-      void pages;
-      const encryptedMeta = await aesGcmEncrypt(JSON.stringify(metaWithoutPages), syncKey);
+      const encryptedMeta = await aesGcmEncrypt(JSON.stringify(localMetadata), syncKey);
       assertNotCancelled(signal);
       await this.remote.uploadJournalMeta(journalId, encryptedMeta, {
-        title: localJournal.title,
-        encrypted: localJournal.secure,
-        salt: localJournal.salt,
-        kdfIterations: localJournal.kdfIterations,
+        title: localMetadata.title,
+        encrypted: localMetadata.secure,
+        salt: localMetadata.salt,
+        kdfIterations: localMetadata.kdfIterations,
       });
       assertNotCancelled(signal);
       await uploadMergedSyncIndex(true);

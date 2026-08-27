@@ -57,11 +57,31 @@ const makeJournal = (pages: Page[]): JournalContent => ({
 
 function createMockLocalStore(journal: JournalContent | null): LocalStore {
   const pages = new Map(journal?.pages.map((p) => [p.id, p]) ?? []);
+  const metadata = journal
+    ? (() => {
+        const { pages: omittedPages, ...value } = journal;
+        void omittedPages;
+        return value;
+      })()
+    : null;
 
   return {
     initialize: jest.fn(),
     listJournals: jest.fn().mockResolvedValue(journal ? [journal] : []),
     getJournal: jest.fn().mockResolvedValue(journal),
+    getJournalSyncSnapshot: jest.fn().mockResolvedValue(
+      journal && metadata
+        ? {
+            metadata,
+            pages: new Map(
+              journal.pages.map((page) => [
+                page.id,
+                { modified: page.modified, ...(page.deleted ? { deleted: true } : {}) },
+              ]),
+            ),
+          }
+        : null,
+    ),
     saveJournal: jest.fn(),
     deleteJournal: jest.fn(),
     getPage: jest
@@ -197,6 +217,68 @@ describe('SyncEngine', () => {
     expect(result.deleted).toHaveLength(0);
   });
 
+  it('plans a 351-page no-change sync from the catalog without local page reads', async () => {
+    const pages = Array.from({ length: 351 }, (_, index) => makePage(`p${index}`, 1_000 + index));
+    const local = createMockLocalStore(makeJournal(pages));
+    const remote = createMockRemoteStore(makeJournal(pages));
+
+    const result = await new SyncEngine(local, remote).sync(
+      'journal-1',
+      SYNC_KEY,
+      undefined,
+      'dGVzdHNhbHQ=',
+    );
+
+    expect(result).toMatchObject({ uploaded: [], downloaded: [], deleted: [] });
+    expect(local.getJournal).not.toHaveBeenCalled();
+    expect(local.getPage).not.toHaveBeenCalled();
+    // The remote key verification canary intentionally remains one page read.
+    expect(remote.downloadPage).toHaveBeenCalledTimes(1);
+  });
+
+  it('opens and uploads only the locally newer page', async () => {
+    const equalPages = Array.from({ length: 50 }, (_, index) =>
+      makePage(`p${index}`, 1_000 + index),
+    );
+    const localChanged = makePage('changed', 5_000);
+    const local = createMockLocalStore(makeJournal([...equalPages, localChanged]));
+    const remote = createMockRemoteStore(makeJournal([...equalPages, makePage('changed', 2_000)]));
+
+    const result = await new SyncEngine(local, remote).sync('journal-1', SYNC_KEY);
+
+    expect(result.uploaded).toEqual(['changed']);
+    expect(local.getJournal).not.toHaveBeenCalled();
+    expect(local.getPage).toHaveBeenCalledTimes(1);
+    expect(local.getPage).toHaveBeenCalledWith('journal-1', 'changed', SYNC_KEY);
+  });
+
+  it('downloads a remotely newer page without opening local page bodies', async () => {
+    const equalPages = Array.from({ length: 50 }, (_, index) =>
+      makePage(`p${index}`, 1_000 + index),
+    );
+    const local = createMockLocalStore(makeJournal([...equalPages, makePage('changed', 2_000)]));
+    const remote = createMockRemoteStore(makeJournal([...equalPages, makePage('changed', 5_000)]));
+
+    const result = await new SyncEngine(local, remote).sync('journal-1', SYNC_KEY);
+
+    expect(result.downloaded).toEqual(['changed']);
+    expect(local.getJournal).not.toHaveBeenCalled();
+    expect(local.getPage).not.toHaveBeenCalled();
+  });
+
+  it('does not publish an index entry when a planned local page disappears', async () => {
+    const page = makePage('p1', 1_000);
+    const local = createMockLocalStore(makeJournal([page]));
+    const remote = createMockRemoteStore(makeJournal([]));
+    (local.getPage as jest.Mock).mockResolvedValueOnce(null);
+
+    const result = await new SyncEngine(local, remote).sync('journal-1', SYNC_KEY);
+
+    expect(result.uploaded).toEqual([]);
+    expect(remote.uploadPage).not.toHaveBeenCalled();
+    expect(remote.uploadSyncIndex).toHaveBeenCalledWith('journal-1', {});
+  });
+
   it('propagates local deletions to remote', async () => {
     const localPage = makePage('p1', 2000, true); // locally deleted
     const remotePage = makePage('p1', 1000, false); // still on remote
@@ -233,6 +315,7 @@ describe('SyncEngine', () => {
 
     expect(result.uploaded).toHaveLength(0);
     expect(remote.uploadPage).not.toHaveBeenCalled();
+    expect(local.getPage).not.toHaveBeenCalled();
   });
 
   it('returns empty result for non-existent journal', async () => {
@@ -435,7 +518,31 @@ describe('SyncEngine', () => {
         controller.signal,
       ),
     ).rejects.toMatchObject({ name: 'SyncCancelledError' });
-    expect(local.getJournal).not.toHaveBeenCalled();
+    expect(local.getJournalSyncSnapshot).not.toHaveBeenCalled();
+    expect(local.getPage).not.toHaveBeenCalled();
+  });
+
+  it('cancels after a page read without publishing its stale catalog entry', async () => {
+    const page = makePage('p1', 1_000);
+    const local = createMockLocalStore(makeJournal([page]));
+    const remote = createMockRemoteStore(makeJournal([]));
+    const controller = new AbortController();
+    (local.getPage as jest.Mock).mockImplementation(async () => {
+      controller.abort();
+      return page;
+    });
+
+    await expect(
+      new SyncEngine(local, remote).sync(
+        'journal-1',
+        SYNC_KEY,
+        undefined,
+        undefined,
+        controller.signal,
+      ),
+    ).rejects.toBeInstanceOf(SyncCancelledError);
+    expect(remote.uploadPage).not.toHaveBeenCalled();
+    expect(remote.uploadSyncIndex).not.toHaveBeenCalled();
   });
 
   it('aborts a concurrent local and remote password rotation instead of choosing a winner', async () => {
@@ -596,7 +703,7 @@ describe('SyncEngine', () => {
   });
 
   describe('derivedKey passthrough', () => {
-    it('passes derivedKey to local.getJournal', async () => {
+    it('passes derivedKey to local.getJournalSyncSnapshot', async () => {
       const journal = makeJournal([]);
       const local = createMockLocalStore(journal);
       const remote = createMockRemoteStore(makeJournal([]));
@@ -605,7 +712,7 @@ describe('SyncEngine', () => {
       const engine = new SyncEngine(local, remote);
       await engine.sync('journal-1', key);
 
-      expect(local.getJournal).toHaveBeenCalledWith('journal-1', key);
+      expect(local.getJournalSyncSnapshot).toHaveBeenCalledWith('journal-1', key);
     });
 
     it('passes derivedKey to local.savePage on download', async () => {
@@ -645,7 +752,7 @@ describe('SyncEngine', () => {
       const engine = new SyncEngine(local, remote);
       await engine.syncAll((id) => (id === 'journal-1' ? key : undefined));
 
-      expect(local.getJournal).toHaveBeenCalledWith('journal-1', key);
+      expect(local.getJournalSyncSnapshot).toHaveBeenCalledWith('journal-1', key);
     });
 
     it('skips journals when getKey returns undefined', async () => {
@@ -710,10 +817,12 @@ describe('SyncEngine', () => {
       consoleSpy.mockRestore();
     });
 
-    it('propagates getJournal errors', async () => {
+    it('propagates sync snapshot errors', async () => {
       const local = createMockLocalStore(null);
       const remote = createMockRemoteStore(null);
-      (local.getJournal as jest.Mock).mockRejectedValueOnce(new Error('Decrypt failed'));
+      (local.getJournalSyncSnapshot as jest.Mock).mockRejectedValueOnce(
+        new Error('Decrypt failed'),
+      );
 
       const engine = new SyncEngine(local, remote);
       await expect(engine.sync('journal-1', SYNC_KEY)).rejects.toThrow('Decrypt failed');
@@ -721,6 +830,31 @@ describe('SyncEngine', () => {
   });
 
   describe('sync snapshot and remote-index fencing', () => {
+    it('loads each page once when repairing a historical remote-key mismatch', async () => {
+      const pages = [makePage('p1', 1_000), makePage('p2', 2_000)];
+      const journal = { ...makeJournal(pages), salt: 'stable-salt' };
+      const local = createMockLocalStore(journal);
+      const remote = createMockRemoteStore(journal);
+      remote.listRemoteJournals = jest
+        .fn()
+        .mockResolvedValue([
+          { id: 'journal-1', title: 'Test Journal', lastModified: 0, salt: 'stable-salt' },
+        ]);
+      remote.downloadPage = jest.fn().mockResolvedValue('not valid page JSON');
+
+      const result = await new SyncEngine(local, remote).sync(
+        'journal-1',
+        SYNC_KEY,
+        undefined,
+        'stable-salt',
+      );
+
+      expect(result.uploaded).toEqual(['p1', 'p2']);
+      expect(local.getJournal).not.toHaveBeenCalled();
+      expect(local.getPage).toHaveBeenCalledTimes(2);
+      expect(remote.uploadPage).toHaveBeenCalledTimes(2);
+    });
+
     it('does not index a local edit made after its snapshot page uploads', async () => {
       const snapshotPage = makePage('p1', 1000);
       const laterPage = makePage('p1', 2000);
@@ -1288,6 +1422,34 @@ describe('SyncEngine', () => {
       // removed; broad prefix cleanup would destroy that concurrent upload.
       expect(remote.deleteAttachmentGenerationsExcept).not.toHaveBeenCalled();
       expect(remote.deleteAttachmentChunk).not.toHaveBeenCalled();
+    });
+
+    it('loads each non-deleted page once through getPage during password rotation', async () => {
+      const localPages = [
+        makePage('p1', 1_000),
+        makePage('p2', 2_000),
+        makePage('p3', 3_000, true),
+      ];
+      const local = createMockLocalStore({ ...makeJournal(localPages), salt: 'new-salt' });
+      const remote = createMockRemoteStore({ ...makeJournal(localPages), salt: 'old-salt' });
+      remote.listRemoteJournals = jest
+        .fn()
+        .mockResolvedValue([
+          { id: 'journal-1', title: 'Test Journal', lastModified: 0, salt: 'old-salt' },
+        ]);
+
+      const result = await new SyncEngine(local, remote).sync(
+        'journal-1',
+        SYNC_KEY,
+        undefined,
+        'old-salt',
+      );
+
+      expect(result.uploaded).toEqual(['p1', 'p2']);
+      expect(local.getJournal).not.toHaveBeenCalled();
+      expect(local.getPage).toHaveBeenCalledTimes(2);
+      expect(local.getPage).toHaveBeenNthCalledWith(1, 'journal-1', 'p1', SYNC_KEY);
+      expect(local.getPage).toHaveBeenNthCalledWith(2, 'journal-1', 'p2', SYNC_KEY);
     });
 
     it('keeps a key rotation atomic when a web chunk budget is requested', async () => {

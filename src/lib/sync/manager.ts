@@ -227,11 +227,20 @@ export class SyncManager {
         }
       }
 
+      // Catalog-based no-op sync can compare hundreds of entries without an
+      // await between them. Emitting a React state update for each comparison
+      // queues touch work on Android's JS thread even after the transfer is
+      // complete, so progress is a sampled UI signal rather than an event log.
+      let lastProgressNotificationAt = Number.NEGATIVE_INFINITY;
       const result = await engine.sync(
         journalId,
         syncKey,
         (current, total) => {
-          if (!controller.signal.aborted && isCurrentRun()) {
+          const now = Date.now();
+          const shouldNotify =
+            current === 1 || current === total || now - lastProgressNotificationAt >= 100;
+          if (!controller.signal.aborted && isCurrentRun() && shouldNotify) {
+            lastProgressNotificationAt = now;
             this.setState(journalId, {
               status: 'syncing',
               lastSynced,

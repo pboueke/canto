@@ -92,13 +92,18 @@ const makeJournal = (pages: Page[]): JournalContent => ({
 });
 
 function createMockLocalStore(journal: JournalContent | null): LocalStore {
+  const pages = new Map(journal?.pages.map((page) => [page.id, page]) ?? []);
   return {
     initialize: jest.fn(),
     listJournals: jest.fn().mockResolvedValue(journal ? [journal] : []),
     getJournal: jest.fn().mockResolvedValue(journal),
     saveJournal: jest.fn(),
     deleteJournal: jest.fn(),
-    getPage: jest.fn().mockResolvedValue(null),
+    getPage: jest
+      .fn()
+      .mockImplementation((_journalId: string, pageId: string) =>
+        Promise.resolve(pages.get(pageId) ?? null),
+      ),
     savePage: jest.fn(),
     deletePage: jest.fn(),
     saveAttachment: jest.fn(),
@@ -140,6 +145,32 @@ describe('SyncManager', () => {
   });
 
   describe('state management', () => {
+    it('coalesces no-change sync progress notifications for large journals', async () => {
+      const pages = Array.from({ length: 351 }, (_, index) => makePage(`p${index}`, index));
+      const local = createMockLocalStore(makeJournal(pages));
+      const remote = createMockRemoteStore();
+      remote.downloadSyncIndex = jest
+        .fn()
+        .mockResolvedValue(
+          Object.fromEntries(pages.map((page) => [page.id, { modified: page.modified }])),
+        );
+      const manager = new SyncManager(local, remote);
+      const listener = jest.fn();
+      manager.subscribe(listener);
+      const now = jest.spyOn(Date, 'now').mockReturnValue(0);
+
+      try {
+        await manager.syncJournal('j1', 'token');
+      } finally {
+        now.mockRestore();
+      }
+
+      // Native scrolling runs separately, but touch handlers share the JS
+      // thread with these notifications. One per catalog page makes a fast
+      // no-op sync leave hundreds of renders queued behind it.
+      expect(listener.mock.calls.length).toBeLessThanOrEqual(4);
+    });
+
     it('returns idle state by default', () => {
       const local = createMockLocalStore(null);
       const manager = new SyncManager(local, createMockRemoteStore());

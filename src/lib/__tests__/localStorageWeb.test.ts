@@ -274,6 +274,62 @@ describe('createLocalStore (web/IndexedDB)', () => {
     });
   });
 
+  it('builds a sync snapshot from metadata and catalog without page reads', async () => {
+    const store = createLocalStore(createMockEncryption());
+    await store.initialize();
+    await store.saveJournal(
+      makeJournalContent('j1', [
+        { ...makePage('p1'), modified: 42 },
+        { ...makePage('p2'), modified: 43, deleted: true },
+      ]),
+    );
+    resetStorageIoCounters();
+
+    const snapshot = await store.getJournalSyncSnapshot?.('j1');
+
+    expect(snapshot?.metadata).toMatchObject({ id: 'j1', title: 'Journal j1' });
+    expect(snapshot?.pages).toEqual(
+      new Map([
+        ['p1', { modified: 42 }],
+        ['p2', { modified: 43, deleted: true }],
+      ]),
+    );
+    expect(getStorageIoCounters().pageReads).toBe(0);
+    expect(getStorageIoCounters()).toMatchObject({ metadataReads: 1, catalogReads: 1 });
+  });
+
+  it('rebuilds a corrupt catalog before returning a sync snapshot', async () => {
+    const store = createLocalStore(createMockEncryption());
+    await store.initialize();
+    await store.saveJournal(makeJournalContent('j1', [makePage('p1'), makePage('p2')]));
+    await putRawStorageRecord('canto/j1/page-catalog.json', 'enc:not-json');
+    resetStorageIoCounters();
+
+    const snapshot = await store.getJournalSyncSnapshot!('j1');
+
+    expect(snapshot!.pages).toEqual(
+      new Map([
+        ['p1', expect.objectContaining({ modified: expect.any(Number) })],
+        ['p2', expect.objectContaining({ modified: expect.any(Number) })],
+      ]),
+    );
+    await expect(getRawStorageRecord('canto/j1/page-catalog.json')).resolves.toMatch(/^enc:/);
+    expect(getStorageIoCounters()).toMatchObject({ pageReads: 2, catalogRebuilds: 1 });
+  });
+
+  it('reads a password-protected sync snapshot only with its derived key', async () => {
+    const store = createLocalStore(createMockEncryption());
+    await store.initialize();
+    const key = new Uint8Array(32).fill(7);
+    const wrongKey = new Uint8Array(32).fill(8);
+    await store.saveJournal(makeJournalContent('j1', [makePage('p1')]), key);
+
+    await expect(store.getJournalSyncSnapshot!('j1', key)).resolves.toMatchObject({
+      metadata: { id: 'j1' },
+    });
+    await expect(store.getJournalSyncSnapshot!('j1', wrongKey)).rejects.toThrow();
+  });
+
   it('getJournal returns null for non-existent journal', async () => {
     const store = createLocalStore(createMockEncryption());
     await store.initialize();

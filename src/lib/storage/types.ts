@@ -18,6 +18,15 @@ export interface JournalOverviewReadOptions {
 }
 
 /**
+ * Compact, immutable local view used to plan sync work. Page records remain
+ * authoritative and are loaded individually through getPage when needed.
+ */
+export interface JournalSyncSnapshot {
+  metadata: Omit<JournalContent, 'pages'>;
+  pages: ReadonlyMap<string, { modified: number; deleted?: boolean }>;
+}
+
+/**
  * Keyless evidence recorded with an in-progress import. It lets startup verify
  * a completed, non-password-protected content root before replaying the final
  * journal-index publication.
@@ -51,6 +60,12 @@ export interface LocalStore {
     derivedKey?: Uint8Array,
     options?: JournalOverviewReadOptions,
   ): Promise<JournalOverview | null>;
+
+  /**
+   * Read encrypted metadata plus the validated page catalog without opening
+   * local page JSON records. Missing or invalid catalogs rebuild internally.
+   */
+  getJournalSyncSnapshot?(id: string, derivedKey?: Uint8Array): Promise<JournalSyncSnapshot | null>;
 
   /** Save or update journal metadata and settings. derivedKey for password-protected journals. */
   saveJournal(journal: JournalContent, derivedKey?: Uint8Array): Promise<void>;

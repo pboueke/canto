@@ -13,6 +13,7 @@ import {
 import type {
   JournalImportRecoveryInfo,
   JournalOverviewReadOptions,
+  JournalSyncSnapshot,
   LocalStore,
   ReencryptionResult,
 } from './types';
@@ -643,6 +644,23 @@ export function createLocalStore(encryption: EncryptionService): LocalStore {
       if (options?.signal?.aborted) throw new Error('Journal catalog rebuild cancelled');
       await writePageCatalog(id, pages, derivedKey);
       return catalogToOverview(metadata, createPageCatalog(id, pages));
+    },
+
+    async getJournalSyncSnapshot(
+      id: string,
+      derivedKey?: Uint8Array,
+    ): Promise<JournalSyncSnapshot | null> {
+      const overview = await this.getJournalOverview!(id, derivedKey);
+      if (!overview) return null;
+      return {
+        metadata: overview.metadata,
+        pages: new Map(
+          overview.pages.map((page) => [
+            page.id,
+            { modified: page.modified ?? 0, ...(page.deleted ? { deleted: true } : {}) },
+          ]),
+        ),
+      };
     },
 
     async saveJournal(journal: JournalContent, derivedKey?: Uint8Array): Promise<void> {
