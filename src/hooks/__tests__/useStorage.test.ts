@@ -57,6 +57,7 @@ import {
   getEncryptionService,
   getLocalStore,
   tryLoadJournal,
+  tryLoadJournalOverview,
   finalizeCompletedDeviceKeyRotationIfReady,
   invalidateJournalOverview,
 } from '../useStorage';
@@ -157,6 +158,42 @@ describe('tryLoadJournal', () => {
     const key = new Uint8Array([1, 2, 3]);
     await tryLoadJournal('j1', key);
     expect(mockStore.getJournal).toHaveBeenCalledWith('j1', key);
+  });
+});
+
+describe('tryLoadJournalOverview', () => {
+  it('validates access through the catalog without loading every page', async () => {
+    const key = new Uint8Array([1, 2, 3]);
+    const overview = {
+      metadata: {
+        ...makeJournal(),
+        settings: { ...DEFAULT_JOURNAL_SETTINGS },
+        version: 1,
+      },
+      pages: [makePage('p1'), makePage('p2')],
+      tags: [],
+      latestModified: 0,
+    };
+    mockStore.getJournalOverview.mockResolvedValueOnce(overview);
+
+    await expect(tryLoadJournalOverview('j1', key)).resolves.toBe(overview);
+
+    expect(mockStore.getJournalOverview).toHaveBeenCalledWith(
+      'j1',
+      key,
+      expect.objectContaining({ onRebuildProgress: undefined }),
+    );
+    expect(mockStore.getJournal).not.toHaveBeenCalled();
+    expect(mockStore.getPage).not.toHaveBeenCalled();
+  });
+
+  it('preserves catalog decryption failures for the unlock UI to handle', async () => {
+    mockStore.getJournalOverview.mockRejectedValueOnce(new Error('Wrong password'));
+
+    await expect(tryLoadJournalOverview('j1', new Uint8Array([1]))).rejects.toThrow(
+      'Wrong password',
+    );
+    expect(mockStore.getJournal).not.toHaveBeenCalled();
   });
 });
 

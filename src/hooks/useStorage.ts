@@ -122,6 +122,17 @@ export async function tryLoadJournal(
   return store.getJournal(id, derivedKey);
 }
 
+/**
+ * Verify access and obtain the list-ready journal projection without decrypting
+ * every page. This is the bounded path for opening password-protected journals.
+ */
+export async function tryLoadJournalOverview(
+  id: string,
+  derivedKey?: Uint8Array,
+): Promise<JournalOverview | null> {
+  return loadJournalOverview(id, derivedKey);
+}
+
 export function useJournals() {
   const [journals, setJournals] = useState<Journal[]>([]);
   const [loading, setLoading] = useState(true);
