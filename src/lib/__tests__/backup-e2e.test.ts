@@ -658,9 +658,8 @@ describe('data equivalence validation', () => {
       date: '2026-02-16T09:00:00Z',
     });
     expect(p.thumbnail).toBe('data:image/jpeg;base64,abc123');
-    // modified is updated by savePage, so just verify it's a valid timestamp
-    expect(typeof p.modified).toBe('number');
-    expect(p.modified).toBeGreaterThan(0);
+    // Import delegates page persistence to saveJournal, preserving backup timestamps.
+    expect(p.modified).toBe(page.modified);
     expect(p.deleted).toBe(false);
   });
 

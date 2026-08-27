@@ -1,14 +1,21 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { SyncEngine } from './engine';
+import { Platform } from 'react-native';
+import {
+  SyncEngine,
+  isSyncCancelledError,
+  isSyncPasswordChangedElsewhereError,
+  SyncCancelledError,
+} from './engine';
 import type { LocalStore } from '@/lib/storage/types';
-import type { RemoteStore, SyncResult } from './types';
+import type { RemoteStore, SyncErrorCode, SyncResult, SyncRunOutcome } from './types';
 import { deriveKey, DEFAULT_KDF_ITERATIONS } from '@/lib/encryption/password';
 import { base64ToUint8 } from '@/lib/encryption/utils';
+import { RendererWorkLedger } from './renderer-work-ledger';
 
 const LAST_SYNC_PREFIX = 'canto:lastSync:';
 const LAST_REMOTE_SALT_PREFIX = 'canto:lastRemoteSalt:';
 
-export type SyncStatus = 'idle' | 'syncing' | 'error';
+export type SyncStatus = 'idle' | 'syncing' | 'checkpointed' | 'error';
 
 export interface SyncProgress {
   current: number;
@@ -19,20 +26,27 @@ export interface SyncState {
   status: SyncStatus;
   lastSynced: number | null; // unix ms
   error?: string;
+  errorCode?: SyncErrorCode;
   errorStack?: string;
   progress?: SyncProgress;
+  requiresFreshRenderer?: boolean;
 }
 
 export class SyncManager {
   private states = new Map<string, SyncState>();
   private locks = new Set<string>();
   private debounceTimers = new Map<string, ReturnType<typeof setTimeout>>();
+  private abortControllers = new Map<string, AbortController>();
   private listeners = new Set<() => void>();
+  private readonly rendererWorkLedger: RendererWorkLedger | undefined;
 
   constructor(
     private local: LocalStore,
     private store: RemoteStore,
-  ) {}
+    private readonly webCheckpointing = Platform.OS === 'web',
+  ) {
+    this.rendererWorkLedger = this.webCheckpointing ? new RendererWorkLedger() : undefined;
+  }
 
   subscribe(listener: () => void): () => void {
     this.listeners.add(listener);
@@ -44,7 +58,17 @@ export class SyncManager {
   }
 
   getState(journalId: string): SyncState {
-    return this.states.get(journalId) ?? { status: 'idle', lastSynced: null };
+    return (
+      this.states.get(journalId) ??
+      (this.hasWebCheckpoint()
+        ? { status: 'checkpointed', lastSynced: null, requiresFreshRenderer: true }
+        : { status: 'idle', lastSynced: null })
+    );
+  }
+
+  /** sessionStorage survives reloads but is discarded with a fully closed tab. */
+  private hasWebCheckpoint(): boolean {
+    return this.rendererWorkLedger?.requiresFreshRenderer === true;
   }
 
   private setState(journalId: string, state: SyncState) {
@@ -52,12 +76,49 @@ export class SyncManager {
     this.notify();
   }
 
-  async connectWithToken(accessToken: string): Promise<void> {
+  async connectWithToken(
+    accessToken: string,
+    refreshAccessToken?: () => Promise<string | null>,
+  ): Promise<void> {
+    // `runJournalSync` installs its refresher before reconnecting through this
+    // method. An ordinary reconnect must not clear that in-flight protection.
+    if (refreshAccessToken) this.store.setAccessTokenRefresher?.(refreshAccessToken);
     await this.store.connect({ accessToken });
   }
 
   async disconnect(): Promise<void> {
     await this.store.disconnect();
+  }
+
+  /** Cancel a running or pending sync without altering its remote backup. */
+  cancelSync(journalId: string): void {
+    this.abortControllers.get(journalId)?.abort();
+
+    const timer = this.debounceTimers.get(journalId);
+    if (timer) {
+      clearTimeout(timer);
+      this.debounceTimers.delete(journalId);
+    }
+
+    const state = this.getState(journalId);
+    if (state.status === 'syncing') {
+      this.setState(journalId, { status: 'idle', lastSynced: state.lastSynced });
+    }
+  }
+
+  /** Cancel every active sync before the owning app context is torn down. */
+  dispose(): void {
+    for (const journalId of new Set([
+      ...this.abortControllers.keys(),
+      ...this.debounceTimers.keys(),
+    ])) {
+      this.cancelSync(journalId);
+    }
+  }
+
+  /** Abort active work before JournalKeyProvider zeroes its cached keys. */
+  cancelAllSyncs(): void {
+    this.dispose();
   }
 
   /**
@@ -75,16 +136,29 @@ export class SyncManager {
    * salt/timestamp data.
    */
   async forgetJournal(journalId: string): Promise<void> {
+    this.cancelSync(journalId);
     await AsyncStorage.removeItem(LAST_SYNC_PREFIX + journalId);
     await AsyncStorage.removeItem(LAST_REMOTE_SALT_PREFIX + journalId);
     this.states.delete(journalId);
-    this.locks.delete(journalId);
-    const timer = this.debounceTimers.get(journalId);
-    if (timer) {
-      clearTimeout(timer);
-      this.debounceTimers.delete(journalId);
-    }
     this.notify();
+  }
+
+  /** Restore the prior value if cancellation wins while AsyncStorage is writing. */
+  private async persistForRun(
+    key: string,
+    value: string,
+    controller: AbortController,
+    isCurrentRun: () => boolean,
+  ): Promise<void> {
+    if (controller.signal.aborted || !isCurrentRun()) throw new SyncCancelledError();
+    const previous = await AsyncStorage.getItem(key);
+    if (controller.signal.aborted || !isCurrentRun()) throw new SyncCancelledError();
+    await AsyncStorage.setItem(key, value);
+    if (controller.signal.aborted || !isCurrentRun()) {
+      if (previous == null) await AsyncStorage.removeItem(key);
+      else await AsyncStorage.setItem(key, previous);
+      throw new SyncCancelledError();
+    }
   }
 
   async syncJournal(
@@ -94,20 +168,46 @@ export class SyncManager {
   ): Promise<SyncResult | null> {
     if (this.locks.has(journalId)) return null;
     this.locks.add(journalId);
+    const controller = new AbortController();
+    this.abortControllers.set(journalId, controller);
+    const throwIfCancelled = () => {
+      if (controller.signal.aborted) throw new SyncCancelledError();
+    };
+    const isCurrentRun = () => this.abortControllers.get(journalId) === controller;
 
     // Load last sync time
     const lastSyncStr = await AsyncStorage.getItem(LAST_SYNC_PREFIX + journalId);
+    if (controller.signal.aborted) {
+      this.abortControllers.delete(journalId);
+      this.locks.delete(journalId);
+      return null;
+    }
     const lastSynced = lastSyncStr ? parseInt(lastSyncStr, 10) : null;
+    if (this.hasWebCheckpoint()) {
+      this.setState(journalId, {
+        status: 'checkpointed',
+        lastSynced,
+        requiresFreshRenderer: true,
+      });
+      this.abortControllers.delete(journalId);
+      this.locks.delete(journalId);
+      return null;
+    }
 
     // Load last-known remote salt — used by engine to disambiguate "I changed
     // password locally" (push) from "another device changed password" (abort).
     const previousRemoteSalt =
       (await AsyncStorage.getItem(LAST_REMOTE_SALT_PREFIX + journalId)) ?? undefined;
+    if (controller.signal.aborted) {
+      this.abortControllers.delete(journalId);
+      this.locks.delete(journalId);
+      return null;
+    }
 
     this.setState(journalId, { status: 'syncing', lastSynced });
-
     try {
       await this.connectWithToken(accessToken);
+      throwIfCancelled();
       const engine = new SyncEngine(this.local, this.store);
 
       // Ensure we always have a sync key. For password-protected journals the
@@ -117,6 +217,7 @@ export class SyncManager {
       let syncKey = derivedKey;
       if (!syncKey) {
         const journals = await this.local.listJournals();
+        throwIfCancelled();
         const journal = journals.find((j) => j.id === journalId);
         if (journal?.salt) {
           const saltBytes = base64ToUint8(journal.salt);
@@ -126,52 +227,143 @@ export class SyncManager {
         }
       }
 
+      // Catalog-based no-op sync can compare hundreds of entries without an
+      // await between them. Emitting a React state update for each comparison
+      // queues touch work on Android's JS thread even after the transfer is
+      // complete, so progress is a sampled UI signal rather than an event log.
+      let lastProgressNotificationAt = Number.NEGATIVE_INFINITY;
       const result = await engine.sync(
         journalId,
         syncKey,
         (current, total) => {
-          this.setState(journalId, {
-            status: 'syncing',
-            lastSynced,
-            progress: { current, total },
-          });
+          const now = Date.now();
+          const shouldNotify =
+            current === 1 || current === total || now - lastProgressNotificationAt >= 100;
+          if (!controller.signal.aborted && isCurrentRun() && shouldNotify) {
+            lastProgressNotificationAt = now;
+            this.setState(journalId, {
+              status: 'syncing',
+              lastSynced,
+              progress: { current, total },
+            });
+          }
         },
         previousRemoteSalt,
+        controller.signal,
+        this.webCheckpointing
+          ? {
+              rendererWorkLedger: this.rendererWorkLedger,
+            }
+          : undefined,
       );
+      throwIfCancelled();
+      if (result.checkpointed) {
+        if (isCurrentRun()) {
+          this.setState(journalId, {
+            status: 'checkpointed',
+            lastSynced,
+            requiresFreshRenderer: true,
+          });
+        }
+        return { ...result, checkpointed: true, requiresFreshRenderer: true };
+      }
 
       // After a successful sync, record the remote salt for future sync comparisons.
       // We re-fetch the registry to get the current state (which may have just been
       // updated by our sync if a key rotation happened).
       try {
         const remoteJournals = await this.store.listRemoteJournals();
+        throwIfCancelled();
         const updatedRemote = remoteJournals.find((j) => j.id === journalId);
         if (updatedRemote?.salt) {
-          await AsyncStorage.setItem(LAST_REMOTE_SALT_PREFIX + journalId, updatedRemote.salt);
+          await this.persistForRun(
+            LAST_REMOTE_SALT_PREFIX + journalId,
+            updatedRemote.salt,
+            controller,
+            isCurrentRun,
+          );
         }
       } catch (err) {
+        if (isSyncCancelledError(err)) throw err;
         // Non-fatal: missing salt record means next sync defaults to "no history" mode.
         // Log so it's visible in Sentry/console when debugging unexpected sync behavior.
         console.warn(`[Canto] Failed to record remote salt for ${journalId}:`, err);
       }
 
       const now = Date.now();
-      await AsyncStorage.setItem(LAST_SYNC_PREFIX + journalId, String(now));
-      this.setState(journalId, { status: 'idle', lastSynced: now });
+      await this.persistForRun(LAST_SYNC_PREFIX + journalId, String(now), controller, isCurrentRun);
+      if (isCurrentRun()) {
+        this.setState(journalId, {
+          status: 'idle',
+          lastSynced: now,
+          ...(this.hasWebCheckpoint() ? { requiresFreshRenderer: true } : {}),
+        });
+      }
 
-      return result;
+      return this.hasWebCheckpoint() ? { ...result, requiresFreshRenderer: true } : result;
     } catch (err) {
+      if (isSyncCancelledError(err) || controller.signal.aborted || !isCurrentRun()) {
+        if (isCurrentRun()) {
+          this.setState(journalId, {
+            status: 'idle',
+            lastSynced,
+            ...(this.hasWebCheckpoint() ? { requiresFreshRenderer: true } : {}),
+          });
+        }
+        return null;
+      }
+
       const message = err instanceof Error ? err.message : String(err);
       const stack = err instanceof Error ? err.stack : undefined;
+      const errorCode: SyncErrorCode | undefined = isSyncPasswordChangedElsewhereError(err)
+        ? 'password-changed-elsewhere'
+        : undefined;
       console.error(`[Canto] Sync failed for ${journalId}:`, err);
       this.setState(journalId, {
         status: 'error',
         lastSynced: lastSynced ?? null,
         error: message,
+        errorCode,
         errorStack: stack,
+        requiresFreshRenderer: this.hasWebCheckpoint(),
       });
       return null;
     } finally {
+      if (isCurrentRun()) this.abortControllers.delete(journalId);
       this.locks.delete(journalId);
+    }
+  }
+
+  /**
+   * Classify every user-requested run without exposing the nullable legacy
+   * result to UI callers. The raw `syncJournal` API remains available to
+   * background scheduling and existing integrations.
+   */
+  async runJournalSync(
+    journalId: string,
+    accessToken: string,
+    derivedKey?: Uint8Array,
+    refreshAccessToken?: () => Promise<string | null>,
+  ): Promise<SyncRunOutcome> {
+    if (this.locks.has(journalId)) return { kind: 'already-running' };
+
+    this.store.setAccessTokenRefresher?.(refreshAccessToken);
+    try {
+      const result = await this.syncJournal(journalId, accessToken, derivedKey);
+      if (result) {
+        return result.checkpointed
+          ? { kind: 'checkpointed', result }
+          : { kind: 'completed', result };
+      }
+
+      const state = this.getState(journalId);
+      if (state.status === 'checkpointed' || state.requiresFreshRenderer) {
+        return { kind: 'checkpointed' };
+      }
+      if (state.status === 'error') return { kind: 'failed', errorCode: state.errorCode };
+      return { kind: 'cancelled' };
+    } finally {
+      this.store.setAccessTokenRefresher?.(undefined);
     }
   }
 
@@ -181,6 +373,15 @@ export class SyncManager {
     derivedKey?: Uint8Array,
     delayMs = 5000,
   ) {
+    if (this.hasWebCheckpoint()) {
+      const state = this.getState(journalId);
+      this.setState(journalId, {
+        status: 'checkpointed',
+        lastSynced: state.lastSynced,
+        requiresFreshRenderer: true,
+      });
+      return;
+    }
     const existing = this.debounceTimers.get(journalId);
     if (existing) clearTimeout(existing);
 

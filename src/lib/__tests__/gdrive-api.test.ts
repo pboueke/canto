@@ -2,9 +2,12 @@ import {
   listFiles,
   getFile,
   getFileContent,
+  getFileContentWithEtag,
   createFile,
   updateFile,
   deleteFile,
+  registerAccessTokenRefresher,
+  unregisterAccessTokenRefresher,
 } from '../sync/gdrive/api';
 
 const TOKEN = 'test-access-token';
@@ -14,6 +17,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  unregisterAccessTokenRefresher(TOKEN);
   jest.restoreAllMocks();
 });
 
@@ -70,6 +74,55 @@ describe('Google Drive API helper', () => {
         expect.anything(),
       );
     });
+
+    it('paginates so prewarmed chunk listings never treat later files as absent', async () => {
+      const first = [
+        { id: 'f1', name: 'chunk-v1-a-0', mimeType: 'application/octet-stream', modifiedTime: '' },
+      ];
+      const second = [
+        { id: 'f2', name: 'chunk-v1-a-1', mimeType: 'application/octet-stream', modifiedTime: '' },
+      ];
+      mockFetchOk({ files: first, nextPageToken: 'page-2' });
+      mockFetchOk({ files: second });
+
+      await expect(listFiles(TOKEN, "name contains 'chunk-v1-'")).resolves.toEqual([
+        ...first,
+        ...second,
+      ]);
+
+      expect(global.fetch).toHaveBeenCalledTimes(2);
+      expect((global.fetch as jest.Mock).mock.calls[1][0]).toContain('pageToken=page-2');
+    });
+
+    it('refuses malformed and non-Google request URLs before issuing a fetch', async () => {
+      const originalURL = globalThis.URL;
+      try {
+        Object.defineProperty(globalThis, 'URL', {
+          configurable: true,
+          value: class {
+            origin = 'https://example.invalid';
+          },
+        });
+        await expect(listFiles(TOKEN, "name = 'test'")).rejects.toThrow(
+          'Refusing a non-Google Drive request',
+        );
+
+        Object.defineProperty(globalThis, 'URL', {
+          configurable: true,
+          value: class {
+            constructor() {
+              throw new Error('malformed');
+            }
+          },
+        });
+        await expect(listFiles(TOKEN, "name = 'test'")).rejects.toThrow(
+          'Refusing an invalid Google Drive request',
+        );
+        expect(global.fetch).not.toHaveBeenCalled();
+      } finally {
+        Object.defineProperty(globalThis, 'URL', { configurable: true, value: originalURL });
+      }
+    });
   });
 
   describe('getFile', () => {
@@ -105,6 +158,90 @@ describe('Google Drive API helper', () => {
       mockFetchError(401, 'Unauthorized');
       await expect(getFileContent(TOKEN, 'f1')).rejects.toThrow('Drive API error (401)');
     });
+
+    it('refreshes a rejected token once and replays the failed request', async () => {
+      const refresh = jest.fn().mockResolvedValue('fresh-access-token');
+      registerAccessTokenRefresher(TOKEN, refresh);
+      (global.fetch as jest.Mock)
+        .mockResolvedValueOnce({
+          ok: false,
+          status: 401,
+          text: () => Promise.resolve('Unauthorized'),
+        })
+        .mockResolvedValueOnce({ ok: true, status: 200, text: () => Promise.resolve('content') });
+
+      await expect(getFileContent(TOKEN, 'f1')).resolves.toBe('content');
+      expect(refresh).toHaveBeenCalledTimes(1);
+      expect(global.fetch).toHaveBeenCalledTimes(2);
+      expect(
+        new Headers((global.fetch as jest.Mock).mock.calls[1][1].headers).get('Authorization'),
+      ).toBe('Bearer fresh-access-token');
+    });
+
+    it('shares one refresh across concurrent 401 responses', async () => {
+      let resolveRefresh!: (token: string) => void;
+      const refresh = jest.fn(
+        () =>
+          new Promise<string>((resolve) => {
+            resolveRefresh = resolve;
+          }),
+      );
+      registerAccessTokenRefresher(TOKEN, refresh);
+      (global.fetch as jest.Mock)
+        .mockResolvedValueOnce({
+          ok: false,
+          status: 401,
+          text: () => Promise.resolve('Unauthorized'),
+        })
+        .mockResolvedValueOnce({
+          ok: false,
+          status: 401,
+          text: () => Promise.resolve('Unauthorized'),
+        })
+        .mockResolvedValueOnce({ ok: true, status: 200, text: () => Promise.resolve('first') })
+        .mockResolvedValueOnce({ ok: true, status: 200, text: () => Promise.resolve('second') });
+
+      const first = getFileContent(TOKEN, 'first');
+      const second = getFileContent(TOKEN, 'second');
+      await Promise.resolve();
+      await Promise.resolve();
+      expect(refresh).toHaveBeenCalledTimes(1);
+
+      resolveRefresh('fresh-access-token');
+      await expect(Promise.all([first, second])).resolves.toEqual(['first', 'second']);
+      expect(global.fetch).toHaveBeenCalledTimes(4);
+      for (const [, init] of (global.fetch as jest.Mock).mock.calls.slice(2)) {
+        expect(new Headers(init.headers).get('Authorization')).toBe('Bearer fresh-access-token');
+      }
+    });
+
+    it('fails instead of treating an unchanged rejected token as refreshed', async () => {
+      registerAccessTokenRefresher(TOKEN, jest.fn().mockResolvedValue(TOKEN));
+      (global.fetch as jest.Mock).mockResolvedValueOnce({
+        ok: false,
+        status: 401,
+        text: () => Promise.resolve('Unauthorized'),
+      });
+
+      await expect(getFileContent(TOKEN, 'f1')).rejects.toThrow(
+        'Drive authentication could not be refreshed',
+      );
+      expect(global.fetch).toHaveBeenCalledTimes(1);
+    });
+
+    it('returns the ETag required for conditional updates', async () => {
+      (global.fetch as jest.Mock).mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        text: () => Promise.resolve('{"p1":{"modified":1000}}'),
+        headers: { get: (name: string) => (name === 'etag' ? '"index-v1"' : null) },
+      });
+
+      await expect(getFileContentWithEtag(TOKEN, 'index-id')).resolves.toEqual({
+        content: '{"p1":{"modified":1000}}',
+        etag: '"index-v1"',
+      });
+    });
   });
 
   describe('createFile', () => {
@@ -128,6 +265,42 @@ describe('Google Drive API helper', () => {
         expect.stringContaining('uploadType=multipart'),
         expect.objectContaining({ method: 'POST' }),
       );
+    });
+
+    it('uses Blob multipart parts on web rather than a joined request string', async () => {
+      const originalDocument = globalThis.document;
+      Object.defineProperty(globalThis, 'document', { configurable: true, value: {} });
+      try {
+        mockFetchOk({
+          id: 'f1',
+          name: 'test.json',
+          mimeType: 'application/json',
+          modifiedTime: '2026-01-01',
+        });
+
+        await createFile(TOKEN, { name: 'test.json' }, 'attachment-data');
+
+        const call = (global.fetch as jest.Mock).mock.calls[0][1];
+        const body = call.body;
+        const boundary = call.headers['Content-Type'].match(
+          /boundary=(---canto-[a-f0-9]+---)/,
+        )?.[1];
+        expect(body).toBeInstanceOf(Blob);
+        await expect((body as Blob).text()).resolves.toBe(
+          `--${boundary}\r\n` +
+            'Content-Type: application/json; charset=UTF-8\r\n\r\n' +
+            '{"name":"test.json"}' +
+            `\r\n--${boundary}\r\n` +
+            'Content-Type: application/json\r\n\r\n' +
+            'attachment-data' +
+            `\r\n--${boundary}--`,
+        );
+      } finally {
+        Object.defineProperty(globalThis, 'document', {
+          configurable: true,
+          value: originalDocument,
+        });
+      }
     });
 
     it('uses a unique boundary per request', async () => {
@@ -180,6 +353,19 @@ describe('Google Drive API helper', () => {
         expect.objectContaining({ method: 'PATCH' }),
       );
     });
+
+    it('sends an If-Match ETag for a conditional update', async () => {
+      mockFetchOk({ id: 'f1', name: 'index.json', mimeType: 'application/json', modifiedTime: '' });
+
+      await updateFile(TOKEN, 'f1', { name: 'index.json' }, '{}', undefined, '"index-v1"');
+
+      expect(global.fetch).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.objectContaining({
+          headers: expect.objectContaining({ 'If-Match': '"index-v1"' }),
+        }),
+      );
+    });
   });
 
   describe('deleteFile', () => {
@@ -203,11 +389,58 @@ describe('Google Drive API helper', () => {
 
     it('throws on other errors', async () => {
       mockFetchError(500, 'Server error');
-      await expect(deleteFile(TOKEN, 'f1')).rejects.toThrow('Drive API error (500)');
+      await expect(deleteFile(TOKEN, 'f1')).rejects.toThrow(
+        'Drive API error (500): Google Drive returned no usable error details',
+      );
+    });
+
+    it('identifies a body-less deletion failure', async () => {
+      mockFetchError(500);
+      await expect(deleteFile(TOKEN, 'f1')).rejects.toThrow(
+        'Drive API error (500): Google Drive returned no usable error details',
+      );
     });
   });
 
   describe('fetchWithRetry network error retry', () => {
+    it('retries a transient Drive response and honours cancellation while waiting', async () => {
+      const originalSetTimeout = globalThis.setTimeout;
+      globalThis.setTimeout = ((fn: () => void) => originalSetTimeout(fn, 0)) as typeof setTimeout;
+      try {
+        (global.fetch as jest.Mock)
+          .mockResolvedValueOnce({
+            ok: false,
+            status: 429,
+            headers: { get: () => '0' },
+            text: () => Promise.resolve('busy'),
+          })
+          .mockResolvedValueOnce({
+            ok: true,
+            status: 200,
+            text: () => Promise.resolve(JSON.stringify({ files: [] })),
+          });
+
+        await expect(listFiles(TOKEN, "name = 'test'")).resolves.toEqual([]);
+        expect(global.fetch).toHaveBeenCalledTimes(2);
+
+        const controller = new AbortController();
+        globalThis.setTimeout = (() => 1) as unknown as typeof setTimeout;
+        (global.fetch as jest.Mock).mockResolvedValueOnce({
+          ok: false,
+          status: 429,
+          headers: { get: () => '60' },
+          text: () => Promise.resolve('busy'),
+        });
+        const pending = listFiles(TOKEN, "name = 'test'", 'drive', controller.signal);
+        await Promise.resolve();
+        await Promise.resolve();
+        controller.abort();
+        await expect(pending).rejects.toMatchObject({ name: 'AbortError' });
+      } finally {
+        globalThis.setTimeout = originalSetTimeout;
+      }
+    });
+
     it('retries on network error (fetch throws) and succeeds', async () => {
       // Speed up the 1s retry delay
       const origSetTimeout = globalThis.setTimeout;
@@ -235,7 +468,7 @@ describe('Google Drive API helper', () => {
       mockFetchError(403, 'insufficient permissions for this file');
       await expect(listFiles(TOKEN, "name = 'test'")).rejects.toThrow('Drive API error (403)');
       // Verify the sensitive body text is NOT in the error
-      await mockFetchError(403, 'secret-token-leaked');
+      mockFetchError(403, 'secret-token-leaked');
       try {
         await listFiles(TOKEN, "name = 'test'");
       } catch (err) {

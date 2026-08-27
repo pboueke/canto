@@ -12,6 +12,33 @@ const TAG_LENGTH = 16;
 const textEncoder = new TextEncoder();
 const textDecoder = new TextDecoder();
 
+// Sync and device encryption reuse the same Uint8Array key for hundreds of
+// bounded chunks. WebCrypto key import creates a native CryptoKey, so importing
+// it for every chunk can grow renderer-owned memory while the JS heap remains
+// flat. Weak keys preserve key lifecycle: clearing or releasing the Uint8Array
+// also permits its imported CryptoKey to be collected.
+const importedAesKeys = new WeakMap<Uint8Array, Promise<AESEncryptionKey>>();
+
+/** Evict a native imported key before its mutable source bytes are cleared. */
+export function releaseImportedAesKey(key: Uint8Array): void {
+  importedAesKeys.delete(key);
+}
+
+/** Release the native key identity and then zero the source key material. */
+export function releaseAndZeroAesKey(key: Uint8Array): void {
+  releaseImportedAesKey(key);
+  key.fill(0);
+}
+
+function importAesKey(key: Uint8Array): Promise<AESEncryptionKey> {
+  let imported = importedAesKeys.get(key);
+  if (!imported) {
+    imported = AESEncryptionKey.import(key);
+    importedAesKeys.set(key, imported);
+  }
+  return imported;
+}
+
 /** Yield the JS thread so touch events and animations can be processed. */
 const yieldThread = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 0));
 
@@ -22,8 +49,11 @@ const yieldThread = (): Promise<void> => new Promise((resolve) => setTimeout(res
  */
 export async function aesGcmEncrypt(plaintext: string, key: Uint8Array): Promise<string> {
   if (key.length !== 32) throw new Error(`Invalid AES key: expected 32 bytes, got ${key.length}`);
-  const aesKey = await AESEncryptionKey.import(key);
+  const aesKey = await importAesKey(key);
   const sealed = await aesEncryptAsync(textEncoder.encode(plaintext), aesKey);
+  // Expo Crypto's Web `combined('base64')` encoder concatenates one character
+  // per byte, creating excessive allocator high-water for each sync chunk.
+  // Always request bytes and use Canto's bounded-part encoder instead.
   const combined = await sealed.combined();
   await yieldThread();
   return uint8ToBase64(combined);
@@ -35,15 +65,16 @@ export async function aesGcmEncrypt(plaintext: string, key: Uint8Array): Promise
  */
 export async function aesGcmDecrypt(ciphertext: string, key: Uint8Array): Promise<string> {
   if (key.length !== 32) throw new Error(`Invalid AES key: expected 32 bytes, got ${key.length}`);
-  await yieldThread();
-  const data = base64ToUint8(ciphertext);
-
-  if (data.length < NONCE_LENGTH + TAG_LENGTH) {
+  if (ciphertext.length < Math.ceil((NONCE_LENGTH + TAG_LENGTH) / 3) * 4) {
     throw new Error('Invalid ciphertext: too short');
   }
 
-  const sealed = AESSealedData.fromCombined(data);
-  const aesKey = await AESEncryptionKey.import(key);
+  await yieldThread();
+  // Canto persists the combined cipher payload as base64 text. Decode it here
+  // so both Expo Crypto implementations receive the same raw byte format;
+  // Android does not reliably deserialize the base64 string overload.
+  const sealed = AESSealedData.fromCombined(base64ToUint8(ciphertext));
+  const aesKey = await importAesKey(key);
   const result = await aesDecryptAsync(sealed, aesKey);
 
   await yieldThread();
@@ -58,7 +89,7 @@ export async function aesGcmDecrypt(ciphertext: string, key: Uint8Array): Promis
  */
 export async function aesGcmEncryptBytes(plaintext: string, key: Uint8Array): Promise<Uint8Array> {
   if (key.length !== 32) throw new Error(`Invalid AES key: expected 32 bytes, got ${key.length}`);
-  const aesKey = await AESEncryptionKey.import(key);
+  const aesKey = await importAesKey(key);
   const sealed = await aesEncryptAsync(textEncoder.encode(plaintext), aesKey);
   const combined = await sealed.combined();
   await yieldThread();
@@ -77,7 +108,7 @@ export async function aesGcmDecryptBytes(data: Uint8Array, key: Uint8Array): Pro
 
   await yieldThread();
   const sealed = AESSealedData.fromCombined(data);
-  const aesKey = await AESEncryptionKey.import(key);
+  const aesKey = await importAesKey(key);
   const result = await aesDecryptAsync(sealed, aesKey);
 
   await yieldThread();
@@ -107,19 +138,24 @@ const B64_LOOKUP = new Uint8Array(128);
 B64_LOOKUP.fill(255);
 for (let i = 0; i < B64.length; i++) B64_LOOKUP[B64.charCodeAt(i)] = i;
 
+const BASE64_ENCODE_BLOCK_BYTES = 8_190; // divisible by three
+
+/**
+ * Encode bytes without building a binary string one character at a time for
+ * the entire input. The final base64 result is required by legacy wire APIs,
+ * but intermediate binary strings stay bounded to one small block.
+ */
 export function uint8ToBase64(bytes: Uint8Array): string {
-  let result = '';
-  const len = bytes.length;
-  for (let i = 0; i < len; i += 3) {
-    const a = bytes[i];
-    const b = i + 1 < len ? bytes[i + 1] : 0;
-    const c = i + 2 < len ? bytes[i + 2] : 0;
-    result += B64[a >> 2];
-    result += B64[((a & 3) << 4) | (b >> 4)];
-    result += i + 1 < len ? B64[((b & 15) << 2) | (c >> 6)] : '=';
-    result += i + 2 < len ? B64[c & 63] : '=';
+  const parts: string[] = [];
+  for (let offset = 0; offset < bytes.length; offset += BASE64_ENCODE_BLOCK_BYTES) {
+    const block = bytes.subarray(offset, offset + BASE64_ENCODE_BLOCK_BYTES);
+    let binary = '';
+    for (let index = 0; index < block.length; index++) {
+      binary += String.fromCharCode(block[index]);
+    }
+    parts.push(btoa(binary));
   }
-  return result;
+  return parts.join('');
 }
 
 export function base64ToUint8(base64: string): Uint8Array {

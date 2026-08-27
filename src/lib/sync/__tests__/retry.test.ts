@@ -114,6 +114,48 @@ describe('retryWithBackoff', () => {
     expect(fn).toHaveBeenCalledTimes(3);
   });
 
+  it('waits for asynchronous recovery before retrying', async () => {
+    let token = 'expired';
+    const fn = jest.fn(async () => {
+      if (token === 'expired') throw new Error('Drive API error (401)');
+      return 'ok';
+    });
+    const refreshToken = jest.fn(
+      () =>
+        new Promise<void>((resolve) => {
+          setTimeout(() => {
+            token = 'fresh';
+            resolve();
+          }, 500);
+        }),
+    );
+
+    const promise = retryWithBackoff(fn, {
+      attempts: 2,
+      delaysMs: [100],
+      onAttempt: refreshToken,
+    });
+
+    await jest.advanceTimersByTimeAsync(600);
+    await expect(promise).resolves.toBe('ok');
+    expect(refreshToken).toHaveBeenCalledTimes(1);
+    expect(fn).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not retry an error rejected by the retry policy', async () => {
+    const error = new Error('IndexedDB quota exceeded');
+    const fn = jest.fn().mockRejectedValue(error);
+
+    const promise = retryWithBackoff(fn, {
+      attempts: 5,
+      delaysMs: [100, 200, 400, 800],
+      shouldRetry: () => false,
+    });
+
+    await expect(promise).rejects.toBe(error);
+    expect(fn).toHaveBeenCalledTimes(1);
+  });
+
   it('reuses last delay if delaysMs is shorter than attempts-1 — all 4 waits use 50ms', async () => {
     const fn = jest.fn().mockImplementation(async () => {
       throw new Error('fail');

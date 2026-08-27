@@ -14,6 +14,8 @@ import { inspectBackup, importJournal } from '../backup/import.web';
 import type { EncryptionService } from '../encryption';
 import type { JournalContent, Page, Attachment } from 'canto-data';
 import { aesGcmEncryptBytes, aesGcmDecryptBytes } from '../encryption/utils';
+import { LEGACY_ATTACHMENT_MEMORY_LIMIT_BYTES } from '../storage/attachment-content';
+import { canGenerateThumbnailFromAttachment, pageToListPreview } from '../pagePreview';
 
 // ---------------------------------------------------------------------------
 // Mocks
@@ -22,8 +24,16 @@ import { aesGcmEncryptBytes, aesGcmDecryptBytes } from '../encryption/utils';
 // Mock getLocalStore to return our test store
 // Variable must be prefixed with `mock` to be accessible inside jest.mock()
 let mockTestStore: ReturnType<typeof createLocalStore>;
+const PNG_HEADER = new Uint8Array([
+  0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 13, 0x49, 0x48, 0x44, 0x52, 0, 0, 0, 1,
+  0, 0, 0, 1,
+]);
+const mockGenerateThumbnail = jest.fn();
 jest.mock('@/hooks/useStorage', () => ({
   getLocalStore: () => Promise.resolve(mockTestStore),
+}));
+jest.mock('@/lib/thumbnail', () => ({
+  generateThumbnailFromChunks: (...args: unknown[]) => mockGenerateThumbnail(...args),
 }));
 
 // Mock document.createElement + URL for browser download
@@ -98,6 +108,26 @@ function makePage(id: string, text = `Page ${id}`): Page {
   };
 }
 
+async function prepareTransactionalImportZip(secure = false): Promise<void> {
+  const journal = makeJournal('source-journal');
+  journal.secure = secure;
+  const zip = new JSZip();
+  zip.file(
+    'manifest.json',
+    JSON.stringify({
+      version: 1,
+      appVersion: '0.19.1',
+      exportDate: '2026-05-16T00:00:00Z',
+      encrypted: false,
+      journalTitle: journal.title,
+    }),
+  );
+  zip.file('journal.json', JSON.stringify(journal));
+  zip.file('settings.json', JSON.stringify(journal.settings));
+  zip.file('pages/source-page.json', JSON.stringify(makePage('source-page')));
+  fetchResponse = await zip.generateAsync({ type: 'arraybuffer' });
+}
+
 beforeEach(async () => {
   _resetDB();
   indexedDB.deleteDatabase('canto');
@@ -107,6 +137,8 @@ beforeEach(async () => {
   mockCreateElement.mockClear();
   mockCreateObjectURL.mockClear();
   mockRevokeObjectURL.mockClear();
+  mockGenerateThumbnail.mockReset();
+  mockGenerateThumbnail.mockResolvedValue('dGh1bWJuYWls');
   fetchResponse = null;
 });
 
@@ -377,6 +409,15 @@ describe('inspectBackup (web)', () => {
 });
 
 describe('importJournal (web)', () => {
+  it('stops an already-cancelled import before fetching the archive', async () => {
+    const controller = new AbortController();
+    controller.abort();
+
+    await expect(
+      importJournal('blob:never-read', 'Cancelled', undefined, undefined, controller.signal),
+    ).rejects.toThrow('Backup import cancelled');
+  });
+
   it('imports unencrypted journal with pages', async () => {
     const zip = new JSZip();
     zip.file(
@@ -442,6 +483,7 @@ describe('importJournal (web)', () => {
     expect(stored!.title).toBe('My Import');
     expect(stored!.pages.length).toBe(1);
     expect(stored!.pages[0].text).toBe('Hello world');
+    expect(stored!.pages[0].modified).toBe(1000);
     // Page ID should be regenerated
     expect(stored!.pages[0].id).not.toBe('p1');
   });
@@ -505,8 +547,15 @@ describe('importJournal (web)', () => {
         deleted: false,
       }),
     );
-    // Unencrypted attachment stored as raw binary (base64-decoded by JSZip)
-    zip.file('attachments/image-att1.jpg', 'fakeimagebytes');
+    // A minimal parseable PNG header. The platform thumbnail decoder is mocked;
+    // import itself must only preflight this header and stream the source.
+    zip.file(
+      'attachments/image-att1.jpg',
+      new Uint8Array([
+        0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 13, 0x49, 0x48, 0x44, 0x52, 0, 0,
+        0, 1, 0, 0, 0, 1,
+      ]),
+    );
     fetchResponse = await zip.generateAsync({ type: 'arraybuffer' });
 
     const result = await importJournal('blob:mock', 'Imported');
@@ -517,6 +566,153 @@ describe('importJournal (web)', () => {
     // Attachment path should be updated to new storage path
     expect(stored!.pages[0].images[0].path).toBeTruthy();
     expect(stored!.pages[0].images[0].path).not.toBe('image-att1.jpg');
+
+    // A flat-v1 image is re-imported as chunked content and receives a small
+    // persisted preview; automatic list/page rendering never opens the source.
+    const image = stored!.pages[0].images[0];
+    expect(pageToListPreview(stored!.pages[0]).firstImageChunked).toBe(true);
+    expect(canGenerateThumbnailFromAttachment(image)).toBe(false);
+    expect(mockGenerateThumbnail).toHaveBeenCalledTimes(1);
+    expect(stored!.pages[0].thumbnail).toBe('dGh1bWJuYWls');
+  });
+
+  it('assigns an import thumbnail only to the first visible image, regardless of ZIP entry order', async () => {
+    const zip = new JSZip();
+    const settings = {
+      use24h: false,
+      previewTags: true,
+      previewThumbnail: true,
+      previewIcons: true,
+      filterBar: true,
+      sort: 'descending',
+      autoLocation: false,
+      remoteSync: false,
+      autoSync: false,
+    };
+    const page = {
+      ...makePage('p1'),
+      images: [
+        {
+          id: 'first',
+          path: 'image-first.png',
+          name: 'first.png',
+          type: 'image',
+          encrypted: false,
+          deleted: false,
+        },
+        {
+          id: 'later',
+          path: 'image-later.png',
+          name: 'later.png',
+          type: 'image',
+          encrypted: false,
+          deleted: false,
+        },
+      ],
+    };
+    zip.file(
+      'manifest.json',
+      JSON.stringify({
+        version: 1,
+        appVersion: '0.19.1',
+        exportDate: '2026-05-16T00:00:00Z',
+        encrypted: false,
+        journalTitle: 'Order',
+      }),
+    );
+    zip.file(
+      'journal.json',
+      JSON.stringify({ id: 'j1', title: 'Order', icon: 'book', date: '2026-01-01', secure: false }),
+    );
+    zip.file('settings.json', JSON.stringify(settings));
+    zip.file('pages/p1.json', JSON.stringify(page));
+    // Deliberately add the later image first to reproduce archive ordering.
+    zip.file('attachments/image-later.png', PNG_HEADER);
+    zip.file('attachments/image-first.png', PNG_HEADER);
+    fetchResponse = await zip.generateAsync({ type: 'arraybuffer' });
+
+    mockGenerateThumbnail.mockResolvedValue('Zmlyc3QtcHJldmlldw==');
+    const result = await importJournal('blob:mock', 'Order');
+    const stored = await mockTestStore.getJournal(result.journalId);
+
+    expect(mockGenerateThumbnail).toHaveBeenCalledTimes(1);
+    expect(stored?.pages[0].thumbnail).toBe('Zmlyc3QtcHJldmlldw==');
+  });
+
+  it('streams oversized flat-v1 attachments instead of calling JSZip async for attachment content', async () => {
+    const source = new Uint8Array(1024 * 1024 + 29);
+    source.forEach((_, index) => {
+      source[index] = index % 251;
+    });
+    const zip = new JSZip();
+    zip.file(
+      'manifest.json',
+      JSON.stringify({
+        version: 1,
+        appVersion: '0.19.1',
+        exportDate: '2026-05-16T00:00:00Z',
+        encrypted: false,
+        journalTitle: 'Streamed',
+      }),
+    );
+    zip.file(
+      'journal.json',
+      JSON.stringify({
+        id: 'j1',
+        title: 'Streamed',
+        icon: 'book',
+        date: '2026-01-01',
+        secure: false,
+      }),
+    );
+    zip.file(
+      'pages/p1.json',
+      JSON.stringify({
+        id: 'p1',
+        text: 'T',
+        date: '2026-01-01',
+        tags: [],
+        files: [
+          {
+            id: 'att1',
+            path: 'file-att1.bin',
+            name: 'large.bin',
+            type: 'file',
+            encrypted: false,
+            deleted: false,
+          },
+        ],
+        images: [],
+        comments: [],
+        modified: 1,
+        deleted: false,
+      }),
+    );
+    zip.file('attachments/file-att1.bin', source);
+    fetchResponse = await zip.generateAsync({ type: 'arraybuffer' });
+    const fixtureZip = new JSZip();
+    fixtureZip.file('entry', 'value');
+    const prototype = Object.getPrototypeOf(fixtureZip.file('entry')!) as {
+      async: (...args: unknown[]) => Promise<unknown>;
+    };
+    const originalAsync = prototype.async;
+    const asyncSpy = jest.spyOn(prototype, 'async').mockImplementation(function (
+      this: JSZip.JSZipObject,
+      ...args: unknown[]
+    ) {
+      if (this.name.startsWith('attachments/')) {
+        throw new Error(`Unbounded ZIP entry read: ${String(args[0])}`);
+      }
+      return Reflect.apply(originalAsync, this, args);
+    });
+
+    const result = await importJournal('blob:mock', 'Streamed');
+
+    expect(result.attachmentErrors).toBeUndefined();
+    expect(asyncSpy.mock.calls.some(([type]) => type === 'base64')).toBe(false);
+    const stored = await mockTestStore.getJournal(result.journalId);
+    expect(stored!.pages[0].files[0].content).toMatchObject({ byteLength: source.length });
+    asyncSpy.mockRestore();
   });
 
   it('reports progress during import', async () => {
@@ -719,7 +915,10 @@ describe('importJournal (web)', () => {
       ),
     );
     zip.file('pages/p1.json', await aesGcmEncryptBytes(JSON.stringify(page), key));
-    zip.file('attachments/image-att1.jpg', await aesGcmEncryptBytes(btoa('image-data'), key));
+    // Regression: v1 encrypted entries are one AES-GCM value. They must remain
+    // importable above the bounded chunk threshold, then become chunked locally.
+    const attachmentData = btoa('x'.repeat(LEGACY_ATTACHMENT_MEMORY_LIMIT_BYTES + 1));
+    zip.file('attachments/image-att1.jpg', await aesGcmEncryptBytes(attachmentData, key));
     fetchResponse = await zip.generateAsync({ type: 'arraybuffer' });
 
     const result = await importJournal('blob:mock', 'Enc Att', key);
@@ -728,6 +927,57 @@ describe('importJournal (web)', () => {
     expect(stored).not.toBeNull();
     expect(stored!.pages[0].images).toHaveLength(1);
     expect(stored!.pages[0].images[0].path).toBeTruthy();
+    expect(stored!.pages[0].images[0].content?.format).toBe('canto-chunked-v1');
+  });
+
+  it('generates a preview from the decrypted bytes of an encrypted flat-v1 image import', async () => {
+    const key = new Uint8Array(32).fill(0xab);
+    const page = {
+      ...makePage('p1'),
+      images: [
+        {
+          id: 'att1',
+          path: 'image-att1.png',
+          name: 'secret.png',
+          type: 'image',
+          encrypted: true,
+          deleted: false,
+        },
+      ],
+    };
+    const journal = makeJournal('j1');
+    journal.secure = true;
+    const zip = new JSZip();
+    zip.file(
+      'manifest.json',
+      JSON.stringify({
+        version: 1,
+        appVersion: '0.19.1',
+        exportDate: '2026-05-16T00:00:00Z',
+        encrypted: true,
+        salt: journal.salt,
+        kdfIterations: 50000,
+        journalTitle: 'Encrypted image',
+      }),
+    );
+    zip.file('journal.json', await aesGcmEncryptBytes(JSON.stringify(journal), key));
+    zip.file('settings.json', await aesGcmEncryptBytes(JSON.stringify(journal.settings), key));
+    zip.file('pages/p1.json', await aesGcmEncryptBytes(JSON.stringify(page), key));
+    const attachmentBase64 = btoa(String.fromCharCode(...PNG_HEADER));
+    zip.file('attachments/image-att1.png', await aesGcmEncryptBytes(attachmentBase64, key));
+    fetchResponse = await zip.generateAsync({ type: 'arraybuffer' });
+
+    mockGenerateThumbnail.mockImplementation(async (chunks: AsyncIterable<Uint8Array>) => {
+      const read: number[] = [];
+      for await (const chunk of chunks) read.push(...chunk);
+      expect(read).toEqual([...PNG_HEADER]);
+      return 'c2VjdXJlLXByZXZpZXc=';
+    });
+    const result = await importJournal('blob:mock', 'Encrypted image', key);
+    const stored = await mockTestStore.getJournal(result.journalId, key);
+
+    expect(mockGenerateThumbnail).toHaveBeenCalledTimes(1);
+    expect(stored?.pages[0].thumbnail).toBe('c2VjdXJlLXByZXZpZXc=');
   });
 
   it('auto-derives key for unencrypted backup with salt', async () => {
@@ -909,7 +1159,7 @@ describe('importJournal (web)', () => {
     zip.file('attachments/image-att1.jpg', 'fakeimagebytes');
     fetchResponse = await zip.generateAsync({ type: 'arraybuffer' });
 
-    jest.spyOn(mockTestStore, 'saveAttachment').mockRejectedValueOnce(new Error('Disk full'));
+    jest.spyOn(mockTestStore, 'saveAttachmentStream').mockRejectedValueOnce(new Error('Disk full'));
 
     const result = await importJournal('blob:mock', 'Err');
     expect(result.attachmentErrors).toBeDefined();
@@ -1101,6 +1351,44 @@ describe('importJournal (web)', () => {
     fetchResponse = await zip.generateAsync({ type: 'arraybuffer' });
 
     await expect(importJournal('blob:mock', 'T')).rejects.toThrow('missing journal.json');
+  });
+
+  it('rolls back a journal when IndexedDB readback fails', async () => {
+    const key = new Uint8Array(32).fill(0xab);
+    await prepareTransactionalImportZip(true);
+
+    jest
+      .spyOn(mockTestStore, 'getJournalOverview')
+      .mockRejectedValue(new Error('unreadable metadata'));
+    const deleteSpy = jest.spyOn(mockTestStore, 'deleteJournal');
+
+    await expect(importJournal('blob:mock', 'Imported journal', key)).rejects.toThrow(
+      'Imported journal failed storage verification: unreadable metadata',
+    );
+
+    expect(deleteSpy).toHaveBeenCalledTimes(1);
+    const importedId = deleteSpy.mock.calls[0][0];
+    expect(importedId).not.toBe('source-journal');
+    expect(mockTestStore.getJournalOverview).toHaveBeenCalledWith(importedId, key);
+    expect(await mockTestStore.listJournals()).toEqual([]);
+  });
+
+  it('keeps the original write error when rollback cleanup fails', async () => {
+    await prepareTransactionalImportZip();
+
+    jest.spyOn(mockTestStore, 'saveJournal').mockRejectedValue(new Error('quota exceeded'));
+    const deleteSpy = jest
+      .spyOn(mockTestStore, 'deleteJournal')
+      .mockRejectedValue(new Error('cleanup failed'));
+    const consoleWarnSpy = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+
+    await expect(importJournal('blob:mock', 'Imported journal')).rejects.toThrow(
+      'Imported journal failed storage verification: quota exceeded',
+    );
+
+    expect(deleteSpy).toHaveBeenCalledTimes(1);
+    expect(deleteSpy.mock.calls[0][0]).not.toBe('source-journal');
+    consoleWarnSpy.mockRestore();
   });
 });
 

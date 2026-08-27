@@ -1,5 +1,17 @@
 # Changelog
 
+## v0.19.2 - Large-journal performance, safer backups, and resilient sync
+
+- **fix: transactional backup imports** — native and web imports now verify the newly persisted journal's metadata, settings, and page count before publishing it; failed verification rolls the import back. Imported page modification timestamps are preserved.
+- **feat: bounded Android backup imports** — Android now reads `.canto.zip` archives through a native ZIP bridge, validates archive inventory and paths, preflights available disk space, and streams attachments into bounded local chunks. This avoids loading an entire large backup or attachment into the JavaScript heap.
+- **feat: faster journal views** — journals maintain an encrypted, rebuildable page catalog. Opening a journal, its settings, tag suggestions, and calendar reads metadata plus that catalog instead of every page; old or corrupt catalogs rebuild safely. The calendar now mounts a bounded window of months.
+- **feat: automatic bounded page-image loading** — images on an opened page load automatically, one at a time, from chunked storage into leased cache files/Blob URLs. The cache is released on navigation, lock, and background transitions, while journal-list thumbnails remain size-bounded.
+- **fix: catalog-based no-op sync** — an already synchronized large journal now compares its encrypted page catalog with the remote index before opening page bodies. Only pages that need upload, repair, conflict handling, or attachment transfer are loaded; remote downloads do not trigger unrelated local page reads.
+- **fix: resumable, memory-bounded Drive sync** — immutable attachment chunks use bounded upload/download work, resumable inventory checks, compact sync-index publication, and renderer lifetime accounting on web. Checkpointed syncs report their state accurately and avoid stale successful results after cancellation or provider/auth failures.
+- **fix: safer large attachments and browser crypto** — IndexedDB attachment reads retry transient timeout/abort failures; web password protection leaves attachments above 32 MiB device-encrypted and explains affected files. Legacy oversized attachments are kept out of unsafe whole-file sync paths, and Drive retries honor cancellation.
+- **fix: secure previews and cross-device recovery** — protected journal previews reload after a key becomes available, sync errors remain actionable in the UI, and recovery paths preserve remote data rather than treating a failed/cancelled transfer as successful.
+- test: expanded native/web storage, backup, archive, attachment, sync-engine, Drive, manager, UI, cancellation, and large-catalog regression coverage.
+
 ## v0.19.1 - Release fixes
 
 - **feat: font customization in style picker** — `ThemePickerModal` now offers font-size presets (small/default/large/x-large, scales 0.85/1.0/1.15/1.3) and font-family options (default Lato+Merriweather, OpenDyslexic, Lora serif). Prefs persist via AsyncStorage and apply globally; scaling currently affects the journal page editor + rendered markdown. New `FontPrefsContext`, `src/lib/font.ts`, 7 font tests.

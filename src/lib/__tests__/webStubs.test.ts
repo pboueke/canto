@@ -105,13 +105,16 @@ describe('biometric.web', () => {
 import { generateThumbnail } from '../thumbnail.web';
 
 describe('thumbnail.web', () => {
-  it('returns the input base64 unchanged', async () => {
-    const input = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAA';
-    expect(await generateThumbnail(input)).toBe(input);
+  it('fails safely when browser image decoding is unavailable', async () => {
+    await expect(generateThumbnail('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAA')).rejects.toThrow(
+      'Browser thumbnail decoding is unavailable',
+    );
   });
 
-  it('handles empty string', async () => {
-    expect(await generateThumbnail('')).toBe('');
+  it('fails safely for an empty image payload', async () => {
+    await expect(generateThumbnail('')).rejects.toThrow(
+      'Browser thumbnail decoding is unavailable',
+    );
   });
 });
 

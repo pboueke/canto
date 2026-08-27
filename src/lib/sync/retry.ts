@@ -1,7 +1,10 @@
 export interface RetryOptions {
   attempts: number;
   delaysMs: number[];
-  onAttempt?: (attemptNumber: number, error: unknown) => void;
+  /** Return false when another attempt cannot change the outcome. */
+  shouldRetry?: (error: unknown) => boolean;
+  /** Runs after a failed attempt and before the delay/retry, e.g. to refresh credentials. */
+  onAttempt?: (attemptNumber: number, error: unknown) => void | Promise<void>;
 }
 
 export function retryWithBackoff<T>(fn: () => Promise<T>, opts: RetryOptions): Promise<T> {
@@ -10,15 +13,15 @@ export function retryWithBackoff<T>(fn: () => Promise<T>, opts: RetryOptions): P
       (value) => value,
       (err: unknown) => {
         const isLastAttempt = attempt >= opts.attempts;
-        if (isLastAttempt) {
+        if (isLastAttempt || opts.shouldRetry?.(err) === false) {
           return Promise.reject(err);
         }
 
-        opts.onAttempt?.(attempt, err);
-
         const delayIndex = Math.min(attempt - 1, opts.delaysMs.length - 1);
         const ms = opts.delaysMs[delayIndex];
-        return new Promise<void>((r) => setTimeout(r, ms)).then(() => run(attempt + 1));
+        return Promise.resolve(opts.onAttempt?.(attempt, err))
+          .then(() => new Promise<void>((r) => setTimeout(r, ms)))
+          .then(() => run(attempt + 1));
       },
     );
   }

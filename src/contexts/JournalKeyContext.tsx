@@ -2,7 +2,11 @@ import { createContext, useContext, useCallback, useRef, useEffect } from 'react
 import type { ReactNode } from 'react';
 import { AppState } from 'react-native';
 import { deriveKey, DEFAULT_KDF_ITERATIONS } from '@/lib/encryption/password';
-import { base64ToUint8 } from '@/lib/encryption/utils';
+import { base64ToUint8, releaseAndZeroAesKey } from '@/lib/encryption/utils';
+import {
+  purgeAttachmentDisplayCache,
+  purgeEncryptedAttachmentDisplayCache,
+} from '@/lib/attachment-display';
 import { getAutoLockTimeout } from '@/components/home/SecuritySettingsModal';
 
 interface JournalKeyContextValue {
@@ -59,14 +63,18 @@ export function JournalKeyProvider({ children }: { children: ReactNode }) {
   const clearKey = useCallback((journalId: string) => {
     const key = keysRef.current.get(journalId);
     if (key) {
-      key.fill(0);
+      // Display cache entries may contain decrypted bytes for this key. Paths
+      // do not carry a journal id, so evict all completed leased displays.
+      purgeAttachmentDisplayCache();
+      releaseAndZeroAesKey(key);
       keysRef.current.delete(journalId);
     }
   }, []);
 
   const clearAll = useCallback(() => {
+    purgeAttachmentDisplayCache();
     for (const key of keysRef.current.values()) {
-      key.fill(0);
+      releaseAndZeroAesKey(key);
     }
     keysRef.current.clear();
   }, []);
@@ -83,10 +91,10 @@ export function JournalKeyProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const triggerAutoLock = useCallback(() => {
-    clearAll();
     for (const listener of autoLockListenersRef.current) {
       listener();
     }
+    clearAll();
   }, [clearAll]);
 
   // Keep clearAllRef in sync so effects use the latest triggerAutoLock without re-registering
@@ -96,6 +104,10 @@ export function JournalKeyProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const subscription = AppState.addEventListener('change', async (state) => {
       if (state === 'background' || state === 'inactive') {
+        // A background transition can happen before the configured auto-lock
+        // threshold. Remove password-encrypted display originals immediately
+        // while retaining only the bounded unencrypted LRU cache.
+        purgeEncryptedAttachmentDisplayCache();
         backgroundedAtRef.current = Date.now();
       } else if (state === 'active' && backgroundedAtRef.current !== null) {
         const elapsed = Date.now() - backgroundedAtRef.current;

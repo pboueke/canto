@@ -16,6 +16,7 @@ import { useI18n } from '@/hooks/useI18n';
 import { getContrastText } from '@/styles/themes';
 import { useJournals, getLocalStore } from '@/hooks/useStorage';
 import { useGoogleAuth } from '@/contexts/GoogleAuthContext';
+import { useJournalKeys } from '@/contexts/JournalKeyContext';
 import { useSyncManager } from '@/contexts/SyncManagerContext';
 import { SyncProviderModal } from '@/components/home/SyncProviderModal';
 import type { RemoteJournalMeta } from '@/lib/sync';
@@ -40,6 +41,7 @@ export function AccountButton() {
     setRetentionDays,
   } = useGoogleAuth();
   const { manager, provider } = useSyncManager();
+  const { getKey } = useJournalKeys();
   const { journals: localJournals } = useJournals();
   const [showPopover, setShowPopover] = useState(false);
   const [showProviderModal, setShowProviderModal] = useState(false);
@@ -124,22 +126,42 @@ export function AccountButton() {
       await manager.connectWithToken(accessToken);
       const store = manager.getRemoteStore();
       await store.deleteJournal(deleteTarget.id);
-      // Disable sync on the local copy if it exists
+      // Disable sync on the local copy if it exists. Password-protected journals
+      // must use their cached derived key; treating their ciphertext as JSON after
+      // the remote delete would misleadingly report that the delete failed.
       const localJournal = localJournals.find((j) => j.id === deleteTarget.id);
-      if (localJournal) {
-        const localStore = await getLocalStore();
-        const full = await localStore.getJournal(localJournal.id);
-        if (full) {
-          full.settings.syncProvider = undefined;
-          full.settings.remoteSync = false;
-          full.settings.autoSync = false;
-          await localStore.saveJournal(full);
+      const derivedKey = localJournal ? (getKey(localJournal.id) ?? undefined) : undefined;
+      if (localJournal && (!localJournal.secure || derivedKey)) {
+        try {
+          const localStore = await getLocalStore();
+          const full = await localStore.getJournal(localJournal.id, derivedKey);
+          if (full) {
+            full.settings.syncProvider = undefined;
+            full.settings.remoteSync = false;
+            full.settings.autoSync = false;
+            await localStore.saveJournal(full, derivedKey);
+          }
+        } catch (err) {
+          // The remote deletion already succeeded. Leave the local copy untouched
+          // so it can be unlocked and its sync setting changed later.
+          console.warn(
+            `[Canto] Remote journal ${deleteTarget.id} was deleted, but local sync could not be disabled. ` +
+              'Unlock the local journal and disable sync before syncing again.',
+            err,
+          );
         }
+      } else if (localJournal) {
+        console.warn(
+          `[Canto] Remote journal ${deleteTarget.id} was deleted, but its locked local copy could not be updated. ` +
+            'Unlock the local journal and disable sync before syncing again.',
+        );
       }
       setRemoteJournals((prev) => prev.filter((j) => j.id !== deleteTarget.id));
       setDeleteTarget(null);
     } catch (err) {
-      setManageError(err instanceof Error ? err.message : String(err));
+      // Only report failures before the remote deletion completes.
+      const detail = err instanceof Error ? err.message : String(err);
+      setManageError(`Could not delete "${deleteTarget.title}" from Google Drive. ${detail}`);
       setDeleteTarget(null);
     } finally {
       setDeleting(false);

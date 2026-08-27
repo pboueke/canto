@@ -14,7 +14,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '@/hooks/useTheme';
 import { useI18n } from '@/hooks/useI18n';
-import { useJournals, useCreateJournal, tryLoadJournal } from '@/hooks/useStorage';
+import { useJournals, useCreateJournal, tryLoadJournalOverview } from '@/hooks/useStorage';
 import { useJournalKeys } from '@/contexts/JournalKeyContext';
 import { Logo } from '@/components/common/Logo';
 import { InfoBox } from '@/components/home/InfoBox';
@@ -156,8 +156,9 @@ export default function HomeScreen() {
         accessJournal.salt,
         accessJournal.kdfIterations,
       );
-      // Trial decryption — PBKDF2 always succeeds, so we must verify the derived key
-      const result = await tryLoadJournal(journalId, key);
+      // PBKDF2 always succeeds, so verify the derived key by decrypting the
+      // metadata and page catalog. Do not open every page solely to unlock.
+      const result = await tryLoadJournalOverview(journalId, key);
       if (!result) {
         clearKey(journalId);
         setAccessError(t.home.wrongPassword);

@@ -1,4 +1,4 @@
-import { generateThumbnail } from '../thumbnail';
+import { generateThumbnail, generateThumbnailFromChunks } from '../thumbnail';
 
 // expo-image-manipulator is globally mocked in jest.setup.ts
 
@@ -13,6 +13,7 @@ jest.mock('expo-file-system', () => ({
     exists: false,
     create: jest.fn(),
     write: jest.fn(),
+    open: jest.fn(() => ({ writeBytes: jest.fn(), close: jest.fn() })),
     delete: jest.fn(),
   })),
 }));
@@ -30,6 +31,34 @@ describe('generateThumbnail', () => {
       { compress: 0.5, format: 'jpeg', base64: true },
     );
     expect(result).toBe('dGh1bWJuYWls');
+  });
+
+  it('writes import thumbnail input incrementally to a temporary file before manipulating its URI', async () => {
+    const writeBytes = jest.fn();
+    const close = jest.fn();
+    const deleteFn = jest.fn();
+    MockFile.mockImplementation((...args: unknown[]) => ({
+      uri:
+        typeof args[0] === 'string' && args.length === 1
+          ? args[0]
+          : `/tmp/cache/${args[1] ?? 'file'}`,
+      exists: true,
+      create: jest.fn(),
+      write: jest.fn(),
+      open: jest.fn(() => ({ writeBytes, close })),
+      delete: deleteFn,
+    }));
+
+    async function* chunks() {
+      yield new Uint8Array([1, 2]);
+      yield new Uint8Array([3]);
+    }
+    await expect(generateThumbnailFromChunks(chunks())).resolves.toBe('dGh1bWJuYWls');
+
+    expect(writeBytes).toHaveBeenNthCalledWith(1, new Uint8Array([1, 2]));
+    expect(writeBytes).toHaveBeenNthCalledWith(2, new Uint8Array([3]));
+    expect(close).toHaveBeenCalledTimes(1);
+    expect(deleteFn).toHaveBeenCalled();
   });
 
   it('cleans up result file when it exists', async () => {

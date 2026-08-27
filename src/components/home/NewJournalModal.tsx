@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import {
   ActivityIndicator,
   Modal,
@@ -32,14 +32,39 @@ import { useGoogleAuth } from '@/contexts/GoogleAuthContext';
 import { useSyncManager } from '@/contexts/SyncManagerContext';
 import type { JournalContent, Page } from 'canto-data';
 import type { RemoteJournalMeta, DownloadFailure } from '@/lib/sync';
+import { GDriveApiError, GDriveAuthenticationError } from '@/lib/sync/gdrive/api';
+import { downloadCloudPageAttachments } from '@/lib/sync/cloud-attachment-import';
 import { safeJsonParse } from '@/lib/utils/json';
 import { DataIntegrityWarningModal } from '@/components/common/DataIntegrityWarningModal';
 import { retryWithBackoff } from '@/lib/sync/retry';
+import { formatSyncWarning } from '@/lib/sync/warnings';
+import { describeError } from '@/lib/utils/error';
 
 type CloudImportPhase = 'idle' | 'preparing' | 'downloading';
 
 const CLOUD_IMPORT_RETRY_DELAYS_MS = [1000, 2000, 4000, 8000];
 const CLOUD_IMPORT_RETRY_ATTEMPTS = 5;
+
+class CloudImportAuthenticationError extends Error {
+  constructor() {
+    super('Google Drive session expired. Please sign in again.');
+    this.name = 'CloudImportAuthenticationError';
+  }
+}
+
+/**
+ * A page attempt also writes attachments to local storage. Retrying a parse,
+ * quota, or other local error cannot repair it and made a failed large import
+ * spend the full backoff budget once for every page. Drive's request layer
+ * already retries transient transport failures once; this outer retry is only
+ * for a recoverable HTTP response.
+ */
+function shouldRetryCloudImportPage(error: unknown): boolean {
+  if (!(error instanceof GDriveApiError)) return false;
+  return (
+    error.status === 401 || error.status === 408 || error.status === 429 || error.status >= 500
+  );
+}
 
 interface NewJournalModalProps {
   visible: boolean;
@@ -75,10 +100,10 @@ export function NewJournalModal({
   existingIds = [],
 }: NewJournalModalProps) {
   const { theme } = useTheme();
-  const { t } = useI18n();
+  const { t, lang } = useI18n();
   const insets = useSafeAreaInsets();
   const isWeb = Platform.OS === 'web';
-  const { isSignedIn, accessToken } = useGoogleAuth();
+  const { isSignedIn, accessToken, getAccessToken } = useGoogleAuth();
   const { manager } = useSyncManager();
 
   const [title, setTitle] = useState('');
@@ -98,6 +123,7 @@ export function NewJournalModal({
   const [importError, setImportError] = useState<string | null>(null);
   // Import sub-flow state
   const [importFileUri, setImportFileUri] = useState<string | null>(null);
+  const [importSourceFingerprint, setImportSourceFingerprint] = useState<string | undefined>();
   const [importNeedsPassword, setImportNeedsPassword] = useState(false);
   const [importPassword, setImportPassword] = useState('');
   const [importSalt, setImportSalt] = useState<string | null>(null);
@@ -116,6 +142,8 @@ export function NewJournalModal({
   const [importProgress, setImportProgress] = useState<{ current: number; total: number } | null>(
     null,
   );
+  const [canCancelFileImport, setCanCancelFileImport] = useState(false);
+  const fileImportAbortRef = useRef<AbortController | null>(null);
   // Data integrity warning state
   const [integrityWarning, setIntegrityWarning] = useState<{
     type: 'sync' | 'import';
@@ -131,6 +159,32 @@ export function NewJournalModal({
 
   const passwordsMatch = password === '' || password === confirmPassword;
   const canCreate = title.trim().length > 0 && passwordsMatch && !busy;
+  const isImportBusy = busy || importing || cloudLoading || cloudImportPhase !== 'idle';
+
+  function formatImportError(error: unknown): string {
+    const message =
+      error instanceof Error ? error.message.toLowerCase() : String(error).toLowerCase();
+    if (message.includes('cancelled')) return t.common.cancel;
+    if (message.includes('password') || message.includes('ghash') || message.includes('decrypt')) {
+      return t.home.wrongPassword;
+    }
+    if (
+      message.includes('google drive') ||
+      message.includes('authentication') ||
+      message.includes('401')
+    ) {
+      return t.sync.signInToGoogle;
+    }
+    if (
+      message.includes('invalid backup') ||
+      message.includes('missing manifest') ||
+      message.includes('unsupported') ||
+      message.includes('fingerprint')
+    ) {
+      return t.backup.invalidFile;
+    }
+    return t.backup.importError;
+  }
 
   async function handleCreate() {
     if (!canCreate) return;
@@ -157,7 +211,7 @@ export function NewJournalModal({
   }
 
   function handleClose() {
-    if (busy || importing || cloudImportPhase !== 'idle') return;
+    if (isImportBusy) return;
     resetForm();
     onClose();
   }
@@ -180,15 +234,19 @@ export function NewJournalModal({
     if (!manager || !accessToken) return;
     setCloudError(null);
     setCloudLoading(true);
+    // Let React show feedback before a potentially slow Drive request starts.
+    await new Promise((resolve) => setTimeout(resolve, 100));
     try {
-      await manager.connectWithToken(accessToken);
+      const token = await getAccessToken();
+      if (!token) throw new Error('Google Drive session expired. Please sign in again.');
+      await manager.connectWithToken(token, getAccessToken);
       const store = manager.getRemoteStore();
       const remoteJournals = await store.listRemoteJournals();
       setCloudLocalIds(new Set(existingIds));
       setCloudJournals(remoteJournals);
       setShowCloudImport(true);
     } catch (err) {
-      setCloudError((err instanceof Error ? err.message : String(err)) || 'Unknown error');
+      setCloudError(formatImportError(err));
     } finally {
       setCloudLoading(false);
     }
@@ -210,10 +268,16 @@ export function NewJournalModal({
   }
 
   async function executeCloudImport(remote: RemoteJournalMeta, password: string) {
+    let incompleteJournalId: string | null = null;
     setCloudImportPhase('preparing');
     setImportProgress(null);
+    // PBKDF2 can be expensive on Android. Paint the loading state before key
+    // derivation so submitting a password never appears to do nothing.
+    await new Promise((resolve) => setTimeout(resolve, 100));
     try {
-      await manager!.connectWithToken(accessToken!);
+      const token = await getAccessToken();
+      if (!token) throw new Error('Google Drive session expired. Please sign in again.');
+      await manager!.connectWithToken(token, getAccessToken);
       const store = manager!.getRemoteStore();
 
       // Derive sync key from salt
@@ -223,9 +287,31 @@ export function NewJournalModal({
       const syncKey = await deriveKey(password, saltBytes, iterations);
 
       // Download and decrypt journal metadata
-      const encryptedMeta = await store.downloadJournalMeta(remote.id);
-      if (!encryptedMeta) throw new Error('Journal not found on remote');
-      const metaJson = await aesGcmDecrypt(encryptedMeta, syncKey);
+      const encryptedMetaCandidates = store.downloadJournalMetaCandidates
+        ? await store.downloadJournalMetaCandidates(remote.id)
+        : [await store.downloadJournalMeta(remote.id)].filter((value): value is string => !!value);
+      if (encryptedMetaCandidates.length === 0) throw new Error('Journal not found on remote');
+      let metaJson: string | undefined;
+      let metaDecryptError: unknown;
+      for (const encryptedMeta of encryptedMetaCandidates) {
+        try {
+          metaJson = await aesGcmDecrypt(encryptedMeta, syncKey);
+          break;
+        } catch (err) {
+          metaDecryptError = err;
+        }
+      }
+      if (!metaJson) {
+        throw new Error(
+          `Cloud metadata cannot be decrypted (journal ${remote.id}; ${encryptedMetaCandidates.length} candidate(s); ` +
+            `encrypted=${remote.encrypted ?? false}; KDF ${iterations}). ` +
+            `The remote sync key does not match the registry metadata: ${
+              metaDecryptError instanceof Error
+                ? metaDecryptError.message
+                : String(metaDecryptError)
+            }`,
+        );
+      }
       const meta = safeJsonParse<JournalContent>(metaJson, 'cloud-import-meta');
       const journal: JournalContent = { ...meta, pages: [] };
 
@@ -240,8 +326,14 @@ export function NewJournalModal({
       // Download and decrypt each page
       const { getLocalStore } = await import('@/hooks/useStorage');
       const localStore = await getLocalStore();
-      const importWarnings: string[] = [];
+      const importWarnings: { name: string; size?: number; reason: string; pageId: string }[] = [];
       const downloadFailures: DownloadFailure[] = [];
+      // Cloud attachment downloads write into the destination journal root as
+      // they stream. Keep that root invisible and recoverable until the final
+      // metadata/pages/catalog publication has been verified.
+      await localStore.beginJournalImport?.(journal.id);
+      incompleteJournalId = journal.id;
+      await localStore.updateJournalImport?.(journal.id, 'writing');
 
       setCloudImportPhase('downloading');
       setImportProgress({ current: 0, total });
@@ -254,27 +346,16 @@ export function NewJournalModal({
         const pageJson = await aesGcmDecrypt(encryptedPage, syncKey);
         const page = safeJsonParse<Page>(pageJson, `page:${pageId}`);
 
-        const attachments = [...(page.images ?? []), ...(page.files ?? [])].filter(
-          (a) => !a.deleted && a.path,
+        const attachmentWarnings = await downloadCloudPageAttachments({
+          journalId: remote.id,
+          page,
+          syncKey,
+          localStore,
+          remoteStore: store,
+        });
+        importWarnings.push(
+          ...attachmentWarnings.map((warning) => ({ ...warning, pageId: page.id })),
         );
-        const results = await Promise.allSettled(
-          attachments.map(async (att) => {
-            const filename = att.path.split('/').pop() ?? att.path;
-            const remotePath = `gdrive://${remote.id}/attachments/${filename}`;
-            const encrypted = await store.downloadAttachment(remotePath);
-            if (encrypted) {
-              const data = await aesGcmDecrypt(encrypted, syncKey);
-              const localPath = await localStore.saveAttachment(remote.id, page.id, att, data);
-              att.path = localPath;
-            }
-          }),
-        );
-        const failures = results.filter((r) => r.status === 'rejected');
-        if (failures.length > 0) {
-          importWarnings.push(
-            `${failures.length} attachment(s) failed to download for page ${page.id}`,
-          );
-        }
         return page;
       }
 
@@ -283,15 +364,25 @@ export function NewJournalModal({
           const page = await retryWithBackoff(() => downloadOnePage(pageId), {
             attempts: CLOUD_IMPORT_RETRY_ATTEMPTS,
             delaysMs: CLOUD_IMPORT_RETRY_DELAYS_MS,
-            onAttempt: (attempt, err) => {
+            shouldRetry: shouldRetryCloudImportPage,
+            onAttempt: async (attempt, err) => {
               console.warn('[Canto] Cloud import page retry', { pageId, attempt, err });
             },
           });
           if (page) journal.pages.push(page);
         } catch (err) {
+          // Continuing after authentication has failed turns one expired
+          // session into a warning for every page and can keep a large import
+          // running for hours. The outer handler rolls back its staging root.
+          if (
+            err instanceof CloudImportAuthenticationError ||
+            err instanceof GDriveAuthenticationError
+          ) {
+            throw new CloudImportAuthenticationError();
+          }
           downloadFailures.push({
             name: `${pageId}.json`,
-            reason: err instanceof Error ? err.message : String(err),
+            reason: describeError(err),
           });
         }
         current++;
@@ -300,10 +391,16 @@ export function NewJournalModal({
 
       // Show integrity warning if some pages failed
       if (downloadFailures.length > 0) {
+        try {
+          await localStore.abortJournalImport?.(journal.id);
+          incompleteJournalId = null;
+        } catch (cleanupErr) {
+          console.warn('[Canto] Cleanup of incomplete cloud import failed:', cleanupErr);
+        }
         setCloudImportPhase('idle');
         setIntegrityWarning({
           type: 'sync',
-          details: downloadFailures.map((f) => f.name),
+          details: downloadFailures.map((f) => `${f.name}: ${f.reason}`),
           syncFailures: downloadFailures,
           retryRemote: remote,
         });
@@ -311,17 +408,21 @@ export function NewJournalModal({
       }
 
       const importKey = remote.encrypted && password ? syncKey : undefined;
-      // Save journal + pages with rollback on failure: if any save throws after
-      // some data has been written, remove the partial journal so the user
-      // doesn't end up with corrupt/half-imported data.
+      // saveJournal publishes pages and their catalog together. Writing each
+      // page a second time would both duplicate I/O and invalidate imported
+      // modification timestamps.
       try {
+        await localStore.updateJournalImport?.(journal.id, 'publishing', {
+          expectedPageCount: journal.pages.length,
+        });
         await localStore.saveJournal(journal, importKey);
-        for (const page of journal.pages) {
-          await localStore.savePage(journal.id, page, importKey, true);
-        }
+        await localStore.updateJournalImport?.(journal.id, 'committed');
+        await localStore.completeJournalImport?.(journal.id);
+        incompleteJournalId = null;
       } catch (saveErr) {
         try {
-          await localStore.deleteJournal(journal.id);
+          await localStore.abortJournalImport?.(journal.id);
+          incompleteJournalId = null;
         } catch (cleanupErr) {
           console.warn('[Canto] Cleanup of partial cloud import failed:', cleanupErr);
         }
@@ -337,15 +438,38 @@ export function NewJournalModal({
       }
 
       if (importWarnings.length > 0) {
-        console.warn('[Canto] Cloud import warnings:', importWarnings);
+        // The journal is safely imported, but unsafe legacy attachments remain
+        // absent. Show the same localized, per-file result as normal sync;
+        // never leave this important state in a console-only English warning.
+        onImportComplete?.(journal.id);
+        setIntegrityWarning({
+          type: 'import',
+          details: importWarnings.map((warning) =>
+            formatSyncWarning(warning, lang, {
+              legacyAttachmentTooLarge: t.sync.syncDeferredAttachments,
+              chunkGenerationMissing: t.sync.syncDeferredChunkGeneration,
+              attachmentNotFound: t.sync.syncDeferredAttachmentNotFound,
+            }),
+          ),
+        });
+        return;
       }
 
       resetForm();
       onClose();
       onImportComplete?.(journal.id);
     } catch (err) {
+      if (incompleteJournalId) {
+        try {
+          const { getLocalStore } = await import('@/hooks/useStorage');
+          const localStore = await getLocalStore();
+          await localStore.abortJournalImport?.(incompleteJournalId);
+        } catch (cleanupErr) {
+          console.warn('[Canto] Cleanup of interrupted cloud import failed:', cleanupErr);
+        }
+      }
       console.error('[Canto] Cloud import failed:', err);
-      setImportError((err instanceof Error ? err.message : String(err)) || 'Unknown error');
+      setImportError(formatImportError(err));
     } finally {
       setCloudImportPhase('idle');
       setImportProgress(null);
@@ -354,6 +478,7 @@ export function NewJournalModal({
 
   function resetImportState() {
     setImportFileUri(null);
+    setImportSourceFingerprint(undefined);
     setImportNeedsPassword(false);
     setImportPasswordOptional(false);
     setImportPassword('');
@@ -362,6 +487,8 @@ export function NewJournalModal({
     setImportOriginalTitle('');
     setImportRenameNeeded(false);
     setImportNewTitle('');
+    setImportProgress(null);
+    setCanCancelFileImport(false);
   }
 
   async function handleImport() {
@@ -379,6 +506,7 @@ export function NewJournalModal({
 
       const info = await inspectBackup(fileUri);
       setImportFileUri(fileUri);
+      setImportSourceFingerprint(info.sourceFingerprint);
       setImportOriginalTitle(info.manifest.journalTitle);
 
       if (info.needsPassword || info.canProvidePassword) {
@@ -400,10 +528,10 @@ export function NewJournalModal({
       }
 
       // No password, no conflict — import directly
-      await finishImport(fileUri, info.manifest.journalTitle);
+      await finishImport(fileUri, info.manifest.journalTitle, undefined, info.sourceFingerprint);
     } catch (err) {
       console.error('[Canto] Import failed:', err);
-      setImportError((err instanceof Error ? err.message : String(err)) || 'Unknown error');
+      setImportError(formatImportError(err));
       setImporting(false);
     }
   }
@@ -423,10 +551,10 @@ export function NewJournalModal({
     setImporting(true);
     await new Promise((r) => setTimeout(r, 100));
     try {
-      await finishImport(importFileUri, importOriginalTitle);
+      await finishImport(importFileUri, importOriginalTitle, undefined, importSourceFingerprint);
     } catch (err) {
       console.error('[Canto] Import failed:', err);
-      setImportError((err instanceof Error ? err.message : String(err)) || 'Unknown error');
+      setImportError(formatImportError(err));
       setImporting(false);
     }
   }
@@ -465,10 +593,10 @@ export function NewJournalModal({
         return;
       }
 
-      await finishImport(importFileUri, importOriginalTitle, key);
+      await finishImport(importFileUri, importOriginalTitle, key, importSourceFingerprint);
     } catch (err) {
       console.error('[Canto] Import failed:', err);
-      setImportError((err instanceof Error ? err.message : String(err)) || 'Unknown error');
+      setImportError(formatImportError(err));
       setImporting(false);
     }
   }
@@ -487,17 +615,32 @@ export function NewJournalModal({
         key = await deriveKey(importPassword, saltBytes, iterations);
       }
 
-      await finishImport(importFileUri, importNewTitle.trim(), key);
+      await finishImport(importFileUri, importNewTitle.trim(), key, importSourceFingerprint);
     } catch (err) {
       console.error('[Canto] Import failed:', err);
-      setImportError((err instanceof Error ? err.message : String(err)) || 'Unknown error');
+      setImportError(formatImportError(err));
       setImporting(false);
     }
   }
 
-  async function finishImport(fileUri: string, titleToUse: string, key?: Uint8Array) {
+  async function finishImport(
+    fileUri: string,
+    titleToUse: string,
+    key?: Uint8Array,
+    expectedSourceFingerprint?: string,
+  ) {
+    const controller = new AbortController();
+    fileImportAbortRef.current = controller;
+    setCanCancelFileImport(true);
     try {
-      const imported = await importJournal(fileUri, titleToUse, key);
+      const imported = await importJournal(
+        fileUri,
+        titleToUse,
+        key,
+        (progress) => setImportProgress({ current: progress.current, total: progress.total }),
+        controller.signal,
+        expectedSourceFingerprint,
+      );
 
       if (imported.attachmentErrors && imported.attachmentErrors.length > 0) {
         // Show warning but still complete the import
@@ -516,10 +659,16 @@ export function NewJournalModal({
       }
     } catch (err) {
       console.error('[Canto] Import failed:', err);
-      setImportError((err instanceof Error ? err.message : String(err)) || 'Unknown error');
+      setImportError(formatImportError(err));
     } finally {
+      if (fileImportAbortRef.current === controller) fileImportAbortRef.current = null;
+      setCanCancelFileImport(false);
       setImporting(false);
     }
+  }
+
+  function cancelFileImport() {
+    fileImportAbortRef.current?.abort();
   }
 
   return (
@@ -567,7 +716,7 @@ export function NewJournalModal({
             <View style={{ width: 30 }} />
           </View>
 
-          {busy || importing || cloudImportPhase !== 'idle' ? (
+          {isImportBusy ? (
             <View style={styles.busyContainer}>
               <ActivityIndicator size="large" color={theme.colors.primary} />
               <Text
@@ -576,13 +725,15 @@ export function NewJournalModal({
                   { color: theme.colors.textSecondary, fontFamily: theme.fonts.regular },
                 ]}
               >
-                {cloudImportPhase === 'preparing'
-                  ? t.sync.preparingImport
-                  : importing || cloudImportPhase === 'downloading'
-                    ? t.backup.importing
-                    : t.common.loading}
+                {cloudLoading
+                  ? t.common.loading
+                  : cloudImportPhase === 'preparing'
+                    ? t.sync.preparingImport
+                    : importing || cloudImportPhase === 'downloading'
+                      ? t.backup.importing
+                      : t.common.loading}
               </Text>
-              {importProgress && cloudImportPhase !== 'preparing' && (
+              {importProgress && importProgress.total > 0 && cloudImportPhase !== 'preparing' && (
                 <>
                   <View style={[styles.progressTrack, { backgroundColor: theme.colors.border }]}>
                     <View
@@ -604,6 +755,21 @@ export function NewJournalModal({
                     {importProgress.current} / {importProgress.total}
                   </Text>
                 </>
+              )}
+              {importing && canCancelFileImport && (
+                <Pressable
+                  onPress={cancelFileImport}
+                  style={[styles.cancelImport, { borderColor: theme.colors.border }]}
+                >
+                  <Text
+                    style={[
+                      styles.cancelImportText,
+                      { color: theme.colors.text, fontFamily: theme.fonts.regular },
+                    ]}
+                  >
+                    {t.common.cancel}
+                  </Text>
+                </Pressable>
               )}
             </View>
           ) : (
@@ -1441,6 +1607,16 @@ const styles = StyleSheet.create({
   },
   progressText: {
     fontSize: 12,
+  },
+  cancelImport: {
+    marginTop: 18,
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+  },
+  cancelImportText: {
+    fontSize: 15,
   },
   body: {
     flex: 1,

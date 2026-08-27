@@ -1,4 +1,4 @@
-import type { SyncProvider } from 'canto-data';
+import type { Attachment, SyncProvider } from 'canto-data';
 
 export type { SyncProvider };
 
@@ -24,12 +24,42 @@ export interface RegistryInfo {
   kdfIterations?: number;
 }
 
+/**
+ * A prepared immutable attachment-generation view for one sync. The adapter
+ * owns provider IDs, name queries, and absent/present bookkeeping; callers
+ * only ask which indexes still need payload work.
+ */
+export interface PreparedChunkUploads {
+  missingIndexes(attachment: Attachment): readonly number[];
+  uploadMissingChunk(
+    attachment: Attachment,
+    index: number,
+    encryptedData: string,
+    signal?: AbortSignal,
+  ): Promise<void>;
+}
+
+/**
+ * One immutable-index publication session. `publishPage` is the durable
+ * visibility boundary for a page; `finalize` updates the legacy projection at
+ * most once after all session changes are known.
+ */
+export interface SyncIndexPublication {
+  readonly initial: Readonly<SyncIndex>;
+  publishPage(pageId: string, entry: SyncIndex[string], signal?: AbortSignal): Promise<void>;
+  /** A completed run may compact and clean index metadata; checkpoints retain the 128-delta cap. */
+  finalize(options?: { successful?: boolean; signal?: AbortSignal }): Promise<void>;
+}
+
 export interface RemoteStore {
   /** The provider identifier for this store. */
   readonly provider: SyncProvider;
 
   /** Establish connection to the remote provider. */
   connect(credentials: unknown): Promise<void>;
+
+  /** Optional credential-refresh boundary for providers that can replay a rejected request. */
+  setAccessTokenRefresher?(refresher: (() => Promise<string | null>) | undefined): void;
 
   /** Disconnect from the remote provider. */
   disconnect(): Promise<void>;
@@ -56,6 +86,12 @@ export interface RemoteStore {
   /** Download raw (encrypted) journal metadata string from remote. */
   downloadJournalMeta(journalId: string): Promise<string | null>;
 
+  /**
+   * Return every metadata candidate, newest first, when a provider permits
+   * duplicate names. Cloud import authenticates each candidate before use.
+   */
+  downloadJournalMetaCandidates?(journalId: string): Promise<string[]>;
+
   /** Upload an encrypted page blob. */
   uploadPage(journalId: string, pageId: string, encryptedContent: string): Promise<void>;
 
@@ -71,6 +107,9 @@ export interface RemoteStore {
   /** Download the sync timestamp index for a journal. */
   downloadSyncIndex(journalId: string): Promise<SyncIndex | null>;
 
+  /** Open one provider-owned index read/write session for a sync invocation. */
+  openSyncIndexPublication?(journalId: string, signal?: AbortSignal): Promise<SyncIndexPublication>;
+
   /** Upload an attachment. Returns the remote path/identifier. */
   uploadAttachment(journalId: string, localPath: string, data: string): Promise<string>;
 
@@ -80,6 +119,70 @@ export interface RemoteStore {
   /** Delete an attachment on the remote. */
   deleteAttachment(remotePath: string): Promise<void>;
 
+  /**
+   * Resolve exact remote IDs for chunk generations this sync will upload, so
+   * bounded chunk transfers do not perform one Drive search per chunk.
+   */
+  prepareAttachmentChunkUploads?(
+    journalId: string,
+    attachments: Attachment[],
+    signal?: AbortSignal,
+  ): Promise<void>;
+
+  /**
+   * Prepare one metadata-only immutable chunk inventory for this sync.
+   * New implementations should use this deep seam instead of the legacy
+   * prepare/list/upload trio below.
+   */
+  prepareChunkUploads?(
+    journalId: string,
+    attachments: readonly Attachment[],
+    signal?: AbortSignal,
+  ): Promise<PreparedChunkUploads>;
+
+  /**
+   * List the persisted indexes for one immutable attachment generation. This
+   * must not read local attachment data; resumable web sync uses it to skip
+   * completed chunks before IndexedDB or WebCrypto work begins.
+   */
+  listAttachmentChunkIndexes?(
+    journalId: string,
+    attachmentId: string,
+    generation: string,
+    chunkCount: number,
+    signal?: AbortSignal,
+  ): Promise<ReadonlySet<number>>;
+
+  /** Additive bounded-payload transfer surface for canto-chunked-v1 attachments. */
+  uploadAttachmentChunk?(
+    journalId: string,
+    attachmentId: string,
+    generation: string | undefined,
+    index: number,
+    data: string,
+    signal?: AbortSignal,
+  ): Promise<void>;
+  downloadAttachmentChunk?(
+    journalId: string,
+    attachmentId: string,
+    generation: string | undefined,
+    index: number,
+    signal?: AbortSignal,
+  ): Promise<string | null>;
+  /** Remove one unreferenced chunk after a failed upload or committed generation replacement. */
+  deleteAttachmentChunk?(
+    journalId: string,
+    attachmentId: string,
+    generation: string | undefined,
+    index: number,
+  ): Promise<void>;
+  /** Remove every old generation for an attachment after its replacement page publishes. */
+  deleteAttachmentGenerationsExcept?(
+    journalId: string,
+    attachmentId: string,
+    generation: string,
+  ): Promise<void>;
+
   /** Delete a journal and all its contents from the remote. */
   deleteJournal(journalId: string): Promise<void>;
 }
@@ -87,6 +190,13 @@ export interface RemoteStore {
 export interface DownloadFailure {
   name: string;
   reason: string;
+}
+
+export interface SyncWarning {
+  pageId: string;
+  name: string;
+  size?: number;
+  reason: 'legacy-attachment-too-large' | 'chunk-generation-missing';
 }
 
 export interface SyncConflict {
@@ -101,4 +211,30 @@ export interface SyncResult {
   downloaded: string[]; // page IDs
   deleted: string[]; // page IDs
   conflicts: SyncConflict[];
+  /** Attachments intentionally left dirty rather than risking legacy OOM. */
+  warnings: SyncWarning[];
+  /**
+   * Web-only safety stop. The current renderer must be closed before another
+   * sync resumes its immutable, unindexed attachment generations.
+   */
+  checkpointed?: boolean;
+  /** Native-heavy work has consumed the tab-lifetime renderer allowance. */
+  requiresFreshRenderer?: boolean;
 }
+
+/** Stable, user-actionable failure classifications exposed by the sync manager. */
+export type SyncErrorCode = 'password-changed-elsewhere';
+
+/**
+ * The user-facing result of one requested sync. Unlike the engine result, this
+ * keeps cancellation, readiness, authentication, and failure distinct so UI
+ * code never has to guess what a null value meant.
+ */
+export type SyncRunOutcome =
+  | { kind: 'completed'; result: SyncResult }
+  | { kind: 'checkpointed'; result?: SyncResult }
+  | { kind: 'cancelled' }
+  | { kind: 'already-running' }
+  | { kind: 'not-ready' }
+  | { kind: 'authentication-required' }
+  | { kind: 'failed'; errorCode?: SyncErrorCode };

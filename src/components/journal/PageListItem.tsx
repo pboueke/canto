@@ -9,15 +9,23 @@ import { useI18n } from '@/hooks/useI18n';
 import { useAttachment } from '@/hooks/useStorage';
 import { enqueueThumbnail } from '@/hooks/useImageQueue';
 import { useJournalKeys } from '@/contexts/JournalKeyContext';
-import type { PagePreview, JournalSettings } from 'canto-data';
+import type { JournalSettings } from 'canto-data';
+import type { ListPagePreview } from '@/lib/pagePreview';
+import { LEGACY_ATTACHMENT_MEMORY_LIMIT_BYTES } from '@/lib/storage/attachment-content';
 
 interface PageListItemProps {
-  page: PagePreview;
+  page: ListPagePreview;
   journalId: string;
   settings?: JournalSettings;
+  onThumbnailLoadStart?: (pageId: string) => void;
 }
 
-export function PageListItem({ page, journalId, settings }: PageListItemProps) {
+export function PageListItem({
+  page,
+  journalId,
+  settings,
+  onThumbnailLoadStart,
+}: PageListItemProps) {
   const { theme } = useTheme();
   const { t } = useI18n();
   const router = useRouter();
@@ -38,11 +46,21 @@ export function PageListItem({ page, journalId, settings }: PageListItemProps) {
       return;
     }
 
-    if (!page.firstImage || !showThumbnail) return;
+    // Chunked content is intentionally only reassembled when a user opens the
+    // attachment. List rendering may use a persisted thumbnail, never source.
+    if (
+      !page.firstImage ||
+      page.firstImageChunked ||
+      !showThumbnail ||
+      page.firstImageSize == null ||
+      page.firstImageSize > LEGACY_ATTACHMENT_MEMORY_LIMIT_BYTES
+    )
+      return;
     const cancel = enqueueThumbnail(
       page.id,
       async () => {
-        const data = await getAttachment(page.firstImage!, false);
+        onThumbnailLoadStart?.(page.id);
+        const data = await getAttachment(page.firstImage!, page.firstImageEncrypted ?? false);
         if (!data) return null;
         if (Platform.OS === 'web') {
           return `data:image/jpeg;base64,${data}`;
@@ -59,7 +77,17 @@ export function PageListItem({ page, journalId, settings }: PageListItemProps) {
       },
     );
     return cancel;
-  }, [page.thumbnail, page.firstImage, showThumbnail]);
+  }, [
+    page.thumbnail,
+    page.firstImage,
+    page.firstImageEncrypted,
+    page.firstImageChunked,
+    page.firstImageSize,
+    showThumbnail,
+    derivedKey,
+    getAttachment,
+    onThumbnailLoadStart,
+  ]);
 
   const dateObj = new Date(page.date);
   const dateStr = dateObj.toLocaleDateString();

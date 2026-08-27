@@ -4,6 +4,7 @@
  * Verifies data integrity across platforms.
  */
 import { SyncEngine } from '../sync/engine';
+import { SyncManager } from '../sync/manager';
 import { GDriveRemoteStore } from '../sync/gdrive/store';
 import * as api from '../sync/gdrive/api';
 import { InMemoryDrive } from './helpers/in-memory-drive';
@@ -339,6 +340,199 @@ describe('Cross-platform sync E2E', () => {
   // ========== Bidirectional ==========
 
   describe('bidirectional sync', () => {
+    it('keeps both immutable revisions readable when Drive fails after every publication boundary', async () => {
+      type FaultPoint =
+        | 'delta-create'
+        | 'compatibility-create'
+        | 'compatibility-update'
+        | 'compact-list'
+        | 'compact-read'
+        | 'compact-create'
+        | 'compact-cleanup';
+      const faultPoints: readonly FaultPoint[] = [
+        'delta-create',
+        'compatibility-create',
+        'compatibility-update',
+        'compact-list',
+        'compact-read',
+        'compact-create',
+        'compact-cleanup',
+      ];
+
+      for (const faultPoint of faultPoints) {
+        drive.setup();
+        const rootId = drive.putFolder('Canto');
+        const journalId = drive.putFolder('j1', rootId);
+        const priorDeltaId = drive.putFile(
+          'canto-sync-index-v1-j1-index-v2-00000000-0000-4000-8000-000000000001.json',
+          'appData',
+          JSON.stringify({ remote: { modified: 1 } }),
+        );
+        if (faultPoint === 'compatibility-update') {
+          drive.putFile('index.json', journalId, JSON.stringify({ remote: { modified: 1 } }));
+        }
+
+        let injected = false;
+        let hiddenIndexLists = 0;
+        let priorDeltaReads = 0;
+        const createFile = mockedApi.createFile.getMockImplementation()!;
+        const updateFile = mockedApi.updateFile.getMockImplementation()!;
+        const listFiles = mockedApi.listFiles.getMockImplementation()!;
+        const getFileContent = mockedApi.getFileContent.getMockImplementation()!;
+        const deleteFile = mockedApi.deleteFile.getMockImplementation()!;
+        mockedApi.createFile.mockImplementation(async (...args) => {
+          const created = await createFile(...args);
+          const name = args[1].name;
+          if (
+            !injected &&
+            ((faultPoint === 'delta-create' && name.includes('-index-v2-')) ||
+              (faultPoint === 'compatibility-create' && name === 'index.json') ||
+              (faultPoint === 'compact-create' && name.includes('-index-v3-')))
+          ) {
+            injected = true;
+            throw new Error(`lost Drive response after ${faultPoint}`);
+          }
+          return created;
+        });
+        mockedApi.updateFile.mockImplementation(async (...args) => {
+          const updated = await updateFile(...args);
+          if (!injected && faultPoint === 'compatibility-update' && args[2].name === 'index.json') {
+            injected = true;
+            throw new Error('lost Drive response after compatibility-update');
+          }
+          return updated;
+        });
+        mockedApi.listFiles.mockImplementation(async (...args) => {
+          const files = await listFiles(...args);
+          if (
+            args[1].includes("name contains 'canto-sync-index-v1-j1-'") &&
+            ++hiddenIndexLists === 2 &&
+            !injected &&
+            faultPoint === 'compact-list'
+          ) {
+            injected = true;
+            throw new Error('lost Drive response after compact-list');
+          }
+          return files;
+        });
+        mockedApi.getFileContent.mockImplementation(async (...args) => {
+          const content = await getFileContent(...args);
+          if (
+            args[1] === priorDeltaId &&
+            ++priorDeltaReads === 2 &&
+            !injected &&
+            faultPoint === 'compact-read'
+          ) {
+            injected = true;
+            throw new Error('lost Drive response after compact-read');
+          }
+          return content;
+        });
+        mockedApi.deleteFile.mockImplementation(async (...args) => {
+          await deleteFile(...args);
+          if (!injected && faultPoint === 'compact-cleanup') {
+            injected = true;
+            throw new Error('lost Drive response after compact-cleanup');
+          }
+        });
+
+        const writer = new GDriveRemoteStore();
+        await connectStore(writer);
+        const publication = await writer.openSyncIndexPublication('j1');
+        const warn = jest.spyOn(console, 'warn').mockImplementation();
+        try {
+          await publication.publishPage('local', { modified: 2 });
+          await publication.finalize({ successful: true });
+        } catch {
+          // A client-observed failure after a successful remote write is the
+          // exact recovery case under test. A new reader must still see it.
+        } finally {
+          warn.mockRestore();
+        }
+
+        expect(injected).toBe(true);
+        const reader = new GDriveRemoteStore();
+        await connectStore(reader);
+        await expect(reader.downloadSyncIndex('j1')).resolves.toMatchObject({
+          remote: { modified: 1 },
+          local: { modified: 2 },
+        });
+      }
+    });
+
+    it('retains both independent publications through concurrent finalization and compaction', async () => {
+      const native = createSyncPair(drive, 'native');
+      const web = createSyncPair(drive, 'web');
+      await native.local.saveJournal(makeJournal([]));
+      await web.local.saveJournal(makeJournal([]));
+
+      // Seed the common journal folders/index before the two independent
+      // managers race publication. The race below is therefore at immutable
+      // page/index publication and compaction, not folder creation.
+      await connectStore(native.remote);
+      await new SyncManager(native.local, native.remote).syncJournal('j1', 'test-token', SYNC_KEY);
+
+      await native.local.savePage(
+        'j1',
+        makePage('native-page', 10_000, false, [], 'from native'),
+        undefined,
+        true,
+      );
+      await web.local.savePage(
+        'j1',
+        makePage('web-page', 20_000, false, [], 'from web'),
+        undefined,
+        true,
+      );
+
+      // Use separate RemoteStore/manager instances so neither device shares
+      // in-memory index snapshots or publication state with the other.
+      const nativeRaceStore = new GDriveRemoteStore();
+      const webRaceStore = new GDriveRemoteStore();
+      await Promise.all([connectStore(nativeRaceStore), connectStore(webRaceStore)]);
+      const nativeManager = new SyncManager(native.local, nativeRaceStore);
+      const webManager = new SyncManager(web.local, webRaceStore);
+
+      // The stateful fake models Drive's ETag conflict, but the API boundary
+      // classifies it exactly as production does so the store takes its
+      // conditional-update merge/retry path.
+      const updateFile = mockedApi.updateFile.getMockImplementation()!;
+      mockedApi.updateFile.mockImplementation(async (...args) => {
+        try {
+          return await updateFile(...args);
+        } catch (error) {
+          if ((error as { status?: number }).status === 412) {
+            throw Object.assign(new api.GDriveApiError(412), { status: 412 });
+          }
+          throw error;
+        }
+      });
+
+      const [nativeResult, webResult] = await Promise.all([
+        nativeManager.syncJournal('j1', 'test-token', SYNC_KEY),
+        webManager.syncJournal('j1', 'test-token', SYNC_KEY),
+      ]);
+      expect(nativeResult).not.toBeNull();
+      expect(webResult).not.toBeNull();
+
+      const reader = new GDriveRemoteStore();
+      await connectStore(reader);
+      await expect(reader.downloadSyncIndex('j1')).resolves.toMatchObject({
+        'native-page': { modified: 10_000 },
+        'web-page': { modified: 20_000 },
+      });
+
+      const hiddenIndexes = drive
+        .dump()
+        .filter(
+          (file) => file.parentId === 'appData' && file.name.startsWith('canto-sync-index-v1-j1-'),
+        );
+      // Successful finalization compacts eagerly. Concurrent cleanup may leave
+      // one extra immutable artifact, but it must remain far below the 128
+      // checkpoint bound and every reader above still sees the full union.
+      expect(hiddenIndexes.length).toBeLessThanOrEqual(2);
+    });
+
     it('concurrent edits on different pages', async () => {
       const native = createSyncPair(drive, 'native');
       const web = createSyncPair(drive, 'web');

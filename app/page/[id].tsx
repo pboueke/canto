@@ -1,7 +1,7 @@
-import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { ActivityIndicator, Alert, BackHandler, Platform, StyleSheet, View } from 'react-native';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view';
-import { useLocalSearchParams, router } from 'expo-router';
+import { useLocalSearchParams } from 'expo-router';
 import { useSafeBack } from '@/hooks/useSafeBack';
 import { useNavigation } from '@react-navigation/native';
 import * as ImagePicker from 'expo-image-picker';
@@ -21,6 +21,7 @@ import {
 } from '@/hooks/useStorage';
 import { useJournalKeys } from '@/contexts/JournalKeyContext';
 import { generateThumbnail } from '@/lib/thumbnail';
+import { canGenerateThumbnailFromAttachment } from '@/lib/pagePreview';
 import { downloadAttachment } from '@/lib/downloadAttachment';
 import { PageHeader } from '@/components/page/PageHeader';
 import { TagEditor } from '@/components/page/TagEditor';
@@ -33,7 +34,22 @@ import { CommentModal } from '@/components/page/CommentModal';
 import { AddAttachmentPopup } from '@/components/page/AddAttachmentPopup';
 import { FloatingActionButton } from '@/components/common/FloatingActionButton';
 import { generateUUID } from '@/lib/encryption/utils';
+import { chunkedContentForByteLength } from '@/lib/storage/attachment-content';
+import { blobAttachmentChunks, nativeAttachmentChunks } from '@/lib/storage/attachment-ingestion';
+import { persistPickedImage, type PickedAttachmentSource } from '@/lib/image-ingestion';
 import type { Attachment, Comment, GeoLocation, Page } from 'canto-data';
+
+function attachmentSource(uri: string, webFile?: Blob): PickedAttachmentSource {
+  if (Platform.OS === 'web') {
+    // Expo's web pickers provide the original File. Refusing a URI-only value
+    // avoids falling back to a data URL or a full-response buffer.
+    if (!webFile) throw new Error('Attachment file is unavailable for streamed import');
+    return { size: webFile.size, chunks: () => blobAttachmentChunks(webFile) };
+  }
+  const { File: ExpoFile } = require('expo-file-system');
+  const file = new ExpoFile(uri);
+  return { size: file.size, chunks: () => nativeAttachmentChunks(file) };
+}
 
 export default function PageScreen() {
   const { id, journalId, edit, themeOverride } = useLocalSearchParams<{
@@ -64,7 +80,7 @@ export default function PageScreen() {
   const { save } = useSavePage(journalId, derivedKey);
   const { deletePage } = useDeletePage(journalId, derivedKey);
   const { tags: journalTags } = useJournalTags(journalId, derivedKey);
-  const { saveAttachment, getAttachment } = useAttachment(derivedKey);
+  const { saveAttachmentStream, getAttachment, materializeImage } = useAttachment(derivedKey);
 
   const [isEditing, setIsEditing] = useState(edit === 'true');
   const [draft, setDraft] = useState<Page | null>(null);
@@ -141,7 +157,7 @@ export default function PageScreen() {
 
     // Generate thumbnail from first non-deleted image
     const firstImage = toSave.images.find((img) => !img.deleted);
-    if (firstImage && journalId && id) {
+    if (firstImage && journalId && id && canGenerateThumbnailFromAttachment(firstImage)) {
       try {
         const base64 = await getAttachment(firstImage.path, firstImage.encrypted);
         if (base64) {
@@ -150,7 +166,10 @@ export default function PageScreen() {
       } catch {
         // Non-critical — skip thumbnail generation on error
       }
-    } else if (!toSave.images.some((img) => !img.deleted)) {
+    } else if (!firstImage) {
+      // A thumbnail belongs to the first visible image. Clear it only when
+      // there is no image left; chunked images may already have received a
+      // persisted preview while they were picked or imported.
       toSave.thumbnail = undefined;
     }
 
@@ -196,11 +215,11 @@ export default function PageScreen() {
 
   // Attachment handlers
   const handleAddImage = useCallback(
-    async (encrypted: boolean, source: 'camera' | 'library' = 'library') => {
+    async (encrypted: boolean, input: 'camera' | 'library' = 'library') => {
       if (!draft || !journalId || !id) return;
 
       let result: ImagePicker.ImagePickerResult;
-      if (source === 'camera') {
+      if (input === 'camera') {
         const perm = await ImagePicker.requestCameraPermissionsAsync();
         if (!perm.granted) {
           Alert.alert(t.page.cameraPermissionDenied);
@@ -209,19 +228,19 @@ export default function PageScreen() {
         result = await ImagePicker.launchCameraAsync({
           mediaTypes: ['images'],
           quality: 0.8,
-          base64: true,
+          base64: false,
         });
       } else {
         result = await ImagePicker.launchImageLibraryAsync({
           mediaTypes: ['images'],
           quality: 0.8,
-          base64: true,
+          base64: false,
         });
       }
-      if (result.canceled || !result.assets[0]?.base64) return;
+      if (result.canceled || !result.assets[0]) return;
 
       const asset = result.assets[0];
-      const base64Data = asset.base64!;
+      const source = attachmentSource(asset.uri, asset.file);
       const ext = asset.uri.split('.').pop() ?? 'jpg';
       const attachment: Attachment = {
         id: generateUUID(),
@@ -229,19 +248,27 @@ export default function PageScreen() {
         name: `image-${Date.now()}.${ext}`,
         type: 'image',
         encrypted,
-        size: base64Data.length * 0.75, // approximate decoded size
+        size: source.size,
+        content: chunkedContentForByteLength(source.size),
         deleted: false,
       };
 
       try {
-        const path = await saveAttachment(journalId!, id!, attachment, base64Data);
-        attachment.path = path;
-        updateDraft({ images: [...draft.images, attachment] });
+        const persisted = await persistPickedImage({
+          attachment,
+          source,
+          save: (chunks) => saveAttachmentStream(journalId!, id!, attachment, chunks),
+        });
+        const hasVisibleImage = draft.images.some((image) => !image.deleted);
+        updateDraft({
+          images: [...draft.images, persisted.attachment],
+          ...(hasVisibleImage || !persisted.thumbnail ? {} : { thumbnail: persisted.thumbnail }),
+        });
       } catch (err) {
         Alert.alert('Error', err instanceof Error ? err.message : String(err));
       }
     },
-    [draft, journalId, id, saveAttachment, updateDraft, t],
+    [draft, journalId, id, saveAttachmentStream, updateDraft, t],
   );
 
   const handleAddFile = useCallback(
@@ -251,51 +278,27 @@ export default function PageScreen() {
       if (result.canceled || !result.assets[0]) return;
 
       const asset = result.assets[0];
-      let b64: string;
-      let fileSize: number;
-      if (Platform.OS === 'web') {
-        const response = await fetch(asset.uri);
-        const blob = await response.blob();
-        fileSize = blob.size;
-        b64 = await new Promise<string>((resolve) => {
-          const reader = new FileReader();
-          reader.onloadend = () => {
-            const dataUrl = reader.result as string;
-            resolve(dataUrl.split(',')[1]);
-          };
-          reader.readAsDataURL(blob);
-        });
-      } else {
-        const { File: ExpoFile } = require('expo-file-system');
-        const file = new ExpoFile(asset.uri);
-        const bytes = await file.bytes();
-        fileSize = bytes.length;
-        let raw = '';
-        for (let i = 0; i < bytes.length; i++) {
-          raw += String.fromCharCode(bytes[i]);
-        }
-        b64 = btoa(raw);
-      }
-
+      const source = attachmentSource(asset.uri, asset.file);
       const attachment: Attachment = {
         id: generateUUID(),
         path: '',
         name: asset.name,
         type: 'file',
         encrypted,
-        size: fileSize,
+        size: source.size,
+        content: chunkedContentForByteLength(source.size),
         deleted: false,
       };
 
       try {
-        const path = await saveAttachment(journalId!, id!, attachment, b64);
+        const path = await saveAttachmentStream(journalId!, id!, attachment, source.chunks());
         attachment.path = path;
         updateDraft({ files: [...draft.files, attachment] });
       } catch (err) {
         Alert.alert('Error', err instanceof Error ? err.message : String(err));
       }
     },
-    [draft, journalId, id, saveAttachment, updateDraft],
+    [draft, journalId, id, saveAttachmentStream, updateDraft],
   );
 
   const handleAddLocation = useCallback(async () => {
@@ -318,6 +321,9 @@ export default function PageScreen() {
       if (!draft) return;
       updateDraft({
         images: draft.images.map((img) => (img.id === imageId ? { ...img, deleted: true } : img)),
+        ...(draft.images.find((img) => !img.deleted)?.id === imageId
+          ? { thumbnail: undefined }
+          : {}),
       });
     },
     [draft, updateDraft],
@@ -337,7 +343,7 @@ export default function PageScreen() {
       const listIdx1 = list.findIndex((img) => img.id === filtered[idx].id);
       const listIdx2 = list.findIndex((img) => img.id === filtered[swapIdx].id);
       [list[listIdx1], list[listIdx2]] = [list[listIdx2], list[listIdx1]];
-      updateDraft({ images: list });
+      updateDraft({ images: list, thumbnail: undefined });
     },
     [draft, updateDraft],
   );
@@ -404,45 +410,17 @@ export default function PageScreen() {
   );
 
   const loadImage = useCallback(
-    async (path: string): Promise<string | null> => {
-      const data = await getAttachment(path, false);
-      if (!data) return null;
-      if (Platform.OS === 'web') {
-        return `data:image/jpeg;base64,${data}`;
-      }
-      // Native: write to cache file for better memory management
-      await new Promise((r) => setTimeout(r, 0));
-      const { Paths, File: ExpoFile } = require('expo-file-system');
-      const tmpFile = new ExpoFile(
-        Paths.cache,
-        `img-${Date.now()}-${Math.random().toString(36).slice(2)}.jpg`,
-      );
-      if (!tmpFile.exists) tmpFile.create({ intermediates: true });
-      tmpFile.write(data, { encoding: 'base64' });
-      return tmpFile.uri;
+    async (attachment: Attachment, signal: AbortSignal) => {
+      return materializeImage(attachment, signal);
     },
-    [getAttachment],
+    [materializeImage],
   );
 
   const loadEncryptedImage = useCallback(
-    async (path: string): Promise<string | null> => {
-      const data = await getAttachment(path, true);
-      if (!data) return null;
-      if (Platform.OS === 'web') {
-        return `data:image/jpeg;base64,${data}`;
-      }
-      // Native: write to cache file for better memory management
-      await new Promise((r) => setTimeout(r, 0));
-      const { Paths, File: ExpoFile } = require('expo-file-system');
-      const tmpFile = new ExpoFile(
-        Paths.cache,
-        `eimg-${Date.now()}-${Math.random().toString(36).slice(2)}.jpg`,
-      );
-      if (!tmpFile.exists) tmpFile.create({ intermediates: true });
-      tmpFile.write(data, { encoding: 'base64' });
-      return tmpFile.uri;
+    async (attachment: Attachment, signal: AbortSignal) => {
+      return materializeImage(attachment, signal);
     },
-    [getAttachment],
+    [materializeImage],
   );
 
   const handleDateChange = useCallback(
@@ -498,6 +476,7 @@ export default function PageScreen() {
 
   const plainImages = draft.images.filter((img) => !img.encrypted);
   const encryptedImages = draft.images.filter((img) => img.encrypted);
+  const firstImageId = draft.images.find((img) => !img.deleted)?.id;
   const allFiles = [
     ...draft.files.filter((f) => !f.encrypted),
     ...draft.files.filter((f) => f.encrypted),
@@ -532,6 +511,7 @@ export default function PageScreen() {
 
           <ImageCarousel
             images={plainImages}
+            thumbnail={plainImages[0]?.id === firstImageId ? draft.thumbnail : undefined}
             editable={isEditing}
             onRemove={handleRemoveImage}
             onMoveLeft={(imgId) => handleMoveImage(imgId, 'left', false)}
@@ -543,6 +523,7 @@ export default function PageScreen() {
           {encryptedImages.length > 0 && (
             <ImageCarousel
               images={encryptedImages}
+              thumbnail={encryptedImages[0]?.id === firstImageId ? draft.thumbnail : undefined}
               encrypted
               editable={isEditing}
               onRemove={handleRemoveImage}

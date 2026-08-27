@@ -30,6 +30,9 @@ export const makeAttachment = (id: string, path: string): Attachment => ({
   name: `${id}.png`,
   type: 'image',
   encrypted: false,
+  // Test fixtures model an explicitly small legacy payload. Production pages
+  // without this metadata are intentionally deferred before whole-value reads.
+  size: 16,
   deleted: false,
 });
 
@@ -83,6 +86,7 @@ export function createMockLocalStore(journal: JournalContent | null): LocalStore
         Promise.resolve(`/local/files/${att.name}`),
       ),
     getAttachment: jest.fn().mockResolvedValue('base64imagedata'),
+    getAttachmentStorageSize: jest.fn().mockResolvedValue({ status: 'known', bytes: 0 }),
     deleteAttachment: jest.fn(),
     reencryptJournal: jest.fn(),
     reencryptAll: jest.fn(),

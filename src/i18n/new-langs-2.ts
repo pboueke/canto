@@ -142,6 +142,9 @@ export const pl: Dictionary = {
     passwordChanged: 'Hasło zostało zmienione',
     passwordRemoved: 'Ochrona hasłem została usunięta',
     passwordAdded: 'Ochrona hasłem została dodana',
+    passwordProtectionUpdatedWithExceptions: 'Ochrona hasłem została zaktualizowana z wyjątkami',
+    passwordProtectionExceptionDescription:
+      'Następujące pliki pozostają zaszyfrowane na urządzeniu, ale nie są chronione tym hasłem dziennika. Mogą też nie być chronione w zsynchronizowanych kopiach zapasowych:',
     dangerZone: 'Strefa zagrożenia',
     deleteJournal: 'Usuń dziennik',
     deleteConfirmSecure: 'Wprowadź hasło, aby usunąć ten dziennik',
@@ -219,7 +222,15 @@ export const pl: Dictionary = {
     syncNow: 'Synchronizuj teraz',
     syncing: 'Synchronizacja...',
     syncComplete: 'Synchronizacja zakończona',
+    syncCheckpointed:
+      'Synchronizacja została wstrzymana, aby chronić pamięć. Całkowicie zamknij tę kartę, ponownie otwórz Canto i zsynchronizuj ponownie.',
+    syncDeferredAttachments: 'Niektóre duże starsze załączniki nie zostały zsynchronizowane',
+    syncDeferredChunkGeneration:
+      'Załącznik używa starszego formatu fragmentów i nie został zsynchronizowany',
+    syncDeferredAttachmentNotFound: 'Nie znaleziono załącznika w magazynie chmurowym',
     syncError: 'Synchronizacja nie powiodła się',
+    passwordChangedElsewhere:
+      'Hasło zostało zmienione na innym urządzeniu. Zapisz osobno wszystkie niezsynchronizowane lokalne zmiany, usuń ten lokalny dziennik, a następnie zaimportuj go ponownie z Google Drive przy użyciu nowego hasła.',
     enableGDriveSync: 'Włącz synchronizację z Dyskiem Google',
     disableSync: 'Wyłącz synchronizację',
     autoSync: 'Automatyczna synchronizacja',
@@ -444,6 +455,9 @@ export const sv: Dictionary = {
     passwordChanged: 'Lösenordet har ändrats',
     passwordRemoved: 'Lösenordsskyddet har tagits bort',
     passwordAdded: 'Lösenordsskydd har lagts till',
+    passwordProtectionUpdatedWithExceptions: 'Lösenordsskyddet har uppdaterats med undantag',
+    passwordProtectionExceptionDescription:
+      'Följande filer förblir krypterade på enheten men skyddas inte av detta dagbokslösenord. De kan även vara oskyddade i synkroniserade säkerhetskopior:',
     dangerZone: 'Riskzon',
     deleteJournal: 'Radera dagbok',
     deleteConfirmSecure: 'Ange ditt lösenord för att radera den här dagboken',
@@ -521,7 +535,15 @@ export const sv: Dictionary = {
     syncNow: 'Synkronisera nu',
     syncing: 'Synkroniserar...',
     syncComplete: 'Synkronisering klar',
+    syncCheckpointed:
+      'Synkronisering er sat på pause for at beskytte hukommelsen. Luk denne fane helt, åbn Canto igen, og synkroniser igen.',
+    syncDeferredAttachments: 'Vissa stora äldre bilagor synkroniserades inte',
+    syncDeferredChunkGeneration:
+      'Bilagan använder ett äldre segmentformat och synkroniserades inte',
+    syncDeferredAttachmentNotFound: 'Bilagan hittades inte i molnlagringen',
     syncError: 'Synkroniseringen misslyckades',
+    passwordChangedElsewhere:
+      'Lösenordet ändrades på en annan enhet. Spara osynkroniserade lokala ändringar separat, ta bort den här lokala dagboken och importera sedan igen från Google Drive med det nya lösenordet.',
     enableGDriveSync: 'Aktivera Google Drive-synkronisering',
     disableSync: 'Inaktivera synkronisering',
     autoSync: 'Automatisk synkronisering',
@@ -746,6 +768,10 @@ export const vi: Dictionary = {
     passwordChanged: 'Đã đổi mật khẩu thành công',
     passwordRemoved: 'Đã xóa bảo vệ bằng mật khẩu',
     passwordAdded: 'Đã thêm bảo vệ bằng mật khẩu',
+    passwordProtectionUpdatedWithExceptions:
+      'Bảo vệ bằng mật khẩu đã được cập nhật với các ngoại lệ',
+    passwordProtectionExceptionDescription:
+      'Các tệp sau vẫn được mã hóa trên thiết bị nhưng không được bảo vệ bằng mật khẩu nhật ký này. Chúng cũng có thể không được bảo vệ trong các bản sao lưu đã đồng bộ:',
     dangerZone: 'Vùng nguy hiểm',
     deleteJournal: 'Xóa nhật ký',
     deleteConfirmSecure: 'Nhập mật khẩu để xóa nhật ký này',
@@ -823,7 +849,14 @@ export const vi: Dictionary = {
     syncNow: 'Đồng bộ ngay',
     syncing: 'Đang đồng bộ...',
     syncComplete: 'Đồng bộ hoàn tất',
+    syncCheckpointed:
+      'Đồng bộ đã tạm dừng để bảo vệ bộ nhớ. Hãy đóng hoàn toàn thẻ này, mở lại Canto rồi đồng bộ lại.',
+    syncDeferredAttachments: 'Một số tệp đính kèm cũ lớn chưa được đồng bộ',
+    syncDeferredChunkGeneration: 'Tệp đính kèm dùng định dạng đoạn cũ và chưa được đồng bộ',
+    syncDeferredAttachmentNotFound: 'Không tìm thấy tệp đính kèm trong bộ nhớ đám mây',
     syncError: 'Đồng bộ thất bại',
+    passwordChangedElsewhere:
+      'Mật khẩu đã được thay đổi trên một thiết bị khác. Hãy lưu riêng mọi thay đổi cục bộ chưa đồng bộ, xóa nhật ký cục bộ này rồi nhập lại từ Google Drive bằng mật khẩu mới.',
     enableGDriveSync: 'Bật đồng bộ Google Drive',
     disableSync: 'Tắt đồng bộ',
     autoSync: 'Tự động đồng bộ',
@@ -1047,6 +1080,9 @@ export const th: Dictionary = {
     passwordChanged: 'เปลี่ยนรหัสผ่านสำเร็จ',
     passwordRemoved: 'ลบการป้องกันด้วยรหัสผ่านแล้ว',
     passwordAdded: 'เพิ่มการป้องกันด้วยรหัสผ่านแล้ว',
+    passwordProtectionUpdatedWithExceptions: 'อัปเดตการป้องกันด้วยรหัสผ่านพร้อมข้อยกเว้นแล้ว',
+    passwordProtectionExceptionDescription:
+      'ไฟล์ต่อไปนี้ยังคงเข้ารหัสอยู่บนอุปกรณ์ แต่ไม่ได้รับการป้องกันด้วยรหัสผ่านของบันทึกนี้ และอาจไม่ได้รับการป้องกันในข้อมูลสำรองที่ซิงค์แล้ว:',
     dangerZone: 'โซนอันตราย',
     deleteJournal: 'ลบสมุดบันทึก',
     deleteConfirmSecure: 'ป้อนรหัสผ่านเพื่อลบสมุดบันทึกนี้',
@@ -1123,7 +1159,14 @@ export const th: Dictionary = {
     syncNow: 'ซิงค์ตอนนี้',
     syncing: 'กำลังซิงค์...',
     syncComplete: 'ซิงค์เสร็จสิ้น',
+    syncCheckpointed:
+      'การซิงค์ถูกหยุดชั่วคราวเพื่อปกป้องหน่วยความจำ ปิดแท็บนี้ให้สนิท เปิด Canto ใหม่ แล้วซิงค์อีกครั้ง',
+    syncDeferredAttachments: 'ไฟล์แนบเก่าขนาดใหญ่บางไฟล์ไม่ได้ซิงค์',
+    syncDeferredChunkGeneration: 'ไฟล์แนบใช้รูปแบบชิ้นส่วนเก่าและไม่ได้ซิงค์',
+    syncDeferredAttachmentNotFound: 'ไม่พบไฟล์แนบในที่เก็บข้อมูลบนคลาวด์',
     syncError: 'ซิงค์ล้มเหลว',
+    passwordChangedElsewhere:
+      'รหัสผ่านถูกเปลี่ยนบนอุปกรณ์เครื่องอื่น บันทึกการเปลี่ยนแปลงในเครื่องที่ยังไม่ได้ซิงค์แยกไว้ ลบสมุดบันทึกในเครื่องนี้ แล้วนำเข้าจาก Google Drive อีกครั้งด้วยรหัสผ่านใหม่',
     enableGDriveSync: 'เปิดใช้ซิงค์ Google Drive',
     disableSync: 'ปิดการซิงค์',
     autoSync: 'ซิงค์อัตโนมัติ',
@@ -1347,6 +1390,10 @@ export const id: Dictionary = {
     passwordChanged: 'Kata sandi berhasil diubah',
     passwordRemoved: 'Perlindungan kata sandi dihapus',
     passwordAdded: 'Perlindungan kata sandi ditambahkan',
+    passwordProtectionUpdatedWithExceptions:
+      'Perlindungan kata sandi diperbarui dengan pengecualian',
+    passwordProtectionExceptionDescription:
+      'File berikut tetap terenkripsi di perangkat, tetapi tidak dilindungi oleh kata sandi jurnal ini. File tersebut juga mungkin tidak terlindungi dalam cadangan yang disinkronkan:',
     dangerZone: 'Zona bahaya',
     deleteJournal: 'Hapus jurnal',
     deleteConfirmSecure: 'Masukkan kata sandi untuk menghapus jurnal ini',
@@ -1423,7 +1470,14 @@ export const id: Dictionary = {
     syncNow: 'Sinkronkan sekarang',
     syncing: 'Menyinkronkan...',
     syncComplete: 'Sinkronisasi selesai',
+    syncCheckpointed:
+      'Sinkronisasi dijeda untuk melindungi memori. Tutup tab ini sepenuhnya, buka Canto lagi, lalu sinkronkan kembali.',
+    syncDeferredAttachments: 'Beberapa lampiran lama berukuran besar tidak disinkronkan',
+    syncDeferredChunkGeneration: 'Lampiran menggunakan format potongan lama dan tidak disinkronkan',
+    syncDeferredAttachmentNotFound: 'Lampiran tidak ditemukan di penyimpanan cloud',
     syncError: 'Sinkronisasi gagal',
+    passwordChangedElsewhere:
+      'Kata sandi diubah di perangkat lain. Simpan perubahan lokal yang belum disinkronkan secara terpisah, hapus jurnal lokal ini, lalu impor kembali dari Google Drive dengan kata sandi baru.',
     enableGDriveSync: 'Aktifkan sinkronisasi Google Drive',
     disableSync: 'Nonaktifkan sinkronisasi',
     autoSync: 'Sinkronisasi otomatis',
@@ -1648,6 +1702,9 @@ export const uk: Dictionary = {
     passwordChanged: 'Пароль успішно змінено',
     passwordRemoved: 'Захист паролем видалено',
     passwordAdded: 'Захист паролем додано',
+    passwordProtectionUpdatedWithExceptions: 'Захист паролем оновлено з винятками',
+    passwordProtectionExceptionDescription:
+      'Наведені нижче файли залишаються зашифрованими на пристрої, але не захищені цим паролем щоденника. Вони також можуть бути незахищеними в синхронізованих резервних копіях:',
     dangerZone: 'Небезпечна зона',
     deleteJournal: 'Видалити щоденник',
     deleteConfirmSecure: 'Введіть пароль, щоб видалити цей щоденник',
@@ -1725,7 +1782,15 @@ export const uk: Dictionary = {
     syncNow: 'Синхронізувати зараз',
     syncing: 'Синхронізація...',
     syncComplete: 'Синхронізацію завершено',
+    syncCheckpointed:
+      'Синхронізацію призупинено для захисту пам’яті. Повністю закрийте цю вкладку, знову відкрийте Canto та синхронізуйте ще раз.',
+    syncDeferredAttachments: 'Деякі великі застарілі вкладення не було синхронізовано',
+    syncDeferredChunkGeneration:
+      'Вкладення використовує старіший формат фрагментів і не було синхронізовано',
+    syncDeferredAttachmentNotFound: 'Вкладення не знайдено у хмарному сховищі',
     syncError: 'Помилка синхронізації',
+    passwordChangedElsewhere:
+      'Пароль було змінено на іншому пристрої. Окремо збережіть усі несинхронізовані локальні зміни, видаліть цей локальний щоденник, а потім повторно імпортуйте його з Google Drive за допомогою нового пароля.',
     enableGDriveSync: 'Увімкнути синхронізацію з Google Диском',
     disableSync: 'Вимкнути синхронізацію',
     autoSync: 'Автосинхронізація',

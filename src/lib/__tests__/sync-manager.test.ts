@@ -1,4 +1,5 @@
 import { SyncManager, type SyncState } from '../sync/manager';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { LocalStore } from '../storage/types';
 import type { RemoteStore } from '../sync/types';
 import type { Page, JournalContent } from 'canto-data';
@@ -34,6 +35,7 @@ function createMockRemoteStore(): RemoteStore {
   return {
     provider: 'gdrive',
     connect: jest.fn(),
+    setAccessTokenRefresher: jest.fn(),
     disconnect: jest.fn(),
     isConnected: jest.fn().mockReturnValue(true),
     isRemotePath: jest.fn((path: string) => path.startsWith('gdrive://')),
@@ -90,17 +92,23 @@ const makeJournal = (pages: Page[]): JournalContent => ({
 });
 
 function createMockLocalStore(journal: JournalContent | null): LocalStore {
+  const pages = new Map(journal?.pages.map((page) => [page.id, page]) ?? []);
   return {
     initialize: jest.fn(),
     listJournals: jest.fn().mockResolvedValue(journal ? [journal] : []),
     getJournal: jest.fn().mockResolvedValue(journal),
     saveJournal: jest.fn(),
     deleteJournal: jest.fn(),
-    getPage: jest.fn().mockResolvedValue(null),
+    getPage: jest
+      .fn()
+      .mockImplementation((_journalId: string, pageId: string) =>
+        Promise.resolve(pages.get(pageId) ?? null),
+      ),
     savePage: jest.fn(),
     deletePage: jest.fn(),
     saveAttachment: jest.fn(),
     getAttachment: jest.fn(),
+    getAttachmentStorageSize: jest.fn().mockResolvedValue({ status: 'known', bytes: 6 }),
     deleteAttachment: jest.fn(),
     reencryptJournal: jest.fn(),
     reencryptAll: jest.fn(),
@@ -109,10 +117,60 @@ function createMockLocalStore(journal: JournalContent | null): LocalStore {
 
 beforeEach(() => {
   Object.keys(asyncStore).forEach((k) => delete asyncStore[k]);
+  if (typeof sessionStorage !== 'undefined') sessionStorage.clear();
 });
 
 describe('SyncManager', () => {
+  it('registers a Drive token refresher for a direct connection', async () => {
+    const remote = createMockRemoteStore();
+    const manager = new SyncManager(createMockLocalStore(null), remote);
+    const refresh = jest.fn().mockResolvedValue('fresh-token');
+
+    await manager.connectWithToken('expired-token', refresh);
+
+    expect(remote.setAccessTokenRefresher).toHaveBeenCalledWith(refresh);
+    expect(remote.connect).toHaveBeenCalledWith({ accessToken: 'expired-token' });
+  });
+
+  it('keeps a run refresher installed while the sync reconnects', async () => {
+    const remote = createMockRemoteStore();
+    const manager = new SyncManager(createMockLocalStore(makeJournal([])), remote);
+    const refresh = jest.fn().mockResolvedValue('fresh-token');
+
+    await manager.runJournalSync('j1', 'token', undefined, refresh);
+
+    expect(remote.setAccessTokenRefresher).toHaveBeenNthCalledWith(1, refresh);
+    expect(remote.setAccessTokenRefresher).toHaveBeenNthCalledWith(2, undefined);
+    expect(remote.setAccessTokenRefresher).toHaveBeenCalledTimes(2);
+  });
+
   describe('state management', () => {
+    it('coalesces no-change sync progress notifications for large journals', async () => {
+      const pages = Array.from({ length: 351 }, (_, index) => makePage(`p${index}`, index));
+      const local = createMockLocalStore(makeJournal(pages));
+      const remote = createMockRemoteStore();
+      remote.downloadSyncIndex = jest
+        .fn()
+        .mockResolvedValue(
+          Object.fromEntries(pages.map((page) => [page.id, { modified: page.modified }])),
+        );
+      const manager = new SyncManager(local, remote);
+      const listener = jest.fn();
+      manager.subscribe(listener);
+      const now = jest.spyOn(Date, 'now').mockReturnValue(0);
+
+      try {
+        await manager.syncJournal('j1', 'token');
+      } finally {
+        now.mockRestore();
+      }
+
+      // Native scrolling runs separately, but touch handlers share the JS
+      // thread with these notifications. One per catalog page makes a fast
+      // no-op sync leave hundreds of renders queued behind it.
+      expect(listener.mock.calls.length).toBeLessThanOrEqual(4);
+    });
+
     it('returns idle state by default', () => {
       const local = createMockLocalStore(null);
       const manager = new SyncManager(local, createMockRemoteStore());
@@ -160,6 +218,173 @@ describe('SyncManager', () => {
       expect(states[0].status).toBe('syncing');
       expect(states[states.length - 1].status).toBe('idle');
       expect(states[states.length - 1].lastSynced).toBeGreaterThan(0);
+    });
+
+    it('returns a discriminated user-facing outcome for completed and failed runs', async () => {
+      const completedManager = new SyncManager(
+        createMockLocalStore(makeJournal([])),
+        createMockRemoteStore(),
+      );
+      await expect(completedManager.runJournalSync('j1', 'token')).resolves.toMatchObject({
+        kind: 'completed',
+        result: expect.any(Object),
+      });
+
+      const failedLocal = createMockLocalStore(makeJournal([]));
+      (failedLocal.getJournal as jest.Mock).mockRejectedValueOnce(new Error('read failure'));
+      const failedManager = new SyncManager(failedLocal, createMockRemoteStore());
+      const consoleSpy = jest.spyOn(console, 'error').mockImplementation();
+      try {
+        await expect(failedManager.runJournalSync('j1', 'token')).resolves.toEqual({
+          kind: 'failed',
+        });
+      } finally {
+        consoleSpy.mockRestore();
+      }
+    });
+
+    it('keeps a checkpoint across normal reload and resumes only after a new tab', async () => {
+      const originalSessionStorage = Object.getOwnPropertyDescriptor(globalThis, 'sessionStorage');
+      const session = new Map<string, string>();
+      Object.defineProperty(globalThis, 'sessionStorage', {
+        configurable: true,
+        value: {
+          getItem: (key: string) => session.get(key) ?? null,
+          setItem: (key: string, value: string) => session.set(key, value),
+          clear: () => session.clear(),
+        },
+      });
+      const attachment = {
+        id: 'chunked-video',
+        path: '/local/chunked-video',
+        name: 'chunked-video.mp4',
+        type: 'file' as const,
+        encrypted: false,
+        deleted: false,
+        content: {
+          format: 'canto-chunked-v1' as const,
+          byteLength: 80 * 1024 * 1024,
+          chunkSize: 1024 * 1024,
+          chunkCount: 80,
+          generation: 'generation-1',
+        },
+      };
+      const journal = makeJournal([{ ...makePage('p1', 1000), files: [attachment] }]);
+      const local = createMockLocalStore(journal);
+      const remote = createMockRemoteStore();
+      const manager = new SyncManager(local, remote, true);
+      const persisted = new Set<number>();
+      local.forEachAttachmentChunk = jest.fn(async (_attachment, visitor, indexes) => {
+        for (const index of indexes ?? []) await visitor(index, `frame-${index}`);
+      });
+      remote.listAttachmentChunkIndexes = jest.fn(async () => new Set(persisted));
+      remote.uploadAttachmentChunk = jest.fn(async (_journalId, _id, _generation, index) => {
+        persisted.add(index);
+      });
+
+      try {
+        const first = await manager.syncJournal('j1', 'token');
+
+        expect(first?.checkpointed).toBe(true);
+        expect(manager.getState('j1').status).toBe('checkpointed');
+        manager.scheduleSyncDebounced('j1', 'token');
+        expect(manager.getState('j1')).toMatchObject({
+          status: 'checkpointed',
+          requiresFreshRenderer: true,
+        });
+        expect(asyncStore['canto:lastSync:j1']).toBeUndefined();
+        expect(asyncStore['canto:lastRemoteSalt:j1']).toBeUndefined();
+        // sessionStorage survives a normal reload. The next manager must keep
+        // the renderer-safety stop rather than reopening native-heavy work.
+        const reloadedManager = new SyncManager(local, remote, true);
+        await expect(reloadedManager.syncJournal('j1', 'token')).resolves.toBeNull();
+        expect(reloadedManager.getState('j1')).toMatchObject({
+          status: 'checkpointed',
+          requiresFreshRenderer: true,
+        });
+        expect(persisted.size).toBeLessThan(80);
+
+        // A closed tab starts a new sessionStorage lifetime and can use the
+        // immutable chunks published before the checkpoint to finish safely.
+        session.clear();
+        const newTabManager = new SyncManager(local, remote, true);
+        const resumed = await newTabManager.syncJournal('j1', 'token');
+
+        expect(resumed?.checkpointed).toBeFalsy();
+        expect(persisted.size).toBe(80);
+        expect(newTabManager.getState('j1').status).toBe('idle');
+      } finally {
+        if (originalSessionStorage) {
+          Object.defineProperty(globalThis, 'sessionStorage', originalSessionStorage);
+        } else {
+          delete (globalThis as { sessionStorage?: unknown }).sessionStorage;
+        }
+      }
+    });
+
+    it('keeps cancellation distinct when the renderer lifetime budget still has capacity', async () => {
+      const originalSessionStorage = Object.getOwnPropertyDescriptor(globalThis, 'sessionStorage');
+      const session = new Map<string, string>();
+      Object.defineProperty(globalThis, 'sessionStorage', {
+        configurable: true,
+        value: {
+          getItem: (key: string) => session.get(key) ?? null,
+          setItem: (key: string, value: string) => session.set(key, value),
+          clear: () => session.clear(),
+        },
+      });
+      const attachment = {
+        id: 'chunked-video',
+        path: '/local/chunked-video',
+        name: 'chunked-video.mp4',
+        type: 'file' as const,
+        encrypted: false,
+        deleted: false,
+        content: {
+          format: 'canto-chunked-v1' as const,
+          byteLength: 512,
+          chunkSize: 512,
+          chunkCount: 1,
+          generation: 'generation-1',
+        },
+      };
+      const journal = makeJournal([{ ...makePage('p1', 1000), files: [attachment] }]);
+      const local = createMockLocalStore(journal);
+      const remote = createMockRemoteStore();
+      const manager = new SyncManager(local, remote, true);
+      let releaseUpload!: () => void;
+      let markUploadStarted!: () => void;
+      const uploadStarted = new Promise<void>((resolve) => {
+        markUploadStarted = resolve;
+      });
+      local.forEachAttachmentChunk = jest.fn(async (_attachment, visitor, indexes) => {
+        for (const index of indexes ?? []) await visitor(index, `frame-${index}`);
+      });
+      remote.listAttachmentChunkIndexes = jest.fn(async () => new Set<number>());
+      remote.uploadAttachmentChunk = jest.fn(
+        async () =>
+          new Promise<void>((resolve) => {
+            releaseUpload = resolve;
+            markUploadStarted();
+          }),
+      );
+
+      try {
+        const sync = manager.syncJournal('j1', 'token');
+        await uploadStarted;
+        manager.cancelSync('j1');
+        releaseUpload();
+
+        await expect(sync).resolves.toBeNull();
+        expect(manager.getState('j1').status).toBe('idle');
+        expect(manager.getState('j1').requiresFreshRenderer).toBeUndefined();
+      } finally {
+        if (originalSessionStorage) {
+          Object.defineProperty(globalThis, 'sessionStorage', originalSessionStorage);
+        } else {
+          delete (globalThis as { sessionStorage?: unknown }).sessionStorage;
+        }
+      }
     });
 
     it('transitions to error on failure', async () => {
@@ -252,6 +477,44 @@ describe('SyncManager', () => {
 
       expect(r1).not.toBeNull();
       expect(r2).not.toBeNull();
+    });
+
+    it('cancels an in-flight attachment upload without recording a successful sync', async () => {
+      const attachment = {
+        id: 'video',
+        path: '/local/large-video.mp4',
+        name: 'large-video.mp4',
+        type: 'file' as const,
+        encrypted: false,
+        deleted: false,
+      };
+      const journal = makeJournal([{ ...makePage('p1', 1000), files: [attachment] }]);
+      const local = createMockLocalStore(journal);
+      const remote = createMockRemoteStore();
+      const manager = new SyncManager(local, remote);
+      let releaseRead!: (data: string) => void;
+      let markReadStarted!: () => void;
+      const readStarted = new Promise<void>((resolve) => {
+        markReadStarted = resolve;
+      });
+      (local.getAttachment as jest.Mock).mockImplementation(
+        () =>
+          new Promise<string>((resolve) => {
+            releaseRead = resolve;
+            markReadStarted();
+          }),
+      );
+
+      const sync = manager.syncJournal('j1', 'token');
+      await readStarted;
+      manager.cancelSync('j1');
+      releaseRead('base64-video-data');
+
+      await expect(sync).resolves.toBeNull();
+      expect(remote.uploadAttachment).not.toHaveBeenCalled();
+      expect(remote.uploadPage).not.toHaveBeenCalled();
+      expect(manager.getState('j1')).toEqual({ status: 'idle', lastSynced: null });
+      expect(asyncStore['canto:lastSync:j1']).toBeUndefined();
     });
   });
 
@@ -453,6 +716,182 @@ describe('SyncManager', () => {
       await manager.syncJournal('j1', 'token-2');
       expect(remote.connect).toHaveBeenCalledWith({ accessToken: 'token-2' });
     });
+
+    it('exposes direct connect, disconnect, and remote-store access', async () => {
+      const remote = createMockRemoteStore();
+      const manager = new SyncManager(createMockLocalStore(null), remote);
+
+      await manager.connectWithToken('direct-token');
+      await manager.disconnect();
+
+      expect(remote.connect).toHaveBeenCalledWith({ accessToken: 'direct-token' });
+      expect(remote.disconnect).toHaveBeenCalledTimes(1);
+      expect(manager.getRemoteStore()).toBe(remote);
+    });
+  });
+
+  describe('cancellation and scheduling cleanup', () => {
+    beforeEach(() => jest.useFakeTimers());
+    afterEach(() => jest.useRealTimers());
+
+    it('restores persisted sync state when cancellation wins after an AsyncStorage write', async () => {
+      const journal = makeJournal([]);
+      const local = createMockLocalStore(journal);
+      const remote = createMockRemoteStore();
+      (remote.listRemoteJournals as jest.Mock)
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([{ id: 'j1', title: 'Test', lastModified: 1, salt: 'remote-salt' }]);
+      const manager = new SyncManager(local, remote);
+      asyncStore['canto:lastRemoteSalt:j1'] = 'previous-salt';
+      const setItem = AsyncStorage.setItem as jest.Mock;
+      const original = setItem.getMockImplementation();
+      setItem.mockImplementation(async (key: string, value: string) => {
+        asyncStore[key] = value;
+        manager.cancelSync('j1');
+      });
+      try {
+        await expect(manager.syncJournal('j1', 'token')).resolves.toBeNull();
+        expect(asyncStore['canto:lastRemoteSalt:j1']).toBe('previous-salt');
+        expect(manager.getState('j1').status).toBe('idle');
+      } finally {
+        setItem.mockImplementation(original!);
+      }
+    });
+
+    it('never starts or retains a persistence write once its run has been cancelled', async () => {
+      const manager = new SyncManager(
+        createMockLocalStore(makeJournal([])),
+        createMockRemoteStore(),
+      );
+      const persistForRun = (
+        manager as unknown as {
+          persistForRun: (
+            key: string,
+            value: string,
+            controller: AbortController,
+            isCurrentRun: () => boolean,
+          ) => Promise<void>;
+        }
+      ).persistForRun.bind(manager);
+      const getItem = AsyncStorage.getItem as jest.Mock;
+      const setItem = AsyncStorage.setItem as jest.Mock;
+      const originalGet = getItem.getMockImplementation();
+      const originalSet = setItem.getMockImplementation();
+      try {
+        const beforeRead = new AbortController();
+        beforeRead.abort();
+        await expect(persistForRun('key', 'value', beforeRead, () => true)).rejects.toThrow(
+          'Sync cancelled',
+        );
+
+        const afterRead = new AbortController();
+        getItem.mockImplementationOnce(async () => {
+          afterRead.abort();
+          return 'previous';
+        });
+        await expect(persistForRun('key', 'value', afterRead, () => true)).rejects.toThrow(
+          'Sync cancelled',
+        );
+
+        asyncStore.key = 'previous';
+        const afterWrite = new AbortController();
+        setItem.mockImplementationOnce(async (key: string, value: string) => {
+          asyncStore[key] = value;
+          afterWrite.abort();
+        });
+        await expect(persistForRun('key', 'value', afterWrite, () => true)).rejects.toThrow(
+          'Sync cancelled',
+        );
+        expect(asyncStore.key).toBe('previous');
+      } finally {
+        getItem.mockImplementation(originalGet!);
+        setItem.mockImplementation(originalSet!);
+      }
+    });
+
+    it('stops cleanly when cancellation occurs during either persisted-state read', async () => {
+      const getItem = AsyncStorage.getItem as jest.Mock;
+      const original = getItem.getMockImplementation();
+      try {
+        for (const cancelOnCall of [1, 2]) {
+          let calls = 0;
+          const manager = new SyncManager(
+            createMockLocalStore(makeJournal([])),
+            createMockRemoteStore(),
+          );
+          getItem.mockImplementation(async () => {
+            calls++;
+            if (calls === cancelOnCall) manager.cancelSync('j1');
+            return null;
+          });
+          await expect(manager.syncJournal('j1', 'token')).resolves.toBeNull();
+          expect(manager.getState('j1').status).toBe('idle');
+        }
+      } finally {
+        getItem.mockImplementation(original!);
+      }
+    });
+
+    it('requires a fresh renderer before starting or scheduling additional browser sync work', async () => {
+      const manager = new SyncManager(
+        createMockLocalStore(makeJournal([])),
+        createMockRemoteStore(),
+        true,
+      );
+      (
+        manager as unknown as { rendererWorkLedger: { requireFreshRenderer(): void } }
+      ).rendererWorkLedger.requireFreshRenderer();
+
+      await expect(manager.syncJournal('j1', 'token')).resolves.toBeNull();
+      expect(manager.getState('j1')).toMatchObject({
+        status: 'checkpointed',
+        requiresFreshRenderer: true,
+      });
+      manager.scheduleSyncDebounced('j1', 'token');
+      expect(manager.getState('j1').status).toBe('checkpointed');
+    });
+
+    it('keeps an otherwise successful sync successful when recording remote salt fails', async () => {
+      const remote = createMockRemoteStore();
+      (remote.listRemoteJournals as jest.Mock)
+        .mockResolvedValueOnce([])
+        .mockRejectedValueOnce(new Error('registry temporarily unavailable'));
+      const warn = jest.spyOn(console, 'warn').mockImplementation();
+      try {
+        await expect(
+          new SyncManager(createMockLocalStore(makeJournal([])), remote).syncJournal('j1', 'token'),
+        ).resolves.toMatchObject({ uploaded: [], downloaded: [] });
+        expect(warn).toHaveBeenCalledWith(
+          '[Canto] Failed to record remote salt for j1:',
+          expect.any(Error),
+        );
+      } finally {
+        warn.mockRestore();
+      }
+    });
+
+    it('cancels scheduled work through cancelSync, dispose, and cancelAllSyncs', () => {
+      const remote = createMockRemoteStore();
+      const manager = new SyncManager(createMockLocalStore(makeJournal([])), remote);
+
+      manager.scheduleSyncDebounced('j1', 'token', undefined, 100);
+      manager.cancelSync('j1');
+      manager.scheduleSyncDebounced('j2', 'token', undefined, 100);
+      manager.dispose();
+      manager.scheduleSyncDebounced('j3', 'token', undefined, 100);
+      manager.cancelAllSyncs();
+      jest.advanceTimersByTime(100);
+
+      expect(remote.connect).not.toHaveBeenCalled();
+    });
+
+    it('reports a missing salt as a sync error', async () => {
+      const journal = { ...makeJournal([]), salt: undefined } as unknown as JournalContent;
+      const manager = new SyncManager(createMockLocalStore(journal), createMockRemoteStore());
+
+      await expect(manager.syncJournal('j1', 'token')).resolves.toBeNull();
+      expect(manager.getState('j1').error).toContain('has no salt');
+    });
   });
 
   describe('error recovery', () => {
@@ -590,8 +1029,8 @@ describe('SyncManager', () => {
       await new Promise((r) => setTimeout(r, 50));
       jest.useFakeTimers();
 
-      // getJournal called twice per sync: once by engine for content, once for sync index update
-      expect(local.getJournal).toHaveBeenCalledTimes(2);
+      // The engine uses a single immutable journal snapshot for content and index.
+      expect(local.getJournal).toHaveBeenCalledTimes(1);
       // listJournals called once to resolve sync key from salt
       expect(local.listJournals).toHaveBeenCalledTimes(1);
     });

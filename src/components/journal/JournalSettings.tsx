@@ -27,14 +27,16 @@ import { useSyncManager } from '@/contexts/SyncManagerContext';
 import { IconPicker } from '@/components/common/IconPicker';
 import { ThemePickerModal } from '@/components/home/ThemePickerModal';
 import { ConfirmDeleteModal } from './ConfirmDeleteModal';
-import { ChangePasswordModal } from './ChangePasswordModal';
+import { ChangePasswordModal, type ReencryptionProgress } from './ChangePasswordModal';
 import { isBiometricAvailable } from '@/lib/biometric';
+import type { ReencryptionResult } from '@/lib/storage/types';
 import { type ThemeName, themes } from '@/styles/themes';
 import type { JournalContent, JournalSettings as JournalSettingsType } from 'canto-data';
 import { webModalContent } from '@/styles/web';
 
 interface JournalSettingsProps {
-  journal: JournalContent;
+  journal: Omit<JournalContent, 'pages'>;
+  pageCount: number;
   derivedKey: Uint8Array | null;
   onClose: () => void;
   onJournalChanged: () => void;
@@ -45,6 +47,7 @@ const SORT_OPTIONS: SortOrder[] = ['descending', 'ascending', 'none'];
 
 export function JournalSettings({
   journal,
+  pageCount,
   derivedKey,
   onClose,
   onJournalChanged,
@@ -53,8 +56,8 @@ export function JournalSettings({
   const { t } = useI18n();
   const insets = useSafeAreaInsets();
   const { deleteJournal } = useDeleteJournal();
-  const { saveJournal } = useSaveJournal();
-  const { deriveAndCache, setKey, clearKey } = useJournalKeys();
+  const { saveJournalMetadata } = useSaveJournal();
+  const { deriveAndCache, setKey, clearKey, touchActivity } = useJournalKeys();
   const { manager } = useSyncManager();
 
   const [settings, setSettings] = useState<JournalSettingsType>({ ...journal.settings });
@@ -64,8 +67,9 @@ export function JournalSettings({
   const [showNameInput, setShowNameInput] = useState(false);
   const [newName, setNewName] = useState(journal.title);
   const [deleteError, setDeleteError] = useState<string | null>(null);
-  const [passwordProgress, setPasswordProgress] = useState('');
+  const [passwordProgress, setPasswordProgress] = useState<ReencryptionProgress | null>(null);
   const [passwordError, setPasswordError] = useState('');
+  const [passwordResult, setPasswordResult] = useState<ReencryptionResult | null>(null);
   const [saving, setSaving] = useState(false);
   const [biometricSupported, setBiometricSupported] = useState(false);
   const [showThemePicker, setShowThemePicker] = useState(false);
@@ -74,7 +78,6 @@ export function JournalSettings({
     isBiometricAvailable().then(setBiometricSupported);
   }, []);
 
-  const pageCount = journal.pages.filter((p) => !p.deleted).length;
   const createdDate = new Date(journal.date).toLocaleDateString();
 
   const sortLabel = (sort: SortOrder) => {
@@ -93,10 +96,10 @@ export function JournalSettings({
       const updated = { ...settings, [key]: value };
       setSettings(updated);
       const updatedJournal = { ...journal, settings: updated };
-      await saveJournal(updatedJournal, derivedKey ?? undefined);
+      await saveJournalMetadata(updatedJournal, derivedKey ?? undefined);
       onJournalChanged();
     },
-    [settings, journal, derivedKey, saveJournal, onJournalChanged],
+    [settings, journal, derivedKey, saveJournalMetadata, onJournalChanged],
   );
 
   const toggleSort = useCallback(() => {
@@ -109,10 +112,10 @@ export function JournalSettings({
     async (icon: string) => {
       setShowIconPicker(false);
       const updated = { ...journal, icon };
-      await saveJournal(updated, derivedKey ?? undefined);
+      await saveJournalMetadata(updated, derivedKey ?? undefined);
       onJournalChanged();
     },
-    [journal, derivedKey, saveJournal, onJournalChanged],
+    [journal, derivedKey, saveJournalMetadata, onJournalChanged],
   );
 
   const handleNameChange = useCallback(async () => {
@@ -123,11 +126,11 @@ export function JournalSettings({
     }
     setSaving(true);
     const updated = { ...journal, title: trimmed };
-    await saveJournal(updated, derivedKey ?? undefined);
+    await saveJournalMetadata(updated, derivedKey ?? undefined);
     onJournalChanged();
     setSaving(false);
     setShowNameInput(false);
-  }, [newName, journal, derivedKey, saveJournal, onJournalChanged]);
+  }, [newName, journal, derivedKey, saveJournalMetadata, onJournalChanged]);
 
   const handleDelete = useCallback(
     async (password?: string) => {
@@ -159,90 +162,109 @@ export function JournalSettings({
 
   const handleChangePassword = useCallback(
     async (currentPwd: string | undefined, newPwd: string | undefined, kdfIterations?: number) => {
-      setPasswordError('');
-      setPasswordProgress(t.journalSettings.reencrypting);
+      // Password rotation can legitimately take longer than the foreground
+      // inactivity timeout for a large journal. It remains a user-initiated,
+      // active operation, while background/resume auto-lock behavior is left
+      // unchanged by JournalKeyProvider.
+      touchActivity();
+      const activityTimer = setInterval(touchActivity, 10_000);
+      try {
+        setPasswordError('');
+        setPasswordResult(null);
+        setPasswordProgress({ label: t.journalSettings.reencrypting });
 
-      const encryption = getEncryptionService();
-      const store = await getLocalStore();
-      let newKey: Uint8Array | undefined;
-      let newSalt: string = journal.salt;
+        const encryption = getEncryptionService();
+        const store = await getLocalStore();
+        let newKey: Uint8Array | undefined;
+        let newSalt: string = journal.salt;
 
-      // Step 1: Verify current password via trial decryption
-      // (PBKDF2 always succeeds regardless of password — must actually try to decrypt)
-      if (journal.secure && currentPwd && journal.salt) {
-        const trialKey = await deriveAndCache(
-          journal.id,
-          currentPwd,
-          journal.salt,
-          journal.kdfIterations,
-        );
-        const trialResult = await tryLoadJournal(journal.id, trialKey);
-        if (!trialResult) {
-          // Wrong password — restore the correct cached key so journal remains accessible
+        // Step 1: Verify current password via trial decryption
+        // (PBKDF2 always succeeds regardless of password — must actually try to decrypt)
+        if (journal.secure && currentPwd && journal.salt) {
+          const trialKey = await deriveAndCache(
+            journal.id,
+            currentPwd,
+            journal.salt,
+            journal.kdfIterations,
+          );
+          const trialResult = await tryLoadJournal(journal.id, trialKey);
+          if (!trialResult) {
+            // Wrong password — restore the correct cached key so journal remains accessible
+            if (derivedKey) {
+              setKey(journal.id, derivedKey);
+            } else {
+              clearKey(journal.id);
+            }
+            throw new Error(t.home.wrongPassword);
+          }
+        }
+
+        // Step 2: Generate new key if new password provided
+        if (newPwd) {
+          const saltBytes = encryption.generateSalt();
+          const binary = Array.from(saltBytes, (b) => String.fromCharCode(b)).join('');
+          newSalt = btoa(binary);
+          newKey = await deriveAndCache(journal.id, newPwd, newSalt, kdfIterations);
+        }
+
+        // Step 3: Build updated journal
+        // Password rotation is an explicitly confirmed, full-data operation.
+        // Settings itself opens from metadata + catalog without this scan.
+        const fullJournal = await tryLoadJournal(journal.id, derivedKey ?? undefined);
+        if (!fullJournal) throw new Error(t.sync.syncError);
+        const updatedJournal: JournalContent = {
+          ...fullJournal,
+          secure: !!newPwd,
+          salt: newSalt,
+          kdfIterations: newPwd ? kdfIterations : undefined,
+          settings: { ...fullJournal.settings },
+        };
+
+        // Step 4: Re-encrypt with progress
+        let result: ReencryptionResult;
+        try {
+          result = await store.reencryptJournal(
+            updatedJournal,
+            derivedKey ?? undefined,
+            newKey,
+            (current, total) => {
+              setPasswordProgress({
+                label: t.journalSettings.reencryptProgress
+                  .replace('{current}', String(current))
+                  .replace('{total}', String(total)),
+                current,
+                total,
+              });
+            },
+          );
+        } catch (err) {
+          // Restore the original key so user can still access their data
           if (derivedKey) {
             setKey(journal.id, derivedKey);
           } else {
             clearKey(journal.id);
           }
-          throw new Error(t.home.wrongPassword);
+          setPasswordProgress(null);
+          throw new Error(
+            `Re-encryption failed: ${err instanceof Error ? err.message : String(err)}. ` +
+              `Your journal data is unchanged — the original password still works.`,
+          );
         }
-      }
 
-      // Step 2: Generate new key if new password provided
-      if (newPwd) {
-        const saltBytes = encryption.generateSalt();
-        const binary = Array.from(saltBytes, (b) => String.fromCharCode(b)).join('');
-        newSalt = btoa(binary);
-        newKey = await deriveAndCache(journal.id, newPwd, newSalt, kdfIterations);
-      }
-
-      // Step 3: Build updated journal
-      const updatedJournal: JournalContent = {
-        ...journal,
-        secure: !!newPwd,
-        salt: newSalt,
-        kdfIterations: newPwd ? kdfIterations : undefined,
-        settings: { ...journal.settings },
-      };
-
-      // Step 4: Atomic re-encryption with progress
-      try {
-        await store.reencryptJournal(
-          updatedJournal,
-          derivedKey ?? undefined,
-          newKey,
-          (current, total) => {
-            setPasswordProgress(
-              t.journalSettings.reencryptProgress
-                .replace('{current}', String(current))
-                .replace('{total}', String(total)),
-            );
-          },
-        );
-      } catch (err) {
-        // Restore the original key so user can still access their data
-        if (derivedKey) {
-          setKey(journal.id, derivedKey);
-        } else {
+        // Step 5: Update key cache
+        if (!newPwd) {
           clearKey(journal.id);
         }
-        setPasswordProgress('');
-        throw new Error(
-          `Re-encryption failed: ${err instanceof Error ? err.message : String(err)}. ` +
-            `Your journal data is unchanged — the original password still works.`,
-        );
-      }
 
-      // Step 5: Update key cache
-      if (!newPwd) {
-        clearKey(journal.id);
+        setPasswordProgress(null);
+        onJournalChanged();
+        setPasswordResult(result);
+        return result;
+      } finally {
+        clearInterval(activityTimer);
       }
-
-      setPasswordProgress('');
-      onJournalChanged();
-      setShowPasswordModal(false);
     },
-    [journal, derivedKey, deriveAndCache, setKey, clearKey, onJournalChanged, t],
+    [journal, derivedKey, deriveAndCache, setKey, clearKey, touchActivity, onJournalChanged, t],
   );
 
   const renderToggle = (
@@ -461,7 +483,7 @@ export function JournalSettings({
                 value={!!journal.biometric}
                 onValueChange={async (val) => {
                   const updated = { ...journal, biometric: val };
-                  await saveJournal(updated, derivedKey ?? undefined);
+                  await saveJournalMetadata(updated, derivedKey ?? undefined);
                   onJournalChanged();
                 }}
                 trackColor={{ false: theme.colors.border, true: theme.colors.primary }}
@@ -686,10 +708,12 @@ export function JournalSettings({
         onCancel={() => {
           setShowPasswordModal(false);
           setPasswordError('');
-          setPasswordProgress('');
+          setPasswordProgress(null);
+          setPasswordResult(null);
         }}
         progress={passwordProgress}
         error={passwordError}
+        result={passwordResult}
       />
 
       <ThemePickerModal

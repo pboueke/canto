@@ -629,6 +629,40 @@ describe('GDrive sync encryption', () => {
       expect(pageFiles[0].content).toMatch(new RegExp(`^ENC:${keyTag(KEY_S1)}:`));
     });
 
+    it('repairs pages left under an old key when the registry already has the new salt', async () => {
+      // An interrupted older client could publish the new registry/meta before
+      // re-uploading pages. Salt comparison alone then says the journal is in
+      // sync even though a cloud import cannot decrypt any page.
+      const pages = [makePage('p1', 1000), makePage('p2', 2000)];
+      const oldJournal = makeJournal(pages, true, 'UzA=');
+      const KEY_S0 = new Uint8Array(32).fill(10);
+      const KEY_S1 = new Uint8Array(32).fill(20);
+      await new SyncEngine(createMockLocalStore(oldJournal), store).sync('j1', KEY_S0);
+
+      // Simulate the historical half-rotation: only the registry/meta moved
+      // to S1. The page index and ciphertexts remain from S0.
+      await store.uploadJournalMeta('j1', `ENC:${keyTag(KEY_S1)}:metadata`, {
+        title: oldJournal.title,
+        encrypted: true,
+        salt: 'UzE=',
+      });
+      const repairedLocal = createMockLocalStore(makeJournal(pages, true, 'UzE='));
+
+      const result = await new SyncEngine(repairedLocal, store).sync(
+        'j1',
+        KEY_S1,
+        undefined,
+        'UzE=',
+      );
+
+      expect(result.uploaded).toEqual(expect.arrayContaining(['p1', 'p2']));
+      for (const pageId of ['p1', 'p2']) {
+        expect(await store.downloadPage('j1', pageId)).toMatch(
+          new RegExp(`^ENC:${keyTag(KEY_S1)}:`),
+        );
+      }
+    });
+
     it('aborts when remote added password (encrypted=true with new salt) — user scenario', async () => {
       // The user's exact bug: device A has secure=false, salt=S0. Device B (out of band)
       // added a password — remote now has encrypted=true with a NEW salt (since adding a

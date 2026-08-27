@@ -3,6 +3,7 @@ import { ActivityIndicator, Modal, Pressable, StyleSheet, Switch, Text, View } f
 import { Feather } from '@expo/vector-icons';
 import { useTheme } from '@/hooks/useTheme';
 import { useI18n } from '@/hooks/useI18n';
+import { getLocalStore } from '@/hooks/useStorage';
 import { exportJournal, type ExportProgress } from '@/lib/backup';
 import type { JournalContent } from 'canto-data';
 import { webModalContent } from '@/styles/web';
@@ -40,7 +41,7 @@ const progressStyles = StyleSheet.create({
 
 interface ExportJournalModalProps {
   visible: boolean;
-  journal: JournalContent;
+  journal: Omit<JournalContent, 'pages'>;
   derivedKey?: Uint8Array | null;
   onClose: () => void;
 }
@@ -64,11 +65,16 @@ export function ExportJournalModal({
     setError(null);
     await new Promise((r) => setTimeout(r, 100));
     try {
-      await exportJournal(journal, encrypted, derivedKey ?? undefined, setProgress);
+      // Export is a deliberate full-data workflow. Keep the modal shell fast
+      // by loading pages only after the user confirms the export action.
+      const store = await getLocalStore();
+      const fullJournal = await store.getJournal(journal.id, derivedKey ?? undefined);
+      if (!fullJournal) throw new Error(t.backup.exportError);
+      await exportJournal(fullJournal, encrypted, derivedKey ?? undefined, setProgress);
       handleClose();
     } catch (err) {
       console.error('[Canto] Export failed:', err);
-      setError(err instanceof Error ? err.message : String(err));
+      setError(t.backup.exportError);
     } finally {
       setExporting(false);
       setProgress(null);

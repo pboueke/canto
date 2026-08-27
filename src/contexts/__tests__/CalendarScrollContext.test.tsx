@@ -18,6 +18,28 @@ describe('CalendarScrollContext', () => {
     expect(result.current.getOffset('journal-a')).toBe(123);
   });
 
+  it('stores a stable month anchor independently of the pixel offset', () => {
+    const { result } = renderHook(() => useCalendarScroll(), { wrapper });
+    act(() => result.current.setMonthAnchor('journal-a', '2026-8'));
+    expect(result.current.getMonthAnchor('journal-a')).toBe('2026-8');
+    expect(result.current.getOffset('journal-a')).toBe(0);
+  });
+
+  it('stores a month anchor with a relative offset for virtual-list restoration', () => {
+    const { result } = renderHook(() => useCalendarScroll(), { wrapper });
+    act(() =>
+      result.current.setScrollAnchor('journal-a', {
+        monthKey: '2026-8',
+        relativeOffset: 42,
+      }),
+    );
+    expect(result.current.getScrollAnchor('journal-a')).toEqual({
+      monthKey: '2026-8',
+      relativeOffset: 42,
+    });
+    expect(result.current.getMonthAnchor('journal-a')).toBe('2026-8');
+  });
+
   it('offsets are isolated per journal id', () => {
     const { result } = renderHook(() => useCalendarScroll(), { wrapper });
     act(() => {

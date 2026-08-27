@@ -3,6 +3,7 @@ import {
   ActivityIndicator,
   Modal,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -14,7 +15,22 @@ import { useI18n } from '@/hooks/useI18n';
 import { PasswordStrengthMeter } from '@/components/common/PasswordStrengthMeter';
 import { KdfIterationPicker } from '@/components/common/KdfIterationPicker';
 import { DEFAULT_KDF_ITERATIONS } from '@/lib/encryption/password';
+import type { ReencryptionResult } from '@/lib/storage/types';
+import { getContrastText } from '@/styles/themes';
 import { webModalContent } from '@/styles/web';
+
+function formatBytes(bytes: number, locale: string): string {
+  if (bytes < 1024 * 1024) {
+    return `${new Intl.NumberFormat(locale, { maximumFractionDigits: 0 }).format(Math.ceil(bytes / 1024))} KB`;
+  }
+  return `${new Intl.NumberFormat(locale, { minimumFractionDigits: 1, maximumFractionDigits: 1 }).format(bytes / (1024 * 1024))} MB`;
+}
+
+export interface ReencryptionProgress {
+  label: string;
+  current?: number;
+  total?: number;
+}
 
 interface ChangePasswordModalProps {
   visible: boolean;
@@ -24,10 +40,11 @@ interface ChangePasswordModalProps {
     currentPassword: string | undefined,
     newPassword: string | undefined,
     kdfIterations?: number,
-  ) => Promise<void>;
+  ) => Promise<ReencryptionResult>;
   onCancel: () => void;
-  progress?: string;
+  progress?: ReencryptionProgress | null;
   error?: string;
+  result?: ReencryptionResult | null;
 }
 
 export function ChangePasswordModal({
@@ -38,9 +55,10 @@ export function ChangePasswordModal({
   onCancel,
   progress,
   error,
+  result,
 }: ChangePasswordModalProps) {
   const { theme } = useTheme();
-  const { t } = useI18n();
+  const { t, lang } = useI18n();
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -85,6 +103,11 @@ export function ChangePasswordModal({
   };
 
   const displayError = error || localError;
+  const skippedAttachments = result?.skippedAttachments ?? [];
+  const progressPercent =
+    progress?.current !== undefined && progress.total && progress.total > 0
+      ? Math.min(100, Math.round((progress.current / progress.total) * 100))
+      : null;
 
   return (
     <Modal visible={visible} animationType="fade" transparent>
@@ -109,8 +132,102 @@ export function ChangePasswordModal({
                   { color: theme.colors.textSecondary, fontFamily: theme.fonts.regular },
                 ]}
               >
-                {progress || t.common.loading}
+                {progress?.label || t.common.loading}
               </Text>
+              {progressPercent !== null && (
+                <View style={styles.progressContainer}>
+                  <View
+                    testID="reencryption-progress"
+                    accessibilityRole="progressbar"
+                    accessibilityValue={{ min: 0, max: 100, now: progressPercent }}
+                    style={[styles.progressTrack, { backgroundColor: theme.colors.surface }]}
+                  >
+                    <View
+                      style={[
+                        styles.progressFill,
+                        { width: `${progressPercent}%`, backgroundColor: theme.colors.primary },
+                      ]}
+                    />
+                  </View>
+                  <Text
+                    style={[
+                      styles.progressPercent,
+                      { color: theme.colors.textSecondary, fontFamily: theme.fonts.regular },
+                    ]}
+                  >
+                    {progressPercent}%
+                  </Text>
+                </View>
+              )}
+            </View>
+          ) : result ? (
+            <View style={styles.resultContainer}>
+              <Feather
+                name={skippedAttachments.length > 0 ? 'alert-triangle' : 'check-circle'}
+                size={32}
+                color={skippedAttachments.length > 0 ? theme.colors.error : theme.colors.primary}
+              />
+              <Text
+                style={[
+                  styles.resultTitle,
+                  { color: theme.colors.text, fontFamily: theme.fonts.bold },
+                ]}
+              >
+                {skippedAttachments.length > 0
+                  ? t.journalSettings.passwordProtectionUpdatedWithExceptions
+                  : t.journalSettings.passwordChanged}
+              </Text>
+              {skippedAttachments.length > 0 && (
+                <>
+                  <Text
+                    style={[
+                      styles.resultDescription,
+                      { color: theme.colors.textSecondary, fontFamily: theme.fonts.regular },
+                    ]}
+                  >
+                    {t.journalSettings.passwordProtectionExceptionDescription}
+                  </Text>
+                  <ScrollView
+                    style={styles.resultList}
+                    contentContainerStyle={styles.resultListContent}
+                  >
+                    {skippedAttachments.map((attachment, index) => (
+                      <Text
+                        key={`${attachment.name}-${index}`}
+                        style={[
+                          styles.resultItem,
+                          { color: theme.colors.text, fontFamily: theme.fonts.regular },
+                        ]}
+                      >
+                        {attachment.name}
+                        {attachment.size !== undefined
+                          ? ` (${formatBytes(attachment.size, lang)})`
+                          : ''}
+                      </Text>
+                    ))}
+                  </ScrollView>
+                </>
+              )}
+              <Pressable
+                style={[
+                  styles.btn,
+                  styles.doneButton,
+                  { backgroundColor: theme.colors.buttonSubmit },
+                ]}
+                onPress={handleCancel}
+              >
+                <Text
+                  style={[
+                    styles.btnText,
+                    {
+                      color: getContrastText(theme.colors.buttonSubmit),
+                      fontFamily: theme.fonts.bold,
+                    },
+                  ]}
+                >
+                  {t.common.done}
+                </Text>
+              </Pressable>
             </View>
           ) : (
             <>
@@ -248,7 +365,15 @@ export function ChangePasswordModal({
                   onPress={handleSubmit}
                   disabled={!canSubmit}
                 >
-                  <Text style={[styles.btnText, { color: '#fff', fontFamily: theme.fonts.bold }]}>
+                  <Text
+                    style={[
+                      styles.btnText,
+                      {
+                        color: getContrastText(theme.colors.buttonSubmit),
+                        fontFamily: theme.fonts.bold,
+                      },
+                    ]}
+                  >
                     {t.common.save}
                   </Text>
                 </Pressable>
@@ -286,6 +411,49 @@ const styles = StyleSheet.create({
   },
   busyText: {
     fontSize: 14,
+  },
+  progressContainer: {
+    width: '100%',
+    alignItems: 'center',
+    gap: 6,
+  },
+  progressTrack: {
+    width: '100%',
+    height: 8,
+    borderRadius: 4,
+    overflow: 'hidden',
+  },
+  progressFill: {
+    height: '100%',
+    borderRadius: 4,
+  },
+  progressPercent: {
+    fontSize: 12,
+  },
+  resultContainer: {
+    alignItems: 'center',
+    gap: 12,
+  },
+  resultTitle: {
+    fontSize: 16,
+    textAlign: 'center',
+  },
+  resultDescription: {
+    fontSize: 13,
+    lineHeight: 19,
+  },
+  resultList: {
+    alignSelf: 'stretch',
+    maxHeight: 180,
+  },
+  resultListContent: {
+    gap: 6,
+  },
+  resultItem: {
+    fontSize: 13,
+  },
+  doneButton: {
+    marginTop: 4,
   },
   input: {
     height: 44,

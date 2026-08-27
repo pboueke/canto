@@ -5,7 +5,7 @@
  */
 import type { Journal, JournalContent, Page, Attachment } from 'canto-data';
 import type { EncryptionService } from '@/lib/encryption';
-import type { LocalStore } from '../../storage/types';
+import type { LocalStore, ReencryptionResult } from '../../storage/types';
 
 export type Platform = 'native' | 'web';
 
@@ -250,11 +250,18 @@ export function createInMemoryLocalStore(
       store.delete(path);
     },
 
+    async getAttachmentStorageSize(path: string) {
+      const ciphertext = store.get(path);
+      return ciphertext == null
+        ? { status: 'missing' as const }
+        : { status: 'known' as const, bytes: ciphertext.length };
+    },
+
     async reencryptJournal(
       journal: JournalContent,
       oldKey: Uint8Array | undefined,
       newKey: Uint8Array | undefined,
-    ): Promise<void> {
+    ): Promise<ReencryptionResult> {
       // Mirror src/lib/storage/local.ts behavior:
       // - flip attachment.encrypted flags to match newKey presence
       // - re-encrypt non-deleted pages with newKey
@@ -315,6 +322,7 @@ export function createInMemoryLocalStore(
         index.journals.push(entry);
       }
       await writeIndex(index);
+      return { skippedAttachments: [] };
     },
 
     async reencryptAll(): Promise<void> {

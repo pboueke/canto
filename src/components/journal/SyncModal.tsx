@@ -8,13 +8,15 @@ import { useSyncManager, useSyncState } from '@/contexts/SyncManagerContext';
 import { useSaveJournal } from '@/hooks/useStorage';
 import type { JournalContent, JournalSettings } from 'canto-data';
 import { webModalContent } from '@/styles/web';
+import { formatSyncWarning } from '@/lib/sync/warnings';
+import type { SyncRunOutcome } from '@/lib/sync';
 
 interface SyncModalProps {
   visible: boolean;
-  journal: JournalContent;
+  journal: Omit<JournalContent, 'pages'>;
   derivedKey: Uint8Array | null;
   onClose: () => void;
-  onJournalChanged: () => void;
+  onJournalChanged: () => void | Promise<unknown>;
 }
 
 function ProgressBar({ current, total }: { current: number; total: number }) {
@@ -56,26 +58,59 @@ export function SyncModal({
   onJournalChanged,
 }: SyncModalProps) {
   const { theme } = useTheme();
-  const { t } = useI18n();
+  const { t, lang } = useI18n();
   const { isSignedIn, signIn } = useGoogleAuth();
-  const { syncJournal } = useSyncManager();
+  const { syncJournal, cancelSync, manager } = useSyncManager();
   const syncState = useSyncState(journal.id);
-  const { saveJournal } = useSaveJournal();
+  const { saveJournalMetadata } = useSaveJournal();
 
   const [feedback, setFeedback] = useState<string | null>(null);
 
   const isSyncEnabled = journal.settings.syncProvider === 'gdrive';
+  const formatWarnings = useCallback(
+    (warnings: { name: string; size?: number; reason: string }[]) =>
+      warnings
+        .map((warning) =>
+          formatSyncWarning(warning, lang, {
+            legacyAttachmentTooLarge: t.sync.syncDeferredAttachments,
+            chunkGenerationMissing: t.sync.syncDeferredChunkGeneration,
+            attachmentNotFound: t.sync.syncDeferredAttachmentNotFound,
+          }),
+        )
+        .join('\n'),
+    [lang, t],
+  );
 
   const updateSettings = useCallback(
     async (patch: Partial<JournalSettings>) => {
-      const updated: JournalContent = {
+      const updated = {
         ...journal,
         settings: { ...journal.settings, ...patch },
       };
-      await saveJournal(updated, derivedKey ?? undefined);
+      await saveJournalMetadata(updated, derivedKey ?? undefined);
       onJournalChanged();
     },
-    [journal, derivedKey, saveJournal, onJournalChanged],
+    [journal, derivedKey, saveJournalMetadata, onJournalChanged],
+  );
+
+  const formatResultFeedback = useCallback(
+    (outcome: SyncRunOutcome) => {
+      if (outcome.kind === 'cancelled') return null;
+      if (outcome.kind === 'not-ready' || outcome.kind === 'already-running')
+        return t.common.loading;
+      if (outcome.kind === 'authentication-required') return t.sync.signInToGoogle;
+      if (outcome.kind === 'failed' && outcome.errorCode === 'password-changed-elsewhere') {
+        return t.sync.passwordChangedElsewhere;
+      }
+      if (outcome.kind === 'failed') return t.sync.syncError;
+      if (outcome.kind === 'checkpointed') return t.sync.syncCheckpointed;
+
+      const result = outcome.result;
+      const primary =
+        result.warnings.length > 0 ? formatWarnings(result.warnings) : t.sync.syncComplete;
+      return result.requiresFreshRenderer ? `${primary}\n${t.sync.syncCheckpointed}` : primary;
+    },
+    [formatWarnings, t],
   );
 
   const handleEnableSync = useCallback(async () => {
@@ -86,23 +121,36 @@ export function SyncModal({
     });
     setFeedback(t.sync.syncing);
     const result = await syncJournal(journal.id, derivedKey ?? undefined);
-    setFeedback(result ? t.sync.syncComplete : t.sync.syncError);
-  }, [updateSettings, syncJournal, journal.id, derivedKey, t]);
+    setFeedback(formatResultFeedback(result));
+    if (result.kind === 'completed') await onJournalChanged();
+  }, [
+    updateSettings,
+    syncJournal,
+    journal.id,
+    derivedKey,
+    t,
+    formatResultFeedback,
+    onJournalChanged,
+  ]);
 
   const handleDisableSync = useCallback(async () => {
+    // Invalidate the active run before changing settings so it cannot write a
+    // stale success state or continue uploading after the user disables sync.
+    cancelSync(journal.id);
     await updateSettings({
       syncProvider: undefined,
       remoteSync: false,
       autoSync: false,
     });
     setFeedback(null);
-  }, [updateSettings]);
+  }, [cancelSync, journal.id, updateSettings]);
 
   const handleSyncNow = useCallback(async () => {
     setFeedback(t.sync.syncing);
     const result = await syncJournal(journal.id, derivedKey ?? undefined);
-    setFeedback(result ? t.sync.syncComplete : t.sync.syncError);
-  }, [syncJournal, journal.id, derivedKey, t]);
+    setFeedback(formatResultFeedback(result));
+    if (result.kind === 'completed') await onJournalChanged();
+  }, [syncJournal, journal.id, derivedKey, formatResultFeedback, onJournalChanged]);
 
   const handleAutoSyncToggle = useCallback(
     (val: boolean) => updateSettings({ autoSync: val }),
@@ -114,6 +162,12 @@ export function SyncModal({
     : t.sync.neverSynced;
 
   const isSyncing = syncState.status === 'syncing';
+  const isCheckpointed = syncState.status === 'checkpointed';
+  const requiresFreshRenderer = syncState.requiresFreshRenderer === true;
+  const syncBlocked = isCheckpointed || requiresFreshRenderer || !manager;
+  const recoveryFeedback =
+    syncState.errorCode === 'password-changed-elsewhere' ? t.sync.passwordChangedElsewhere : null;
+  const visibleFeedback = feedback ?? recoveryFeedback;
 
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
@@ -228,13 +282,15 @@ export function SyncModal({
 
                   {/* Sync now */}
                   <Pressable
+                    testID="sync-now-button"
                     onPress={handleSyncNow}
-                    disabled={isSyncing}
+                    disabled={isSyncing || syncBlocked}
+                    accessibilityState={{ disabled: isSyncing || syncBlocked }}
                     style={[
                       styles.actionBtn,
                       {
                         backgroundColor: theme.colors.primary,
-                        opacity: isSyncing ? 0.5 : 1,
+                        opacity: isSyncing || syncBlocked ? 0.5 : 1,
                       },
                     ]}
                   >
@@ -248,6 +304,17 @@ export function SyncModal({
                       {isSyncing ? t.sync.syncing : t.sync.syncNow}
                     </Text>
                   </Pressable>
+
+                  {!manager && (
+                    <Text
+                      style={[
+                        styles.feedback,
+                        { color: theme.colors.textSecondary, fontFamily: theme.fonts.regular },
+                      ]}
+                    >
+                      {t.common.loading}
+                    </Text>
+                  )}
 
                   {/* Disable */}
                   <Pressable onPress={handleDisableSync} style={styles.disableRow}>
@@ -266,28 +333,20 @@ export function SyncModal({
           )}
 
           {/* Feedback */}
-          {feedback && !isSyncing && (
+          {(visibleFeedback || syncBlocked) && !isSyncing && (
             <Text
               style={[
                 styles.feedback,
                 {
-                  color: feedback === t.sync.syncError ? theme.colors.error : theme.colors.primary,
+                  color:
+                    visibleFeedback === t.sync.syncError || recoveryFeedback
+                      ? theme.colors.error
+                      : theme.colors.primary,
                   fontFamily: theme.fonts.regular,
                 },
               ]}
             >
-              {feedback}
-            </Text>
-          )}
-
-          {syncState.error && (
-            <Text
-              style={[
-                styles.feedback,
-                { color: theme.colors.error, fontFamily: theme.fonts.regular },
-              ]}
-            >
-              {syncState.error}
+              {visibleFeedback ?? t.sync.syncCheckpointed}
             </Text>
           )}
 
