@@ -22,10 +22,12 @@ jest.mock('react-native', () => ({
 import {
   closeNativeArchive,
   extractNativeArchiveEntry,
+  findEntry,
   nativeArchiveAvailableBytes,
   openNativeArchive,
   readNativeArchiveText,
   supportsNativeArchive,
+  validateArchiveInventory,
 } from '../backup/native-archive';
 
 const archive = {
@@ -193,5 +195,73 @@ describe('native archive extraction cancellation', () => {
     resolveOpen(archive);
 
     await expect(opening).resolves.toEqual(archive);
+  });
+
+  it('continues when cancellation does not return an asynchronous request', async () => {
+    let resolveOpen!: (value: typeof archive) => void;
+    mockOpen.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          resolveOpen = resolve;
+        }),
+    );
+    mockCancel.mockReturnValue(undefined);
+    const openingController = new AbortController();
+    const opening = openNativeArchive('content://backup', openingController.signal);
+    openingController.abort();
+    resolveOpen(archive);
+    await expect(opening).resolves.toEqual(archive);
+
+    let resolveExtraction!: (value: { uri: string; size: number }) => void;
+    mockExtract.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          resolveExtraction = resolve;
+        }),
+    );
+    const extractionController = new AbortController();
+    const extraction = extractNativeArchiveEntry(
+      archive,
+      'manifest.json',
+      'file:///cache/entry',
+      extractionController.signal,
+    );
+    extractionController.abort();
+    resolveExtraction({ uri: 'file:///cache/entry', size: 1 });
+    await expect(extraction).resolves.toEqual({ uri: 'file:///cache/entry', size: 1 });
+  });
+
+  it('extracts a valid entry without cancellation wiring', async () => {
+    mockExtract.mockResolvedValueOnce({ uri: 'file:///cache/entry', size: 1 });
+
+    await expect(
+      extractNativeArchiveEntry(archive, 'manifest.json', 'file:///cache/entry'),
+    ).resolves.toEqual({ uri: 'file:///cache/entry', size: 1 });
+  });
+
+  it('rejects unsafe archive inventories before any entry is read', () => {
+    const manifest = archive.entries[0];
+    const journal = archive.entries[1];
+
+    expect(() =>
+      findEntry({ ...archive, entries: [{ ...manifest, directory: true }] }, 'manifest.json'),
+    ).toThrow('Invalid backup: missing manifest.json');
+    expect(() => validateArchiveInventory(new Array(10_001) as never[])).toThrow(
+      'Archive contains too many entries',
+    );
+    expect(() => validateArchiveInventory([manifest, { ...manifest }, journal])).toThrow(
+      'Invalid archive entry: manifest.json',
+    );
+    expect(() => validateArchiveInventory([{ ...manifest, method: 8 }, journal])).not.toThrow();
+    expect(() =>
+      validateArchiveInventory([{ ...manifest, size: 10_001, compressedSize: 1 }, journal]),
+    ).toThrow('compression ratio');
+    expect(() =>
+      validateArchiveInventory([
+        { ...manifest, size: 2 * 1024 * 1024 * 1024 + 1, compressedSize: 0 },
+        journal,
+      ]),
+    ).toThrow('uncompressed size exceeds limit');
+    expect(() => validateArchiveInventory([manifest])).toThrow('missing journal.json');
   });
 });

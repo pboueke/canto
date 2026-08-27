@@ -80,6 +80,28 @@ describe('GDriveRemoteStore', () => {
       expect(store.isConnected()).toBe(false);
     });
 
+    it('can disconnect before connecting without unregistering a token', async () => {
+      await store.disconnect();
+
+      expect(store.isConnected()).toBe(false);
+      expect(mockedApi.unregisterAccessTokenRefresher).not.toHaveBeenCalled();
+    });
+
+    it('does not register a refresher until a token has been connected', () => {
+      store.setAccessTokenRefresher(jest.fn());
+
+      expect(mockedApi.registerAccessTokenRefresher).not.toHaveBeenCalled();
+      expect(mockedApi.unregisterAccessTokenRefresher).not.toHaveBeenCalled();
+    });
+
+    it('returns null when a stale token has no configured refresher', async () => {
+      const refresh = (
+        store as unknown as { refreshAccessToken(token: string): Promise<string | null> }
+      ).refreshAccessToken('expired-token');
+
+      await expect(refresh).resolves.toBeNull();
+    });
+
     it('throws when not connected', async () => {
       await expect(store.listRemoteJournals()).rejects.toThrow('Not connected');
     });
@@ -739,6 +761,424 @@ describe('GDriveRemoteStore', () => {
         TOKEN,
         expect.objectContaining({ name: 'photo.jpg', mimeType: 'application/octet-stream' }),
         'binary-data',
+      );
+    });
+
+    it('uses a plain local path as the attachment name', async () => {
+      await store.connect({ accessToken: TOKEN });
+      const folder = (id: string, name: string) => ({
+        id,
+        name,
+        mimeType: 'application/vnd.google-apps.folder',
+        modifiedTime: '',
+      });
+      mockedApi.listFiles.mockResolvedValueOnce([folder('root-id', 'Canto')]);
+      mockedApi.listFiles.mockResolvedValueOnce([folder('j-id', 'journal-1')]);
+      mockedApi.listFiles.mockResolvedValueOnce([folder('att-id', 'attachments')]);
+      mockedApi.listFiles.mockResolvedValueOnce([]);
+      mockedApi.createFile.mockResolvedValueOnce({
+        id: 'att-file-id',
+        name: 'photo.jpg',
+        mimeType: 'application/octet-stream',
+        modifiedTime: '',
+      });
+
+      await expect(store.uploadAttachment('journal-1', 'photo.jpg', 'binary-data')).resolves.toBe(
+        'gdrive://journal-1/attachments/photo.jpg',
+      );
+    });
+  });
+
+  describe('adapter edge paths', () => {
+    type StoreInternals = {
+      fileIdCache: Map<string, string>;
+      accessTokenRefresher: (() => Promise<string | null>) | undefined;
+      syncIndexSnapshots: Map<string, Record<string, { modified: number; deleted?: boolean }>>;
+      upsertFile(
+        name: string,
+        parentId: string,
+        content: string,
+        mimeType?: string,
+        signal?: AbortSignal,
+      ): Promise<void>;
+      upsertPrewarmedChunk(
+        name: string,
+        parentId: string,
+        content: string,
+        signal?: AbortSignal,
+      ): Promise<void>;
+      syncIndexDelta(
+        journalId: string,
+        index: Record<string, { modified: number; deleted?: boolean }>,
+      ): Record<string, { modified: number; deleted?: boolean }>;
+      chunkName(attachmentId: string, generation: string | undefined, index: number): string;
+      compactSyncIndex(
+        journalId: string,
+        journalFolderId: string,
+        forceAfterSuccessfulSync: boolean,
+        canDeleteLegacyArtifacts: boolean,
+      ): Promise<void>;
+      updateCompatibilitySyncIndex(
+        journalFolderId: string,
+        index: Record<string, { modified: number; deleted?: boolean }>,
+      ): Promise<boolean>;
+    };
+
+    const internals = () => store as unknown as StoreInternals;
+
+    it('forwards cancellation to a newly created file', async () => {
+      await store.connect({ accessToken: TOKEN });
+      mockedApi.listFiles.mockResolvedValueOnce([]);
+      mockedApi.createFile.mockResolvedValueOnce({
+        id: 'created',
+        name: 'page.json',
+        mimeType: 'application/json',
+        modifiedTime: '',
+      });
+      const controller = new AbortController();
+
+      await internals().upsertFile(
+        'page.json',
+        'parent',
+        '{}',
+        'application/json',
+        controller.signal,
+      );
+
+      expect(mockedApi.createFile).toHaveBeenCalledWith(
+        TOKEN,
+        expect.objectContaining({ name: 'page.json' }),
+        '{}',
+        'drive',
+        controller.signal,
+      );
+    });
+
+    it('creates an un-cached prewarmed chunk and preserves unexpected Drive errors', async () => {
+      await store.connect({ accessToken: TOKEN });
+      mockedApi.createFile.mockResolvedValueOnce({
+        id: 'chunk',
+        name: 'chunk-v1-a-g-0',
+        mimeType: 'application/octet-stream',
+        modifiedTime: '',
+      });
+      await internals().upsertPrewarmedChunk('chunk-v1-a-g-0', 'attachments', 'payload');
+
+      internals().fileIdCache.set('file:attachments/chunk-v1-a-g-1', 'stale-chunk');
+      mockedApi.updateFile.mockRejectedValueOnce(new Error('permission denied'));
+      await expect(
+        internals().upsertPrewarmedChunk('chunk-v1-a-g-1', 'attachments', 'payload'),
+      ).rejects.toThrow('permission denied');
+    });
+
+    it('avoids duplicate immutable deltas and retains legacy chunk addresses', () => {
+      internals().syncIndexSnapshots.set('journal-1', { p1: { modified: 1 } });
+
+      expect(internals().syncIndexDelta('journal-1', { p1: { modified: 1 } })).toEqual({});
+      expect(internals().chunkName('attachment', undefined, 2)).toBe('chunk-v1-attachment-2');
+      expect(internals().chunkName('attachment', 'generation', 2)).toBe(
+        'chunk-v1-attachment-generation-2',
+      );
+    });
+
+    it('accepts an empty prepared-chunk set without listing Drive payloads', async () => {
+      await store.connect({ accessToken: TOKEN });
+      internals().fileIdCache.set('folder:root/Canto', 'root');
+      internals().fileIdCache.set('folder:root/journal-1', 'journal');
+      internals().fileIdCache.set('folder:journal/attachments', 'attachments');
+
+      const prepared = await store.prepareChunkUploads('journal-1', []);
+
+      expect(mockedApi.listFiles).not.toHaveBeenCalled();
+      expect(prepared).toEqual(
+        expect.objectContaining({
+          missingIndexes: expect.any(Function),
+          uploadMissingChunk: expect.any(Function),
+        }),
+      );
+    });
+
+    it('unregisters an active token before replacing its refresher', async () => {
+      await store.connect({ accessToken: TOKEN });
+
+      store.setAccessTokenRefresher(jest.fn().mockResolvedValue(null));
+
+      expect(mockedApi.unregisterAccessTokenRefresher).toHaveBeenCalledWith(TOKEN);
+    });
+
+    it('refreshes a token even when no prior token was registered', async () => {
+      internals().accessTokenRefresher = jest.fn().mockResolvedValue('fresh-token');
+
+      await expect(
+        (
+          store as unknown as { refreshAccessToken(token: string): Promise<string | null> }
+        ).refreshAccessToken('expired-token'),
+      ).resolves.toBe('fresh-token');
+
+      expect(mockedApi.unregisterAccessTokenRefresher).not.toHaveBeenCalled();
+    });
+
+    it('does not delete a page file that is absent from Drive', async () => {
+      await store.connect({ accessToken: TOKEN });
+      internals().fileIdCache.set('folder:root/Canto', 'root');
+      internals().fileIdCache.set('folder:root/journal-1', 'journal');
+      internals().fileIdCache.set('folder:journal/pages', 'pages');
+      mockedApi.listFiles.mockResolvedValueOnce([]);
+
+      await store.deletePage('journal-1', 'missing');
+
+      expect(mockedApi.deleteFile).not.toHaveBeenCalled();
+    });
+
+    it('updates the compatibility index without emitting an empty immutable delta', async () => {
+      await store.connect({ accessToken: TOKEN });
+      internals().fileIdCache.set('folder:root/Canto', 'root');
+      internals().fileIdCache.set('folder:root/journal-1', 'journal');
+      internals().syncIndexSnapshots.set('journal-1', { p1: { modified: 1 } });
+      mockedApi.listFiles.mockResolvedValueOnce([]);
+      mockedApi.createFile.mockResolvedValueOnce({
+        id: 'index',
+        name: 'index.json',
+        mimeType: 'application/json',
+        modifiedTime: '',
+      });
+
+      await store.uploadSyncIndex('journal-1', { p1: { modified: 1 } });
+
+      expect(mockedApi.createFile).toHaveBeenCalledTimes(1);
+      expect(mockedApi.createFile).toHaveBeenCalledWith(
+        TOKEN,
+        expect.objectContaining({ name: 'index.json' }),
+        JSON.stringify({ p1: { modified: 1 } }),
+        'drive',
+        undefined,
+      );
+    });
+
+    it('treats missing legacy and hidden index listings as empty', async () => {
+      await store.connect({ accessToken: TOKEN });
+      internals().fileIdCache.set('folder:root/Canto', 'root');
+      internals().fileIdCache.set('folder:root/journal-1', 'journal');
+      mockedApi.listFiles
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce(null as never)
+        .mockResolvedValueOnce(null as never);
+
+      await expect(store.downloadSyncIndex('journal-1')).resolves.toBeNull();
+    });
+
+    it('ignores unrelated files while prewarming immutable chunk names', async () => {
+      await store.connect({ accessToken: TOKEN });
+      internals().fileIdCache.set('folder:root/Canto', 'root');
+      internals().fileIdCache.set('folder:root/journal-1', 'journal');
+      internals().fileIdCache.set('folder:journal/attachments', 'attachments');
+      mockedApi.listFiles.mockResolvedValueOnce([
+        { id: 'other', name: 'chunk-v1-other-generation-0', mimeType: '', modifiedTime: '' },
+      ]);
+      const attachment: Attachment = {
+        id: 'wanted',
+        path: '/local/wanted',
+        name: 'wanted.bin',
+        type: 'file',
+        encrypted: false,
+        deleted: false,
+        content: {
+          format: 'canto-chunked-v1',
+          byteLength: 1,
+          chunkSize: 1,
+          chunkCount: 1,
+          generation: 'generation',
+        },
+      };
+
+      await store.prepareAttachmentChunkUploads('journal-1', [attachment]);
+
+      expect(mockedApi.listFiles).toHaveBeenCalledTimes(1);
+    });
+
+    it('does not replace an equally recent registry file solely due to list order', async () => {
+      await store.connect({ accessToken: TOKEN });
+      mockedApi.listFiles.mockResolvedValueOnce([
+        { id: 'first', name: 'canto-journals.json', mimeType: '', modifiedTime: '2026-01-01' },
+        { id: 'second', name: 'canto-journals.json', mimeType: '', modifiedTime: '2026-01-01' },
+      ]);
+      mockedApi.getFileContent.mockResolvedValueOnce('[]');
+
+      await store.listRemoteJournals();
+
+      expect(mockedApi.getFileContent).toHaveBeenCalledWith(TOKEN, 'first');
+    });
+
+    it('handles absent immutable index listings while deciding not to compact', async () => {
+      await store.connect({ accessToken: TOKEN });
+      mockedApi.listFiles.mockResolvedValueOnce(null as never).mockResolvedValueOnce(null as never);
+
+      await expect(
+        internals().compactSyncIndex('journal-1', 'journal', false, false),
+      ).resolves.toBeUndefined();
+    });
+
+    it('does not issue a Drive deletion when an uncached journal folder is absent', async () => {
+      await store.connect({ accessToken: TOKEN });
+      internals().fileIdCache.set('folder:root/Canto', 'root');
+      mockedApi.listFiles.mockResolvedValueOnce([]).mockResolvedValueOnce([]);
+
+      await store.deleteJournal('journal-1');
+
+      expect(mockedApi.deleteFile).not.toHaveBeenCalled();
+    });
+
+    it('does not replace an equally deleted compatibility-index entry', async () => {
+      await store.connect({ accessToken: TOKEN });
+      mockedApi.listFiles.mockResolvedValueOnce([
+        { id: 'index', name: 'index.json', mimeType: '', modifiedTime: '' },
+      ]);
+      mockedApi.getFileContentWithEtag.mockResolvedValueOnce({
+        content: JSON.stringify({ p1: { modified: 1, deleted: true } }),
+        etag: 'etag',
+      });
+      mockedApi.updateFile.mockResolvedValueOnce({
+        id: 'index',
+        name: 'index.json',
+        mimeType: 'application/json',
+        modifiedTime: '',
+      });
+
+      await expect(
+        internals().updateCompatibilitySyncIndex('journal', { p1: { modified: 1, deleted: true } }),
+      ).resolves.toBe(true);
+    });
+
+    it('compacts a threshold-sized immutable delta set during a normal checkpoint', async () => {
+      await store.connect({ accessToken: TOKEN });
+      const deltas = Array.from({ length: 128 }, (_, index) => ({
+        id: `delta-${index}`,
+        name: `index-v2-00000000-0000-4000-8000-${String(index).padStart(12, '0')}.json`,
+        mimeType: 'application/json',
+        modifiedTime: '',
+      }));
+      mockedApi.listFiles.mockResolvedValueOnce(deltas).mockResolvedValueOnce([]);
+      for (let index = 0; index < deltas.length; index++) {
+        mockedApi.getFileContent.mockResolvedValueOnce('{}');
+      }
+      mockedApi.createFile.mockResolvedValueOnce({
+        id: 'compact',
+        name: 'index-v3-00000000-0000-4000-8000-000000000000.json',
+        mimeType: 'application/json',
+        modifiedTime: '',
+      });
+
+      await internals().compactSyncIndex('journal-1', 'journal', false, false);
+
+      expect(mockedApi.createFile).toHaveBeenCalledWith(
+        TOKEN,
+        expect.objectContaining({ name: expect.stringMatching(/index-v3-/) }),
+        expect.any(String),
+        'appDataFolder',
+        undefined,
+      );
+    });
+
+    it('rejects malformed compact index metadata before publishing a replacement', async () => {
+      await store.connect({ accessToken: TOKEN });
+      mockedApi.listFiles
+        .mockResolvedValueOnce([
+          {
+            id: 'bad',
+            name: 'index-v3-00000000-0000-4000-8000-000000000000.json',
+            mimeType: 'application/json',
+            modifiedTime: '',
+          },
+          {
+            id: 'delta',
+            name: 'index-v2-00000000-0000-4000-8000-000000000000.json',
+            mimeType: 'application/json',
+            modifiedTime: '',
+          },
+        ])
+        .mockResolvedValueOnce([]);
+      mockedApi.getFileContent.mockResolvedValueOnce(JSON.stringify({ version: 2 }));
+
+      await expect(
+        internals().compactSyncIndex('journal-1', 'journal', true, false),
+      ).rejects.toThrow('Invalid compact sync index');
+    });
+
+    it('retries a compatibility-index precondition conflict before falling back to deltas', async () => {
+      await store.connect({ accessToken: TOKEN });
+      mockedApi.listFiles.mockResolvedValueOnce([
+        { id: 'index', name: 'index.json', mimeType: '', modifiedTime: '' },
+      ]);
+      mockedApi.getFileContentWithEtag
+        .mockResolvedValueOnce({ content: '{}', etag: 'etag' })
+        .mockResolvedValueOnce({ content: '{}', etag: null });
+      const conflict = Object.assign(Object.create(api.GDriveApiError.prototype), { status: 412 });
+      mockedApi.updateFile.mockRejectedValueOnce(conflict);
+
+      await expect(internals().updateCompatibilitySyncIndex('journal', {})).resolves.toBe(false);
+    });
+
+    it('compacts multiple prior snapshots after a successful sync', async () => {
+      await store.connect({ accessToken: TOKEN });
+      const compactFiles = [0, 1].map((index) => ({
+        id: `compact-${index}`,
+        name: `index-v3-00000000-0000-4000-8000-${String(index).padStart(12, '0')}.json`,
+        mimeType: 'application/json',
+        modifiedTime: '',
+      }));
+      mockedApi.listFiles.mockResolvedValueOnce(compactFiles).mockResolvedValueOnce([]);
+      mockedApi.getFileContent
+        .mockResolvedValueOnce(JSON.stringify({ version: 3, entries: {}, coveredFileIds: [] }))
+        .mockResolvedValueOnce(JSON.stringify({ version: 3, entries: {}, coveredFileIds: [] }));
+      mockedApi.createFile.mockResolvedValueOnce({
+        id: 'replacement',
+        name: 'index-v3-00000000-0000-4000-8000-000000000000.json',
+        mimeType: 'application/json',
+        modifiedTime: '',
+      });
+
+      await internals().compactSyncIndex('journal-1', 'journal', true, false);
+
+      expect(mockedApi.createFile).toHaveBeenCalledTimes(1);
+    });
+
+    it('does not publish an immutable page delta that is older than the initial index', async () => {
+      await store.connect({ accessToken: TOKEN });
+      internals().fileIdCache.set('folder:root/Canto', 'root');
+      internals().fileIdCache.set('folder:root/journal-1', 'journal');
+      mockedApi.listFiles
+        .mockResolvedValueOnce([
+          { id: 'index', name: 'index.json', mimeType: '', modifiedTime: '' },
+        ])
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([]);
+      mockedApi.getFileContent.mockResolvedValueOnce(JSON.stringify({ p1: { modified: 2 } }));
+
+      const publication = await store.openSyncIndexPublication('journal-1');
+      await publication.publishPage('p1', { modified: 1 });
+
+      expect(mockedApi.createFile).not.toHaveBeenCalled();
+    });
+
+    it('rejects malformed compact metadata while reading the sync index', async () => {
+      await store.connect({ accessToken: TOKEN });
+      internals().fileIdCache.set('folder:root/Canto', 'root');
+      internals().fileIdCache.set('folder:root/journal-1', 'journal');
+      mockedApi.listFiles
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([
+          {
+            id: 'bad',
+            name: 'index-v3-00000000-0000-4000-8000-000000000000.json',
+            mimeType: 'application/json',
+            modifiedTime: '',
+          },
+        ])
+        .mockResolvedValueOnce([]);
+      mockedApi.getFileContent.mockResolvedValueOnce(JSON.stringify({ version: 2 }));
+
+      await expect(store.downloadSyncIndex('journal-1')).rejects.toThrow(
+        'Invalid compact sync index',
       );
     });
   });

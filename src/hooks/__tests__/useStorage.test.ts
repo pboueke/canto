@@ -1,5 +1,5 @@
 import { renderHook, act, waitFor } from '@testing-library/react-native';
-import type { JournalContent, Page, Journal } from 'canto-data';
+import type { Attachment, JournalContent, Page, Journal } from 'canto-data';
 import type { LocalStore } from '@/lib/storage';
 import { DEFAULT_JOURNAL_SETTINGS } from 'canto-data';
 
@@ -32,6 +32,7 @@ const mockEncryptionService = {
   generateSalt: jest.fn(() => new Uint8Array(16)),
   clearSession: jest.fn(),
 };
+const mockMaterializeAttachmentDisplay = jest.fn();
 
 jest.mock('@/lib/storage', () => ({
   createLocalStore: jest.fn(() => mockStore),
@@ -39,6 +40,10 @@ jest.mock('@/lib/storage', () => ({
 
 jest.mock('@/lib/encryption', () => ({
   createEncryptionService: jest.fn(() => mockEncryptionService),
+}));
+
+jest.mock('@/lib/attachment-display', () => ({
+  materializeAttachmentDisplay: (...args: unknown[]) => mockMaterializeAttachmentDisplay(...args),
 }));
 
 import {
@@ -381,6 +386,112 @@ describe('useJournalOverview', () => {
     expect(result.current.second.overview).toEqual(overview);
   });
 
+  it('starts a fresh catalog read when refreshing while an earlier read is pending', async () => {
+    let resolveInitial: ((value: unknown) => void) | undefined;
+    let resolveRefresh: ((value: unknown) => void) | undefined;
+    const initial = new Promise((resolve) => {
+      resolveInitial = resolve;
+    });
+    const refreshed = new Promise((resolve) => {
+      resolveRefresh = resolve;
+    });
+    const refreshedOverview = {
+      metadata: { ...makeJournal('j1'), settings: { ...DEFAULT_JOURNAL_SETTINGS }, version: 2 },
+      pages: [],
+      tags: ['fresh'],
+      latestModified: 1,
+    };
+    mockStore.getJournalOverview.mockReturnValueOnce(initial).mockReturnValueOnce(refreshed);
+
+    const { result } = renderHook(() => useJournalOverview('j1'));
+    await waitFor(() => expect(mockStore.getJournalOverview).toHaveBeenCalledTimes(1));
+
+    let refresh!: Promise<unknown>;
+    await act(async () => {
+      refresh = result.current.refresh();
+    });
+    await waitFor(() => expect(mockStore.getJournalOverview).toHaveBeenCalledTimes(2));
+
+    await act(async () => {
+      resolveRefresh?.(refreshedOverview);
+      await refresh;
+    });
+    await act(async () => {
+      resolveInitial?.({ ...refreshedOverview, tags: ['stale'] });
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+
+    expect(result.current.overview).toEqual(refreshedOverview);
+  });
+
+  it('does not surface an error from a stale catalog read', async () => {
+    let rejectInitial: ((error: Error) => void) | undefined;
+    const initial = new Promise((_, reject) => {
+      rejectInitial = reject;
+    });
+    const refreshedOverview = {
+      metadata: { ...makeJournal('j1'), settings: { ...DEFAULT_JOURNAL_SETTINGS }, version: 2 },
+      pages: [],
+      tags: ['fresh'],
+      latestModified: 1,
+    };
+    mockStore.getJournalOverview
+      .mockReturnValueOnce(initial)
+      .mockResolvedValueOnce(refreshedOverview);
+
+    const { result } = renderHook(() => useJournalOverview('j1'));
+    await waitFor(() => expect(mockStore.getJournalOverview).toHaveBeenCalledTimes(1));
+
+    await act(async () => {
+      await result.current.refresh();
+    });
+    await act(async () => {
+      rejectInitial?.(new Error('stale read failed'));
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+
+    expect(result.current).toMatchObject({
+      overview: refreshedOverview,
+      error: null,
+      status: 'ready',
+    });
+  });
+
+  it('ignores rebuild progress reported by a stale catalog read', async () => {
+    let resolveInitial: ((value: unknown) => void) | undefined;
+    let initialProgress: ((progress: { current: number; total: number }) => void) | undefined;
+    const initial = new Promise((resolve) => {
+      resolveInitial = resolve;
+    });
+    const refreshedOverview = {
+      metadata: { ...makeJournal('j1'), settings: { ...DEFAULT_JOURNAL_SETTINGS }, version: 2 },
+      pages: [],
+      tags: ['fresh'],
+      latestModified: 1,
+    };
+    mockStore.getJournalOverview
+      .mockImplementationOnce(async (_id, _key, options) => {
+        initialProgress = options?.onRebuildProgress;
+        return initial;
+      })
+      .mockResolvedValueOnce(refreshedOverview);
+
+    const { result } = renderHook(() => useJournalOverview('j1'));
+    await waitFor(() => expect(initialProgress).toBeDefined());
+    await act(async () => {
+      await result.current.refresh();
+    });
+    await act(async () => {
+      initialProgress?.({ current: 1, total: 2 });
+    });
+    expect(result.current).toMatchObject({ status: 'ready', migrationProgress: null });
+
+    await act(async () => {
+      resolveInitial?.(refreshedOverview);
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+  });
+
   it('exposes page-count progress while a legacy catalog is rebuilding', async () => {
     let resolveOverview: ((value: unknown) => void) | undefined;
     mockStore.getJournalOverview.mockImplementationOnce(async (_id, _key, options) => {
@@ -517,6 +628,22 @@ describe('useCreateJournal', () => {
     expect(savedJournal.secure).toBe(true);
     expect(savedJournal.kdfIterations).toBe(600000);
     expect(mockStore.saveJournal.mock.calls[0][1]).toBe(derivedKey);
+  });
+
+  it('uses an empty password when deriving the key for an unprotected journal', async () => {
+    const deriveAndCache = jest.fn().mockResolvedValue(new Uint8Array(32));
+    const { result } = renderHook(() => useCreateJournal());
+
+    await act(async () => {
+      await result.current.create({ title: 'Device-protected', icon: 'book' }, deriveAndCache);
+    });
+
+    expect(deriveAndCache).toHaveBeenCalledWith(
+      expect.any(String),
+      '',
+      expect.any(String),
+      undefined,
+    );
   });
 
   it('sets error on failure', async () => {
@@ -830,6 +957,32 @@ describe('useAttachment', () => {
     );
   });
 
+  it('uses device encryption when an encrypted attachment has no active journal key', async () => {
+    const attachment = {
+      id: 'a1',
+      path: '',
+      name: 'photo.jpg',
+      type: 'image' as const,
+      encrypted: true,
+      deleted: false,
+    };
+    const { result } = renderHook(() => useAttachment());
+
+    await act(async () => {
+      await result.current.saveAttachment('j1', 'p1', attachment, 'base64data');
+      await result.current.getAttachment('path/to/file', true);
+    });
+
+    expect(mockStore.saveAttachment).toHaveBeenLastCalledWith(
+      'j1',
+      'p1',
+      attachment,
+      'base64data',
+      undefined,
+    );
+    expect(mockStore.getAttachment).toHaveBeenLastCalledWith('path/to/file', undefined);
+  });
+
   it('gets an attachment', async () => {
     const { result } = renderHook(() => useAttachment());
 
@@ -899,6 +1052,187 @@ describe('useAttachment', () => {
     } finally {
       delete (mockStore as { saveAttachmentStream?: unknown }).saveAttachmentStream;
     }
+  });
+
+  it('uses device encryption for an encrypted stream when no journal key is active', async () => {
+    const attachment = {
+      id: 'stream-device',
+      path: '',
+      name: 'stream.bin',
+      type: 'file' as const,
+      encrypted: true,
+      deleted: false,
+    };
+    const chunks = (async function* () {
+      yield new Uint8Array([1]);
+    })();
+    const saveAttachmentStream = jest.fn().mockResolvedValue('attachments/stream');
+    Object.assign(mockStore, { saveAttachmentStream });
+    try {
+      const { result } = renderHook(() => useAttachment());
+      await expect(
+        result.current.saveAttachmentStream('j1', 'p1', attachment, chunks),
+      ).resolves.toBe('attachments/stream');
+      expect(saveAttachmentStream).toHaveBeenCalledWith('j1', 'p1', attachment, chunks, undefined);
+    } finally {
+      delete (mockStore as { saveAttachmentStream?: unknown }).saveAttachmentStream;
+    }
+  });
+
+  it('does not pass a journal key when streaming a device-encrypted attachment', async () => {
+    const attachment = {
+      id: 'stream-device',
+      path: '',
+      name: 'stream.bin',
+      type: 'file' as const,
+      encrypted: false,
+      deleted: false,
+    };
+    const chunks = (async function* () {
+      yield new Uint8Array([1]);
+    })();
+    const saveAttachmentStream = jest.fn().mockResolvedValue('attachments/stream');
+    Object.assign(mockStore, { saveAttachmentStream });
+    try {
+      const { result } = renderHook(() => useAttachment(new Uint8Array([1])));
+      await result.current.saveAttachmentStream('j1', 'p1', attachment, chunks);
+      expect(saveAttachmentStream).toHaveBeenCalledWith('j1', 'p1', attachment, chunks, undefined);
+    } finally {
+      delete (mockStore as { saveAttachmentStream?: unknown }).saveAttachmentStream;
+    }
+  });
+
+  it('forwards optional image decryption keys and cancellation signals', async () => {
+    const image: Attachment = {
+      id: 'image',
+      path: 'attachments/image',
+      name: 'image.jpg',
+      type: 'image',
+      encrypted: true,
+      deleted: false,
+    };
+    const lease = { uri: 'file:///cache/image', release: jest.fn() };
+    const controller = new AbortController();
+    mockMaterializeAttachmentDisplay.mockResolvedValue(lease);
+
+    const withoutKey = renderHook(() => useAttachment());
+    const withKey = renderHook(() => useAttachment(new Uint8Array([1])));
+    await expect(withoutKey.result.current.materializeImage(image)).resolves.toBe(lease);
+    await expect(withKey.result.current.materializeImage(image, controller.signal)).resolves.toBe(
+      lease,
+    );
+    await expect(
+      withKey.result.current.materializeImage({ ...image, encrypted: false }),
+    ).resolves.toBe(lease);
+
+    expect(mockMaterializeAttachmentDisplay).toHaveBeenNthCalledWith(
+      1,
+      mockStore,
+      image,
+      undefined,
+      undefined,
+    );
+    expect(mockMaterializeAttachmentDisplay).toHaveBeenNthCalledWith(
+      2,
+      mockStore,
+      image,
+      new Uint8Array([1]),
+      controller.signal,
+    );
+  });
+});
+
+describe('non-Error storage failures', () => {
+  it('normalizes non-Error failures from read hooks', async () => {
+    mockStore.listJournals.mockRejectedValueOnce('journal list unavailable');
+    const journals = renderHook(() => useJournals());
+    await waitFor(() => expect(journals.result.current.loading).toBe(false));
+    expect(journals.result.current.error?.message).toBe('journal list unavailable');
+
+    mockStore.getJournal.mockRejectedValueOnce('journal unavailable');
+    const journal = renderHook(() => useJournal('j1'));
+    await waitFor(() => expect(journal.result.current.loading).toBe(false));
+    expect(journal.result.current.error?.message).toBe('journal unavailable');
+
+    mockStore.getJournalOverview.mockRejectedValueOnce('overview unavailable');
+    const overview = renderHook(() => useJournalOverview('j1'));
+    await waitFor(() => expect(overview.result.current.loading).toBe(false));
+    expect(overview.result.current.error?.message).toBe('overview unavailable');
+
+    mockStore.getPage.mockRejectedValueOnce('page unavailable');
+    const page = renderHook(() => usePage('j1', 'p1'));
+    await waitFor(() => expect(page.result.current.loading).toBe(false));
+    expect(page.result.current.error?.message).toBe('page unavailable');
+  });
+
+  it('normalizes non-Error failures from storage mutations', async () => {
+    const captureFailure = async (work: () => Promise<unknown>): Promise<unknown> => {
+      let failure: unknown;
+      await act(async () => {
+        try {
+          await work();
+        } catch (error) {
+          failure = error;
+        }
+      });
+      return failure;
+    };
+
+    const savePage = renderHook(() => useSavePage('j1'));
+    mockStore.savePage.mockRejectedValueOnce('save page unavailable');
+    expect(await captureFailure(() => savePage.result.current.save(makePage()))).toBe(
+      'save page unavailable',
+    );
+
+    const createJournal = renderHook(() => useCreateJournal());
+    mockStore.saveJournal.mockRejectedValueOnce('create journal unavailable');
+    expect(
+      (
+        (await captureFailure(() =>
+          createJournal.result.current.create({ title: 'Journal', icon: 'book' }),
+        )) as Error
+      ).message,
+    ).toBe('create journal unavailable');
+
+    const createPage = renderHook(() => useCreatePage('j1'));
+    mockStore.savePage.mockRejectedValueOnce('create page unavailable');
+    expect(
+      ((await captureFailure(() => createPage.result.current.create())) as Error).message,
+    ).toBe('create page unavailable');
+
+    const deletePage = renderHook(() => useDeletePage('j1'));
+    mockStore.deletePage.mockRejectedValueOnce('delete page unavailable');
+    expect(await captureFailure(() => deletePage.result.current.deletePage('p1'))).toBe(
+      'delete page unavailable',
+    );
+
+    const deleteJournal = renderHook(() => useDeleteJournal());
+    mockStore.deleteJournal.mockRejectedValueOnce('delete journal unavailable');
+    expect(
+      ((await captureFailure(() => deleteJournal.result.current.deleteJournal('j1'))) as Error)
+        .message,
+    ).toBe('delete journal unavailable');
+
+    const saveJournal = renderHook(() => useSaveJournal());
+    mockStore.saveJournal.mockRejectedValueOnce('save journal unavailable');
+    expect(
+      (
+        (await captureFailure(() =>
+          saveJournal.result.current.saveJournal(makeJournalContent()),
+        )) as Error
+      ).message,
+    ).toBe('save journal unavailable');
+
+    const metadata = { ...makeJournalContent() } as Partial<JournalContent>;
+    delete metadata.pages;
+    mockStore.saveJournalMetadata.mockRejectedValueOnce('metadata unavailable');
+    expect(
+      (
+        (await captureFailure(() =>
+          saveJournal.result.current.saveJournalMetadata(metadata as Omit<JournalContent, 'pages'>),
+        )) as Error
+      ).message,
+    ).toBe('metadata unavailable');
   });
 });
 

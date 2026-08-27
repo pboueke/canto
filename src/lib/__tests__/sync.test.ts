@@ -346,6 +346,106 @@ describe('SyncEngine', () => {
     expect(result.deleted).toHaveLength(0);
   });
 
+  it('uses the legacy journal reader when a storage adapter has no sync snapshot API', async () => {
+    const page = {
+      ...makePage('p1', 1000),
+      images: undefined as never,
+      files: undefined as never,
+    };
+    const local = createMockLocalStore(makeJournal([page]));
+    const remote = createMockRemoteStore(makeJournal([]));
+    local.getJournalSyncSnapshot = undefined;
+
+    const result = await new SyncEngine(local, remote).sync('journal-1', SYNC_KEY);
+
+    expect(result.uploaded).toEqual(['p1']);
+    expect(local.getJournal).toHaveBeenCalledWith('journal-1', SYNC_KEY);
+  });
+
+  it('keeps deleted state in a legacy journal-reader snapshot', async () => {
+    const local = createMockLocalStore(makeJournal([makePage('p1', 1000, true)]));
+    const remote = createMockRemoteStore(makeJournal([]));
+    local.getJournalSyncSnapshot = undefined;
+
+    await new SyncEngine(local, remote).sync('journal-1', SYNC_KEY);
+
+    expect(remote.uploadPage).not.toHaveBeenCalled();
+    expect(remote.uploadSyncIndex).toHaveBeenCalledWith('journal-1', {
+      p1: { modified: 1000, deleted: true },
+    });
+  });
+
+  it('does not probe a key-verification canary when the remote index has no matching page', async () => {
+    const journal = makeJournal([]);
+    const local = createMockLocalStore(journal);
+    const remote = createMockRemoteStore(journal);
+
+    await new SyncEngine(local, remote).sync('journal-1', SYNC_KEY, undefined, journal.salt);
+
+    expect(remote.downloadPage).not.toHaveBeenCalled();
+  });
+
+  it('does not prepare legacy chunk uploads when there are no eligible chunk attachments', async () => {
+    const page = makePage('p1', 1000);
+    const local = createMockLocalStore(makeJournal([page]));
+    const remote = createMockRemoteStore(makeJournal([]));
+    remote.prepareAttachmentChunkUploads = jest.fn();
+
+    await new SyncEngine(local, remote).sync('journal-1', SYNC_KEY);
+
+    expect(remote.prepareAttachmentChunkUploads).not.toHaveBeenCalled();
+  });
+
+  it('does not repair a matching remote key when its canary page has disappeared', async () => {
+    const page = makePage('p1', 1000);
+    const journal = makeJournal([page]);
+    const local = createMockLocalStore(journal);
+    const remote = createMockRemoteStore(journal);
+    (remote.downloadPage as jest.Mock).mockResolvedValueOnce(null);
+
+    const result = await new SyncEngine(local, remote).sync(
+      'journal-1',
+      SYNC_KEY,
+      undefined,
+      journal.salt,
+    );
+
+    expect(result).toMatchObject({ uploaded: [], downloaded: [] });
+    expect(remote.uploadPage).not.toHaveBeenCalled();
+  });
+
+  it('propagates cancellation from a remotely newer page download', async () => {
+    const local = createMockLocalStore(makeJournal([makePage('p1', 1000)]));
+    const remote = createMockRemoteStore(makeJournal([makePage('p1', 2000)]));
+    (remote.downloadPage as jest.Mock).mockRejectedValueOnce(new SyncCancelledError());
+
+    await expect(new SyncEngine(local, remote).sync('journal-1', SYNC_KEY)).rejects.toBeInstanceOf(
+      SyncCancelledError,
+    );
+  });
+
+  it('retains a newer local page index when its body disappears before upload', async () => {
+    const local = createMockLocalStore(makeJournal([makePage('p1', 2000)]));
+    const remote = createMockRemoteStore(makeJournal([makePage('p1', 1000)]));
+    (local.getPage as jest.Mock).mockResolvedValueOnce(null);
+
+    const result = await new SyncEngine(local, remote).sync('journal-1', SYNC_KEY);
+
+    expect(result.uploaded).toEqual([]);
+    expect(remote.uploadPage).not.toHaveBeenCalled();
+  });
+
+  it('retains a newer remote page index when its body has disappeared', async () => {
+    const local = createMockLocalStore(makeJournal([makePage('p1', 1000)]));
+    const remote = createMockRemoteStore(makeJournal([makePage('p1', 2000)]));
+    (remote.downloadPage as jest.Mock).mockResolvedValueOnce(null);
+
+    const result = await new SyncEngine(local, remote).sync('journal-1', SYNC_KEY);
+
+    expect(result.downloaded).toEqual([]);
+    expect(local.savePage).not.toHaveBeenCalled();
+  });
+
   it.each([0, -1, 1.5, Number.NaN])('rejects an invalid legacy chunk budget: %p', async (limit) => {
     const local = createMockLocalStore(makeJournal([]));
     const remote = createMockRemoteStore(makeJournal([]));
@@ -979,6 +1079,92 @@ describe('SyncEngine', () => {
         'journal-1',
         '/local/img1.png',
         expect.any(String), // encrypted attachment data
+      );
+    });
+
+    it('uses an attachment descriptor size when an older store has no storage-size API', async () => {
+      const att = { ...makeAttachment('legacy', 'legacy.png'), size: 1 };
+      const page = { ...makePage('p1', 1000), images: [att] };
+      const local = createMockLocalStore(makeJournal([page]));
+      const remote = createMockRemoteStore(makeJournal([]));
+      local.getAttachmentStorageSize = undefined;
+      (local.getAttachment as jest.Mock).mockResolvedValue('base64data');
+
+      await new SyncEngine(local, remote).sync('journal-1', SYNC_KEY);
+
+      expect(remote.uploadAttachment).toHaveBeenCalledWith('journal-1', 'legacy.png', 'base64data');
+    });
+
+    it('retains a sync cancellation raised while reading a local attachment', async () => {
+      const att = { ...makeAttachment('cancelled', '/local/cancelled.png'), size: 1 };
+      const local = createMockLocalStore(makeJournal([{ ...makePage('p1', 1000), images: [att] }]));
+      const remote = createMockRemoteStore(makeJournal([]));
+      (local.getAttachment as jest.Mock).mockRejectedValueOnce(new SyncCancelledError());
+
+      await expect(
+        new SyncEngine(local, remote).sync('journal-1', SYNC_KEY),
+      ).rejects.toBeInstanceOf(SyncCancelledError);
+    });
+
+    it('includes a non-Error attachment failure in the retryable sync error', async () => {
+      const att = { ...makeAttachment('offline', '/local/offline.png'), size: 1 };
+      const local = createMockLocalStore(makeJournal([{ ...makePage('p1', 1000), images: [att] }]));
+      const remote = createMockRemoteStore(makeJournal([]));
+      (local.getAttachment as jest.Mock).mockRejectedValueOnce('offline');
+
+      await expect(new SyncEngine(local, remote).sync('journal-1', SYNC_KEY)).rejects.toThrow(
+        'offline. Please retry sync.',
+      );
+    });
+
+    it('defers a key rotation when a legacy attachment size cannot be verified', async () => {
+      const attachment = makeAttachment('unknown', '/local/unknown.png');
+      const localJournal = {
+        ...makeJournal([{ ...makePage('p1', 1000), images: [attachment] }]),
+        salt: 'new-salt',
+      };
+      const remoteJournal = { ...makeJournal([makePage('p1', 1000)]), salt: 'old-salt' };
+      const local = createMockLocalStore(localJournal);
+      const remote = createMockRemoteStore(remoteJournal);
+      (local.getAttachmentStorageSize as jest.Mock).mockResolvedValue({ status: 'unknown' });
+      (remote.listRemoteJournals as jest.Mock).mockResolvedValue([
+        { id: 'journal-1', title: 'Test Journal', lastModified: 0, salt: 'old-salt' },
+      ]);
+
+      const result = await new SyncEngine(local, remote).sync(
+        'journal-1',
+        SYNC_KEY,
+        undefined,
+        'old-salt',
+      );
+
+      expect(result.warnings).toEqual([
+        expect.objectContaining({ reason: 'legacy-attachment-too-large', size: undefined }),
+      ]);
+      expect(remote.uploadPage).not.toHaveBeenCalled();
+    });
+
+    it('preflights a safe legacy attachment through an older storage adapter', async () => {
+      const attachment = { ...makeAttachment('safe', '/local/safe.png'), size: 1 };
+      const localJournal = {
+        ...makeJournal([{ ...makePage('p1', 1000), images: [attachment] }]),
+        salt: 'new-salt',
+      };
+      const remoteJournal = { ...makeJournal([makePage('p1', 1000)]), salt: 'old-salt' };
+      const local = createMockLocalStore(localJournal);
+      const remote = createMockRemoteStore(remoteJournal);
+      local.getAttachmentStorageSize = undefined;
+      (local.getAttachment as jest.Mock).mockResolvedValue('base64data');
+      (remote.listRemoteJournals as jest.Mock).mockResolvedValue([
+        { id: 'journal-1', title: 'Test Journal', lastModified: 0, salt: 'old-salt' },
+      ]);
+
+      await new SyncEngine(local, remote).sync('journal-1', SYNC_KEY, undefined, 'old-salt');
+
+      expect(remote.uploadAttachment).toHaveBeenCalledWith(
+        'journal-1',
+        '/local/safe.png',
+        'base64data',
       );
     });
 
