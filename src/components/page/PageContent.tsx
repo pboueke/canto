@@ -1,4 +1,4 @@
-import { useLayoutEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Platform, StyleSheet, TextInput, View } from 'react-native';
 import Markdown from 'react-native-markdown-display';
 import { useTheme } from '@/hooks/useTheme';
@@ -10,32 +10,85 @@ interface PageContentProps {
   onChangeText?: (text: string) => void;
 }
 
+export const EDITOR_MIN_LINES = 16;
+const VIEWER_MIN_LINES = 4;
+const EDITOR_BASE_LINE_HEIGHT = 22;
+
+export function getEditorMinHeight(scale: number): number {
+  return EDITOR_BASE_LINE_HEIGHT * scale * EDITOR_MIN_LINES;
+}
+
+export function clampEditorHeight(contentHeight: number, minHeight: number): number {
+  return Math.max(contentHeight, minHeight);
+}
+
 export function PageContent({ content, isEditing, onChangeText }: PageContentProps) {
   const { theme } = useTheme();
   const { t } = useI18n();
   const scale = theme.fonts.fontScale;
+  const lineHeight = EDITOR_BASE_LINE_HEIGHT * scale;
+  const minEditorHeight = getEditorMinHeight(scale);
+  const minViewerHeight = lineHeight * VIEWER_MIN_LINES;
   const textInputRef = useRef<TextInput>(null);
-  // react-native-web renders multiline TextInput as a plain <textarea>, which
-  // does not auto-grow with content. Measure the textarea's natural content
-  // height after every change and apply it as an explicit React style so the
-  // textarea grows along with content. Native is unaffected.
-  const [webHeight, setWebHeight] = useState<number | undefined>(undefined);
+  const pendingLocalContentRef = useRef<string | null>(null);
+  const [editorHeight, setEditorHeight] = useState(minEditorHeight);
 
+  useEffect(() => {
+    if (Platform.OS !== 'web') setEditorHeight(minEditorHeight);
+  }, [isEditing, minEditorHeight]);
+
+  useEffect(() => {
+    if (Platform.OS === 'web') return;
+    if (pendingLocalContentRef.current === content) {
+      pendingLocalContentRef.current = null;
+      return;
+    }
+    setEditorHeight(minEditorHeight);
+  }, [content, minEditorHeight]);
+
+  // react-native-web renders multiline TextInput as a textarea, which needs an
+  // explicit height. Release the old height before reading scrollHeight so the
+  // editor can shrink as well as grow, then restore the page scroll position.
   useLayoutEffect(() => {
     if (Platform.OS !== 'web' || !isEditing) return;
+    // SAFETY: react-native-web renders this multiline TextInput ref as an HTML textarea.
     const node = textInputRef.current as unknown as HTMLTextAreaElement | null;
     if (!node || node.tagName !== 'TEXTAREA') return;
-    // Grow-only: never reset to 'auto' (causes layout shift that triggers
-    // KeyboardAwareScrollView's auto-scroll and the browser's scroll-into-view).
-    // scrollHeight reports the minimum height to fit content; when applied
-    // height already accommodates content, scrollHeight equals applied height
-    // and we keep the textarea where it is.
-    const measured = node.scrollHeight;
-    setWebHeight((current) => {
-      if (current !== undefined && measured <= current) return current;
-      return measured;
-    });
-  }, [content, isEditing, scale]);
+
+    const browserWindow = typeof window === 'undefined' ? null : window;
+    const scrollX = browserWindow?.scrollX ?? 0;
+    const scrollY = browserWindow?.scrollY ?? 0;
+    const ancestorScrollPositions: Array<{
+      element: HTMLElement;
+      scrollLeft: number;
+      scrollTop: number;
+    }> = [];
+    let ancestor = node.parentElement;
+    while (ancestor) {
+      ancestorScrollPositions.push({
+        element: ancestor,
+        scrollLeft: ancestor.scrollLeft,
+        scrollTop: ancestor.scrollTop,
+      });
+      ancestor = ancestor.parentElement;
+    }
+    const selectionStart = node.selectionStart;
+    const selectionEnd = node.selectionEnd;
+
+    node.style.height = 'auto';
+    const nextHeight = clampEditorHeight(node.scrollHeight, minEditorHeight);
+    node.style.height = `${nextHeight}px`;
+    setEditorHeight(nextHeight);
+
+    if (selectionStart !== null && selectionEnd !== null) {
+      node.setSelectionRange(selectionStart, selectionEnd);
+    }
+    for (const position of ancestorScrollPositions) {
+      position.element.scrollLeft = position.scrollLeft;
+      position.element.scrollTop = position.scrollTop;
+    }
+    browserWindow?.scrollTo(scrollX, scrollY);
+  }, [content, isEditing, minEditorHeight]);
 
   const markdownStyles = {
     body: {
@@ -105,16 +158,11 @@ export function PageContent({ content, isEditing, onChangeText }: PageContentPro
     },
   };
 
-  const isWeb = Platform.OS === 'web';
-
   return (
     <View
+      testID="page-content-card"
       style={[
         styles.container,
-        // minHeight: 400 only on web — gives the textarea visual space when
-        // empty. On native it makes the TextInput too tall for the caret to
-        // stay above the keyboard.
-        isWeb ? styles.containerWeb : null,
         {
           borderColor: theme.colors.border,
           borderWidth: theme.borderWidth,
@@ -126,27 +174,37 @@ export function PageContent({ content, isEditing, onChangeText }: PageContentPro
         <TextInput
           ref={textInputRef}
           style={[
-            // On native, flex: 1 fills the container. On web we explicitly
-            // size to content via webHeight so flex must be turned off.
-            isWeb ? styles.inputWeb : styles.input,
+            styles.input,
             {
               color: theme.colors.text,
               fontFamily: theme.fonts.serif,
               fontSize: 14 * scale,
-              lineHeight: 22 * scale,
+              lineHeight,
+              minHeight: minEditorHeight,
+              height: editorHeight,
             },
-            isWeb && webHeight !== undefined ? { height: webHeight } : null,
           ]}
           value={content}
-          onChangeText={onChangeText}
-          scrollEnabled={isWeb ? false : undefined}
+          onChangeText={(text) => {
+            pendingLocalContentRef.current = text;
+            onChangeText?.(text);
+          }}
+          onContentSizeChange={({ nativeEvent }) => {
+            if (Platform.OS !== 'web') {
+              setEditorHeight(clampEditorHeight(nativeEvent.contentSize.height, minEditorHeight));
+            }
+          }}
+          scrollEnabled={false}
           multiline
+          underlineColorAndroid="transparent"
           textAlignVertical="top"
           placeholder={t.page.placeholder}
           placeholderTextColor={theme.colors.textSecondary}
         />
       ) : (
-        <Markdown style={markdownStyles}>{content || ' '}</Markdown>
+        <View testID="page-content-viewer" style={{ minHeight: minViewerHeight }}>
+          <Markdown style={markdownStyles}>{content || ' '}</Markdown>
+        </View>
       )}
     </View>
   );
@@ -158,20 +216,15 @@ const styles = StyleSheet.create({
     padding: 15,
     marginTop: 10,
   },
-  containerWeb: {
-    minHeight: 400,
-  },
   input: {
-    fontSize: 14,
-    lineHeight: 22,
-    flex: 1,
-  },
-  inputWeb: {
-    fontSize: 14,
-    lineHeight: 22,
     width: '100%',
-    // No flex and no fixed height — height is driven via state from
-    // scrollHeight measurements so the textarea always fits content.
+    padding: 0,
+    backgroundColor: 'transparent',
+    borderColor: 'transparent',
+    borderWidth: 0,
+    boxShadow: 'none',
+    outlineColor: 'transparent',
+    outlineWidth: 0,
     overflow: 'hidden',
   },
 });

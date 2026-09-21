@@ -40,6 +40,11 @@
     "license": "MIT"
   },
   {
+    "name": "expo-build-properties",
+    "version": "55.0.18",
+    "license": "MIT"
+  },
+  {
     "name": "expo-clipboard",
     "version": "55.0.13",
     "license": "MIT"

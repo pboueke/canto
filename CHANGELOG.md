@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.20.0 - Editor polish and optimized Android releases
+
+- **fix: responsive journal editor and viewer sizing** — the multiline editor now uses a scale-derived 16-line minimum, grows and shrinks with its content without nested scrolling, preserves web caret and outer-scroll positions, and keeps the inner input borderless so focus decoration cannot overlap text. Read mode keeps a smaller four-line minimum.
+- **build: optimized Android release bundles** — release builds enable R8 minification, code/resource shrinking, the optimizing ProGuard baseline, and AGP 8.12 optimized resource shrinking through durable Expo configuration.
+- **build: reproducible secret-safe Android releases** — the tracked release script clean-prebuilds Android, validates signing/R8/version settings, supports JDK 25 native access, loads ignored signing credentials, and verifies the signed AAB output.
+- **fix: prebuild-safe native archive bridge** — canonical `CantoArchive` Kotlin sources now live outside the generated Android tree and are restored and registered idempotently by an Expo config plugin.
+- **dev: side-by-side Android debug installs** — debug builds use `com.boueke.canto.debug`, preserving the installed production app and its local data while release builds remain `com.boueke.canto`.
+
 ## v0.19.2 - Large-journal performance, safer backups, and resilient sync
 
 - **fix: transactional backup imports** — native and web imports now verify the newly persisted journal's metadata, settings, and page count before publishing it; failed verification rolls the import back. Imported page modification timestamps are preserved.
