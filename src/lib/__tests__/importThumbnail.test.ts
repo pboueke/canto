@@ -156,6 +156,9 @@ describe('generateImportThumbnail', () => {
     expect(
       imageDimensionsFromHeader(new Uint8Array([0xff, 0xd8, 0xff, 0xc0, 0, 7, 0, 0, 0, 0])),
     ).toBeNull();
+    expect(
+      imageDimensionsFromHeader(new Uint8Array([0xff, 0xd8, 0xff, 0xc0, 0, 7, 0, 0, 0, 0, 0, 0])),
+    ).toBeNull();
 
     await expect(generateImportThumbnail({} as JSZip.JSZipObject, 1, '')).resolves.toBeNull();
     expect(mockGenerateThumbnailFromChunks).not.toHaveBeenCalled();

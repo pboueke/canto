@@ -1478,6 +1478,40 @@ describe('importJournal', () => {
     expect(importedAtt!.path).toBe('');
   });
 
+  it('reports a chunked attachment import when the store cannot stream payloads', async () => {
+    const att = makeAttachment('a1', { name: 'photo.jpg', path: 'image-a1.jpg' });
+    const page = makePage('p1', { images: [att] });
+    const journal = makeJournal('j1', { title: 'No Stream' });
+    const uri = await buildZip({
+      manifest: {
+        version: 1,
+        appVersion: '0.9.0',
+        exportDate: '2026-03-13T00:00:00Z',
+        encrypted: false,
+        journalTitle: 'No Stream',
+      },
+      journalJson: JSON.stringify(journal),
+      pages: [{ id: 'p1', json: JSON.stringify(page) }],
+      attachments: [{ filename: 'image-a1.jpg', data: btoa('fake-image-data') }],
+    });
+
+    const storeWithStream = mockStore as {
+      saveAttachmentStream?: LocalStore['saveAttachmentStream'];
+    };
+    const original = storeWithStream.saveAttachmentStream;
+    storeWithStream.saveAttachmentStream = undefined;
+    try {
+      const result = await importJournal(uri, 'No Stream');
+
+      expect(result.attachmentErrors).toHaveLength(1);
+      expect(result.attachmentErrors![0].error).toBe(
+        'Chunked attachment import is unavailable on this device',
+      );
+    } finally {
+      storeWithStream.saveAttachmentStream = original;
+    }
+  });
+
   it('streams oversized flat-v1 attachments without materializing entry async output', async () => {
     const source = new Uint8Array(1024 * 1024 + 31);
     source.forEach((_, index) => {
@@ -1516,7 +1550,7 @@ describe('importJournal', () => {
       if (this.name.startsWith('attachments/')) {
         throw new Error(`Unbounded ZIP entry read: ${String(args[0])}`);
       }
-      return Reflect.apply(originalAsync, this, args);
+      return originalAsync.apply(this, args);
     });
 
     const result = await importJournal(uri, 'Streamed import');

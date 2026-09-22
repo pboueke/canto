@@ -7,7 +7,8 @@ const config = {
     '^@noble/ciphers/(.*)\\.js$': '<rootDir>/node_modules/@noble/ciphers/$1.js',
     '^@noble/hashes/(.*)\\.js$': '<rootDir>/node_modules/@noble/hashes/$1.js',
     '^expo-file-system/next$': '<rootDir>/src/__mocks__/expo-file-system-next.ts',
-    '^expo-auth-session/providers/google$': '<rootDir>/src/__mocks__/expo-auth-session-providers-google.ts',
+    '^expo-auth-session/providers/google$':
+      '<rootDir>/src/__mocks__/expo-auth-session-providers-google.ts',
     '^expo-auth-session$': '<rootDir>/src/__mocks__/expo-auth-session.ts',
     '^expo-web-browser$': '<rootDir>/src/__mocks__/expo-web-browser.ts',
   },
@@ -30,7 +31,7 @@ const config = {
   coverageThreshold: {
     global: {
       statements: 95,
-      branches: 90,
+      branches: 95,
       functions: 95,
       lines: 95,
     },

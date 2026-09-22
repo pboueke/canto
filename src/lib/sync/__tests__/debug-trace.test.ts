@@ -208,4 +208,60 @@ describe('sync debug trace', () => {
         Object.defineProperty(globalThis, 'performance', originalPerformance);
     }
   });
+
+  it('falls back to Date.now and omits heap samples without a performance API', () => {
+    const originalPerformance = Object.getOwnPropertyDescriptor(globalThis, 'performance');
+    try {
+      setSyncDebugTraceEnabled(true);
+      Object.defineProperty(globalThis, 'performance', { configurable: true, value: undefined });
+      startSyncDebugTrace();
+      recordSyncDebugPhase('no-performance');
+      finishSyncDebugTrace('completed');
+
+      expect(readSyncDebugTrace()?.events).toContainEqual(
+        expect.objectContaining({ type: 'sync', phase: 'no-performance', heapBytes: null }),
+      );
+    } finally {
+      if (originalPerformance)
+        Object.defineProperty(globalThis, 'performance', originalPerformance);
+    }
+  });
+
+  it('records a non-finite browser memory measurement as null', async () => {
+    const target = performance as Performance & {
+      measureUserAgentSpecificMemory?: () => Promise<{ bytes: number }>;
+    };
+    const original = target.measureUserAgentSpecificMemory;
+    Object.defineProperty(target, 'measureUserAgentSpecificMemory', {
+      configurable: true,
+      value: () => Promise.resolve({ bytes: Number.NaN }),
+    });
+    try {
+      setSyncDebugTraceEnabled(true);
+      startSyncDebugTrace();
+      await Promise.resolve();
+      await Promise.resolve();
+      finishSyncDebugTrace('completed');
+
+      expect(readSyncDebugTrace()?.events).toContainEqual(
+        expect.objectContaining({ type: 'memory', totalBytes: null, outcome: 'measured' }),
+      );
+    } finally {
+      if (original) {
+        Object.defineProperty(target, 'measureUserAgentSpecificMemory', {
+          configurable: true,
+          value: original,
+        });
+      } else {
+        delete target.measureUserAgentSpecificMemory;
+      }
+    }
+  });
+
+  it('rejects stored traces with an unexpected version or event shape', () => {
+    storage.set('canto:debug:sync-trace:v1', JSON.stringify({ version: 2, events: [] }));
+    expect(readSyncDebugTrace()).toBeNull();
+    storage.set('canto:debug:sync-trace:v1', JSON.stringify({ version: 1, events: 'nope' }));
+    expect(readSyncDebugTrace()).toBeNull();
+  });
 });

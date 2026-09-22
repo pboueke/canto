@@ -894,6 +894,123 @@ describe('SyncManager', () => {
       await expect(manager.syncJournal('j1', 'token')).resolves.toBeNull();
       expect(manager.getState('j1').error).toContain('has no salt');
     });
+
+    it('reports a pending web checkpoint as the default state for an untouched journal', () => {
+      const manager = new SyncManager(createMockLocalStore(null), createMockRemoteStore(), true);
+      (
+        manager as unknown as { rendererWorkLedger: { requireFreshRenderer(): void } }
+      ).rendererWorkLedger.requireFreshRenderer();
+
+      // No state has ever been recorded for this journal, so getState must fall
+      // back to the renderer-safety checkpoint rather than reporting idle.
+      expect(manager.getState('never-synced')).toEqual({
+        status: 'checkpointed',
+        lastSynced: null,
+        requiresFreshRenderer: true,
+      });
+    });
+
+    it('classifies a run blocked by an active web checkpoint without reconnecting', async () => {
+      const remote = createMockRemoteStore();
+      const manager = new SyncManager(createMockLocalStore(makeJournal([])), remote, true);
+      (
+        manager as unknown as { rendererWorkLedger: { requireFreshRenderer(): void } }
+      ).rendererWorkLedger.requireFreshRenderer();
+
+      await expect(manager.runJournalSync('j1', 'token')).resolves.toEqual({
+        kind: 'checkpointed',
+      });
+      expect(remote.connect).not.toHaveBeenCalled();
+    });
+
+    it('classifies a run cancelled before publishing as cancelled', async () => {
+      const manager = new SyncManager(
+        createMockLocalStore(makeJournal([])),
+        createMockRemoteStore(),
+      );
+      const getItem = AsyncStorage.getItem as jest.Mock;
+      const original = getItem.getMockImplementation();
+      try {
+        getItem.mockImplementationOnce(async () => {
+          manager.cancelSync('j1');
+          return null;
+        });
+
+        await expect(manager.runJournalSync('j1', 'token')).resolves.toEqual({
+          kind: 'cancelled',
+        });
+      } finally {
+        getItem.mockImplementation(original!);
+      }
+    });
+
+    it('reports already-running while a journal run still holds its lock', async () => {
+      const local = createMockLocalStore(makeJournal([]));
+      let releaseList!: (journals: JournalContent[]) => void;
+      (local.listJournals as jest.Mock).mockImplementationOnce(
+        () => new Promise<JournalContent[]>((resolve) => (releaseList = resolve)),
+      );
+      const manager = new SyncManager(local, createMockRemoteStore());
+
+      const first = manager.runJournalSync('j1', 'token');
+      await expect(manager.runJournalSync('j1', 'token')).resolves.toEqual({
+        kind: 'already-running',
+      });
+
+      // Let the held run progress to the awaited catalog lookup before releasing it.
+      await jest.advanceTimersByTimeAsync(0);
+      releaseList([makeJournal([])]);
+      await expect(first).resolves.toMatchObject({ kind: 'completed' });
+    });
+
+    it('aborts the run when cancellation lands while reconnecting', async () => {
+      const remote = createMockRemoteStore();
+      const manager = new SyncManager(createMockLocalStore(makeJournal([])), remote);
+      (remote.connect as jest.Mock).mockImplementationOnce(async () => {
+        manager.cancelSync('j1');
+      });
+
+      await expect(manager.syncJournal('j1', 'token')).resolves.toBeNull();
+      expect(manager.getState('j1').status).toBe('idle');
+    });
+
+    it('removes a freshly written value when cancellation wins right after the write', async () => {
+      const manager = new SyncManager(
+        createMockLocalStore(makeJournal([])),
+        createMockRemoteStore(),
+      );
+      const persistForRun = (
+        manager as unknown as {
+          persistForRun: (
+            key: string,
+            value: string,
+            controller: AbortController,
+            isCurrentRun: () => boolean,
+          ) => Promise<void>;
+        }
+      ).persistForRun.bind(manager);
+      const setItem = AsyncStorage.setItem as jest.Mock;
+      const removeItem = AsyncStorage.removeItem as jest.Mock;
+      const originalSet = setItem.getMockImplementation();
+      const originalRemove = removeItem.getMockImplementation();
+      try {
+        delete asyncStore.key;
+        const afterWrite = new AbortController();
+        setItem.mockImplementationOnce(async (key: string, value: string) => {
+          asyncStore[key] = value;
+          afterWrite.abort();
+        });
+
+        await expect(persistForRun('key', 'value', afterWrite, () => true)).rejects.toThrow(
+          'Sync cancelled',
+        );
+        expect(removeItem).toHaveBeenCalledWith('key');
+        expect(asyncStore.key).toBeUndefined();
+      } finally {
+        setItem.mockImplementation(originalSet!);
+        removeItem.mockImplementation(originalRemove!);
+      }
+    });
   });
 
   describe('error recovery', () => {

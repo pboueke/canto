@@ -514,4 +514,33 @@ describe('Google Drive API helper', () => {
       );
     });
   });
+
+  it('tolerates a listing response without a files field', async () => {
+    mockFetchOk({});
+    await expect(listFiles(TOKEN, "name = 'test'")).resolves.toEqual([]);
+  });
+
+  it('honours explicit parents metadata on multipart create', async () => {
+    mockFetchOk({ id: 'f1', name: 'test.json', mimeType: 'application/json' });
+
+    await createFile(
+      TOKEN,
+      { name: 'test.json', mimeType: 'application/json', parents: ['folder-1'] },
+      '{"data":true}',
+    );
+
+    const body = (global.fetch as jest.Mock).mock.calls[0][1].body as string | Blob;
+    const text = typeof body === 'string' ? body : await (body as Blob).text();
+    expect(text).toContain('folder-1');
+  });
+
+  it('propagates a network error immediately when the request was already cancelled', async () => {
+    const controller = new AbortController();
+    controller.abort();
+    (global.fetch as jest.Mock).mockRejectedValueOnce(new Error('Network error'));
+
+    await expect(listFiles(TOKEN, "name = 'test'", 'drive', controller.signal)).rejects.toThrow(
+      'Network error',
+    );
+  });
 });

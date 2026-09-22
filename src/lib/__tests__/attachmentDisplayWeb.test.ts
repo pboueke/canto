@@ -158,4 +158,38 @@ describe('browser attachment display materializer', () => {
     );
     expect(createObjectURL).not.toHaveBeenCalled();
   });
+
+  it('revokes encrypted displays on background and ignores already-disposed entries', async () => {
+    const store = {
+      forEachAttachmentDisplayChunk: jest.fn(async (_attachment, visitor) => {
+        await visitor(0, 'AQI=');
+        await visitor(1, 'Aw==');
+      }),
+    } as unknown as LocalStore;
+
+    const lease = await materializeAttachmentDisplay(store, attachment, new Uint8Array(32));
+    purgeEncryptedAttachmentDisplayCache();
+    lease.release();
+    purgeAttachmentDisplayCache();
+
+    expect(revokeObjectURL).toHaveBeenCalledWith('blob:canto-display');
+  });
+
+  it('leaves unencrypted displays resident when purging encrypted ones', async () => {
+    const plain = { ...attachment, encrypted: false, content: undefined };
+    const store = {
+      forEachAttachmentDisplayChunk: jest.fn(async (_attachment, visitor) => {
+        await visitor(0, 'AQI=');
+        await visitor(1, 'Aw==');
+      }),
+    } as unknown as LocalStore;
+
+    const display = await materializeAttachmentDisplay(store, plain);
+    purgeEncryptedAttachmentDisplayCache();
+
+    expect(revokeObjectURL).not.toHaveBeenCalled();
+    display.release();
+    purgeAttachmentDisplayCache();
+    expect(revokeObjectURL).toHaveBeenCalledWith('blob:canto-display');
+  });
 });

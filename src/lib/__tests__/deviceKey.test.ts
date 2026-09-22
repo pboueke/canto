@@ -87,6 +87,20 @@ describe('Device key — prepareKeyRotation / commitKeyRotation', () => {
     expect(await SecureStore.getItemAsync('canto_device_encryption_previous_key')).toBeNull();
   });
 
+  it('aborts a rotation that never staged a previous key without disturbing the device key', async () => {
+    const device = createDeviceEncryption();
+    const ciphertext = await device.encrypt('stable-data');
+    device.clearKey!();
+    const storedBefore = await SecureStore.getItemAsync('canto_device_encryption_key');
+
+    await abortKeyRotation();
+
+    expect(await SecureStore.getItemAsync('canto_device_encryption_key')).toBe(storedBefore);
+    expect(await SecureStore.getItemAsync('canto_device_encryption_previous_key')).toBeNull();
+    device.clearKey!();
+    expect(await device.decrypt(ciphertext)).toBe('stable-data');
+  });
+
   it('exposes a keyless probe for a pending previous key so bootstrap never misreads a fresh install', async () => {
     const device = createDeviceEncryption();
     await device.encrypt('seed');

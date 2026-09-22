@@ -10,6 +10,7 @@ import JSZip from 'jszip';
 import { createLocalStore, _resetDB } from '../storage/local.web';
 import { exportJournal } from '../backup/export.web';
 import type { ExportManifest } from '../backup/export.web';
+import { ExportError } from '../backup/export-errors';
 import { inspectBackup, importJournal } from '../backup/import.web';
 import type { EncryptionService } from '../encryption';
 import type { JournalContent, Page, Attachment } from 'canto-data';
@@ -373,6 +374,19 @@ describe('exportJournal (web)', () => {
     await expect(exportJournal(journal, false)).rejects.toMatchObject({ kind: 'archive' });
     expect(mockCreateObjectURL).not.toHaveBeenCalled();
     generateAsync.mockRestore();
+  });
+
+  it('rethrows a typed ExportError raised while handing the archive to the browser', async () => {
+    const journal = makeJournal('j1', [makePage('p1')]);
+    await mockTestStore.saveJournal(journal);
+    mockCreateObjectURL.mockImplementationOnce(() => {
+      throw new ExportError('archive', 'The browser blocked the download.');
+    });
+
+    await expect(exportJournal(journal, false)).rejects.toMatchObject({
+      kind: 'archive',
+      message: 'The browser blocked the download.',
+    });
   });
 });
 
@@ -752,7 +766,7 @@ describe('importJournal (web)', () => {
       if (this.name.startsWith('attachments/')) {
         throw new Error(`Unbounded ZIP entry read: ${String(args[0])}`);
       }
-      return Reflect.apply(originalAsync, this, args);
+      return originalAsync.apply(this, args);
     });
 
     const result = await importJournal('blob:mock', 'Streamed');
@@ -1216,6 +1230,69 @@ describe('importJournal (web)', () => {
     expect(result.attachmentErrors![0].error).toBe('Disk full');
     const stored = await mockTestStore.getJournal(result.journalId);
     expect(stored!.pages[0].images[0].path).toBe('');
+  });
+
+  it('reports a chunked attachment import when the store cannot stream payloads', async () => {
+    const zip = new JSZip();
+    zip.file(
+      'manifest.json',
+      JSON.stringify({
+        version: 1,
+        appVersion: '0.14.0',
+        exportDate: '2026-01-01',
+        encrypted: false,
+        journalTitle: 'NoStream',
+      }),
+    );
+    zip.file(
+      'journal.json',
+      JSON.stringify({
+        id: 'j1',
+        title: 'NoStream',
+        icon: 'book',
+        date: '2026-01-01',
+        secure: false,
+      }),
+    );
+    zip.file(
+      'pages/p1.json',
+      JSON.stringify({
+        id: 'p1',
+        text: 'T',
+        date: '2026-01-01',
+        tags: [],
+        files: [],
+        images: [
+          {
+            id: 'att1',
+            path: 'image-att1.jpg',
+            name: 'photo.jpg',
+            type: 'image',
+            encrypted: false,
+            deleted: false,
+          },
+        ],
+        comments: [],
+        modified: 1,
+        deleted: false,
+      }),
+    );
+    zip.file('attachments/image-att1.jpg', 'fakeimagebytes');
+    fetchResponse = await zip.generateAsync({ type: 'arraybuffer' });
+
+    const storeWithStream = mockTestStore as { saveAttachmentStream?: unknown };
+    const original = storeWithStream.saveAttachmentStream;
+    storeWithStream.saveAttachmentStream = undefined;
+    try {
+      const result = await importJournal('blob:mock', 'NoStream');
+
+      expect(result.attachmentErrors).toHaveLength(1);
+      expect(result.attachmentErrors![0].error).toBe(
+        'Chunked attachment import is unavailable on this device',
+      );
+    } finally {
+      storeWithStream.saveAttachmentStream = original;
+    }
   });
 
   it('rewrites file attachment paths during import', async () => {

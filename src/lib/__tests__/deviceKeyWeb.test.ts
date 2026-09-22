@@ -71,6 +71,16 @@ describe('Device key web — prepareKeyRotation / commitKeyRotation', () => {
     expect(newKey.length).toBe(32);
   });
 
+  it('shares a single key-creation promise across concurrent devices', async () => {
+    const first = createDeviceEncryption();
+    const second = createDeviceEncryption();
+    await Promise.all([first.encrypt('one'), second.encrypt('two')]);
+
+    const key = localStorageMock.getItem(DEVICE_KEY_ALIAS);
+    expect(key).toEqual(expect.any(String));
+    expect(await first.decrypt(await second.encrypt('shared'))).toBe('shared');
+  });
+
   it('prepareKeyRotation does NOT persist new key', async () => {
     const device = createDeviceEncryption();
     await device.encrypt('seed');
@@ -120,6 +130,20 @@ describe('Device key web — prepareKeyRotation / commitKeyRotation', () => {
     expect(await device.decrypt(ciphertext)).toBe('old-data');
     expect(localStorageMock.getItem(DEVICE_KEY_ALIAS)).toBe(bytesToHex(oldKey));
     expect(localStorageMock.getItem(PREVIOUS_DEVICE_KEY_ALIAS)).toBeNull();
+  });
+
+  it('aborts a rotation that never staged a previous key without disturbing the device key', async () => {
+    const device = createDeviceEncryption();
+    const ciphertext = await device.encrypt('stable-data');
+    device.clearKey!();
+    const storedBefore = localStorageMock.getItem(DEVICE_KEY_ALIAS);
+
+    await abortKeyRotation();
+
+    expect(localStorageMock.getItem(DEVICE_KEY_ALIAS)).toBe(storedBefore);
+    expect(localStorageMock.getItem(PREVIOUS_DEVICE_KEY_ALIAS)).toBeNull();
+    device.clearKey!();
+    expect(await device.decrypt(ciphertext)).toBe('stable-data');
   });
 
   it('exposes a keyless probe for a pending previous key so bootstrap never misreads a fresh install', async () => {

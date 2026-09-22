@@ -39,4 +39,22 @@ describe('native import disk estimator', () => {
     expect(shared.localStorageBytes).toBeGreaterThan(oneCopy.localStorageBytes);
     expect(shared.requiredBytes).toBeGreaterThan(oneCopy.requiredBytes);
   });
+
+  it('ignores directory entries and unowned attachments', () => {
+    const entries = [
+      { name: 'pages/', size: 0, compressedSize: 0, method: 0, crc: 0, directory: true },
+      {
+        name: 'attachments/image-a.jpg',
+        size: 1_000,
+        compressedSize: 1_000,
+        method: 0,
+        crc: 1,
+        directory: false,
+      },
+    ];
+
+    const estimate = estimateNativeImportDiskUse(entries, new Map(), ATTACHMENT_CHUNK_SIZE);
+    expect(estimate.localStorageBytes).toBe(0);
+    expect(estimate.largestTemporaryEntryBytes).toBe(1_000);
+  });
 });

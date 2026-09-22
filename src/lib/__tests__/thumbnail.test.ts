@@ -105,4 +105,47 @@ describe('generateThumbnail', () => {
     const result = await generateThumbnail('aW1hZ2VkYXRh');
     expect(result).toBe('dGh1bWJuYWls');
   });
+
+  it('throws when the encoder returns no base64 output', async () => {
+    MockFile.mockImplementation((...args: unknown[]) => ({
+      uri:
+        typeof args[0] === 'string' && args.length === 1
+          ? args[0]
+          : `/tmp/cache/${args[1] ?? 'file'}`,
+      exists: false,
+      create: jest.fn(),
+      write: jest.fn(),
+      open: jest.fn(() => ({ writeBytes: jest.fn(), close: jest.fn() })),
+      delete: jest.fn(),
+    }));
+    (ImageManipulator.manipulateAsync as jest.Mock).mockResolvedValueOnce({
+      uri: 'file:///encoded',
+    });
+
+    await expect(generateThumbnail('aW1hZ2VkYXRh')).rejects.toThrow(
+      'Thumbnail encoder returned no base64 output',
+    );
+  });
+
+  it('creates the import source file when it does not yet exist', async () => {
+    const create = jest.fn();
+    MockFile.mockImplementation((...args: unknown[]) => ({
+      uri:
+        typeof args[0] === 'string' && args.length === 1
+          ? args[0]
+          : `/tmp/cache/${args[1] ?? 'file'}`,
+      exists: false,
+      create,
+      write: jest.fn(),
+      open: jest.fn(() => ({ writeBytes: jest.fn(), close: jest.fn() })),
+      delete: jest.fn(),
+    }));
+
+    async function* chunks() {
+      yield new Uint8Array([1]);
+    }
+
+    await expect(generateThumbnailFromChunks(chunks())).resolves.toBe('dGh1bWJuYWls');
+    expect(create).toHaveBeenCalled();
+  });
 });

@@ -228,6 +228,64 @@ describe('SyncManagerContext', () => {
 
     expect(mockDisconnect).toHaveBeenCalled();
   });
+
+  it('syncJournal reports not-ready before the manager finishes initialising', async () => {
+    const { getLocalStore } = jest.requireMock('@/hooks/useStorage') as {
+      getLocalStore: jest.Mock;
+    };
+    const original = getLocalStore.getMockImplementation();
+    let resolveStore!: (store: unknown) => void;
+    getLocalStore.mockImplementationOnce(() => new Promise((resolve) => (resolveStore = resolve)));
+    try {
+      const { result } = renderHook(() => useSyncManager(), { wrapper });
+
+      await expect(result.current.syncJournal('j1')).resolves.toEqual({ kind: 'not-ready' });
+      expect(mockRunJournalSync).not.toHaveBeenCalled();
+
+      await act(async () => {
+        resolveStore({});
+      });
+    } finally {
+      if (original) getLocalStore.mockImplementation(original);
+      else getLocalStore.mockResolvedValue({});
+    }
+  });
+
+  it('disposes a manager that finishes initialising only after unmount', async () => {
+    const { getLocalStore } = jest.requireMock('@/hooks/useStorage') as {
+      getLocalStore: jest.Mock;
+    };
+    const original = getLocalStore.getMockImplementation();
+    let resolveStore!: (store: unknown) => void;
+    getLocalStore.mockImplementationOnce(() => new Promise((resolve) => (resolveStore = resolve)));
+    try {
+      const { unmount } = renderHook(() => useSyncManager(), { wrapper });
+      unmount();
+
+      await act(async () => {
+        resolveStore({});
+      });
+
+      expect(mockDispose).toHaveBeenCalled();
+      expect(mockDisconnect).toHaveBeenCalled();
+    } finally {
+      if (original) getLocalStore.mockImplementation(original);
+      else getLocalStore.mockResolvedValue({});
+    }
+  });
+
+  it('skips scheduling when the access token cannot be refreshed', async () => {
+    mockAuthValue.getAccessToken = jest.fn().mockResolvedValue(null);
+    const { result } = renderHook(() => useSyncManager(), { wrapper });
+    await act(async () => {});
+
+    await act(async () => {
+      result.current.scheduleSyncDebounced('j1');
+    });
+    await act(async () => {});
+
+    expect(mockScheduleSyncDebounced).not.toHaveBeenCalled();
+  });
 });
 
 describe('useSyncManager default context (no provider)', () => {

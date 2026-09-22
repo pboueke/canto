@@ -125,4 +125,47 @@ describe('web thumbnails', () => {
       ),
     ).rejects.toThrow('Browser thumbnail decoding is unavailable');
   });
+
+  it('falls back to layout dimensions when natural dimensions are unavailable', async () => {
+    class ZeroNaturalImage extends SuccessfulImage {
+      override naturalWidth = 0;
+      override naturalHeight = 0;
+      override width = 400;
+      override height = 200;
+    }
+    Object.defineProperty(globalThis, 'Image', { configurable: true, value: ZeroNaturalImage });
+    const drawImage = jest.fn();
+    const canvas = {
+      width: 0,
+      height: 0,
+      getContext: () => ({ drawImage }),
+      toDataURL: () => 'data:image/jpeg;base64,dGh1bWJuYWls',
+    };
+    jest.spyOn(document, 'createElement').mockReturnValue(canvas as unknown as HTMLCanvasElement);
+
+    await expect(generateThumbnail('aW1hZ2U=')).resolves.toBe('dGh1bWJuYWls');
+    expect(canvas.width).toBe(120);
+    expect(canvas.height).toBe(60);
+  });
+
+  it('treats an empty encoded payload and padded base64 as a bounded thumbnail', async () => {
+    jest.spyOn(document, 'createElement').mockReturnValue({
+      width: 0,
+      height: 0,
+      getContext: () => ({ drawImage: jest.fn() }),
+      toDataURL: () => 'data:image/jpeg;base64,AAAA==',
+    } as unknown as HTMLCanvasElement);
+    await expect(generateThumbnail('aW1hZ2U=')).resolves.toBe('AAAA==');
+
+    jest.restoreAllMocks();
+    jest.spyOn(document, 'createElement').mockReturnValue({
+      width: 0,
+      height: 0,
+      getContext: () => ({ drawImage: jest.fn() }),
+      toDataURL: () => 'no-comma-payload',
+    } as unknown as HTMLCanvasElement);
+    await expect(generateThumbnail('aW1hZ2U=')).rejects.toThrow(
+      'Generated thumbnail exceeds size limit',
+    );
+  });
 });

@@ -5,6 +5,7 @@ const mockClose = jest.fn();
 const mockDeleteFile = jest.fn();
 const mockDirectoryList = jest.fn(() => []);
 let mockDirectoryExists = true;
+let mockFileExists = true;
 
 jest.mock('react-native', () => ({ Platform: { OS: 'ios' } }));
 jest.mock('expo-file-system', () => ({
@@ -17,13 +18,15 @@ jest.mock('expo-file-system', () => ({
     create: jest.fn(),
     list: mockDirectoryList,
   })),
-  File: jest.fn().mockImplementation(() => ({
-    uri: '/cache/canto-display/opaque',
-    exists: true,
-    create: jest.fn(),
-    open: () => ({ writeBytes: mockWriteBytes, close: mockClose }),
-    delete: mockDeleteFile,
-  })),
+  File: class MockFile {
+    uri = '/cache/canto-display/opaque';
+    get exists() {
+      return mockFileExists;
+    }
+    create = jest.fn();
+    open = () => ({ writeBytes: mockWriteBytes, close: mockClose });
+    delete = mockDeleteFile;
+  },
 }));
 
 import {
@@ -58,6 +61,7 @@ describe('attachment display materializer', () => {
     mockDeleteFile.mockClear();
     mockDirectoryList.mockClear();
     mockDirectoryExists = true;
+    mockFileExists = true;
   });
 
   it('writes one decoded chunk at a time and deletes encrypted output on release', async () => {
@@ -255,5 +259,92 @@ describe('attachment display materializer', () => {
     });
 
     expect(() => scavengeAttachmentDisplayCache()).not.toThrow();
+  });
+
+  it('creates the native cache directory when missing and deletes only existing native files', async () => {
+    mockDirectoryExists = false;
+    const store = {
+      forEachAttachmentDisplayChunk: jest.fn(async (_attachment, visitor) => {
+        await visitor(0, 'AQI=');
+        await visitor(1, 'Aw==');
+      }),
+    } as unknown as LocalStore;
+
+    const lease = await materializeAttachmentDisplay(store, attachment, new Uint8Array(32));
+    lease.release();
+
+    mockDirectoryExists = true;
+    const { File } = require('expo-file-system') as { File: new () => { exists: boolean } };
+    const existing = new File();
+    const nonFile = { exists: true, delete: jest.fn() };
+    mockDirectoryList.mockReturnValueOnce([existing, nonFile] as unknown as never[]);
+    mockDeleteFile.mockClear();
+    scavengeAttachmentDisplayCache();
+    expect(mockDeleteFile).toHaveBeenCalledTimes(1);
+  });
+
+  it('reports an unavailable web streamer and a web display length mismatch', async () => {
+    const { Platform } = require('react-native') as { Platform: { OS: string } };
+    const originalPlatform = Platform.OS;
+    Platform.OS = 'web';
+    try {
+      await expect(materializeAttachmentDisplay({} as LocalStore, attachment)).rejects.toThrow(
+        'Streaming attachment display is unavailable',
+      );
+
+      const plain = { ...attachment, encrypted: false };
+      const wrongLength = {
+        forEachAttachmentDisplayChunk: jest.fn(async (_attachment, visitor) => {
+          await visitor(0, 'AQI=');
+        }),
+      } as unknown as LocalStore;
+      await expect(materializeAttachmentDisplay(wrongLength, plain)).rejects.toThrow(
+        'length mismatch',
+      );
+    } finally {
+      Platform.OS = originalPlatform;
+    }
+  });
+
+  it('skips native cache scavenging on web', () => {
+    const { Platform } = require('react-native') as { Platform: { OS: string } };
+    const originalPlatform = Platform.OS;
+    Platform.OS = 'web';
+    mockDirectoryList.mockClear();
+    try {
+      scavengeAttachmentDisplayCache();
+    } finally {
+      Platform.OS = originalPlatform;
+    }
+    expect(mockDirectoryList).not.toHaveBeenCalled();
+  });
+
+  it('skips deleting a failed native output that never reached disk', async () => {
+    const store = {
+      forEachAttachmentDisplayChunk: jest.fn(async (_attachment, visitor) => {
+        await visitor(0, 'AQI=');
+      }),
+    } as unknown as LocalStore;
+
+    mockFileExists = false;
+    await expect(
+      materializeAttachmentDisplay(store, attachment, new Uint8Array(32)),
+    ).rejects.toThrow('length mismatch');
+    expect(mockDeleteFile).not.toHaveBeenCalled();
+  });
+
+  it('skips deleting an encrypted output that already disappeared on release', async () => {
+    const store = {
+      forEachAttachmentDisplayChunk: jest.fn(async (_attachment, visitor) => {
+        await visitor(0, 'AQI=');
+        await visitor(1, 'Aw==');
+      }),
+    } as unknown as LocalStore;
+
+    const lease = await materializeAttachmentDisplay(store, attachment, new Uint8Array(32));
+    mockFileExists = false;
+    lease.release();
+
+    expect(mockDeleteFile).not.toHaveBeenCalled();
   });
 });
