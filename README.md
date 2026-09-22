@@ -17,7 +17,7 @@
 <p align="center">
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-GPLv3-blue.svg" alt="License: GPL v3" /></a>
   <img src="https://img.shields.io/badge/version-0.20.1-green" alt="Version" />
-  <img src="https://img.shields.io/badge/tests-1707%2F1707%20passed-brightgreen" alt="Tests" />
+  <img src="https://img.shields.io/badge/tests-1709%2F1709%20passed-brightgreen" alt="Tests" />
   <img src="https://img.shields.io/badge/coverage-99%25-brightgreen" alt="Coverage" />
   <img src="https://img.shields.io/badge/platforms-Android%20%7C%20Web-lightgrey" alt="Platforms" />
 </p>

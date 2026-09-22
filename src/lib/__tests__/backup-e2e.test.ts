@@ -40,8 +40,9 @@ jest.mock('expo-file-system', () => {
         filesystem[this.uri] = '';
       }
     }
-    write(content: string) {
-      filesystem[this.uri] = content;
+    write(content: string | Uint8Array) {
+      filesystem[this.uri] =
+        content instanceof Uint8Array ? Buffer.from(content).toString('base64') : content;
     }
     text() {
       return Promise.resolve(filesystem[this.uri] ?? '');

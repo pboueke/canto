@@ -160,6 +160,25 @@ describe('exportJournal (web)', () => {
     expect(mockRevokeObjectURL).toHaveBeenCalledTimes(1);
   });
 
+  it('creates the download from binary Blob archive data', async () => {
+    const journal = makeJournal('j1', [makePage('p1')]);
+    await mockTestStore.saveJournal(journal);
+    let capturedBlob: Blob | null = null;
+    mockCreateObjectURL.mockImplementation((blob: unknown) => {
+      capturedBlob = blob as Blob;
+      return 'blob:mock';
+    });
+    const generateAsync = jest.spyOn(JSZip.prototype, 'generateAsync');
+
+    await exportJournal(journal, false);
+
+    expect(generateAsync).toHaveBeenCalledWith({ type: 'blob' });
+    expect(capturedBlob).not.toBeNull();
+    const zip = await JSZip.loadAsync(await capturedBlob!.arrayBuffer());
+    expect(zip.file('manifest.json')).not.toBeNull();
+    generateAsync.mockRestore();
+  });
+
   it('download filename is sanitized from journal title', async () => {
     const journal = makeJournal('j1', [makePage('p1')]);
     journal.title = 'My Journal / with <special> chars!';

@@ -151,7 +151,10 @@ export async function exportJournal(
   // --- Phase 2: archive construction and cache write (space/IO failures) ---
   try {
     onProgress?.({ current: total, total, phase: 'zipping' });
-    const zipData = await zip.generateAsync({ type: 'base64' });
+    // Keep the completed archive as bytes rather than a base64 string. On
+    // Android, base64 would create a large additional JavaScript allocation
+    // (and can make otherwise-exportable attachment-heavy journals fail).
+    const zipData = await zip.generateAsync({ type: 'uint8array' });
 
     const cacheDir = new Directory(Paths.cache, 'exports');
     if (!cacheDir.exists) {

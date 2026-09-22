@@ -12,6 +12,7 @@ import type { LocalStore } from '../storage';
 // In-memory filesystem mock (same pattern as localStorage.test.ts)
 // ---------------------------------------------------------------------------
 const filesystem: Record<string, string> = {};
+const archiveWriteKinds: Record<string, 'base64' | 'bytes'> = {};
 const mockGenerateThumbnailFromChunks = jest.fn();
 
 jest.mock('expo-file-system', () => {
@@ -36,8 +37,14 @@ jest.mock('expo-file-system', () => {
         filesystem[this.uri] = '';
       }
     }
-    write(content: string) {
+    write(content: string | Uint8Array) {
+      if (content instanceof Uint8Array) {
+        filesystem[this.uri] = Buffer.from(content).toString('base64');
+        archiveWriteKinds[this.uri] = 'bytes';
+        return;
+      }
       filesystem[this.uri] = content;
+      archiveWriteKinds[this.uri] = 'base64';
     }
     text() {
       return Promise.resolve(filesystem[this.uri] ?? '');
@@ -231,6 +238,7 @@ async function buildZip(opts: {
 // ---------------------------------------------------------------------------
 beforeEach(() => {
   for (const key of Object.keys(filesystem)) delete filesystem[key];
+  for (const key of Object.keys(archiveWriteKinds)) delete archiveWriteKinds[key];
   sharedFiles.length = 0;
   mockStore = createLocalStore(mockCreateEncryption());
   mockGenerateThumbnailFromChunks.mockReset();
@@ -629,6 +637,19 @@ describe('exportJournal', () => {
 
     // No archive may have been written by either attempt.
     expect(Object.keys(filesystem).filter((k) => k.endsWith('.canto.zip'))).toHaveLength(0);
+  });
+
+  it('writes the generated archive as binary bytes so large exports avoid a base64 archive copy', async () => {
+    const journal = makeJournal('j1', { pages: [makePage('p1')] });
+    await mockStore.saveJournal(journal);
+
+    await exportJournal(journal, false);
+
+    const zipUri = Object.keys(filesystem).find((key) => key.endsWith('.canto.zip'))!;
+    expect(archiveWriteKinds[zipUri]).toBe('bytes');
+    const zip = await JSZip.loadAsync(filesystem[zipUri], { base64: true });
+    expect(zip.file('manifest.json')).not.toBeNull();
+    expect(sharedFiles).toEqual([zipUri]);
   });
 
   it('classifies archive construction failures as archive errors and never opens the share sheet', async () => {
