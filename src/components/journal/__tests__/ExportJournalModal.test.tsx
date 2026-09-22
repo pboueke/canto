@@ -31,9 +31,14 @@ jest.mock('@/hooks/useI18n', () => ({
 jest.mock('@/hooks/useStorage', () => ({
   getLocalStore: () => Promise.resolve({ getJournal: mockGetJournal }),
 }));
-jest.mock('@/lib/backup', () => ({
-  exportJournal: (...args: unknown[]) => mockExportJournal(...args),
-}));
+jest.mock('@/lib/backup', () => {
+  const { ExportError } = jest.requireActual('@/lib/backup');
+  return {
+    exportJournal: (...args: unknown[]) => mockExportJournal(...args),
+    ExportError,
+    isExportError: (err: unknown) => err instanceof ExportError,
+  };
+});
 
 const metadata: Omit<JournalContent, 'pages'> = {
   id: 'j1',
@@ -92,5 +97,74 @@ describe('ExportJournalModal', () => {
 
     await waitFor(() => expect(getByText('Export failed')).toBeTruthy());
     expect(queryByText('token=secret disk failure')).toBeNull();
+  });
+
+  it('maps unreadable journal data to the localized integrity message', async () => {
+    const { ExportError } = jest.requireActual('@/lib/backup');
+    mockGetJournal.mockResolvedValue({ ...metadata, pages: [] });
+    mockExportJournal.mockRejectedValue(new ExportError('integrity', 'unreadable'));
+    const { getByText } = render(
+      <ExportJournalModal visible journal={metadata} onClose={jest.fn()} />,
+    );
+
+    fireEvent.press(getByText('Export'));
+
+    await waitFor(() =>
+      expect(
+        getByText('Some journal data could not be read. No files were changed or deleted.'),
+      ).toBeTruthy(),
+    );
+  });
+
+  it('maps archive construction failures to the localized archive message', async () => {
+    const { ExportError } = jest.requireActual('@/lib/backup');
+    mockGetJournal.mockResolvedValue({ ...metadata, pages: [] });
+    mockExportJournal.mockRejectedValue(new ExportError('archive', 'disk full'));
+    const { getByText } = render(
+      <ExportJournalModal visible journal={metadata} onClose={jest.fn()} />,
+    );
+
+    fireEvent.press(getByText('Export'));
+
+    await waitFor(() =>
+      expect(
+        getByText(
+          'The backup archive could not be created. Check available storage and try again.',
+        ),
+      ).toBeTruthy(),
+    );
+  });
+
+  it('maps native share failures to the localized share message', async () => {
+    const { ExportError } = jest.requireActual('@/lib/backup');
+    mockGetJournal.mockResolvedValue({ ...metadata, pages: [] });
+    mockExportJournal.mockRejectedValue(new ExportError('share', 'no activity'));
+    const { getByText } = render(
+      <ExportJournalModal visible journal={metadata} onClose={jest.fn()} />,
+    );
+
+    fireEvent.press(getByText('Export'));
+
+    await waitFor(() =>
+      expect(
+        getByText('The backup was created but could not be shared. Please try again.'),
+      ).toBeTruthy(),
+    );
+  });
+
+  it('maps a storage-integrity journal load failure to the localized integrity message', async () => {
+    const { StorageIntegrityError } = jest.requireActual('@/lib/storage/integrity');
+    mockGetJournal.mockRejectedValue(new StorageIntegrityError('JOURNAL_UNREADABLE', 'nope'));
+    const { getByText } = render(
+      <ExportJournalModal visible journal={metadata} onClose={jest.fn()} />,
+    );
+
+    fireEvent.press(getByText('Export'));
+
+    await waitFor(() =>
+      expect(
+        getByText('Some journal data could not be read. No files were changed or deleted.'),
+      ).toBeTruthy(),
+    );
   });
 });

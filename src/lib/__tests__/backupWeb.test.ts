@@ -259,6 +259,15 @@ describe('exportJournal (web)', () => {
       encrypted: true,
       deleted: false,
     };
+
+    const page = makePage('p1');
+    const journal = makeJournal('j1', [page]);
+    journal.secure = true;
+    journal.salt = 'dGVzdA==';
+    journal.kdfIterations = 50000;
+    // Persist the journal before staging attachments: orphan attachment records
+    // over a missing index are an integrity condition, not a journal.
+    await mockTestStore.saveJournal(journal, key);
     const attPath = await mockTestStore.saveAttachment(
       'j1',
       'p1',
@@ -266,14 +275,7 @@ describe('exportJournal (web)', () => {
       btoa('secret-image-bytes'),
       key,
     );
-
-    const page = makePage('p1');
     page.images = [{ ...att, path: attPath }];
-    const journal = makeJournal('j1', [page]);
-    journal.secure = true;
-    journal.salt = 'dGVzdA==';
-    journal.kdfIterations = 50000;
-    await mockTestStore.saveJournal(journal);
 
     let capturedBlob: unknown = null;
     mockCreateObjectURL.mockImplementation((blob: unknown) => {
@@ -304,12 +306,13 @@ describe('exportJournal (web)', () => {
       encrypted: false,
       deleted: false,
     };
-    const attPath = await mockTestStore.saveAttachment('j1', 'p1', att, btoa('fake-image-bytes'));
-
     const page = makePage('p1');
-    page.images = [{ ...att, path: attPath }];
     const journal = makeJournal('j1', [page]);
+    // Persist the journal before staging attachments: orphan attachment records
+    // over a missing index are an integrity condition, not a journal.
     await mockTestStore.saveJournal(journal);
+    const attPath = await mockTestStore.saveAttachment('j1', 'p1', att, btoa('fake-image-bytes'));
+    page.images = [{ ...att, path: attPath }];
 
     let capturedBlob: unknown = null;
     mockCreateObjectURL.mockImplementation((blob: unknown) => {
@@ -324,6 +327,52 @@ describe('exportJournal (web)', () => {
     const attachmentFiles = zip.file(/^attachments\//);
     expect(attachmentFiles.length).toBe(1);
     expect(attachmentFiles[0].name).toContain('image-att1.jpg');
+  });
+
+  it('classifies missing attachment data as an integrity failure and never downloads a partial archive', async () => {
+    const att: Attachment = {
+      id: 'att1',
+      path: '',
+      name: 'photo.jpg',
+      type: 'image',
+      encrypted: false,
+      deleted: false,
+    };
+    // The page references an attachment whose data was never written.
+    const page = makePage('p1');
+    page.images = [{ ...att, path: 'canto/j1/attachments/img-p1-att1.jpg' }];
+    const journal = makeJournal('j1', [page]);
+    await mockTestStore.saveJournal(journal);
+
+    await expect(exportJournal(journal, false)).rejects.toMatchObject({ kind: 'integrity' });
+    expect(mockCreateObjectURL).not.toHaveBeenCalled();
+    // Journal records are untouched: readback still returns the full journal.
+    const stored = await mockTestStore.getJournal('j1');
+    expect(stored?.pages).toHaveLength(1);
+  });
+
+  it('never downgrades a requested encrypted export to plaintext when the key is missing or revoked', async () => {
+    const journal = makeJournal('j1', [makePage('p1')]);
+    journal.salt = 'dGVzdA==';
+    await mockTestStore.saveJournal(journal);
+
+    await expect(exportJournal(journal, true)).rejects.toMatchObject({ kind: 'integrity' });
+    await expect(exportJournal(journal, true, new Uint8Array(32))).rejects.toMatchObject({
+      kind: 'integrity',
+    });
+    expect(mockCreateObjectURL).not.toHaveBeenCalled();
+  });
+
+  it('classifies archive construction failures as archive errors', async () => {
+    const journal = makeJournal('j1', [makePage('p1')]);
+    await mockTestStore.saveJournal(journal);
+    const generateAsync = jest
+      .spyOn(JSZip.prototype, 'generateAsync')
+      .mockRejectedValueOnce(new Error('disk full'));
+
+    await expect(exportJournal(journal, false)).rejects.toMatchObject({ kind: 'archive' });
+    expect(mockCreateObjectURL).not.toHaveBeenCalled();
+    generateAsync.mockRestore();
   });
 });
 
@@ -1360,25 +1409,28 @@ describe('importJournal (web)', () => {
     jest
       .spyOn(mockTestStore, 'getJournalOverview')
       .mockRejectedValue(new Error('unreadable metadata'));
-    const deleteSpy = jest.spyOn(mockTestStore, 'deleteJournal');
 
     await expect(importJournal('blob:mock', 'Imported journal', key)).rejects.toThrow(
       'Imported journal failed storage verification: unreadable metadata',
     );
 
-    expect(deleteSpy).toHaveBeenCalledTimes(1);
-    const importedId = deleteSpy.mock.calls[0][0];
+    // Rollback goes through the serialized-abort path (same mutation queue as
+    // deleteJournal), so the imported journal must be fully gone afterwards.
+    expect(mockTestStore.getJournalOverview).toHaveBeenCalledWith(expect.any(String), key);
+    const importedId = (mockTestStore.getJournalOverview as jest.Mock).mock.calls[0][0];
     expect(importedId).not.toBe('source-journal');
-    expect(mockTestStore.getJournalOverview).toHaveBeenCalledWith(importedId, key);
     expect(await mockTestStore.listJournals()).toEqual([]);
+    expect(await mockTestStore.getJournal(importedId)).toBeNull();
   });
 
   it('keeps the original write error when rollback cleanup fails', async () => {
     await prepareTransactionalImportZip();
 
     jest.spyOn(mockTestStore, 'saveJournal').mockRejectedValue(new Error('quota exceeded'));
-    const deleteSpy = jest
-      .spyOn(mockTestStore, 'deleteJournal')
+    // Rollback cleanup itself fails; the original write error must still surface
+    // while startup recovery owns any leftover marker.
+    const abortSpy = jest
+      .spyOn(mockTestStore, 'abortJournalImport')
       .mockRejectedValue(new Error('cleanup failed'));
     const consoleWarnSpy = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
 
@@ -1386,8 +1438,7 @@ describe('importJournal (web)', () => {
       'Imported journal failed storage verification: quota exceeded',
     );
 
-    expect(deleteSpy).toHaveBeenCalledTimes(1);
-    expect(deleteSpy.mock.calls[0][0]).not.toBe('source-journal');
+    expect(abortSpy).toHaveBeenCalledTimes(1);
     consoleWarnSpy.mockRestore();
   });
 });

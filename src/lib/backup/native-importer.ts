@@ -285,6 +285,8 @@ export async function importNativeJournal(
             path: '',
             name: owner.name || `imported-${attachmentId}.${parts.ext}`,
             type: parts.type,
+            // The page-level flag preserves a legacy encrypted marker even
+            // when the storage write below records the actual protection.
             encrypted: owner.encrypted,
             size: byteLength,
             content: chunkedContentForByteLength(byteLength),
@@ -294,21 +296,34 @@ export async function importNativeJournal(
             if (decryptedAttachment === undefined && !store.saveAttachmentStream) {
               throw new Error('Chunked attachment import is unavailable on this device');
             }
+            // Legacy 0.19.x archives can carry an encrypted attachment flag
+            // with data that was never password-wrapped (no salt, unencrypted
+            // archive with no key). Such records must stay readable
+            // device-only while newer keyless encrypted writes remain rejected
+            // by the store guard.
+            const keyForWrite = owner.encrypted ? derivedKey : undefined;
+            const storageAttachment: Attachment = {
+              ...attachment,
+              // Flag the storage descriptor only when the write can actually
+              // protect the payload: plain attachments inside an encrypted
+              // archive stay device-only exactly like pre-import storage.
+              encrypted: owner.encrypted && (Boolean(keyForWrite) || manifest.encrypted),
+            };
             const path =
               decryptedAttachment === undefined
                 ? await store.saveAttachmentStream!(
                     newJournalId,
                     owner.pageId,
-                    attachment,
+                    storageAttachment,
                     nativeAttachmentChunks(source!),
-                    owner.encrypted ? derivedKey : undefined,
+                    keyForWrite,
                   )
                 : await store.saveAttachment(
                     newJournalId,
                     owner.pageId,
-                    attachment,
+                    storageAttachment,
                     decryptedAttachment,
-                    owner.encrypted ? derivedKey : undefined,
+                    keyForWrite,
                   );
             importedAttachments.set(`${owner.pageId}:${entry.name.replace('attachments/', '')}`, {
               ...attachment,

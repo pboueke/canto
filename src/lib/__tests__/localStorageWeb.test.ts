@@ -54,35 +54,81 @@ function makeJournalContent(id: string, pages: Page[] = []): JournalContent {
   };
 }
 
+// Raw helpers below can run before the first store.initialize() (to build a
+// legacy device state). A version-less open of a freshly-deleted database
+// creates it at version 1, so it must also create the same "files" store the
+// production openDB creates on upgrade: production opens at version 1 too, and
+// onupgradeneeded would never fire against an already-version-1 database.
 async function putRawStorageRecord(path: string, data: string): Promise<void> {
   const db = await new Promise<IDBDatabase>((resolve, reject) => {
     const request = indexedDB.open('canto');
+    request.onupgradeneeded = () => {
+      if (!request.result.objectStoreNames.contains('files')) {
+        request.result.createObjectStore('files', { keyPath: 'path' });
+      }
+    };
     request.onsuccess = () => resolve(request.result);
     request.onerror = () => reject(request.error);
   });
-  await new Promise<void>((resolve, reject) => {
-    const tx = db.transaction('files', 'readwrite');
-    tx.objectStore('files').put({ path, data });
-    tx.oncomplete = () => resolve();
-    tx.onerror = () => reject(tx.error);
-  });
-  db.close();
+  try {
+    await new Promise<void>((resolve, reject) => {
+      const tx = db.transaction('files', 'readwrite');
+      tx.objectStore('files').put({ path, data });
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+    });
+  } finally {
+    db.close();
+  }
 }
 
 async function getRawStorageRecord(path: string): Promise<string | undefined> {
   const db = await new Promise<IDBDatabase>((resolve, reject) => {
     const request = indexedDB.open('canto');
+    request.onupgradeneeded = () => {
+      if (!request.result.objectStoreNames.contains('files')) {
+        request.result.createObjectStore('files', { keyPath: 'path' });
+      }
+    };
     request.onsuccess = () => resolve(request.result);
     request.onerror = () => reject(request.error);
   });
-  const value = await new Promise<{ path: string; data: string } | undefined>((resolve, reject) => {
-    const tx = db.transaction('files', 'readonly');
-    const request = tx.objectStore('files').get(path);
+  try {
+    const value = await new Promise<{ path: string; data: string } | undefined>(
+      (resolve, reject) => {
+        const tx = db.transaction('files', 'readonly');
+        const request = tx.objectStore('files').get(path);
+        request.onsuccess = () => resolve(request.result);
+        request.onerror = () => reject(request.error);
+      },
+    );
+    return value?.data;
+  } finally {
+    db.close();
+  }
+}
+
+async function deleteRawStorageRecord(path: string): Promise<void> {
+  const db = await new Promise<IDBDatabase>((resolve, reject) => {
+    const request = indexedDB.open('canto');
+    request.onupgradeneeded = () => {
+      if (!request.result.objectStoreNames.contains('files')) {
+        request.result.createObjectStore('files', { keyPath: 'path' });
+      }
+    };
     request.onsuccess = () => resolve(request.result);
     request.onerror = () => reject(request.error);
   });
-  db.close();
-  return value?.data;
+  try {
+    await new Promise<void>((resolve, reject) => {
+      const tx = db.transaction('files', 'readwrite');
+      tx.objectStore('files').delete(path);
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+    });
+  } finally {
+    db.close();
+  }
 }
 
 function makePage(id: string): Page {
@@ -99,7 +145,7 @@ function makePage(id: string): Page {
   };
 }
 
-beforeEach(async () => {
+beforeEach(() => {
   // Close cached connection and delete the database between tests
   _resetDB();
   indexedDB.deleteDatabase('canto');
@@ -399,18 +445,25 @@ describe('createLocalStore (web/IndexedDB)', () => {
     });
   });
 
-  it('saves an edit when a legacy journal has a malformed unrelated page', async () => {
+  it('rejects a save covering a malformed unrelated page and leaves every file unchanged', async () => {
     const store = createLocalStore(createMockEncryption());
     await store.initialize();
     await store.saveJournal(makeJournalContent('j1', [makePage('p1'), makePage('p2')]));
     await putRawStorageRecord('canto/j1/page-catalog.json', '');
     await putRawStorageRecord('canto/j1/pages/p2.json', 'enc:local corruption');
+    const p1Before = await getRawStorageRecord('canto/j1/pages/p1.json');
+    const p2Before = await getRawStorageRecord('canto/j1/pages/p2.json');
 
+    // A rebuild may publish only after every discovered page validates. The
+    // unreadable page must block the mutation and never be silently omitted
+    // from a reduced catalog projection.
     await expect(
       store.savePage('j1', { ...makePage('p1'), text: 'Saved edit' }, undefined, true),
-    ).resolves.toBeUndefined();
+    ).rejects.toMatchObject({ code: 'CATALOG_UNREADABLE', details: ['p2'] });
 
-    await expect(store.getPage('j1', 'p1')).resolves.toMatchObject({ text: 'Saved edit' });
+    expect(await getRawStorageRecord('canto/j1/pages/p1.json')).toBe(p1Before);
+    expect(await getRawStorageRecord('canto/j1/pages/p2.json')).toBe(p2Before);
+    expect(await getRawStorageRecord('canto/j1/page-catalog.json')).toBe('');
   });
 
   it('getPage returns null for non-existent page', async () => {
@@ -626,9 +679,9 @@ describe('readEncrypted password-layer fallback (web)', () => {
       throw new Error('Decryption failed');
     });
 
-    // Should return null gracefully (readEncrypted catches and returns null)
-    const result = await store.getJournal('j1');
-    expect(result).toBeNull();
+    // A journal that exists but cannot be device-decrypted must fail closed
+    // with a typed integrity error, never silently become an empty journal.
+    await expect(store.getJournal('j1')).rejects.toMatchObject({ code: 'JOURNAL_UNREADABLE' });
   });
 });
 
@@ -711,6 +764,59 @@ describe('deletePage attachment cleanup (web)', () => {
   });
 });
 
+describe('secure journal write guards (web/IndexedDB)', () => {
+  it('rejects keyless and all-zero-key savePage/deletePage for a secure journal and leaves files unchanged', async () => {
+    const key = new Uint8Array(32).fill(7);
+    const store = createLocalStore(createMockEncryption());
+    const journal: JournalContent = {
+      ...makeJournalContent('secure-j', [makePage('p1')]),
+      secure: true,
+    };
+    await store.saveJournal(journal, key);
+
+    const journalRoot = 'canto/secure-j';
+    const before = {
+      catalog: await getRawStorageRecord(`${journalRoot}/page-catalog.json`),
+      page: await getRawStorageRecord(`${journalRoot}/pages/p1.json`),
+      metadata: await getRawStorageRecord(`${journalRoot}/metadata.json`),
+    };
+    expect(before.catalog).toBeDefined();
+
+    // Missing key: the secure status comes from the device-only index entry,
+    // so both mutations reject before any IndexedDB write.
+    await expect(store.savePage('secure-j', makePage('p2'))).rejects.toMatchObject({
+      code: 'JOURNAL_LOCKED',
+    });
+    await expect(store.deletePage('secure-j', 'p1')).rejects.toMatchObject({
+      code: 'JOURNAL_LOCKED',
+    });
+
+    // Revoked (all-zero) key: rejected by the defense-in-depth guard as well.
+    await expect(
+      store.savePage('secure-j', makePage('p3'), new Uint8Array(32)),
+    ).rejects.toMatchObject({ code: 'JOURNAL_LOCKED' });
+    await expect(store.deletePage('secure-j', 'p1', new Uint8Array(32))).rejects.toMatchObject({
+      code: 'JOURNAL_LOCKED',
+    });
+
+    // Every durable record is byte-identical and nothing new was published.
+    expect(await getRawStorageRecord(`${journalRoot}/page-catalog.json`)).toBe(before.catalog);
+    expect(await getRawStorageRecord(`${journalRoot}/pages/p1.json`)).toBe(before.page);
+    expect(await getRawStorageRecord(`${journalRoot}/metadata.json`)).toBe(before.metadata);
+    expect(await getRawStorageRecord(`${journalRoot}/pages/p2.json`)).toBeUndefined();
+    expect(await getRawStorageRecord(`${journalRoot}/pages/p3.json`)).toBeUndefined();
+  });
+
+  it('still allows keyless page writes for a non-secure journal', async () => {
+    const store = createLocalStore(createMockEncryption());
+    await store.saveJournal(makeJournalContent('ns-j'));
+    await expect(store.savePage('ns-j', makePage('p1'))).resolves.toBeUndefined();
+    expect(await getRawStorageRecord('canto/ns-j/pages/p1.json')).toBeDefined();
+    await expect(store.deletePage('ns-j', 'p1')).resolves.toBeUndefined();
+    await expect(store.getPage('ns-j', 'p1')).resolves.toMatchObject({ deleted: true });
+  });
+});
+
 describe('reencryptAll (web/IndexedDB)', () => {
   it('refuses an unknown-size legacy attachment before staging a device-key rotation', async () => {
     const store = createLocalStore(createMockEncryption());
@@ -789,8 +895,9 @@ describe('reencryptAll (web/IndexedDB)', () => {
     const newEncrypt = (pt: string) => Promise.resolve(`new:${pt}`);
     await store.reencryptAll(oldDecrypt, oldEncrypt, newEncrypt);
 
-    const result = await store.getJournal('j1');
-    expect(result).toBeNull();
+    // The store still uses old encryption internally, so reads must fail
+    // closed with a typed integrity error instead of an empty journal.
+    await expect(store.getJournal('j1')).rejects.toMatchObject({ code: 'JOURNAL_UNREADABLE' });
   });
 
   it('re-encrypts multiple journals and their pages', async () => {
@@ -937,9 +1044,35 @@ describe('chunked attachment storage (web)', () => {
     await expect(store.getAttachment(path)).resolves.toBe('QUJDRA==');
   });
 
-  it('reads legacy device-only chunk frames when metadata retains encrypted', async () => {
+  it('rejects writing an encrypted-flagged attachment without a usable key and leaves no root', async () => {
     const store = createLocalStore(createMockEncryption());
     await store.initialize();
+    const attachment: Attachment = {
+      id: 'locked-chunk-write',
+      path: '',
+      name: 'locked-chunk-write.bin',
+      type: 'file',
+      encrypted: true,
+      deleted: false,
+      content: chunkedContentForBase64('QUJD'),
+    };
+
+    // The password-layer downgrade after auto-lock must fail closed: an
+    // encrypted attachment with no usable key is never persisted device-only.
+    await expect(store.saveAttachment('j1', 'p1', attachment, 'QUJD')).rejects.toMatchObject({
+      code: 'JOURNAL_LOCKED',
+    });
+    await expect(
+      getRawStorageRecord('canto/j1/attachments/chunk-v1-p1-locked-chunk-write-legacy/0'),
+    ).resolves.toBeUndefined();
+  });
+
+  it('still tolerates legacy device-only chunk frames on read when metadata retains encrypted', async () => {
+    // Pre-19.2 devices can retain encrypted attachment metadata while the
+    // frame itself was written without a password layer (device-only). The
+    // read path must tolerate that legacy state even though new keyless
+    // writes are rejected. Build the legacy root directly, as an old device
+    // or interrupted migration would have left it.
     const attachment: Attachment = {
       id: 'legacy-device-only-chunk',
       path: '',
@@ -949,12 +1082,19 @@ describe('chunked attachment storage (web)', () => {
       deleted: false,
       content: chunkedContentForBase64('QUJD'),
     };
+    const root = 'canto/j1/attachments/chunk-v1-p1-legacy-device-only-chunk-legacy';
+    await putRawStorageRecord(
+      root + '/0',
+      'enc:' + encodeChunkFrame('j1', 'p1', attachment, 0, 'QUJD'),
+    );
+    await putRawStorageRecord(
+      root + '/manifest',
+      'enc:' + JSON.stringify({ journalId: 'j1', pageId: 'p1', attachment }),
+    );
 
-    // Pre-19.2 content can retain encrypted metadata while lacking the
-    // password layer. Import turns it into a chunked generation.
-    const path = await store.saveAttachment('j1', 'p1', attachment, 'QUJD');
-
-    await expect(store.getAttachment(path, new Uint8Array(32).fill(7))).resolves.toBe('QUJD');
+    const store = createLocalStore(createMockEncryption());
+    await store.initialize();
+    await expect(store.getAttachment(root, new Uint8Array(32).fill(7))).resolves.toBe('QUJD');
   });
 
   it('atomically persists downloaded chunk frames and deletes failed generations', async () => {
@@ -1281,6 +1421,10 @@ describe('chunked attachment storage (web)', () => {
   it('cleans up a chunk root when its owning page is deleted', async () => {
     const store = createLocalStore(createMockEncryption());
     await store.initialize();
+    // Establish the journal through the store so the device-only index entry
+    // exists; the fail-closed index guard treats durable data without an index
+    // as an integrity condition and blocks page mutations below.
+    await store.saveJournal(makeJournalContent('j1'));
     const attachment: Attachment = {
       id: 'delete-root',
       path: '',
@@ -2082,28 +2226,35 @@ describe('IDB error paths (web/IndexedDB)', () => {
     it('rejects when IDB deletePrefix transaction errors', async () => {
       const { store } = await getInitializedStore();
 
-      interceptNextTransaction((tx) => {
-        const origOS = tx.objectStore.bind(tx);
-        tx.objectStore = (name: string) => {
-          const os = origOS(name);
-          os.openCursor = () => {
-            queueMicrotask(() => {
-              Object.defineProperty(tx, 'error', {
-                value: new DOMException('DeletePrefix failed'),
-                configurable: true,
+      // deleteJournal reads the index (read-only transaction) before the
+      // directory prefix deletion, so intercept the first read-write
+      // transaction, which is the prefix deletion.
+      let readWrites = 0;
+      interceptNextTransaction(
+        (tx) => {
+          const origOS = tx.objectStore.bind(tx);
+          tx.objectStore = (name: string) => {
+            const os = origOS(name);
+            os.openCursor = () => {
+              queueMicrotask(() => {
+                Object.defineProperty(tx, 'error', {
+                  value: new DOMException('DeletePrefix failed'),
+                  configurable: true,
+                });
+                if (tx.onerror) tx.onerror(new Event('error'));
               });
-              if (tx.onerror) tx.onerror(new Event('error'));
-            });
-            return { onsuccess: null, onerror: null } as unknown as IDBRequest;
+              return { onsuccess: null, onerror: null } as unknown as IDBRequest;
+            };
+            return os;
           };
-          return os;
-        };
-        Object.defineProperty(tx, 'oncomplete', {
-          set: () => {},
-          get: () => null,
-          configurable: true,
-        });
-      });
+          Object.defineProperty(tx, 'oncomplete', {
+            set: () => {},
+            get: () => null,
+            configurable: true,
+          });
+        },
+        (tx) => (readWrites += tx.mode === 'readwrite' ? 1 : 0) === 1,
+      );
 
       await expect(store.deleteJournal('j1')).rejects.toThrow();
     });
@@ -2113,28 +2264,32 @@ describe('IDB error paths (web/IndexedDB)', () => {
     it('rejects when IDB deletePrefix transaction is aborted', async () => {
       const { store } = await getInitializedStore();
 
-      interceptNextTransaction((tx) => {
-        const origOS = tx.objectStore.bind(tx);
-        tx.objectStore = (name: string) => {
-          const os = origOS(name);
-          os.openCursor = () => {
-            queueMicrotask(() => {
-              try {
-                tx.abort();
-              } catch (error) {
-                void error;
-              }
-            });
-            return { onsuccess: null, onerror: null } as unknown as IDBRequest;
+      let readWrites = 0;
+      interceptNextTransaction(
+        (tx) => {
+          const origOS = tx.objectStore.bind(tx);
+          tx.objectStore = (name: string) => {
+            const os = origOS(name);
+            os.openCursor = () => {
+              queueMicrotask(() => {
+                try {
+                  tx.abort();
+                } catch (error) {
+                  void error;
+                }
+              });
+              return { onsuccess: null, onerror: null } as unknown as IDBRequest;
+            };
+            return os;
           };
-          return os;
-        };
-        Object.defineProperty(tx, 'oncomplete', {
-          set: () => {},
-          get: () => null,
-          configurable: true,
-        });
-      });
+          Object.defineProperty(tx, 'oncomplete', {
+            set: () => {},
+            get: () => null,
+            configurable: true,
+          });
+        },
+        (tx) => (readWrites += tx.mode === 'readwrite' ? 1 : 0) === 1,
+      );
 
       await expect(store.deleteJournal('j1')).rejects.toThrow();
     });
@@ -2187,12 +2342,34 @@ describe('IDB error paths (web/IndexedDB)', () => {
       await jest.advanceTimersByTimeAsync(10_000);
       await removedAssertion;
 
+      // deleteJournal first reads the index through a read-only transaction;
+      // only the subsequent prefix deletion must time out.
       const prefixTx = stalledTransaction({ openCursor: jest.fn(() => ({})) });
-      IDBDatabase.prototype.transaction = (() =>
-        prefixTx) as typeof IDBDatabase.prototype.transaction;
+      let interceptedPrefix = false;
+      IDBDatabase.prototype.transaction = function (
+        storeNames: string | string[],
+        mode?: IDBTransactionMode,
+      ) {
+        if (mode === 'readwrite' && !interceptedPrefix) {
+          interceptedPrefix = true;
+          return prefixTx;
+        }
+        return origTransaction.call(this, storeNames, mode);
+      };
       const journal = store.deleteJournal('j1');
       const journalAssertion = expect(journal).rejects.toThrow('Timeout deleting prefix');
-      await Promise.resolve();
+      // deleteJournal reads the index (and now probes durable journal data)
+      // through read-only transactions before its first readwrite delete.
+      // fake-indexeddb delivers each request event via setImmediate, which
+      // fake timers also replace, and events scheduled while the fake clock
+      // is ticking land 1ms later, so each pump pass must advance the fake
+      // clock by 1ms to keep pace until the stalled prefix transaction is
+      // handed out. The pass count is bounded so a future stall fails fast
+      // instead of hanging; the 10s IDB timeout timers stay far outside this
+      // 1ms window and are cleared when their reads succeed.
+      for (let passes = 0; passes < 1000 && !interceptedPrefix; passes++) {
+        await jest.advanceTimersByTimeAsync(1);
+      }
       await jest.advanceTimersByTimeAsync(10_000);
       await journalAssertion;
     });
@@ -2375,5 +2552,225 @@ describe('device-key rotation write barrier (web)', () => {
     await concurrentSave;
     // A page mutation commits both the authoritative page and its catalog projection.
     expect(writesDuringRotation).toBe(2);
+  });
+});
+
+describe('fail-closed integrity reads and mutations (web)', () => {
+  beforeEach(() => {
+    _resetDB();
+  });
+
+  it('listJournals throws INDEX_UNREADABLE when the index file exists but is undecryptable', async () => {
+    const encryption = createMockEncryption();
+    encryption.decrypt = jest.fn(() => {
+      throw new Error('Cannot decrypt index');
+    });
+    const store = createLocalStore(encryption);
+    await store.initialize();
+    await putRawStorageRecord('canto/journals.json', 'ciphertext-bytes');
+    await expect(store.listJournals()).rejects.toMatchObject({ code: 'INDEX_UNREADABLE' });
+  });
+
+  it('listJournals throws INDEX_UNREADABLE when the index is not valid JSON', async () => {
+    const store = createLocalStore(createMockEncryption());
+    await store.initialize();
+    await putRawStorageRecord('canto/journals.json', 'enc:not-json');
+    await expect(store.listJournals()).rejects.toMatchObject({ code: 'INDEX_UNREADABLE' });
+  });
+
+  it('an unreadable index blocks metadata publication and never writes a reduced index', async () => {
+    const store = createLocalStore(createMockEncryption());
+    await store.initialize();
+    await putRawStorageRecord('canto/journals.json', 'enc:not-json');
+    await putRawStorageRecord('canto/j1/metadata.json', 'enc:{"id":"j1"}');
+
+    await expect(
+      store.saveJournalMetadata?.({
+        ...makeJournalContent('j1'),
+        title: 'Renamed',
+        pages: undefined,
+      } as Omit<JournalContent, 'pages'>),
+    ).rejects.toMatchObject({ code: 'INDEX_UNREADABLE' });
+    expect(await getRawStorageRecord('canto/journals.json')).toBe('enc:not-json');
+  });
+
+  it('a missing index over existing durable journal data fails closed instead of listing an empty library', async () => {
+    const store = createLocalStore(createMockEncryption());
+    await store.initialize();
+    await store.saveJournal(makeJournalContent('j1', [makePage('p1')]));
+    await deleteRawStorageRecord('canto/journals.json');
+
+    await expect(store.listJournals()).rejects.toMatchObject({
+      code: 'INDEX_UNREADABLE',
+      causeLayer: 'INDEX_ABSENT',
+    });
+    // The durable journal was never treated as evidence of deletion.
+    expect(await getRawStorageRecord('canto/j1/metadata.json')).toBeDefined();
+    expect(await getRawStorageRecord('canto/j1/pages/p1.json')).toBeDefined();
+  });
+
+  it('a missing index over existing data blocks every publication and never writes a reduced index', async () => {
+    const store = createLocalStore(createMockEncryption());
+    await store.initialize();
+    await store.saveJournal(makeJournalContent('j1', [makePage('p1')]));
+    await deleteRawStorageRecord('canto/journals.json');
+    await expect(store.deleteJournal('j1')).rejects.toMatchObject({
+      code: 'INDEX_UNREADABLE',
+      causeLayer: 'INDEX_ABSENT',
+    });
+    await expect(store.saveJournal(makeJournalContent('j2'))).rejects.toMatchObject({
+      code: 'INDEX_UNREADABLE',
+      causeLayer: 'INDEX_ABSENT',
+    });
+    // No reduced index was published and the existing journal was not deleted.
+    expect(await getRawStorageRecord('canto/journals.json')).toBeUndefined();
+    expect(await getRawStorageRecord('canto/j1/metadata.json')).toBeDefined();
+  });
+
+  it('lets a marker-covered import stage durable data and publish the final index', async () => {
+    const store = createLocalStore(createMockEncryption());
+    await store.initialize();
+    const journalId = 'marker-import';
+    await store.beginJournalImport?.(journalId);
+    await store.updateJournalImport?.(journalId, 'writing');
+
+    // Attachment staging writes durable journal records before the index or
+    // any journal metadata exists. The active import marker is what makes this
+    // an allowed, non-destructive staging state rather than an integrity error.
+    const savedPath = await store.saveAttachment(
+      journalId,
+      'p1',
+      {
+        id: 'a1',
+        path: '',
+        name: 'photo.jpg',
+        type: 'image',
+        encrypted: false,
+        deleted: false,
+      },
+      'QUJD',
+    );
+    expect(savedPath).toBeTruthy();
+
+    await store.updateJournalImport?.(journalId, 'publishing', { expectedPageCount: 1 });
+    await store.saveJournal(makeJournalContent(journalId, [makePage('p1')]));
+    await store.updateJournalImport?.(journalId, 'committed');
+    await store.completeJournalImport?.(journalId);
+
+    // The final index was published with the fully imported journal.
+    expect(await store.listJournals()).toEqual([
+      expect.objectContaining({ id: journalId, title: 'Journal marker-import' }),
+    ]);
+  });
+
+  it('keeps orphan durable directories without an import marker fail-closed', async () => {
+    const store = createLocalStore(createMockEncryption());
+    await store.initialize();
+    // Durable attachment data staged under no journal and no import marker is
+    // an orphan: no index may be published over it, even for another journal.
+    await store.saveAttachment(
+      'orphan-directory',
+      'p1',
+      {
+        id: 'a1',
+        path: '',
+        name: 'photo.jpg',
+        type: 'image',
+        encrypted: false,
+        deleted: false,
+      },
+      'QUJD',
+    );
+
+    await expect(store.saveJournal(makeJournalContent('imported-ok'))).rejects.toMatchObject({
+      code: 'INDEX_UNREADABLE',
+      causeLayer: 'INDEX_ABSENT',
+    });
+    await expect(store.listJournals()).rejects.toMatchObject({
+      code: 'INDEX_UNREADABLE',
+    });
+    expect(await getRawStorageRecord('canto/journals.json')).toBeUndefined();
+  });
+
+  it('recovery never deletes import journals or markers while the index is unreadable', async () => {
+    const journalId = 'orphaned-import';
+    const encryption = createMockEncryption();
+    const store = createLocalStore(encryption);
+    await store.initialize();
+    await putRawStorageRecord(
+      'canto/.imports/orphaned-import',
+      JSON.stringify({
+        version: 2,
+        journalId,
+        phase: 'publishing',
+        expectedPageCount: 1,
+      }),
+    );
+    await putRawStorageRecord(`canto/${journalId}/metadata.json`, 'enc:{"id":"orphaned-import"}');
+    await putRawStorageRecord('canto/journals.json', 'enc:not-json');
+
+    // A second store runs the startup recovery pass against the unreadable index.
+    _resetDB();
+    await store.initialize();
+
+    expect(await getRawStorageRecord(`canto/${journalId}/metadata.json`)).toBe(
+      'enc:{"id":"orphaned-import"}',
+    );
+    expect(await getRawStorageRecord('canto/.imports/orphaned-import')).toBeDefined();
+    await expect(store.listJournals()).rejects.toMatchObject({ code: 'INDEX_UNREADABLE' });
+  });
+
+  it('getJournalOverview fails closed when the catalog is unreadable and a page cannot be read', async () => {
+    const store = createLocalStore(createMockEncryption());
+    await store.initialize();
+    await store.saveJournal(makeJournalContent('j1', [makePage('p1')]));
+    await putRawStorageRecord('canto/j1/page-catalog.json', 'enc:not-json');
+    await putRawStorageRecord('canto/j1/pages/p1.json', 'enc:corrupt page data');
+
+    await expect(store.getJournalOverview?.('j1')).rejects.toMatchObject({
+      code: 'CATALOG_UNREADABLE',
+      details: ['p1'],
+    });
+    expect(await getRawStorageRecord('canto/j1/page-catalog.json')).toBe('enc:not-json');
+  });
+
+  it('savePage with a revoked all-zero key is rejected before any file mutation', async () => {
+    const store = createLocalStore(createMockEncryption());
+    await store.initialize();
+    await store.saveJournal(makeJournalContent('j1', [makePage('p1')]));
+    const zeroKey = new Uint8Array(32);
+    const catalogBefore = await getRawStorageRecord('canto/j1/page-catalog.json');
+    const pageBefore = await getRawStorageRecord('canto/j1/pages/p1.json');
+
+    await expect(
+      store.savePage('j1', { ...makePage('p1'), text: 'locked edit' }, zeroKey),
+    ).rejects.toMatchObject({ code: 'JOURNAL_LOCKED' });
+
+    expect(await getRawStorageRecord('canto/j1/page-catalog.json')).toBe(catalogBefore);
+    expect(await getRawStorageRecord('canto/j1/pages/p1.json')).toBe(pageBefore);
+  });
+
+  it('serializes concurrent mutations so every committed page survives in the catalog', async () => {
+    const store = createLocalStore(createMockEncryption());
+    await store.initialize();
+    await store.saveJournal(makeJournalContent('j1'));
+
+    await Promise.all([
+      store.savePage('j1', makePage('p1'), undefined, true),
+      store.savePage('j1', makePage('p2'), undefined, true),
+    ]);
+
+    const overview = await store.getJournalOverview?.('j1');
+    const ids = overview!.pages.map((page) => page.id).sort();
+    expect(ids).toEqual(['p1', 'p2']);
+  });
+
+  it('can read keyless store seams for the device-key bootstrap gate', async () => {
+    const store = createLocalStore(createMockEncryption());
+    await store.initialize();
+    expect(await store.hasExistingData?.()).toBe(false);
+    await store.recordFirstInstall?.();
+    await store.saveJournal(makeJournalContent('j1'));
+    expect(await store.hasExistingData?.()).toBe(true);
   });
 });

@@ -20,6 +20,7 @@ import {
   useAttachment,
 } from '@/hooks/useStorage';
 import { useJournalKeys } from '@/contexts/JournalKeyContext';
+import { useKeyLease } from '@/hooks/useKeyLease';
 import { generateThumbnail } from '@/lib/thumbnail';
 import { canGenerateThumbnailFromAttachment } from '@/lib/pagePreview';
 import { downloadAttachment } from '@/lib/downloadAttachment';
@@ -76,6 +77,9 @@ export default function PageScreen() {
   const safeBack = useSafeBack();
 
   const derivedKey = journalId ? getKey(journalId) : null;
+  // Auto-lock write capability: revoked before clearKey/clearAll zeroes key
+  // material, so an already-mounted editor can never save with a zeroed key.
+  const { locked } = useKeyLease(journalId);
   const { page, loading } = usePage(journalId, id, derivedKey);
   const { save } = useSavePage(journalId, derivedKey);
   const { deletePage } = useDeletePage(journalId, derivedKey);
@@ -153,6 +157,12 @@ export default function PageScreen() {
 
   const handleSave = useCallback(async () => {
     if (!draft) return;
+    // The lease is checked immediately before any storage mutation (including
+    // after awaited attachment/thumbnail work), so a revoked key cannot write.
+    if (locked) {
+      Alert.alert(t.page.unlockRequired);
+      return;
+    }
     const toSave = { ...draft, modified: Date.now() };
 
     // Generate thumbnail from first non-deleted image
@@ -173,10 +183,22 @@ export default function PageScreen() {
       toSave.thumbnail = undefined;
     }
 
-    await save(toSave);
-    setIsDirty(false);
-    setIsEditing(false);
-  }, [draft, save, getAttachment, journalId, id]);
+    // Re-check the lease after the awaited thumbnail work, then persist.
+    if (locked) {
+      Alert.alert(t.page.unlockRequired);
+      return;
+    }
+    try {
+      await save(toSave);
+      setIsDirty(false);
+      setIsEditing(false);
+    } catch (err) {
+      // Handler error boundary: never leave an unhandled promise rejection
+      // from a locked/recovery save. The draft stays in memory untouched.
+      const message = err instanceof Error ? err.message : String(err);
+      Alert.alert(t.page.unlockRequired, message);
+    }
+  }, [draft, locked, save, getAttachment, journalId, id, t]);
 
   const handleDelete = useCallback(() => {
     Alert.alert(t.page.deleteConfirm, t.page.deleteMessage, [
@@ -185,14 +207,19 @@ export default function PageScreen() {
         text: t.common.delete,
         style: 'destructive',
         onPress: async () => {
-          if (id) {
-            await deletePage(id);
-            safeBack();
+          if (!id) return;
+          // A revoked lease must reject the mutation instead of writing with a
+          // zeroed key; the journal returns to its locked state.
+          if (locked) {
+            Alert.alert(t.page.unlockRequired);
+            return;
           }
+          await deletePage(id);
+          safeBack();
         },
       },
     ]);
-  }, [id, deletePage, t]);
+  }, [id, locked, deletePage, t]);
 
   const handleToggleEdit = useCallback(() => {
     if (isEditing && isDirty) {

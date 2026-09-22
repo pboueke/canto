@@ -92,6 +92,31 @@ Local storage uses `expo-file-system` (native) or IndexedDB (web) with a structu
 - Attachments (images, files) are stored alongside entries with optional per-file encryption
 - File writes use an **atomic temp-file pattern** — data is written to a temporary file first, then renamed, preventing corruption from interrupted writes
 
+## Data-Preservation Handling (Support Staff)
+
+The app treats journal files and directories as the authoritative user data.
+`journals.json` (the index) and `page-catalog.json` are projections only and are
+**never** treated as proof that missing records were deleted.
+
+- **Never treat an unreadable index/catalog as an empty library.** A missing
+  device key, an undecryptable index, or an unreadable page fails closed into
+  the recovery state; the app does not publish an empty/reduced view and does
+  not rebuild the projection from a partial scan.
+- **Never create or replace a device key when encrypted data already exists.**
+  A fresh install is the only state in which a missing device key means an
+  empty library. The first-install marker must never be written over existing
+  content.
+- **Export is read-only with respect to journal data** and fails closed with a
+  typed diagnostic: unreadable journal data, archive construction/storage
+  failure, or Android share-sheet failure.
+- **Recovery guidance for users:** keep the app installed, do not clear app
+  data or reinstall, and preserve the app-private storage and any logcat.
+  Collection of logcat plus `canto/` app-private storage before any reinstall
+  is the only way to diagnose an integrity event.
+- **Physical Android validation:** integrity behavior must be validated on an
+  API-29 Huawei/EMUI-class device before release; API level differences in
+  `expo-secure-store` and file-system behavior can change the failure surface.
+
 ## Data Collection
 
 Canto collects **no data**:

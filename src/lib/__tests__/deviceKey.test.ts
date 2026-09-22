@@ -6,6 +6,8 @@ import {
   abortKeyRotation,
   commitKeyRotation,
   recoverKeyRotation,
+  hasDeviceKey,
+  hasPendingPreviousDeviceKey,
   _resetKeyCreationPromise,
 } from '../encryption/device';
 import { bytesToHex, hexToBytes } from '@noble/ciphers/utils.js';
@@ -85,6 +87,19 @@ describe('Device key — prepareKeyRotation / commitKeyRotation', () => {
     expect(await SecureStore.getItemAsync('canto_device_encryption_previous_key')).toBeNull();
   });
 
+  it('exposes a keyless probe for a pending previous key so bootstrap never misreads a fresh install', async () => {
+    const device = createDeviceEncryption();
+    await device.encrypt('seed');
+    device.clearKey!();
+    const { oldKey, newKey } = await prepareKeyRotation();
+
+    expect(await hasPendingPreviousDeviceKey()).toBe(false);
+    await beginKeyRotation(oldKey, newKey);
+    expect(await hasPendingPreviousDeviceKey()).toBe(true);
+    await commitKeyRotation(newKey);
+    expect(await hasPendingPreviousDeviceKey()).toBe(false);
+  });
+
   it('restores the old key at startup after a crash before re-encryption, so retry preserves its fallback', async () => {
     const device = createDeviceEncryption();
     const ciphertext = await device.encrypt('old-data');
@@ -100,6 +115,26 @@ describe('Device key — prepareKeyRotation / commitKeyRotation', () => {
     device.clearKey!();
     expect(await device.decrypt(ciphertext)).toBe('old-data');
     expect(await SecureStore.getItemAsync('canto_device_encryption_previous_key')).toBeNull();
+  });
+
+  it('reports a pending previous key when an interrupted cutover left only the fallback', async () => {
+    const device = createDeviceEncryption();
+    await device.encrypt('seed');
+    device.clearKey!();
+    const { oldKey, newKey } = await prepareKeyRotation();
+
+    await beginKeyRotation(oldKey, newKey);
+    expect(await hasPendingPreviousDeviceKey()).toBe(true);
+
+    // Simulate a crash between the fallback write and the current-key write:
+    // only the previous key alias is durable.
+    await SecureStore.deleteItemAsync('canto_device_encryption_key');
+    expect(await hasDeviceKey()).toBe(false);
+    expect(await hasPendingPreviousDeviceKey()).toBe(true);
+
+    await recoverKeyRotation(false);
+    expect(await hasPendingPreviousDeviceKey()).toBe(false);
+    expect(await hasDeviceKey()).toBe(true);
   });
 
   it('finalizes an interrupted rotation after startup proves the data commit', async () => {

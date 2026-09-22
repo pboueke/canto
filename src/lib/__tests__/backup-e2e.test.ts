@@ -429,7 +429,7 @@ describe('encrypted round-trip with attachments', () => {
       kdfIterations: 50000,
       pages: [page],
     });
-    await mockStore.saveJournal(journal);
+    await mockStore.saveJournal(journal, key);
     await storeAttachment('j1', 'p1', att, imgData, key);
     journal.pages[0].images[0].path = att.path;
 
@@ -463,7 +463,7 @@ describe('encrypted round-trip with attachments', () => {
       kdfIterations: 50000,
       pages: [page],
     });
-    await mockStore.saveJournal(journal);
+    await mockStore.saveJournal(journal, key);
     await storeAttachment('j1', 'p1', att, fileData, key);
     journal.pages[0].files[0].path = att.path;
 
@@ -492,7 +492,7 @@ describe('encrypted round-trip with attachments', () => {
       kdfIterations: 50000,
       pages: [page],
     });
-    await mockStore.saveJournal(journal);
+    await mockStore.saveJournal(journal, key);
     await storeAttachment('j1', 'p1', encImg, encImgData, key);
     await storeAttachment('j1', 'p1', plainImg, plainImgData);
     journal.pages[0].images[0].path = encImg.path;
@@ -535,7 +535,7 @@ describe('unencrypted export of secure journal', () => {
       kdfIterations: 50000,
       pages: [page],
     });
-    await mockStore.saveJournal(journal);
+    await mockStore.saveJournal(journal, key);
     await storeAttachment('j1', 'p1', encAtt, encData, key);
     await storeAttachment('j1', 'p1', plainAtt, plainData);
     journal.pages[0].images[0].path = encAtt.path;
@@ -571,7 +571,7 @@ describe('unencrypted export of secure journal', () => {
       kdfIterations: 50000,
       pages: [page],
     });
-    await mockStore.saveJournal(journal);
+    await mockStore.saveJournal(journal, key);
     await storeAttachment('j1', 'p1', encAtt, encData, key);
     journal.pages[0].images[0].path = encAtt.path;
 
@@ -598,7 +598,7 @@ describe('unencrypted export of secure journal', () => {
       kdfIterations: 100000,
       pages: [makePage('p1')],
     });
-    await mockStore.saveJournal(journal);
+    await mockStore.saveJournal(journal, key);
 
     const zipUri = await exportAndGetZipUri(journal, false);
     const result = await importJournal(zipUri, 'Metadata Check', key);
@@ -1069,7 +1069,7 @@ describe('password-derived key round-trips', () => {
       kdfIterations: ITERATIONS,
       pages: [page],
     });
-    await mockStore.saveJournal(journal);
+    await mockStore.saveJournal(journal, exportKey);
 
     // Export encrypted with the derived key
     const zipUri = await exportAndGetZipUri(journal, true, exportKey);
@@ -1107,7 +1107,7 @@ describe('password-derived key round-trips', () => {
       kdfIterations: ITERATIONS,
       pages: [page],
     });
-    await mockStore.saveJournal(journal);
+    await mockStore.saveJournal(journal, exportKey);
     await storeAttachment('j1', 'p1', att, imgData, exportKey);
     journal.pages[0].images[0].path = att.path;
 
@@ -1135,7 +1135,7 @@ describe('password-derived key round-trips', () => {
       kdfIterations: ITERATIONS,
       pages: [makePage('p1', { text: 'Secret' })],
     });
-    await mockStore.saveJournal(journal);
+    await mockStore.saveJournal(journal, exportKey);
 
     const zipUri = await exportAndGetZipUri(journal, true, exportKey);
 
@@ -1156,7 +1156,7 @@ describe('password-derived key round-trips', () => {
       kdfIterations: ITERATIONS,
       pages: [makePage('p1', { text: 'Verify salt round-trip' })],
     });
-    await mockStore.saveJournal(journal);
+    await mockStore.saveJournal(journal, exportKey);
 
     const zipUri = await exportAndGetZipUri(journal, true, exportKey);
 

@@ -194,6 +194,20 @@ export interface LocalStore {
   /** Remove the durable completion proof after the previous device key is discarded. */
   clearCompletedDeviceKeyRotation?(): Promise<void>;
 
+  /**
+   * Keyless durable proof that the root was set up as a fresh install. Written
+   * atomically with initial device-key creation so an interrupted empty
+   * installation can be distinguished from a populated library.
+   */
+  recordFirstInstall(): Promise<void>;
+
+  /**
+   * Keyless check whether durable Canto content exists below the root. Used by
+   * the device-key bootstrap gate: existing content with an unavailable key is
+   * an integrity/recovery condition, never a new-library signal.
+   */
+  hasExistingData(): Promise<boolean>;
+
   /** Re-encrypt all data with a new device key (for device key rotation). */
   reencryptAll(
     oldDeviceEncrypt: (plaintext: string) => Promise<string>,

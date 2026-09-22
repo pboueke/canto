@@ -104,6 +104,7 @@ export interface Dictionary {
     takePhoto: string;
     takeEncryptedPhoto: string;
     cameraPermissionDenied: string;
+    unlockRequired: string;
   };
   settings: {
     theme: string;
@@ -221,6 +222,9 @@ export interface Dictionary {
     exporting: string;
     exportComplete: string;
     exportError: string;
+    exportErrorData: string;
+    exportErrorArchive: string;
+    exportErrorShare: string;
     importPassword: string;
     importConflict: string;
     importRename: string;
@@ -316,6 +320,13 @@ export interface Dictionary {
     retry: string;
     acknowledge: string;
   };
+  recovery: {
+    title: string;
+    message: string;
+    deviceKeyDetail: string;
+    indexDetail: string;
+    instructions: string;
+  };
 }
 
 const en: Dictionary = {
@@ -404,6 +415,7 @@ const en: Dictionary = {
     takePhoto: 'Take Photo',
     takeEncryptedPhoto: 'Encrypted Photo',
     cameraPermissionDenied: 'Camera permission denied',
+    unlockRequired: 'Unlock this journal before saving.',
   },
   settings: {
     theme: 'Theme',
@@ -526,6 +538,10 @@ const en: Dictionary = {
     exporting: 'Exporting...',
     exportComplete: 'Export ready',
     exportError: 'Export failed',
+    exportErrorData: 'Some journal data could not be read. No files were changed or deleted.',
+    exportErrorArchive:
+      'The backup archive could not be created. Check available storage and try again.',
+    exportErrorShare: 'The backup was created but could not be shared. Please try again.',
     importPassword: 'This backup is encrypted. Enter the password:',
     importConflict: 'A journal with this name already exists',
     importRename: 'Rename journal',
@@ -628,6 +644,15 @@ const en: Dictionary = {
     retry: 'Retry',
     acknowledge: 'OK',
   },
+  recovery: {
+    title: 'Data preservation needed',
+    message: 'Canto detected a storage integrity problem. Nothing was changed or deleted.',
+    deviceKeyDetail:
+      'This device currently cannot access the key that protects your journal files.',
+    indexDetail: 'The journal index cannot be read safely.',
+    instructions:
+      'Keep the app installed and do not clear its data or reinstall it. Your encrypted files are the only copy. Contact support and mention this message.',
+  },
 };
 
 const pt: Dictionary = {
@@ -716,6 +741,7 @@ const pt: Dictionary = {
     takePhoto: 'Tirar Foto',
     takeEncryptedPhoto: 'Foto Criptografada',
     cameraPermissionDenied: 'Permissão de câmera negada',
+    unlockRequired: 'Desbloqueie este diário antes de salvar.',
   },
   settings: {
     theme: 'Tema',
@@ -838,6 +864,11 @@ const pt: Dictionary = {
     exporting: 'Exportando...',
     exportComplete: 'Exportação pronta',
     exportError: 'Falha na exportação',
+    exportErrorData:
+      'Não foi possível ler alguns dados do diário. Nenhum arquivo foi alterado ou excluído.',
+    exportErrorArchive:
+      'Não foi possível criar o arquivo de backup. Verifique o espaço disponível e tente novamente.',
+    exportErrorShare: 'O backup foi criado, mas não pôde ser compartilhado. Tente novamente.',
     importPassword: 'Este backup está criptografado. Digite a senha:',
     importConflict: 'Um diário com este nome já existe',
     importRename: 'Renomear diário',
@@ -940,6 +971,16 @@ const pt: Dictionary = {
     retry: 'Tentar novamente',
     acknowledge: 'OK',
   },
+  recovery: {
+    title: 'Preservação de dados necessária',
+    message:
+      'O Canto detectou um problema de integridade do armazenamento. Nada foi alterado ou excluído.',
+    deviceKeyDetail:
+      'Este dispositivo não consegue acessar a chave que protege seus arquivos de diário.',
+    indexDetail: 'O índice de diários não pode ser lido com segurança.',
+    instructions:
+      'Mantenha o aplicativo instalado e não limpe os dados nem reinstale. Seus arquivos criptografados são a única cópia. Entre em contato com o suporte informando esta mensagem.',
+  },
 };
 
 const es: Dictionary = {
@@ -1028,6 +1069,7 @@ const es: Dictionary = {
     takePhoto: 'Tomar Foto',
     takeEncryptedPhoto: 'Foto Cifrada',
     cameraPermissionDenied: 'Permiso de cámara denegado',
+    unlockRequired: 'Desbloquea este diario antes de guardar.',
   },
   settings: {
     theme: 'Tema',
@@ -1151,6 +1193,12 @@ const es: Dictionary = {
     exporting: 'Exportando...',
     exportComplete: 'Exportación lista',
     exportError: 'Error al exportar',
+    exportErrorData:
+      'No se pudieron leer algunos datos del diario. No se modificó ni eliminó ningún archivo.',
+    exportErrorArchive:
+      'No se pudo crear el archivo de copia de seguridad. Comprueba el espacio disponible e inténtalo de nuevo.',
+    exportErrorShare:
+      'La copia de seguridad se creó, pero no se pudo compartir. Inténtalo de nuevo.',
     importPassword: 'Este respaldo está cifrado. Ingrese la contraseña:',
     importConflict: 'Ya existe un diario con este nombre',
     importRename: 'Renombrar diario',
@@ -1256,6 +1304,16 @@ const es: Dictionary = {
     retry: 'Reintentar',
     acknowledge: 'OK',
   },
+  recovery: {
+    title: 'Es necesaria la preservación de datos',
+    message:
+      'Canto detectó un problema de integridad del almacenamiento. No se cambió ni eliminó nada.',
+    deviceKeyDetail:
+      'Este dispositivo no puede acceder a la clave que protege tus archivos de diario.',
+    indexDetail: 'El índice de diarios no se puede leer de forma segura.',
+    instructions:
+      'Mantén la aplicación instalada y no borres sus datos ni la reinstales. Tus archivos cifrados son la única copia. Contacta con el soporte y menciona este mensaje.',
+  },
 };
 
 const de: Dictionary = {
@@ -1344,6 +1402,7 @@ const de: Dictionary = {
     takePhoto: 'Foto aufnehmen',
     takeEncryptedPhoto: 'Verschlüsseltes Foto',
     cameraPermissionDenied: 'Kameraberechtigung verweigert',
+    unlockRequired: 'Entsperre dieses Journal, bevor du speicherst.',
   },
   settings: {
     theme: 'Thema',
@@ -1466,6 +1525,12 @@ const de: Dictionary = {
     exporting: 'Exportiere...',
     exportComplete: 'Export bereit',
     exportError: 'Export fehlgeschlagen',
+    exportErrorData:
+      'Einige Journaldaten konnten nicht gelesen werden. Es wurden keine Dateien geändert oder gelöscht.',
+    exportErrorArchive:
+      'Das Backup-Archiv konnte nicht erstellt werden. Überprüfe den verfügbaren Speicherplatz und versuche es erneut.',
+    exportErrorShare:
+      'Das Backup wurde erstellt, konnte aber nicht geteilt werden. Bitte versuche es erneut.',
     importPassword: 'Dieses Backup ist verschlüsselt. Passwort eingeben:',
     importConflict: 'Ein Tagebuch mit diesem Namen existiert bereits',
     importRename: 'Tagebuch umbenennen',
@@ -1569,6 +1634,16 @@ const de: Dictionary = {
     retry: 'Erneut versuchen',
     acknowledge: 'OK',
   },
+  recovery: {
+    title: 'Datenerhalt erforderlich',
+    message:
+      'Canto hat ein Problem mit der Speicherintegrität erkannt. Es wurde nichts geändert oder gelöscht.',
+    deviceKeyDetail:
+      'Dieses Gerät kann derzeit nicht auf den Schlüssel zugreifen, der deine Journaldateien schützt.',
+    indexDetail: 'Der Journal-Index kann nicht sicher gelesen werden.',
+    instructions:
+      'Lass die App installiert und lösche weder ihre Daten noch installiere sie neu. Deine verschlüsselten Dateien sind die einzige Kopie. Kontaktiere den Support und erwähne diese Meldung.',
+  },
 };
 
 const fr: Dictionary = {
@@ -1657,6 +1732,7 @@ const fr: Dictionary = {
     takePhoto: 'Prendre une Photo',
     takeEncryptedPhoto: 'Photo Chiffrée',
     cameraPermissionDenied: 'Autorisation de la caméra refusée',
+    unlockRequired: 'Déverrouillez ce journal avant d’enregistrer.',
   },
   settings: {
     theme: 'Thème',
@@ -1780,6 +1856,12 @@ const fr: Dictionary = {
     exporting: 'Exportation...',
     exportComplete: 'Exportation prête',
     exportError: "Échec de l'exportation",
+    exportErrorData:
+      'Certaines données du journal n’ont pas pu être lues. Aucun fichier n’a été modifié ni supprimé.',
+    exportErrorArchive:
+      'L’archive de sauvegarde n’a pas pu être créée. Vérifiez l’espace disponible et réessayez.',
+    exportErrorShare:
+      'La sauvegarde a été créée mais n’a pas pu être partagée. Veuillez réessayer.',
     importPassword: 'Cette sauvegarde est chiffrée. Entrez le mot de passe :',
     importConflict: 'Un journal avec ce nom existe déjà',
     importRename: 'Renommer le journal',
@@ -1885,6 +1967,16 @@ const fr: Dictionary = {
     retry: 'Réessayer',
     acknowledge: 'OK',
   },
+  recovery: {
+    title: 'Préservation des données requise',
+    message:
+      'Canto a détecté un problème d’intégrité du stockage. Rien n’a été modifié ni supprimé.',
+    deviceKeyDetail:
+      'Cet appareil ne peut actuellement pas accéder à la clé qui protège vos fichiers de journal.',
+    indexDetail: 'L’index des journaux ne peut pas être lu en toute sécurité.',
+    instructions:
+      'Gardez l’application installée, ne videz pas ses données et ne la réinstallez pas. Vos fichiers chiffrés sont la seule copie. Contactez l’assistance en mentionnant ce message.',
+  },
 };
 
 const ru: Dictionary = {
@@ -1973,6 +2065,7 @@ const ru: Dictionary = {
     takePhoto: 'Сделать фото',
     takeEncryptedPhoto: 'Зашифрованное фото',
     cameraPermissionDenied: 'Доступ к камере запрещён',
+    unlockRequired: 'Разблокируйте журнал перед сохранением.',
   },
   settings: {
     theme: 'Тема',
@@ -2095,6 +2188,12 @@ const ru: Dictionary = {
     exporting: 'Экспорт...',
     exportComplete: 'Экспорт готов',
     exportError: 'Ошибка экспорта',
+    exportErrorData:
+      'Не удалось прочитать часть данных журнала. Никакие файлы не были изменены или удалены.',
+    exportErrorArchive:
+      'Не удалось создать архив резервной копии. Проверьте свободное место и попробуйте снова.',
+    exportErrorShare:
+      'Резервная копия создана, но не удалось открыть окно отправки. Попробуйте ещё раз.',
     importPassword: 'Эта резервная копия зашифрована. Введите пароль:',
     importConflict: 'Дневник с таким именем уже существует',
     importRename: 'Переименовать дневник',
@@ -2198,6 +2297,15 @@ const ru: Dictionary = {
     retry: 'Повторить',
     acknowledge: 'OK',
   },
+  recovery: {
+    title: 'Требуется сохранность данных',
+    message: 'Canto обнаружил проблему целостности хранилища. Ничего не было изменено или удалено.',
+    deviceKeyDetail:
+      'Это устройство сейчас не может получить доступ к ключу, защищающему файлы журнала.',
+    indexDetail: 'Индекс журналов не может быть прочитан безопасно.',
+    instructions:
+      'Не удаляйте приложение, не очищайте его данные и не переустанавливайте. Зашифрованные файлы — единственная копия. Обратитесь в поддержку, указав это сообщение.',
+  },
 };
 
 const zh: Dictionary = {
@@ -2285,6 +2393,7 @@ const zh: Dictionary = {
     takePhoto: '拍照',
     takeEncryptedPhoto: '加密照片',
     cameraPermissionDenied: '相机权限被拒绝',
+    unlockRequired: '保存前请先解锁此日记。',
   },
   settings: {
     theme: '主题',
@@ -2406,6 +2515,9 @@ const zh: Dictionary = {
     exporting: '正在导出...',
     exportComplete: '导出完成',
     exportError: '导出失败',
+    exportErrorData: '无法读取部分日记数据。没有文件被更改或删除。',
+    exportErrorArchive: '无法创建备份压缩包。请检查可用空间后重试。',
+    exportErrorShare: '备份已创建，但无法共享。请重试。',
     importPassword: '此备份已加密。请输入密码：',
     importConflict: '已存在同名日记',
     importRename: '重命名日记',
@@ -2503,6 +2615,14 @@ const zh: Dictionary = {
     retry: '重试',
     acknowledge: '确定',
   },
+  recovery: {
+    title: '需要保护数据',
+    message: 'Canto 检测到存储完整性问题。没有任何内容被更改或删除。',
+    deviceKeyDetail: '此设备目前无法访问保护日记文件的密钥。',
+    indexDetail: '无法安全地读取日记索引。',
+    instructions:
+      '请保持应用已安装，不要清除其数据或重新安装。您的加密文件是唯一副本。请联系支持并提及此消息。',
+  },
 };
 
 const it: Dictionary = {
@@ -2591,6 +2711,7 @@ const it: Dictionary = {
     takePhoto: 'Scatta Foto',
     takeEncryptedPhoto: 'Foto Crittografata',
     cameraPermissionDenied: 'Permesso fotocamera negato',
+    unlockRequired: 'Sblocca questo diario prima di salvare.',
   },
   settings: {
     theme: 'Tema',
@@ -2713,6 +2834,11 @@ const it: Dictionary = {
     exporting: 'Esportazione...',
     exportComplete: 'Esportazione pronta',
     exportError: 'Esportazione fallita',
+    exportErrorData:
+      'Non è stato possibile leggere alcuni dati del diario. Nessun file è stato modificato o eliminato.',
+    exportErrorArchive:
+      'Non è stato possibile creare l’archivio di backup. Controlla lo spazio disponibile e riprova.',
+    exportErrorShare: 'Il backup è stato creato ma non è stato possibile condividerlo. Riprova.',
     importPassword: 'Questo backup e crittografato. Inserisci la password:',
     importConflict: 'Un diario con questo nome esiste gia',
     importRename: 'Rinomina diario',
@@ -2816,6 +2942,16 @@ const it: Dictionary = {
     failedItems: 'Elementi falliti',
     retry: 'Riprova',
     acknowledge: 'OK',
+  },
+  recovery: {
+    title: 'È necessaria la conservazione dei dati',
+    message:
+      'Canto ha rilevato un problema di integrità dello storage. Non è stato modificato né eliminato nulla.',
+    deviceKeyDetail:
+      'Questo dispositivo attualmente non può accedere alla chiave che protegge i file del diario.',
+    indexDetail: 'L’indice dei diari non può essere letto in modo sicuro.',
+    instructions:
+      'Tieni installata l’app, non cancellarne i dati e non reinstallarla. I tuoi file crittografati sono l’unica copia. Contatta l’assistenza citando questo messaggio.',
   },
 };
 

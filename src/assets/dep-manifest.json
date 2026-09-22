@@ -25,6 +25,11 @@
     "license": "MIT"
   },
   {
+    "name": "@react-navigation/native",
+    "version": "7.1.33",
+    "license": "MIT"
+  },
+  {
     "name": "canto-data",
     "version": "1.2.0",
     "license": "MIT"

@@ -8,6 +8,7 @@ import {
   createPageCatalog,
   isPageCatalogV1,
   withCatalogPage,
+  type JournalOverview,
   type PageCatalogV1,
 } from '@/lib/journal-overview';
 import type {
@@ -20,6 +21,14 @@ import type {
 import { serializeDeviceKeyWrites } from './write-barrier';
 import { recordStorageIo } from './io-counters';
 import {
+  assertUsableDerivedKey,
+  requireUsableDerivedKey,
+  StorageIntegrityError,
+  type IndexedRead,
+  type IntegrityCode,
+  type StorageIntegrityCause,
+} from './integrity';
+import {
   base64ByteLength,
   decodeChunkFrame,
   encodeChunkFrame,
@@ -31,6 +40,7 @@ import {
 const BASE_DIR_NAME = 'canto';
 const JOURNALS_INDEX_NAME = 'journals.json';
 const DEVICE_KEY_ROTATION_COMPLETE_NAME = '.device-key-rotation-complete';
+const FIRST_INSTALL_MARKER_NAME = '.first-install';
 const IMPORTS_DIR_NAME = '.imports';
 
 function getBaseDir(): Directory {
@@ -133,12 +143,23 @@ function ensureDir(dir: Directory): void {
   }
 }
 
-async function readEncrypted(
+type DetailedRead =
+  | { status: 'absent' }
+  | { status: 'value'; value: string }
+  | { status: 'unreadable'; cause: StorageIntegrityCause };
+
+/**
+ * Distinguish an absent file from a file that exists but cannot be read safely.
+ * A password-decryption failure falls back to device-decrypted content exactly
+ * as before (legacy mixed-layer journals); a device-layer failure is reported
+ * as unreadable so callers can fail closed instead of omitting records.
+ */
+async function readEncryptedDetailed(
   file: File,
   encryption: EncryptionService,
   derivedKey?: Uint8Array,
-): Promise<string | null> {
-  if (!file.exists) return null;
+): Promise<DetailedRead> {
+  if (!file.exists) return { status: 'absent' };
   recordStorageIo('decryptions');
   if (file.uri.endsWith('/metadata.json')) recordStorageIo('metadataReads');
   else if (file.uri.endsWith('/page-catalog.json')) recordStorageIo('catalogReads');
@@ -150,20 +171,71 @@ async function readEncrypted(
     // Layer 2: password decryption (if derived key present)
     if (derivedKey) {
       try {
-        return await aesGcmDecrypt(deviceDecrypted, derivedKey);
+        return { status: 'value', value: await aesGcmDecrypt(deviceDecrypted, derivedKey) };
       } catch {
         // Data is not password-encrypted — return device-decrypted content.
         // This happens for metadata/pages in journals with encrypted attachments
         // but no active password (auto-derive provides a key, but only
         // attachments are password-encrypted, not metadata).
-        return deviceDecrypted;
+        return { status: 'value', value: deviceDecrypted };
       }
     }
-    return deviceDecrypted;
-  } catch (err) {
-    console.warn(`[Canto] Failed to decrypt ${file.uri}:`, err);
-    return null;
+    return { status: 'value', value: deviceDecrypted };
+  } catch {
+    // Production diagnostics never carry the app-private URI or the error
+    // stack; an opaque record id plus the failure layer is enough to locate
+    // the failure without leaking journal names or paths.
+    console.warn(`[Canto] ${opaqueRecordId(file.uri)} unreadable (DEVICE_DECRYPT_FAILED)`);
+    return { status: 'unreadable', cause: 'DEVICE_DECRYPT_FAILED' };
   }
+}
+
+/** Stable opaque label for one storage record, safe for production logs. */
+function opaqueRecordId(path: string): string {
+  return `record:${hashCode(path).toString(16)}`;
+}
+
+/**
+ * Durable journal evidence below the root, excluding the index itself, the
+ * keyless markers, and (optionally) the journal directories being recovered
+ * from import markers. Only a genuinely empty root may be treated as an
+ * empty library; a missing index over existing data is an integrity
+ * condition and must never be replaced by a reduced projection.
+ */
+function directoryName(entry: File | Directory): string {
+  const name = (entry as { name?: string }).name;
+  return name || entry.uri.split('/').pop() || '';
+}
+
+async function hasDurableJournalData(
+  excludedJournalIds: ReadonlySet<string> = new Set(),
+): Promise<boolean> {
+  const baseDir = getBaseDir();
+  if (!baseDir.exists) return false;
+  for (const entry of baseDir.list()) {
+    if (entry instanceof Directory) {
+      const name = directoryName(entry);
+      if (name === TRANSACTIONS_DIR_NAME || name === IMPORTS_DIR_NAME) continue;
+      if (!excludedJournalIds.has(name)) return true;
+    } else if (
+      entry.name !== FIRST_INSTALL_MARKER_NAME &&
+      entry.name !== DEVICE_KEY_ROTATION_COMPLETE_NAME &&
+      entry.name !== JOURNALS_INDEX_NAME
+    ) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/** Convenience for legacy helpers that only need a plain value or absence. */
+async function readEncrypted(
+  file: File,
+  encryption: EncryptionService,
+  derivedKey?: Uint8Array,
+): Promise<string | null> {
+  const read = await readEncryptedDetailed(file, encryption, derivedKey);
+  return read.status === 'value' ? read.value : null;
 }
 
 /**
@@ -183,22 +255,6 @@ async function decryptAttachmentFrame(
   } catch {
     return frame;
   }
-}
-
-async function writeEncrypted(
-  file: File,
-  data: string,
-  encryption: EncryptionService,
-  derivedKey?: Uint8Array,
-): Promise<void> {
-  // Layer 1: password encryption (if derived key present)
-  const toDeviceEncrypt = derivedKey ? await aesGcmEncrypt(data, derivedKey) : data;
-  // Layer 2: device encryption (always)
-  const ciphertext = await encryption.encrypt(toDeviceEncrypt);
-  if (!file.exists) {
-    file.create({ intermediates: true });
-  }
-  file.write(ciphertext);
 }
 
 interface JournalIndex {
@@ -342,16 +398,67 @@ async function recoverTransactions(): Promise<void> {
 }
 
 export function createLocalStore(encryption: EncryptionService): LocalStore {
-  async function readIndex(): Promise<JournalIndex> {
-    const file = getJournalsIndexFile();
-    const raw = await readEncrypted(file, encryption);
-    if (!raw) return { journals: [] };
-    return safeJsonParse<JournalIndex>(raw, 'journals index');
+  /**
+   * True only when the journal's device-only index entry declares the
+   * password layer enabled. Unlike the metadata file — which is password-layer
+   * encrypted for secure journals and therefore unreadable without the derived
+   * key — the journals.json projection is guarded by device encryption alone,
+   * so this never requires the password and stays safe for callers that hold
+   * no key.
+   */
+  async function isJournalSecure(journalId: string): Promise<boolean> {
+    const index = await readIndex();
+    const entry = index.journals.find((candidate) => candidate.id === journalId);
+    return entry?.secure === true;
   }
 
-  async function writeIndex(index: JournalIndex): Promise<void> {
+  async function readIndexTyped(): Promise<IndexedRead<JournalIndex>> {
     const file = getJournalsIndexFile();
-    await writeEncrypted(file, JSON.stringify(index), encryption);
+    const raw = await readEncryptedDetailed(file, encryption);
+    if (raw.status === 'absent') return { state: 'absent' };
+    if (raw.status === 'unreadable') return { state: 'unreadable', cause: raw.cause };
+    try {
+      return { state: 'valid', value: safeJsonParse<JournalIndex>(raw.value, 'journals index') };
+    } catch {
+      return { state: 'unreadable', cause: 'JSON_PARSE_FAILED' };
+    }
+  }
+
+  /**
+   * Fail-closed index read for every mutation path. An unreadable index must
+   * block all publication instead of collapsing to an empty library; an
+   * absent index over existing durable journal data is the same integrity
+   * condition, never a signal to publish a reduced index.
+   */
+  async function readIndex(): Promise<JournalIndex> {
+    const read = await readIndexTyped();
+    if (read.state === 'unreadable') {
+      throw new StorageIntegrityError(
+        'INDEX_UNREADABLE',
+        'The journal index could not be read safely; refusing to publish a reduced library.',
+        { cause: read.cause },
+      );
+    }
+    // Durable records are allowed only when they belong to a live,
+    // marker-verified import that is still staging before the final index
+    // publication. Anything else over a missing index fails closed.
+    if (read.state === 'absent' && (await hasDurableJournalData(await activeImportJournalIds()))) {
+      throw new StorageIntegrityError(
+        'INDEX_UNREADABLE',
+        'The journal index is missing while journal data exists; refusing to publish a reduced library.',
+        { cause: 'INDEX_ABSENT' },
+      );
+    }
+    return read.state === 'valid' ? read.value : { journals: [] };
+  }
+
+  async function commitIndexOnly(index: JournalIndex): Promise<void> {
+    await commitStagedWrites('index', [
+      {
+        target: getJournalsIndexFile(),
+        ciphertext: await encryptForStorage(JSON.stringify(index)),
+      },
+    ]);
   }
 
   function journalIndexEntry(metadata: Omit<JournalContent, 'pages'>): Journal {
@@ -404,7 +511,25 @@ export function createLocalStore(encryption: EncryptionService): LocalStore {
   async function recoverIncompleteJournalImports(): Promise<void> {
     const markers = getImportsDir();
     if (!markers.exists) return;
-    const index = await readIndex();
+    const indexRead = await readIndexTyped();
+    // An unreadable index cannot prove what is committed. Deleting any journal
+    // directory or rewriting the index from a reduced view would risk real
+    // data loss; recovery defers to a later startup that can read the index.
+    if (indexRead.state === 'unreadable') return; // An absent index over durable journal data that is not part of these
+    // markers is the same integrity condition: publishing a marker-only index
+    // would hide that data. Preserve everything and defer the replay.
+    if (indexRead.state === 'absent') {
+      const markerEntries = markers.list().filter((entry): entry is File => entry instanceof File);
+      const markerJournalIds = new Set<string>();
+      for (const entry of markerEntries) {
+        const marker = await entry
+          .text()
+          .then((value) => parseJournalImportMarker(value, entry.name));
+        markerJournalIds.add(marker?.journalId ?? entry.name);
+      }
+      if (await hasDurableJournalData(markerJournalIds)) return;
+    }
+    const index = indexRead.state === 'valid' ? indexRead.value : { journals: [] };
     const committedIds = new Set(index.journals.map((journal) => journal.id));
     for (const entry of markers.list()) {
       if (!(entry instanceof File)) continue;
@@ -416,7 +541,7 @@ export function createLocalStore(encryption: EncryptionService): LocalStore {
         const recovered = await recoveredImportIndexEntry(marker);
         if (recovered) {
           index.journals.push(recovered);
-          await writeIndex(index);
+          await commitIndexOnly(index);
           committedIds.add(journalId);
         }
       }
@@ -428,38 +553,38 @@ export function createLocalStore(encryption: EncryptionService): LocalStore {
     }
   }
 
-  async function writePageCatalog(
-    journalId: string,
-    pages: readonly Page[],
-    derivedKey?: Uint8Array,
-  ): Promise<void> {
-    await writeEncrypted(
-      getPageCatalogFile(journalId),
-      JSON.stringify(createPageCatalog(journalId, pages)),
-      encryption,
-      derivedKey,
-    );
-  }
-
-  async function readPageCatalog(
-    journalId: string,
-    derivedKey?: Uint8Array,
-  ): Promise<PageCatalogV1 | null> {
-    const raw = await readEncrypted(getPageCatalogFile(journalId), encryption, derivedKey);
-    if (!raw) return null;
-    try {
-      const parsed = safeJsonParse<unknown>(raw, `journal:${journalId} page catalog`);
-      return isPageCatalogV1(parsed, journalId) ? parsed : null;
-    } catch {
-      return null;
+  /**
+   * Journal directories owned by a live, marker-verified import. A valid
+   * import marker is the only authority that lets staged-but-not-yet-indexed
+   * records avoid tripping the fail-closed missing-index guard; orphan
+   * directories without a marker still fail closed.
+   */
+  async function activeImportJournalIds(): Promise<ReadonlySet<string>> {
+    const ids = new Set<string>();
+    const markers = getImportsDir();
+    if (!markers.exists) return ids;
+    for (const entry of markers.list()) {
+      if (!(entry instanceof File)) continue;
+      try {
+        const marker = parseJournalImportMarker(await entry.text(), entry.name);
+        if (marker) ids.add(marker.journalId);
+      } catch {
+        // An unreadable marker grants no exclusion.
+      }
     }
+    return ids;
   }
 
+  /**
+   * A complete scan of every discovered page file can rebuild a projection.
+   * Any unreadable page blocks publication and is reported as a typed,
+   * recoverable CATALOG_UNREADABLE outcome with opaque record identifiers.
+   */
   async function readJournalPages(
     journalId: string,
     derivedKey?: Uint8Array,
     options?: JournalOverviewReadOptions,
-    skipMalformedPages = false,
+    errorCode: IntegrityCode = 'CATALOG_UNREADABLE',
   ): Promise<Page[]> {
     if (options?.signal?.aborted) throw new Error('Journal catalog rebuild cancelled');
     const pagesDirectory = getPagesDir(journalId);
@@ -471,23 +596,100 @@ export function createLocalStore(encryption: EncryptionService): LocalStore {
       .list()
       .filter((entry): entry is File => entry instanceof File && entry.uri.endsWith('.json'));
     const pages: Page[] = [];
+    const unreadable: string[] = [];
     options?.onRebuildProgress?.({ current: 0, total: pageFiles.length });
     for (const [index, entry] of pageFiles.entries()) {
       if (options?.signal?.aborted) throw new Error('Journal catalog rebuild cancelled');
-      const pageRaw = await readEncrypted(entry, encryption, derivedKey);
-      if (pageRaw) {
+      const pageRaw = await readEncryptedDetailed(entry, encryption, derivedKey);
+      if (pageRaw.status === 'value') {
         try {
-          pages.push(safeJsonParse<Page>(pageRaw, `page:${entry.name}`));
-        } catch (error) {
-          if (!skipMalformedPages) throw error;
+          pages.push(safeJsonParse<Page>(pageRaw.value, `page:${entry.name}`));
+        } catch {
+          unreadable.push(entry.name.replace(/\.json$/, ''));
         }
+      } else if (pageRaw.status === 'unreadable') {
+        unreadable.push(entry.name.replace(/\.json$/, ''));
       }
       options?.onRebuildProgress?.({ current: index + 1, total: pageFiles.length });
+    }
+    if (unreadable.length > 0) {
+      throw new StorageIntegrityError(
+        errorCode,
+        `Cannot trust local records: ${unreadable.length} page(s) could not be read safely.`,
+        { journalId, details: unreadable },
+      );
     }
     return pages;
   }
 
+  async function readPageCatalogDetailed(
+    journalId: string,
+    derivedKey?: Uint8Array,
+  ): Promise<IndexedRead<PageCatalogV1>> {
+    const raw = await readEncryptedDetailed(getPageCatalogFile(journalId), encryption, derivedKey);
+    if (raw.status === 'absent') return { state: 'absent' };
+    if (raw.status === 'unreadable') return { state: 'unreadable', cause: raw.cause };
+    try {
+      const parsed = safeJsonParse<unknown>(raw.value, `journal:${journalId} page catalog`);
+      if (isPageCatalogV1(parsed, journalId)) {
+        return { state: 'valid', value: parsed };
+      }
+      return { state: 'unreadable', cause: 'VALIDATION_FAILED' };
+    } catch {
+      return { state: 'unreadable', cause: 'JSON_PARSE_FAILED' };
+    }
+  }
+
+  /** Legacy tolerant helper for import-recovery verification only. */
+  async function readPageCatalog(
+    journalId: string,
+    derivedKey?: Uint8Array,
+  ): Promise<PageCatalogV1 | null> {
+    const read = await readPageCatalogDetailed(journalId, derivedKey);
+    return read.state === 'valid' ? read.value : null;
+  }
+
+  async function commitStagedWrites(
+    idPrefix: string,
+    entries: { target: File; ciphertext: string }[],
+  ): Promise<void> {
+    if (entries.length === 0) return;
+    const transactionDir = getTransactionDir(`${idPrefix}-${generateUUID()}`);
+    transactionDir.create({ intermediates: true });
+    const transaction: StorageTransaction = { phase: 'prepared', files: [] };
+    try {
+      entries.forEach((entry, index) => {
+        transaction.files.push(stageRawFile(transactionDir, index, entry.target, entry.ciphertext));
+      });
+      writeTransactionMarker(transactionDir, transaction);
+      transaction.phase = 'committing';
+      writeTransactionMarker(transactionDir, transaction);
+      await applyStorageTransaction(transaction);
+      transactionDir.delete();
+    } catch (error) {
+      if (transaction.phase === 'prepared' && transactionDir.exists) transactionDir.delete();
+      throw error;
+    }
+  }
+
+  async function writePageCatalog(
+    journalId: string,
+    pages: readonly Page[],
+    derivedKey?: Uint8Array,
+  ): Promise<void> {
+    await commitStagedWrites('catalog', [
+      {
+        target: getPageCatalogFile(journalId),
+        ciphertext: await encryptForStorage(
+          JSON.stringify(createPageCatalog(journalId, pages)),
+          derivedKey,
+        ),
+      },
+    ]);
+  }
+
   async function encryptForStorage(data: string, derivedKey?: Uint8Array): Promise<string> {
+    assertUsableDerivedKey(derivedKey);
     const inner = derivedKey ? await aesGcmEncrypt(data, derivedKey) : data;
     return encryption.encrypt(inner);
   }
@@ -584,6 +786,75 @@ export function createLocalStore(encryption: EncryptionService): LocalStore {
     }
   }
 
+  async function loadOverviewInternal(
+    id: string,
+    derivedKey?: Uint8Array,
+    options?: JournalOverviewReadOptions,
+  ): Promise<JournalOverview | null> {
+    const metadataRead = await readEncryptedDetailed(getMetadataFile(id), encryption, derivedKey);
+    if (metadataRead.status === 'absent') return null;
+    if (metadataRead.status === 'unreadable') {
+      throw new StorageIntegrityError(
+        'JOURNAL_UNREADABLE',
+        `Journal ${id} exists but its metadata could not be read safely.`,
+        { journalId: id, cause: metadataRead.cause },
+      );
+    }
+    const metadata = safeJsonParse<Omit<JournalContent, 'pages'>>(
+      metadataRead.value,
+      `journal:${id} metadata`,
+    );
+    const catalogRead = await readPageCatalogDetailed(id, derivedKey);
+    if (catalogRead.state === 'valid') return catalogToOverview(metadata, catalogRead.value);
+
+    // Existing journals receive a catalog lazily. A replacement may be
+    // published only after a complete strict scan of every discovered page
+    // file validates successfully; any unreadable page fails closed instead
+    // of publishing a reduced view.
+    recordStorageIo('catalogRebuilds');
+    const pages = await readJournalPages(id, derivedKey, options, 'CATALOG_UNREADABLE');
+    if (options?.signal?.aborted) throw new Error('Journal catalog rebuild cancelled');
+    await writePageCatalog(id, pages, derivedKey);
+    return catalogToOverview(metadata, createPageCatalog(id, pages));
+  }
+
+  async function deleteJournalRaw(id: string): Promise<void> {
+    // Verify the index is readable before deleting anything: an unreadable
+    // baseline must block destructive publication, never orphan a directory.
+    const index = await readIndex();
+    // Delete directory first — if this fails, the journal stays in the index
+    // (visible but recoverable). Reverse order would orphan data.
+    const dir = getJournalDir(id);
+    if (dir.exists) {
+      dir.delete();
+    }
+    index.journals = index.journals.filter((j) => j.id !== id);
+    await commitIndexOnly(index);
+  }
+
+  async function hasExistingDataImpl(): Promise<boolean> {
+    const baseDir = getBaseDir();
+    if (!baseDir.exists) return false;
+    for (const entry of baseDir.list()) {
+      if (entry instanceof Directory) {
+        if (entry.name !== TRANSACTIONS_DIR_NAME && entry.name !== IMPORTS_DIR_NAME) return true;
+      } else if (
+        entry.name !== FIRST_INSTALL_MARKER_NAME &&
+        entry.name !== DEVICE_KEY_ROTATION_COMPLETE_NAME
+      ) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  async function recordFirstInstallImpl(): Promise<void> {
+    ensureDir(getBaseDir());
+    const marker = new File(getBaseDir(), FIRST_INSTALL_MARKER_NAME);
+    if (!marker.exists) marker.create({ intermediates: true });
+    marker.write('first-install');
+  }
+
   const store: LocalStore = {
     async initialize(): Promise<void> {
       ensureDir(getBaseDir());
@@ -605,18 +876,47 @@ export function createLocalStore(encryption: EncryptionService): LocalStore {
     },
 
     async listJournals(): Promise<Journal[]> {
-      const index = await readIndex();
-      return index.journals;
+      const index = await readIndexTyped();
+      if (index.state === 'unreadable') {
+        throw new StorageIntegrityError(
+          'INDEX_UNREADABLE',
+          'The journal index could not be read safely; the library cannot be listed.',
+          { cause: index.cause },
+        );
+      }
+      // A missing index on a non-empty root is an integrity/recovery
+      // condition, never an empty library — except for durable records owned
+      // by a live, marker-verified import that is still staging its final
+      // index publication.
+      if (
+        index.state === 'absent' &&
+        (await hasDurableJournalData(await activeImportJournalIds()))
+      ) {
+        throw new StorageIntegrityError(
+          'INDEX_UNREADABLE',
+          'The journal index is missing while journal data exists; the library cannot be listed.',
+          { cause: 'INDEX_ABSENT' },
+        );
+      }
+      return index.state === 'valid' ? index.value.journals : [];
     },
 
     async getJournal(id: string, derivedKey?: Uint8Array): Promise<JournalContent | null> {
-      const metaFile = getMetadataFile(id);
-      const raw = await readEncrypted(metaFile, encryption, derivedKey);
-      if (!raw) return null;
+      const metaRead = await readEncryptedDetailed(getMetadataFile(id), encryption, derivedKey);
+      if (metaRead.status === 'absent') return null;
+      if (metaRead.status === 'unreadable') {
+        throw new StorageIntegrityError(
+          'JOURNAL_UNREADABLE',
+          `Journal ${id} exists but its metadata could not be read safely.`,
+          { journalId: id, cause: metaRead.cause },
+        );
+      }
+      const metadata = safeJsonParse<Omit<JournalContent, 'pages'>>(
+        metaRead.value,
+        `journal:${id} metadata`,
+      );
 
-      const metadata = safeJsonParse<Omit<JournalContent, 'pages'>>(raw, `journal:${id} metadata`);
-
-      const pages = await readJournalPages(id, derivedKey);
+      const pages = await readJournalPages(id, derivedKey, undefined, 'JOURNAL_UNREADABLE');
       return { ...metadata, pages };
     },
 
@@ -625,32 +925,14 @@ export function createLocalStore(encryption: EncryptionService): LocalStore {
       derivedKey?: Uint8Array,
       options?: JournalOverviewReadOptions,
     ) {
-      const metadataRaw = await readEncrypted(getMetadataFile(id), encryption, derivedKey);
-      if (!metadataRaw) return null;
-      const metadata = safeJsonParse<Omit<JournalContent, 'pages'>>(
-        metadataRaw,
-        `journal:${id} metadata`,
-      );
-      const catalog = await readPageCatalog(id, derivedKey);
-      if (catalog) return catalogToOverview(metadata, catalog);
-
-      // Existing journals receive a catalog lazily. Page files remain the
-      // authority, so a missing/corrupt catalog is safe to rebuild once.
-      recordStorageIo('catalogRebuilds');
-      // A malformed legacy page must not prevent the journal catalog from
-      // reopening. The raw page is retained for recovery; sync remains strict
-      // and therefore cannot overwrite it with an incomplete local snapshot.
-      const pages = await readJournalPages(id, derivedKey, options, true);
-      if (options?.signal?.aborted) throw new Error('Journal catalog rebuild cancelled');
-      await writePageCatalog(id, pages, derivedKey);
-      return catalogToOverview(metadata, createPageCatalog(id, pages));
+      return loadOverviewInternal(id, derivedKey, options);
     },
 
     async getJournalSyncSnapshot(
       id: string,
       derivedKey?: Uint8Array,
     ): Promise<JournalSyncSnapshot | null> {
-      const overview = await this.getJournalOverview!(id, derivedKey);
+      const overview = await loadOverviewInternal(id, derivedKey);
       if (!overview) return null;
       return {
         metadata: overview.metadata,
@@ -664,6 +946,10 @@ export function createLocalStore(encryption: EncryptionService): LocalStore {
     },
 
     async saveJournal(journal: JournalContent, derivedKey?: Uint8Array): Promise<void> {
+      // A secure journal's metadata/pages/catalog are password-layer protected.
+      // Without a usable key the write would silently replace password
+      // ciphertext with device-only data — fail closed instead.
+      if (journal.secure) requireUsableDerivedKey(derivedKey);
       ensureDir(getJournalDir(journal.id));
       ensureDir(getPagesDir(journal.id));
       ensureDir(getAttachmentsDir(journal.id));
@@ -685,19 +971,25 @@ export function createLocalStore(encryption: EncryptionService): LocalStore {
     },
 
     async saveJournalMetadata(metadata, derivedKey): Promise<void> {
+      if (metadata.secure) requireUsableDerivedKey(derivedKey);
       ensureDir(getJournalDir(metadata.id));
-      await writeEncrypted(
-        getMetadataFile(metadata.id),
-        JSON.stringify(metadata),
-        encryption,
-        derivedKey,
-      );
       const index = await readIndex();
       const entry = journalIndexEntry(metadata);
       const existing = index.journals.findIndex((journal) => journal.id === metadata.id);
       if (existing >= 0) index.journals[existing] = entry;
       else index.journals.push(entry);
-      await writeIndex(index);
+      // Metadata and the index projection commit as one crash-recoverable
+      // transaction so a background kill cannot publish a partial record.
+      await commitStagedWrites('metadata', [
+        {
+          target: getMetadataFile(metadata.id),
+          ciphertext: await encryptForStorage(JSON.stringify(metadata), derivedKey),
+        },
+        {
+          target: getJournalsIndexFile(),
+          ciphertext: await encryptForStorage(JSON.stringify(index)),
+        },
+      ]);
     },
 
     async beginJournalImport(id: string): Promise<void> {
@@ -726,7 +1018,10 @@ export function createLocalStore(encryption: EncryptionService): LocalStore {
     },
 
     async abortJournalImport(id: string): Promise<void> {
-      await this.deleteJournal(id);
+      // Call the internal implementation directly: abortJournalImport is itself
+      // a serialized mutation, so re-entering the write barrier through the
+      // wrapped deleteJournal would deadlock on the mutation queue.
+      await deleteJournalRaw(id);
       const marker = getImportMarker(id);
       if (marker.exists) marker.delete();
     },
@@ -740,17 +1035,18 @@ export function createLocalStore(encryption: EncryptionService): LocalStore {
       if (marker.exists) marker.delete();
     },
 
-    async deleteJournal(id: string): Promise<void> {
-      // Delete directory first — if this fails, the journal stays in the index
-      // (visible but recoverable). Reverse order would orphan data.
-      const dir = getJournalDir(id);
-      if (dir.exists) {
-        dir.delete();
-      }
+    /** Keyless proof that the root was set up as a fresh install. */
+    async recordFirstInstall(): Promise<void> {
+      await recordFirstInstallImpl();
+    },
 
-      const index = await readIndex();
-      index.journals = index.journals.filter((j) => j.id !== id);
-      await writeIndex(index);
+    /** Keyless check: does durable Canto content exist below the root? */
+    async hasExistingData(): Promise<boolean> {
+      return hasExistingDataImpl();
+    },
+
+    async deleteJournal(id: string): Promise<void> {
+      await deleteJournalRaw(id);
     },
 
     async getPage(
@@ -759,9 +1055,16 @@ export function createLocalStore(encryption: EncryptionService): LocalStore {
       derivedKey?: Uint8Array,
     ): Promise<Page | null> {
       const file = getPageFile(journalId, pageId);
-      const raw = await readEncrypted(file, encryption, derivedKey);
-      if (!raw) return null;
-      return safeJsonParse<Page>(raw, `page:${pageId}`);
+      const raw = await readEncryptedDetailed(file, encryption, derivedKey);
+      if (raw.status === 'absent') return null;
+      if (raw.status === 'unreadable') {
+        throw new StorageIntegrityError(
+          'JOURNAL_UNREADABLE',
+          `Page ${pageId} exists but could not be read safely.`,
+          { journalId, cause: raw.cause, details: [pageId] },
+        );
+      }
+      return safeJsonParse<Page>(raw.value, `page:${pageId}`);
     },
 
     async savePage(
@@ -770,38 +1073,64 @@ export function createLocalStore(encryption: EncryptionService): LocalStore {
       derivedKey?: Uint8Array,
       preserveModified?: boolean,
     ): Promise<void> {
+      assertUsableDerivedKey(derivedKey);
+      // Same password-layer preservation contract as the attachment writers:
+      // a secure journal must never publish device-only page data. The guard
+      // runs before any filesystem touch so a keyless/revoked mutation cannot
+      // create directories either.
+      if (await isJournalSecure(journalId)) requireUsableDerivedKey(derivedKey);
       ensureDir(getPagesDir(journalId));
       const updated = preserveModified ? page : { ...page, modified: Date.now() };
-      let catalog = await readPageCatalog(journalId, derivedKey);
-      if (!catalog) {
-        // Legacy/malformed catalogs rebuild once. Normal saves never open the
-        // remaining page files.
-        catalog = createPageCatalog(
+      const catalogRead = await readPageCatalogDetailed(journalId, derivedKey);
+      if (catalogRead.state === 'valid') {
+        // Provably consistent warm view: update one projection without opening
+        // unrelated page files.
+        await commitPageAndCatalog(
           journalId,
-          await readJournalPages(journalId, derivedKey, undefined, true),
+          updated,
+          withCatalogPage(catalogRead.value, updated),
+          derivedKey,
         );
+        return;
       }
-      await commitPageAndCatalog(journalId, updated, withCatalogPage(catalog, updated), derivedKey);
+      // Missing or unreadable catalog: a rebuild may publish only after a
+      // complete scan of every discovered page file validates successfully.
+      const pages = await readJournalPages(journalId, derivedKey, undefined, 'CATALOG_UNREADABLE');
+      await commitPageAndCatalog(
+        journalId,
+        updated,
+        withCatalogPage(createPageCatalog(journalId, pages), updated),
+        derivedKey,
+      );
     },
 
     async deletePage(journalId: string, pageId: string, derivedKey?: Uint8Array): Promise<void> {
+      assertUsableDerivedKey(derivedKey);
+      if (await isJournalSecure(journalId)) requireUsableDerivedKey(derivedKey);
       const page = await this.getPage(journalId, pageId, derivedKey);
       if (!page) return;
 
       // Soft delete: mark as deleted, update modified timestamp
       const deleted = { ...page, deleted: true, modified: Date.now() };
-      let catalog = await readPageCatalog(journalId, derivedKey);
-      if (!catalog) {
-        catalog = createPageCatalog(
-          journalId,
-          await readJournalPages(journalId, derivedKey, undefined, true),
-        );
-      }
-      if (catalog) {
+      const catalogRead = await readPageCatalogDetailed(journalId, derivedKey);
+      if (catalogRead.state === 'valid') {
         await commitPageAndCatalog(
           journalId,
           deleted,
-          withCatalogPage(catalog, deleted),
+          withCatalogPage(catalogRead.value, deleted),
+          derivedKey,
+        );
+      } else {
+        const pages = await readJournalPages(
+          journalId,
+          derivedKey,
+          undefined,
+          'CATALOG_UNREADABLE',
+        );
+        await commitPageAndCatalog(
+          journalId,
+          deleted,
+          withCatalogPage(createPageCatalog(journalId, pages), deleted),
           derivedKey,
         );
       }
@@ -840,6 +1169,10 @@ export function createLocalStore(encryption: EncryptionService): LocalStore {
       data: string,
       derivedKey?: Uint8Array,
     ): Promise<string> {
+      // Encrypted attachments must never be downgraded to device-only storage
+      // when the password key is unavailable; require it and encrypt
+      // unconditionally.
+      const passwordKey = attachment.encrypted ? requireUsableDerivedKey(derivedKey) : undefined;
       ensureDir(getAttachmentsDir(journalId));
       if (attachment.content?.format === 'canto-chunked-v1') {
         const root = getChunkRoot(journalId, pageId, attachment);
@@ -850,8 +1183,7 @@ export function createLocalStore(encryption: EncryptionService): LocalStore {
         try {
           for (const [index, chunk] of splitBase64Chunks(data, attachment.content).entries()) {
             const frame = encodeChunkFrame(journalId, pageId, attachment, index, chunk);
-            const inner =
-              attachment.encrypted && derivedKey ? await aesGcmEncrypt(frame, derivedKey) : frame;
+            const inner = passwordKey ? await aesGcmEncrypt(frame, passwordKey) : frame;
             const file = getChunkFile(root, index);
             file.create({ intermediates: true });
             file.write(await encryption.encrypt(inner));
@@ -868,8 +1200,7 @@ export function createLocalStore(encryption: EncryptionService): LocalStore {
         }
       }
       const file = getAttachmentFile(journalId, pageId, attachment);
-      const toDeviceEncrypt =
-        attachment.encrypted && derivedKey ? await aesGcmEncrypt(data, derivedKey) : data;
+      const toDeviceEncrypt = passwordKey ? await aesGcmEncrypt(data, passwordKey) : data;
       const ciphertext = await encryption.encrypt(toDeviceEncrypt);
       if (!file.exists) file.create({ intermediates: true });
       file.write(ciphertext);
@@ -877,6 +1208,7 @@ export function createLocalStore(encryption: EncryptionService): LocalStore {
     },
 
     async saveAttachmentStream(journalId, pageId, attachment, chunks, derivedKey): Promise<string> {
+      const passwordKey = attachment.encrypted ? requireUsableDerivedKey(derivedKey) : undefined;
       if (attachment.content?.format !== 'canto-chunked-v1') {
         throw new Error(`Chunked content descriptor required for attachment: ${attachment.name}`);
       }
@@ -904,8 +1236,7 @@ export function createLocalStore(encryption: EncryptionService): LocalStore {
             index,
             uint8ToBase64(bytes),
           );
-          const inner =
-            attachment.encrypted && derivedKey ? await aesGcmEncrypt(frame, derivedKey) : frame;
+          const inner = passwordKey ? await aesGcmEncrypt(frame, passwordKey) : frame;
           const file = getChunkFile(root, index++);
           file.create({ intermediates: true });
           file.write(await encryption.encrypt(inner));
@@ -1372,7 +1703,9 @@ export function createLocalStore(encryption: EncryptionService): LocalStore {
         const files = listFilesRecursively(getBaseDir()).filter(
           (file) =>
             !file.uri.includes(`/${TRANSACTIONS_DIR_NAME}/`) &&
+            !file.uri.includes(`/${IMPORTS_DIR_NAME}/`) &&
             file.name !== DEVICE_KEY_ROTATION_COMPLETE_NAME &&
+            file.name !== FIRST_INSTALL_MARKER_NAME &&
             !file.name.endsWith('.tmp') &&
             !file.name.endsWith('.size'),
         );

@@ -5,6 +5,10 @@ import type { SyncRunOutcome } from '@/lib/sync';
 
 const mockEvents: string[] = [];
 const mockRefresh = jest.fn();
+const mockCreatePage = jest.fn(async () => 'p-new');
+// Mirrors the write-capability seam: false while the journal holds a valid key
+// lease, true after an auto-lock revokes it (set per-test).
+let mockKeyLeaseLocked = false;
 const mockUseJournal = jest.fn((..._args: unknown[]) => ({
   journal: mockJournal,
   loading: false,
@@ -56,7 +60,11 @@ jest.mock('@/hooks/useTheme', () => {
 
 jest.mock('@/hooks/useI18n', () => ({
   useI18n: () => ({
-    t: { journal: { anniversary: '', filter: '', noPages: '' }, a11y: { pageEntry: 'Page entry' } },
+    t: {
+      journal: { anniversary: '', filter: '', noPages: '' },
+      page: { unlockRequired: 'Unlock this journal before saving.' },
+      a11y: { pageEntry: 'Page entry' },
+    },
   }),
 }));
 
@@ -70,8 +78,12 @@ jest.mock('@/hooks/useStorage', () => ({
       refresh: mockRefresh,
     };
   },
-  useCreatePage: () => ({ create: jest.fn() }),
+  useCreatePage: () => ({ create: mockCreatePage }),
   useAttachment: () => ({ getAttachment: mockGetAttachment }),
+}));
+
+jest.mock('@/hooks/useKeyLease', () => ({
+  useKeyLease: () => ({ locked: mockKeyLeaseLocked, lease: null }),
 }));
 
 jest.mock('@/contexts/JournalKeyContext', () => ({
@@ -140,7 +152,14 @@ jest.mock('@/components/journal/SyncModal', () => {
       visible ? React.createElement(Text, { testID: 'sync-modal' }, 'Sync modal') : null,
   };
 });
-jest.mock('@/components/common/FloatingActionButton', () => ({ FloatingActionButton: () => null }));
+jest.mock('@/components/common/FloatingActionButton', () => {
+  const React = require('react');
+  const { Pressable } = require('react-native');
+  return {
+    FloatingActionButton: ({ onPress }: { onPress: () => void }) =>
+      React.createElement(Pressable, { testID: 'new-page', onPress }),
+  };
+});
 
 // Mirrors the actual queue's deferred InteractionManager scheduling: the thumbnail
 // work only starts after the screen's effects have committed.
@@ -188,6 +207,7 @@ const mockJournal = {
 };
 
 import JournalScreen from '../../../../app/journal/[id]/index';
+import { Alert } from 'react-native';
 
 describe('JournalScreen open scheduling', () => {
   beforeEach(() => {
@@ -197,6 +217,8 @@ describe('JournalScreen open scheduling', () => {
     mockSyncJournal.mockClear();
     mockGetAttachment.mockClear();
     mockUseJournal.mockClear();
+    mockCreatePage.mockClear();
+    mockKeyLeaseLocked = false;
     jest.spyOn(InteractionManager, 'runAfterInteractions').mockImplementation((task) => {
       if (typeof task === 'function') {
         task();
@@ -268,5 +290,29 @@ describe('JournalScreen open scheduling', () => {
     const exportModal = render(<JournalScreen />);
     fireEvent.press(exportModal.getByTestId('open-export'));
     expect(mockUseJournal).not.toHaveBeenCalled();
+  });
+
+  it('creates a new page from the FAB while the key lease is valid', async () => {
+    const { getByTestId } = render(<JournalScreen />);
+    fireEvent.press(getByTestId('new-page'));
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(mockCreatePage).toHaveBeenCalledTimes(1);
+  });
+
+  it('blocks the new-page FAB with a localized locked error when the key lease is revoked', async () => {
+    const alertSpy = jest.spyOn(Alert, 'alert').mockImplementation(() => {});
+    mockKeyLeaseLocked = true;
+    const { getByTestId } = render(<JournalScreen />);
+
+    fireEvent.press(getByTestId('new-page'));
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(mockCreatePage).not.toHaveBeenCalled();
+    expect(alertSpy).toHaveBeenCalledWith('Unlock this journal before saving.');
+    alertSpy.mockRestore();
   });
 });

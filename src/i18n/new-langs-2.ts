@@ -86,6 +86,7 @@ export const pl: Dictionary = {
     takePhoto: 'Zrób Zdjęcie',
     takeEncryptedPhoto: 'Zaszyfrowane Zdjęcie',
     cameraPermissionDenied: 'Odmówiono dostępu do aparatu',
+    unlockRequired: 'Odblokuj ten dziennik przed zapisaniem.',
   },
   settings: {
     theme: 'Motyw',
@@ -208,6 +209,12 @@ export const pl: Dictionary = {
     exporting: 'Eksportowanie...',
     exportComplete: 'Eksport gotowy',
     exportError: 'Eksport nie powiódł się',
+    exportErrorData:
+      'Nie udało się odczytać części danych dziennika. Żadne pliki nie zostały zmienione ani usunięte.',
+    exportErrorArchive:
+      'Nie udało się utworzyć archiwum kopii zapasowej. Sprawdź dostępne miejsce i spróbuj ponownie.',
+    exportErrorShare:
+      'Kopia zapasowa została utworzona, ale nie można jej było udostępnić. Spróbuj ponownie.',
     importPassword: 'Ta kopia zapasowa jest zaszyfrowana. Wprowadź hasło:',
     importConflict: 'Dziennik o tej nazwie już istnieje',
     importRename: 'Zmień nazwę dziennika',
@@ -311,6 +318,16 @@ export const pl: Dictionary = {
     retry: 'Ponów',
     acknowledge: 'OK',
   },
+  recovery: {
+    title: 'Wymagana ochrona danych',
+    message:
+      'Canto wykryło problem z integralnością pamięci. Nic nie zostało zmienione ani usunięte.',
+    deviceKeyDetail:
+      'To urządzenie nie może obecnie uzyskać dostępu do klucza chroniącego pliki dziennika.',
+    indexDetail: 'Indeks dzienników nie może być bezpiecznie odczytany.',
+    instructions:
+      'Pozostaw aplikację zainstalowaną, nie czyść jej danych ani nie instaluj ponownie. Zaszyfrowane pliki są jedyną kopią. Skontaktuj się z pomocą techniczną, podając ten komunikat.',
+  },
 };
 
 export const sv: Dictionary = {
@@ -399,6 +416,7 @@ export const sv: Dictionary = {
     takePhoto: 'Ta Foto',
     takeEncryptedPhoto: 'Krypterat Foto',
     cameraPermissionDenied: 'Kameraåtkomst nekad',
+    unlockRequired: 'Lås upp den här journalen innan du sparar.',
   },
   settings: {
     theme: 'Tema',
@@ -521,6 +539,10 @@ export const sv: Dictionary = {
     exporting: 'Exporterar...',
     exportComplete: 'Export klar',
     exportError: 'Exporten misslyckades',
+    exportErrorData: 'Vissa journaldata kunde inte läsas. Inga filer ändrades eller raderades.',
+    exportErrorArchive:
+      'Säkerhetskopian kunde inte skapas. Kontrollera tillgängligt utrymme och försök igen.',
+    exportErrorShare: 'Säkerhetskopian skapades men kunde inte delas. Försök igen.',
     importPassword: 'Den här säkerhetskopian är krypterad. Ange lösenord:',
     importConflict: 'En dagbok med detta namn finns redan',
     importRename: 'Byt namn på dagbok',
@@ -624,6 +646,16 @@ export const sv: Dictionary = {
     retry: 'Försök igen',
     acknowledge: 'OK',
   },
+  recovery: {
+    title: 'Databevarande krävs',
+    message:
+      'Canto upptäckte ett problem med lagringsintegriteten. Ingenting ändrades eller raderades.',
+    deviceKeyDetail:
+      'Enheten kan för närvarande inte komma åt nyckeln som skyddar dina journalfiler.',
+    indexDetail: 'Journalindexet kan inte läsas på ett säkert sätt.',
+    instructions:
+      'Behåll appen installerad och rensa inte dess data eller installera om den. Dina krypterade filer är den enda kopian. Kontakta supporten och nämn detta meddelande.',
+  },
 };
 
 export const vi: Dictionary = {
@@ -712,6 +744,7 @@ export const vi: Dictionary = {
     takePhoto: 'Chụp Ảnh',
     takeEncryptedPhoto: 'Ảnh Mã Hóa',
     cameraPermissionDenied: 'Quyền truy cập máy ảnh bị từ chối',
+    unlockRequired: 'Hãy mở khóa nhật ký này trước khi lưu.',
   },
   settings: {
     theme: 'Giao diện',
@@ -835,6 +868,9 @@ export const vi: Dictionary = {
     exporting: 'Đang xuất...',
     exportComplete: 'Xuất hoàn tất',
     exportError: 'Xuất thất bại',
+    exportErrorData: 'Không thể đọc một số dữ liệu nhật ký. Không có tệp nào bị thay đổi hoặc xóa.',
+    exportErrorArchive: 'Không thể tạo tệp sao lưu. Hãy kiểm tra dung lượng trống và thử lại.',
+    exportErrorShare: 'Bản sao lưu đã được tạo nhưng không thể chia sẻ. Vui lòng thử lại.',
     importPassword: 'Bản sao lưu này đã được mã hóa. Nhập mật khẩu:',
     importConflict: 'Đã tồn tại nhật ký có tên này',
     importRename: 'Đổi tên nhật ký',
@@ -937,6 +973,14 @@ export const vi: Dictionary = {
     retry: 'Thử lại',
     acknowledge: 'OK',
   },
+  recovery: {
+    title: 'Cần bảo toàn dữ liệu',
+    message: 'Canto phát hiện sự cố toàn vẹn bộ nhớ. Không có gì bị thay đổi hoặc xóa.',
+    deviceKeyDetail: 'Thiết bị này hiện không thể truy cập khóa bảo vệ các tệp nhật ký của bạn.',
+    indexDetail: 'Không thể đọc chỉ mục nhật ký một cách an toàn.',
+    instructions:
+      'Giữ ứng dụng đã cài đặt, không xóa dữ liệu hoặc cài lại. Các tệp mã hóa của bạn là bản sao duy nhất. Liên hệ bộ phận hỗ trợ và đề cập thông báo này.',
+  },
 };
 
 export const th: Dictionary = {
@@ -1024,6 +1068,7 @@ export const th: Dictionary = {
     takePhoto: 'ถ่ายรูป',
     takeEncryptedPhoto: 'รูปที่เข้ารหัส',
     cameraPermissionDenied: 'ปฏิเสธสิทธิ์เข้าถึงกล้อง',
+    unlockRequired: 'ปลดล็อกสมุดบันทึกนี้ก่อนบันทึก',
   },
   settings: {
     theme: 'ธีม',
@@ -1145,6 +1190,9 @@ export const th: Dictionary = {
     exporting: 'กำลังส่งออก...',
     exportComplete: 'ส่งออกเรียบร้อย',
     exportError: 'ส่งออกล้มเหลว',
+    exportErrorData: 'ไม่สามารถอ่านข้อมูลสมุดบันทึกบางส่วนได้ ไม่มีไฟล์ใดถูกเปลี่ยนแปลงหรือลบ',
+    exportErrorArchive: 'ไม่สามารถสร้างไฟล์สำรองข้อมูลได้ ตรวจสอบพื้นที่ว่างแล้วลองอีกครั้ง',
+    exportErrorShare: 'สร้างไฟล์สำรองแล้วแต่ไม่สามารถแชร์ได้ กรุณาลองอีกครั้ง',
     importPassword: 'ข้อมูลสำรองนี้ถูกเข้ารหัส กรุณาป้อนรหัสผ่าน:',
     importConflict: 'มีสมุดบันทึกชื่อนี้อยู่แล้ว',
     importRename: 'เปลี่ยนชื่อสมุดบันทึก',
@@ -1246,6 +1294,14 @@ export const th: Dictionary = {
     retry: 'ลองใหม่',
     acknowledge: 'ตกลง',
   },
+  recovery: {
+    title: 'ต้องรักษาข้อมูลไว้',
+    message: 'Canto ตรวจพบปัญหาความสมบูรณ์ของพื้นที่จัดเก็บ ไม่มีการเปลี่ยนแปลงหรือลบสิ่งใด',
+    deviceKeyDetail: 'อุปกรณ์นี้ไม่สามารถเข้าถึงคีย์ที่ป้องกันไฟล์สมุดบันทึกของคุณได้ในขณะนี้',
+    indexDetail: 'ไม่สามารถอ่านดัชนีสมุดบันทึกได้อย่างปลอดภัย',
+    instructions:
+      'ติดตั้งแอปไว้ตามเดิม อย่าล้างข้อมูลหรือติดตั้งใหม่ ไฟล์ที่เข้ารหัสของคุณเป็นสำเนาเดียว ติดต่อฝ่ายสนับสนุนและแจ้งข้อความนี้',
+  },
 };
 
 export const id: Dictionary = {
@@ -1334,6 +1390,7 @@ export const id: Dictionary = {
     takePhoto: 'Ambil Foto',
     takeEncryptedPhoto: 'Foto Terenkripsi',
     cameraPermissionDenied: 'Izin kamera ditolak',
+    unlockRequired: 'Buka kunci jurnal ini sebelum menyimpan.',
   },
   settings: {
     theme: 'Tema',
@@ -1456,6 +1513,11 @@ export const id: Dictionary = {
     exporting: 'Mengekspor...',
     exportComplete: 'Ekspor siap',
     exportError: 'Ekspor gagal',
+    exportErrorData:
+      'Sebagian data jurnal tidak dapat dibaca. Tidak ada file yang diubah atau dihapus.',
+    exportErrorArchive:
+      'Arsip cadangan tidak dapat dibuat. Periksa ruang penyimpanan dan coba lagi.',
+    exportErrorShare: 'Cadangan berhasil dibuat tetapi tidak dapat dibagikan. Coba lagi.',
     importPassword: 'Cadangan ini terenkripsi. Masukkan kata sandi:',
     importConflict: 'Jurnal dengan nama ini sudah ada',
     importRename: 'Ganti nama jurnal',
@@ -1558,6 +1620,15 @@ export const id: Dictionary = {
     retry: 'Coba lagi',
     acknowledge: 'OK',
   },
+  recovery: {
+    title: 'Pelestarian data diperlukan',
+    message: 'Canto mendeteksi masalah integritas penyimpanan. Tidak ada yang diubah atau dihapus.',
+    deviceKeyDetail:
+      'Perangkat ini saat ini tidak dapat mengakses kunci yang melindungi file jurnal Anda.',
+    indexDetail: 'Indeks jurnal tidak dapat dibaca dengan aman.',
+    instructions:
+      'Biarkan aplikasi tetap terpasang, jangan hapus datanya atau instal ulang. File terenkripsi Anda adalah satu-satunya salinan. Hubungi dukungan dan sebutkan pesan ini.',
+  },
 };
 
 export const uk: Dictionary = {
@@ -1646,6 +1717,7 @@ export const uk: Dictionary = {
     takePhoto: 'Зробити фото',
     takeEncryptedPhoto: 'Зашифроване фото',
     cameraPermissionDenied: 'Доступ до камери відхилено',
+    unlockRequired: 'Розблокуйте цей журнал перед збереженням.',
   },
   settings: {
     theme: 'Тема',
@@ -1768,6 +1840,12 @@ export const uk: Dictionary = {
     exporting: 'Експортування...',
     exportComplete: 'Експорт готовий',
     exportError: 'Помилка експорту',
+    exportErrorData:
+      'Не вдалося прочитати частину даних журналу. Жоден файл не було змінено чи видалено.',
+    exportErrorArchive:
+      'Не вдалося створити архів резервної копії. Перевірте вільне місце та спробуйте ще раз.',
+    exportErrorShare:
+      'Резервну копію створено, але не вдалося відкрити меню поділитися. Спробуйте ще раз.',
     importPassword: 'Ця резервна копія зашифрована. Введіть пароль:',
     importConflict: 'Щоденник з такою назвою вже існує',
     importRename: 'Перейменувати щоденник',
@@ -1870,5 +1948,14 @@ export const uk: Dictionary = {
     failedItems: 'Невдалі елементи',
     retry: 'Повторити',
     acknowledge: 'OK',
+  },
+  recovery: {
+    title: 'Потрібне збереження даних',
+    message: 'Canto виявив проблему цілісності сховища. Нічого не було змінено чи видалено.',
+    deviceKeyDetail:
+      'Цей пристрій зараз не може отримати доступ до ключа, що захищає файли вашого журналу.',
+    indexDetail: 'Індекс журналів не можна безпечно прочитати.',
+    instructions:
+      'Залиште застосунок встановленим, не очищайте його дані та не перевстановлюйте. Зашифровані файли — єдина копія. Зверніться до підтримки, зазначивши це повідомлення.',
   },
 };

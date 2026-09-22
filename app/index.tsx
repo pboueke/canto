@@ -24,6 +24,7 @@ import { NewJournalModal } from '@/components/home/NewJournalModal';
 import { JournalAccessModal } from '@/components/home/JournalAccessModal';
 import { AccountButton } from '@/components/home/AccountButton';
 import { authenticateBiometric } from '@/lib/biometric';
+import { StorageIntegrityError } from '@/lib/storage/integrity';
 import { ONBOARDING_KEY, isOnboardingDone, markOnboardingDone } from './onboarding';
 import type { Journal } from 'canto-data';
 
@@ -33,7 +34,12 @@ export default function HomeScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const params = useLocalSearchParams<{ fromOnboarding?: string }>();
-  const { journals, loading, refresh } = useJournals();
+  const { journals, loading, error, refresh } = useJournals();
+  const recoveryCode =
+    error instanceof StorageIntegrityError &&
+    (error.code === 'DEVICE_KEY_UNAVAILABLE' || error.code === 'INDEX_UNREADABLE')
+      ? error.code
+      : null;
   const { create } = useCreateJournal();
   const { deriveAndCache, getKey, clearKey, clearAll } = useJournalKeys();
   const [onboardingChecked, setOnboardingChecked] = useState(false);
@@ -200,6 +206,69 @@ export default function HomeScreen() {
         <View style={styles.centered}>
           <ActivityIndicator size="large" color={theme.colors.primary} />
         </View>
+      ) : recoveryCode ? (
+        // Non-destructive integrity/recovery state: data is preserved; the
+        // library must never render as empty or reduced because an index or
+        // device key could not be read.
+        <ScrollView contentContainerStyle={styles.recoveryContainer}>
+          <View
+            style={[
+              styles.recoveryCard,
+              {
+                backgroundColor: theme.colors.foreground,
+                borderColor: theme.colors.border,
+              },
+            ]}
+          >
+            <Text
+              style={[
+                styles.recoveryTitle,
+                { color: theme.colors.text, fontFamily: theme.fonts.bold },
+              ]}
+            >
+              {t.recovery.title}
+            </Text>
+            <Text
+              style={[
+                styles.recoveryText,
+                { color: theme.colors.text, fontFamily: theme.fonts.regular },
+              ]}
+            >
+              {t.recovery.message}
+            </Text>
+            <Text
+              style={[
+                styles.recoveryText,
+                { color: theme.colors.textSecondary, fontFamily: theme.fonts.regular },
+              ]}
+            >
+              {recoveryCode === 'DEVICE_KEY_UNAVAILABLE'
+                ? t.recovery.deviceKeyDetail
+                : t.recovery.indexDetail}
+            </Text>
+            <Text
+              style={[
+                styles.recoveryText,
+                { color: theme.colors.textSecondary, fontFamily: theme.fonts.regular },
+              ]}
+            >
+              {t.recovery.instructions}
+            </Text>
+            <Pressable
+              onPress={refresh}
+              style={[styles.recoveryRetry, { backgroundColor: theme.colors.highlight }]}
+            >
+              <Text
+                style={[
+                  styles.recoveryRetryText,
+                  { color: theme.colors.text, fontFamily: theme.fonts.bold },
+                ]}
+              >
+                {t.dataIntegrity.retry}
+              </Text>
+            </Pressable>
+          </View>
+        </ScrollView>
       ) : journals.length === 0 ? (
         <View style={styles.centered}>
           <Text
@@ -306,6 +375,34 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     padding: 20,
+  },
+  recoveryContainer: {
+    flexGrow: 1,
+    justifyContent: 'center',
+    padding: 24,
+  },
+  recoveryCard: {
+    borderRadius: 16,
+    borderWidth: 1,
+    padding: 20,
+    gap: 12,
+  },
+  recoveryTitle: {
+    fontSize: 17,
+  },
+  recoveryText: {
+    fontSize: 14,
+    lineHeight: 20,
+  },
+  recoveryRetry: {
+    alignSelf: 'flex-start',
+    paddingHorizontal: 18,
+    paddingVertical: 10,
+    borderRadius: 8,
+    marginTop: 4,
+  },
+  recoveryRetryText: {
+    fontSize: 14,
   },
   emptyText: {
     fontSize: 15,

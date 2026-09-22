@@ -257,6 +257,8 @@ export async function importJournal(
           path: '',
           name: owner.name ?? `imported-${newAttId}.${ext}`,
           type: type as 'image' | 'file',
+          // The page-level flag preserves a legacy encrypted marker even when
+          // the storage write below has to record the actual protection layer.
           encrypted: owner.encrypted,
           size: byteLength,
           content: chunkedContentForByteLength(byteLength),
@@ -267,21 +269,34 @@ export async function importJournal(
           if (encryptedData === undefined && !saveAttachmentStream) {
             throw new Error('Chunked attachment import is unavailable on this device');
           }
+          // Legacy 0.19.x archives can carry an encrypted attachment flag with
+          // data that was never password-wrapped (no salt, unencrypted archive
+          // with no key). Such records must stay readable device-only while
+          // newer keyless encrypted writes remain rejected by the store guard.
+          // The storage descriptor then records the actual protection applied.
+          const keyForWrite = owner.encrypted ? derivedKey : undefined;
+          const storageAttachment: Attachment = {
+            ...attachment,
+            // Flag the storage descriptor only when the write can actually
+            // protect the payload: plain attachments inside an encrypted
+            // archive stay device-only exactly like pre-import storage.
+            encrypted: owner.encrypted && (Boolean(keyForWrite) || isEncrypted),
+          };
           const savedPath =
             encryptedData !== undefined
               ? await store.saveAttachment(
                   newJournalId,
                   owner.pageId,
-                  attachment,
+                  storageAttachment,
                   encryptedData,
-                  owner.encrypted && derivedKey ? derivedKey : undefined,
+                  keyForWrite,
                 )
               : await saveAttachmentStream!(
                   newJournalId,
                   owner.pageId,
-                  attachment,
+                  storageAttachment,
                   zipAttachmentChunks(af, byteLength),
-                  owner.encrypted && derivedKey ? derivedKey : undefined,
+                  keyForWrite,
                 );
           importedAttachments.set(`${owner.pageId}:${zipFilename}`, {
             ...attachment,

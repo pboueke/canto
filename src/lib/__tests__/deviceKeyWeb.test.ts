@@ -33,6 +33,8 @@ import {
   abortKeyRotation,
   commitKeyRotation,
   recoverKeyRotation,
+  hasDeviceKey,
+  hasPendingPreviousDeviceKey,
   _resetKeyCreationPromise,
 } from '../encryption/device.web';
 
@@ -120,6 +122,19 @@ describe('Device key web — prepareKeyRotation / commitKeyRotation', () => {
     expect(localStorageMock.getItem(PREVIOUS_DEVICE_KEY_ALIAS)).toBeNull();
   });
 
+  it('exposes a keyless probe for a pending previous key so bootstrap never misreads a fresh install', async () => {
+    const device = createDeviceEncryption();
+    await device.encrypt('seed');
+    device.clearKey!();
+    const { oldKey, newKey } = await prepareKeyRotation();
+
+    expect(await hasPendingPreviousDeviceKey()).toBe(false);
+    await beginKeyRotation(oldKey, newKey);
+    expect(await hasPendingPreviousDeviceKey()).toBe(true);
+    await commitKeyRotation(newKey);
+    expect(await hasPendingPreviousDeviceKey()).toBe(false);
+  });
+
   it('restores the old key at startup after a crash before re-encryption, so retry preserves its fallback', async () => {
     const device = createDeviceEncryption();
     const ciphertext = await device.encrypt('old-data');
@@ -135,6 +150,26 @@ describe('Device key web — prepareKeyRotation / commitKeyRotation', () => {
     device.clearKey!();
     expect(await device.decrypt(ciphertext)).toBe('old-data');
     expect(localStorageMock.getItem(PREVIOUS_DEVICE_KEY_ALIAS)).toBeNull();
+  });
+
+  it('reports a pending previous key when an interrupted cutover left only the fallback', async () => {
+    const device = createDeviceEncryption();
+    await device.encrypt('seed');
+    device.clearKey!();
+    const { oldKey, newKey } = await prepareKeyRotation();
+
+    await beginKeyRotation(oldKey, newKey);
+    expect(await hasPendingPreviousDeviceKey()).toBe(true);
+
+    // Simulate a crash between the fallback write and the current-key write:
+    // only the previous key alias is durable.
+    localStorageMock.removeItem(DEVICE_KEY_ALIAS);
+    expect(await hasDeviceKey()).toBe(false);
+    expect(await hasPendingPreviousDeviceKey()).toBe(true);
+
+    await recoverKeyRotation(false);
+    expect(await hasPendingPreviousDeviceKey()).toBe(false);
+    expect(await hasDeviceKey()).toBe(true);
   });
 
   it('finalizes an interrupted rotation after startup proves the data commit', async () => {

@@ -4,7 +4,8 @@ import { Feather } from '@expo/vector-icons';
 import { useTheme } from '@/hooks/useTheme';
 import { useI18n } from '@/hooks/useI18n';
 import { getLocalStore } from '@/hooks/useStorage';
-import { exportJournal, type ExportProgress } from '@/lib/backup';
+import { exportJournal, isExportError, type ExportProgress } from '@/lib/backup';
+import { StorageIntegrityError } from '@/lib/storage/integrity';
 import type { JournalContent } from 'canto-data';
 import { webModalContent } from '@/styles/web';
 
@@ -74,7 +75,20 @@ export function ExportJournalModal({
       handleClose();
     } catch (err) {
       console.error('[Canto] Export failed:', err);
-      setError(t.backup.exportError);
+      if (isExportError(err)) {
+        // Typed, localized classification: never leak keys, paths, or plaintext.
+        setError(
+          err.kind === 'integrity'
+            ? t.backup.exportErrorData
+            : err.kind === 'archive'
+              ? t.backup.exportErrorArchive
+              : t.backup.exportErrorShare,
+        );
+      } else if (err instanceof StorageIntegrityError) {
+        setError(t.backup.exportErrorData);
+      } else {
+        setError(t.backup.exportError);
+      }
     } finally {
       setExporting(false);
       setProgress(null);
