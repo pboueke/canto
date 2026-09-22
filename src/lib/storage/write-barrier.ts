@@ -114,6 +114,10 @@ export function serializeDeviceKeyWrites<T extends object>(store: T): T {
     'getAttachment',
     'getAttachmentStorageSize',
     'forEachAttachmentChunk',
+    // Read-only recovery scan: never queued behind the mutation tail, but a
+    // device-key rotation still waits for it. The confirmed restore is a
+    // mutation and intentionally stays on the serialized write path.
+    'scanJournalPages',
   ]);
   for (const [name, original] of Object.entries(mutable)) {
     if (name === 'reencryptAll') continue;

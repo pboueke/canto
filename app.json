@@ -2,7 +2,7 @@
   "expo": {
     "name": "Canto",
     "slug": "canto",
-    "version": "0.20.0",
+    "version": "0.20.1",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",
@@ -18,7 +18,7 @@
     },
     "android": {
       "package": "com.boueke.canto",
-      "versionCode": 27,
+      "versionCode": 28,
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
         "foregroundImage": "./assets/android-icon-foreground.png",

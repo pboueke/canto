@@ -10,9 +10,11 @@ import {
   type JournalOverview,
   type PageCatalogV1,
 } from '@/lib/journal-overview';
+import { validatePage } from 'canto-data';
 import type {
   JournalImportRecoveryInfo,
   JournalOverviewReadOptions,
+  JournalPageScan,
   JournalSyncSnapshot,
   LocalStore,
 } from './types';
@@ -854,37 +856,51 @@ export function createLocalStore(encryption: EncryptionService): LocalStore {
       key.endsWith('.json'),
     );
     const pages: Page[] = [];
-    const unreadable: string[] = [];
+    const unusable: string[] = [];
+    const seenIds = new Set<string>();
     options?.onRebuildProgress?.({ current: 0, total: pageKeys.length });
     for (const [index, key] of pageKeys.entries()) {
       if (options?.signal?.aborted) throw new Error('Journal catalog rebuild cancelled');
+      // Details never carry the raw path, page id, body, or error text.
+      const recordId = opaqueRecordId(key);
+      const filenameId = key
+        .split('/')
+        .pop()!
+        .replace(/\.json$/, '');
       const pageRaw = await readEncryptedDetailed(key, encryption, derivedKey);
       if (pageRaw.status === 'value') {
+        let page: Page | undefined;
         try {
-          pages.push(safeJsonParse<Page>(pageRaw.value, `page:${key}`));
+          // Runtime-validate the decoded record instead of trusting the cast;
+          // a valid JSON body with the wrong shape must fail closed.
+          page = validatePage(safeJsonParse<unknown>(pageRaw.value, `page:${recordId}`));
         } catch {
-          unreadable.push(
-            key
-              .split('/')
-              .pop()!
-              .replace(/\.json$/, ''),
-          );
+          page = undefined;
+        }
+        if (!page) {
+          unusable.push(recordId);
+        } else if (page.id !== filenameId) {
+          // The record id and its filename-derived catalog key disagree, so the
+          // projection would be ambiguous. Fail closed.
+          unusable.push(recordId);
+        } else if (seenIds.has(page.id)) {
+          // Two discovered records claim the same id; neither can be published
+          // as the single authoritative row.
+          unusable.push(recordId);
+        } else {
+          seenIds.add(page.id);
+          pages.push(page);
         }
       } else if (pageRaw.status === 'unreadable') {
-        unreadable.push(
-          key
-            .split('/')
-            .pop()!
-            .replace(/\.json$/, ''),
-        );
+        unusable.push(recordId);
       }
       options?.onRebuildProgress?.({ current: index + 1, total: pageKeys.length });
     }
-    if (unreadable.length > 0) {
+    if (unusable.length > 0) {
       throw new StorageIntegrityError(
         errorCode,
-        `Cannot trust local records: ${unreadable.length} page(s) could not be read safely.`,
-        { journalId, details: unreadable },
+        `Cannot trust local records: ${unusable.length} page(s) could not be read safely.`,
+        { journalId, details: unusable },
       );
     }
     return pages;
@@ -1118,6 +1134,39 @@ export function createLocalStore(encryption: EncryptionService): LocalStore {
           ]),
         ),
       };
+    },
+
+    async scanJournalPages(
+      journalId: string,
+      derivedKey?: Uint8Array,
+      options?: JournalOverviewReadOptions,
+    ): Promise<JournalPageScan> {
+      // Raw page records are authoritative: the catalog is deliberately ignored
+      // and every discovered page must validate before recovery is offered.
+      // A revoked/absent key is rejected up front so a locked secure journal is
+      // never silently scanned through the device-only password-layer fallback.
+      assertUsableDerivedKey(derivedKey);
+      if (await isJournalSecure(journalId)) requireUsableDerivedKey(derivedKey);
+      const pages = await readJournalPages(journalId, derivedKey, options, 'CATALOG_UNREADABLE');
+      return { journalId, pageCount: pages.length, pages };
+    },
+
+    async restoreJournalCatalog(
+      journalId: string,
+      derivedKey?: Uint8Array,
+    ): Promise<JournalPageScan> {
+      // Catalog-only publication through the same serialized, crash-recoverable
+      // transaction path as every other projection write. The confirmed write
+      // must not trust a preview captured earlier: it re-scans every raw page
+      // record here, inside the mutation slot, and publishes only that fresh,
+      // fully validated set. Raw page records are never read or rewritten for
+      // publication; the same key guard as savePage prevents a secure journal's
+      // catalog from being downgraded to device-only data.
+      assertUsableDerivedKey(derivedKey);
+      if (await isJournalSecure(journalId)) requireUsableDerivedKey(derivedKey);
+      const pages = await readJournalPages(journalId, derivedKey, undefined, 'CATALOG_UNREADABLE');
+      await writePageCatalog(journalId, pages, derivedKey);
+      return { journalId, pageCount: pages.length, pages };
     },
 
     async saveJournal(journal: JournalContent, derivedKey?: Uint8Array): Promise<void> {

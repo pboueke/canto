@@ -1,4 +1,5 @@
 import { Paths, File, Directory } from 'expo-file-system';
+import { validatePage } from 'canto-data';
 import type { Journal, JournalContent, Page, Attachment } from 'canto-data';
 import type { EncryptionService } from '@/lib/encryption';
 import { aesGcmEncrypt, aesGcmDecrypt, generateUUID, uint8ToBase64 } from '@/lib/encryption/utils';
@@ -14,6 +15,7 @@ import {
 import type {
   JournalImportRecoveryInfo,
   JournalOverviewReadOptions,
+  JournalPageScan,
   JournalSyncSnapshot,
   LocalStore,
   ReencryptionResult,
@@ -577,7 +579,9 @@ export function createLocalStore(encryption: EncryptionService): LocalStore {
 
   /**
    * A complete scan of every discovered page file can rebuild a projection.
-   * Any unreadable page blocks publication and is reported as a typed,
+   * Every record must be structurally valid, its id must match the filename-
+   * derived page id, and no two records may claim the same id. Any unreadable
+   * or ambiguous page blocks publication and is reported as a typed,
    * recoverable CATALOG_UNREADABLE outcome with opaque record identifiers.
    */
   async function readJournalPages(
@@ -596,27 +600,48 @@ export function createLocalStore(encryption: EncryptionService): LocalStore {
       .list()
       .filter((entry): entry is File => entry instanceof File && entry.uri.endsWith('.json'));
     const pages: Page[] = [];
-    const unreadable: string[] = [];
+    const unusable: string[] = [];
+    const seenIds = new Set<string>();
     options?.onRebuildProgress?.({ current: 0, total: pageFiles.length });
     for (const [index, entry] of pageFiles.entries()) {
       if (options?.signal?.aborted) throw new Error('Journal catalog rebuild cancelled');
+      // Details never carry the raw path, page id, body, or error text.
+      const recordId = opaqueRecordId(entry.uri);
+      const filenameId = entry.name.replace(/\.json$/, '');
       const pageRaw = await readEncryptedDetailed(entry, encryption, derivedKey);
       if (pageRaw.status === 'value') {
+        let page: Page | undefined;
         try {
-          pages.push(safeJsonParse<Page>(pageRaw.value, `page:${entry.name}`));
+          // Runtime-validate the decoded record instead of trusting the cast;
+          // a valid JSON body with the wrong shape must fail closed.
+          page = validatePage(safeJsonParse<unknown>(pageRaw.value, `page:${recordId}`));
         } catch {
-          unreadable.push(entry.name.replace(/\.json$/, ''));
+          page = undefined;
+        }
+        if (!page) {
+          unusable.push(recordId);
+        } else if (page.id !== filenameId) {
+          // The record id and its filename-derived catalog key disagree, so the
+          // projection would be ambiguous. Fail closed.
+          unusable.push(recordId);
+        } else if (seenIds.has(page.id)) {
+          // Two discovered records claim the same id; neither can be published
+          // as the single authoritative row.
+          unusable.push(recordId);
+        } else {
+          seenIds.add(page.id);
+          pages.push(page);
         }
       } else if (pageRaw.status === 'unreadable') {
-        unreadable.push(entry.name.replace(/\.json$/, ''));
+        unusable.push(recordId);
       }
       options?.onRebuildProgress?.({ current: index + 1, total: pageFiles.length });
     }
-    if (unreadable.length > 0) {
+    if (unusable.length > 0) {
       throw new StorageIntegrityError(
         errorCode,
-        `Cannot trust local records: ${unreadable.length} page(s) could not be read safely.`,
-        { journalId, details: unreadable },
+        `Cannot trust local records: ${unusable.length} page(s) could not be read safely.`,
+        { journalId, details: unusable },
       );
     }
     return pages;
@@ -943,6 +968,39 @@ export function createLocalStore(encryption: EncryptionService): LocalStore {
           ]),
         ),
       };
+    },
+
+    async scanJournalPages(
+      journalId: string,
+      derivedKey?: Uint8Array,
+      options?: JournalOverviewReadOptions,
+    ): Promise<JournalPageScan> {
+      // Raw page files are authoritative: the catalog is deliberately ignored
+      // and every discovered page must validate before recovery is offered.
+      // A revoked/absent key is rejected up front so a locked secure journal is
+      // never silently scanned through the device-only password-layer fallback.
+      assertUsableDerivedKey(derivedKey);
+      if (await isJournalSecure(journalId)) requireUsableDerivedKey(derivedKey);
+      const pages = await readJournalPages(journalId, derivedKey, options, 'CATALOG_UNREADABLE');
+      return { journalId, pageCount: pages.length, pages };
+    },
+
+    async restoreJournalCatalog(
+      journalId: string,
+      derivedKey?: Uint8Array,
+    ): Promise<JournalPageScan> {
+      // Catalog-only publication through the same serialized, crash-recoverable
+      // transaction path as every other projection write. The confirmed write
+      // must not trust a preview captured earlier: it re-scans every raw page
+      // record here, inside the mutation slot, and publishes only that fresh,
+      // fully validated set. Raw page records are never read or rewritten for
+      // publication; the same key guard as savePage prevents a secure journal's
+      // catalog from being downgraded to device-only data.
+      assertUsableDerivedKey(derivedKey);
+      if (await isJournalSecure(journalId)) requireUsableDerivedKey(derivedKey);
+      const pages = await readJournalPages(journalId, derivedKey, undefined, 'CATALOG_UNREADABLE');
+      await writePageCatalog(journalId, pages, derivedKey);
+      return { journalId, pageCount: pages.length, pages };
     },
 
     async saveJournal(journal: JournalContent, derivedKey?: Uint8Array): Promise<void> {

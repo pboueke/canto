@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.20.1 - Safer local journal recovery
+
+- **feat: opt-in local-page recovery** — Journal Settings now offers **Recover local pages**. It performs a read-only scan of the current journal’s raw page records, shows the recoverable count, and restores only that journal’s page catalog after explicit confirmation. The tool never creates a separate journal, exports a forensic package, or rewrites raw page records.
+- **fix: fail-closed journal persistence recovery** — native and web storage now treat unreadable or missing indexes, catalogs, page records, and unavailable device keys as integrity conditions rather than publishing an empty or reduced view. Catalog rebuilds validate every raw page record and use serialized, crash-recoverable transactions.
+- **fix: safer recovery authorization and diagnostics** — auto-locked secure journals reject recovery and mutation attempts until unlocked; malformed, mismatched, duplicate, or unreadable raw records block recovery without changing the existing catalog. Recovery diagnostics use localized messages and opaque record identifiers rather than paths, page content, or keys.
+- **fix: safer backup export integrity handling** — exports of unreadable journal data now fail with an actionable integrity diagnostic and leave source records untouched.
+- test: added native/web recovery, transaction, write-barrier, auto-lock, backup, and settings-UI regression coverage; raised Jest coverage thresholds.
+
 ## v0.20.0 - Editor polish and optimized Android releases
 
 - **fix: responsive journal editor and viewer sizing** — the multiline editor now uses a scale-derived 16-line minimum, grows and shrinks with its content without nested scrolling, preserves web caret and outer-scroll positions, and keeps the inner input borderless so focus decoration cannot overlap text. Read mode keeps a smaller four-line minimum.

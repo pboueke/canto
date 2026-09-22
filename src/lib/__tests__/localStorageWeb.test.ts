@@ -460,7 +460,10 @@ describe('createLocalStore (web/IndexedDB)', () => {
     // from a reduced catalog projection.
     await expect(
       store.savePage('j1', { ...makePage('p1'), text: 'Saved edit' }, undefined, true),
-    ).rejects.toMatchObject({ code: 'CATALOG_UNREADABLE', details: ['p2'] });
+    ).rejects.toMatchObject({
+      code: 'CATALOG_UNREADABLE',
+      details: [expect.stringMatching(/^record:[0-9a-f]+$/)],
+    });
 
     expect(await getRawStorageRecord('canto/j1/pages/p1.json')).toBe(p1Before);
     expect(await getRawStorageRecord('canto/j1/pages/p2.json')).toBe(p2Before);
@@ -2730,7 +2733,7 @@ describe('fail-closed integrity reads and mutations (web)', () => {
 
     await expect(store.getJournalOverview?.('j1')).rejects.toMatchObject({
       code: 'CATALOG_UNREADABLE',
-      details: ['p1'],
+      details: [expect.stringMatching(/^record:[0-9a-f]+$/)],
     });
     expect(await getRawStorageRecord('canto/j1/page-catalog.json')).toBe('enc:not-json');
   });
@@ -2878,7 +2881,7 @@ describe('storage behavior coverage (web/IndexedDB)', () => {
     await failing.initialize();
     await expect(failing.getJournalOverview!('j1')).rejects.toMatchObject({
       code: 'CATALOG_UNREADABLE',
-      details: ['p2'],
+      details: [expect.stringMatching(/^record:[0-9a-f]+$/)],
     });
   });
 
@@ -3699,5 +3702,425 @@ describe('storage behavior coverage (web/IndexedDB)', () => {
 
     await expect(createLocalStore(createMockEncryption()).initialize()).resolves.toBeUndefined();
     await expect(getRawStorageRecord('canto/j1/metadata.json')).resolves.toBeDefined();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Deterministic publication fault injection (web/IndexedDB parity with native):
+// a process kill between commit phases must never expose a partial projection.
+// ---------------------------------------------------------------------------
+const PUBLICATION_PHASES_WEB = ['stage', 'marker', 'apply'] as const;
+type PublicationPhaseWeb = (typeof PUBLICATION_PHASES_WEB)[number];
+
+interface PutCapableStore {
+  put(value: unknown): unknown;
+}
+
+function idbObjectStorePrototype(): PutCapableStore {
+  return (globalThis as unknown as { IDBObjectStore: { prototype: PutCapableStore } })
+    .IDBObjectStore.prototype;
+}
+
+/** One-shot put failure, restoring the original put once it fires. */
+function armPutFault(match: (path: string, data: string) => boolean): () => void {
+  const prototype = idbObjectStorePrototype();
+  const original = prototype.put;
+  prototype.put = function (this: unknown, value: unknown) {
+    const record = value as { path?: string; data?: string } | undefined;
+    if (record && typeof record.path === 'string' && match(record.path, record.data ?? '')) {
+      prototype.put = original;
+      throw new Error('injected publication failure');
+    }
+    return original.call(this, value);
+  };
+  return () => {
+    prototype.put = original;
+  };
+}
+
+/**
+ * Faults are keyed to a payload's *content*, not to its staged file index. The
+ * mock encryption is a passthrough, so the staged record data still carries the
+ * JSON payload; matching `file-N` would silently stop covering the intended
+ * target if staging order ever changes (the test would still pass).
+ */
+function armPublicationFault(
+  phase: PublicationPhaseWeb,
+  matchesStaged: (data: string) => boolean,
+  applyPath: string,
+): () => void {
+  return armPutFault((path, data) => {
+    if (phase === 'stage') return path.includes('/.transactions/') && matchesStaged(data);
+    if (phase === 'marker') {
+      return path.endsWith('/marker') && data.includes('"phase":"committing"');
+    }
+    return path === applyPath;
+  });
+}
+
+async function listRawKeys(prefix: string): Promise<string[]> {
+  const db = await new Promise<IDBDatabase>((resolve, reject) => {
+    const request = indexedDB.open('canto');
+    request.onupgradeneeded = () => {
+      if (!request.result.objectStoreNames.contains('files')) {
+        request.result.createObjectStore('files', { keyPath: 'path' });
+      }
+    };
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error);
+  });
+  try {
+    return await new Promise<string[]>((resolve, reject) => {
+      const tx = db.transaction('files', 'readonly');
+      const req = tx.objectStore('files').getAllKeys(IDBKeyRange.bound(prefix, prefix + '\uffff'));
+      req.onsuccess = () => resolve(req.result as string[]);
+      req.onerror = () => reject(req.error);
+    });
+  } finally {
+    db.close();
+  }
+}
+
+describe('publication fault injection (web/IndexedDB)', () => {
+  it.each(PUBLICATION_PHASES_WEB)(
+    'saveJournalMetadata rename never exposes a partial projection when %s is interrupted',
+    async (phase) => {
+      const store = createLocalStore(createMockEncryption());
+      await store.initialize();
+      await store.saveJournal(makeJournalContent('j1', [makePage('p1')]));
+      const oldIndex = await getRawStorageRecord('canto/journals.json');
+      const oldMetadata = await getRawStorageRecord('canto/j1/metadata.json');
+
+      const disarm = armPublicationFault(
+        phase,
+        (data) => data.includes('"journals":'),
+        'canto/journals.json',
+      );
+      try {
+        await expect(
+          store.saveJournalMetadata!({
+            ...makeJournalContent('j1'),
+            title: 'Renamed',
+            pages: undefined,
+          } as Omit<JournalContent, 'pages'>),
+        ).rejects.toThrow('injected publication failure');
+      } finally {
+        disarm();
+      }
+
+      _resetDB();
+      const recovered = createLocalStore(createMockEncryption());
+      await recovered.initialize();
+
+      const [listed] = await recovered.listJournals();
+      const overview = await recovered.getJournalOverview!('j1');
+      expect(listed.title).toBe(overview!.metadata.title);
+      if (phase === 'apply') {
+        expect(listed.title).toBe('Renamed');
+      } else {
+        expect(listed.title).toBe('Journal j1');
+        expect(await getRawStorageRecord('canto/journals.json')).toBe(oldIndex);
+        expect(await getRawStorageRecord('canto/j1/metadata.json')).toBe(oldMetadata);
+      }
+      expect(await listRawKeys('canto/.transactions/')).toEqual([]);
+    },
+  );
+
+  it.each(PUBLICATION_PHASES_WEB)(
+    'warm savePage never exposes a partial page/catalog pair when %s is interrupted',
+    async (phase) => {
+      const store = createLocalStore(createMockEncryption());
+      await store.initialize();
+      await store.saveJournal(makeJournalContent('j1', [makePage('p1')]));
+      const oldPage = await getRawStorageRecord('canto/j1/pages/p1.json');
+      const oldCatalog = await getRawStorageRecord('canto/j1/page-catalog.json');
+
+      const disarm = armPublicationFault(
+        phase,
+        (data) => data.includes('"digest":'),
+        'canto/j1/page-catalog.json',
+      );
+      try {
+        await expect(
+          store.savePage('j1', { ...makePage('p1'), text: 'edited' }, undefined, true),
+        ).rejects.toThrow('injected publication failure');
+      } finally {
+        disarm();
+      }
+
+      _resetDB();
+      const recovered = createLocalStore(createMockEncryption());
+      await recovered.initialize();
+
+      const page = await recovered.getPage('j1', 'p1');
+      const journal = await recovered.getJournal('j1');
+      const overview = await recovered.getJournalOverview!('j1');
+      expect(overview!.pages.map((candidate) => candidate.id)).toEqual(['p1']);
+      expect(journal!.pages.map((candidate) => candidate.id)).toEqual(['p1']);
+      if (phase === 'apply') {
+        expect(page!.text).toBe('edited');
+      } else {
+        expect(page!.text).toBe('Page p1 content');
+        expect(await getRawStorageRecord('canto/j1/pages/p1.json')).toBe(oldPage);
+        expect(await getRawStorageRecord('canto/j1/page-catalog.json')).toBe(oldCatalog);
+      }
+      expect(await listRawKeys('canto/.transactions/')).toEqual([]);
+    },
+  );
+
+  it.each(PUBLICATION_PHASES_WEB)(
+    'saveJournal of a new journal never publishes a partial library when %s is interrupted',
+    async (phase) => {
+      const store = createLocalStore(createMockEncryption());
+      await store.initialize();
+      await store.saveJournal(makeJournalContent('j1', [makePage('p1')]));
+
+      const disarm = armPublicationFault(
+        phase,
+        (data) => data.includes('"id":"p9"'),
+        'canto/j2/pages/p9.json',
+      );
+      try {
+        await expect(store.saveJournal(makeJournalContent('j2', [makePage('p9')]))).rejects.toThrow(
+          'injected publication failure',
+        );
+      } finally {
+        disarm();
+      }
+
+      _resetDB();
+      const recovered = createLocalStore(createMockEncryption());
+      await recovered.initialize();
+
+      const ids = (await recovered.listJournals()).map((journal) => journal.id).sort();
+      if (phase === 'apply') {
+        expect(ids).toEqual(['j1', 'j2']);
+        await expect(recovered.getJournal('j2')).resolves.toMatchObject({
+          pages: [expect.objectContaining({ id: 'p9' })],
+        });
+      } else {
+        expect(ids).toEqual(['j1']);
+        await expect(recovered.getJournal('j2')).resolves.toBeNull();
+      }
+      expect(await listRawKeys('canto/.transactions/')).toEqual([]);
+    },
+  );
+
+  it.each(PUBLICATION_PHASES_WEB)(
+    'index-only deleteJournal never writes a truncated index when %s is interrupted',
+    async (phase) => {
+      const store = createLocalStore(createMockEncryption());
+      await store.initialize();
+      await store.saveJournal(makeJournalContent('j1', [makePage('p1')]));
+      await store.saveJournal(makeJournalContent('j2', [makePage('p9')]));
+      const oldIndex = await getRawStorageRecord('canto/journals.json');
+
+      const disarm = armPublicationFault(
+        phase,
+        (data) => data.includes('"journals":'),
+        'canto/journals.json',
+      );
+      try {
+        await expect(store.deleteJournal('j1')).rejects.toThrow('injected publication failure');
+      } finally {
+        disarm();
+      }
+
+      _resetDB();
+      const recovered = createLocalStore(createMockEncryption());
+      await recovered.initialize();
+
+      const ids = (await recovered.listJournals()).map((journal) => journal.id).sort();
+      if (phase === 'apply') {
+        // The index is the only staged entry, so the injected failure lands on
+        // its own write: nothing was partially applied, and the durable commit
+        // marker replays the complete new index exactly once.
+        expect(ids).toEqual(['j2']);
+      } else {
+        expect(ids).toEqual(['j1', 'j2']);
+        expect(await getRawStorageRecord('canto/journals.json')).toBe(oldIndex);
+        // The journal directory is deleted before the index-only commit, so a
+        // prepared/marker rollback leaves a *ghost* index entry: j1 is still
+        // listed while its data is already gone. This is the documented
+        // "visible but recoverable" window (see deleteJournalRaw); assert it so
+        // the window stays explicit rather than implicit.
+        await expect(recovered.getJournal('j1')).resolves.toBeNull();
+      }
+      expect(await listRawKeys('canto/.transactions/')).toEqual([]);
+    },
+  );
+});
+
+// ---------------------------------------------------------------------------
+// Opt-in recovery tool (web/IndexedDB parity): a read-only complete scan of
+// the authoritative raw page records, then an explicitly confirmed catalog
+// publication. Mirrors the native recover-local-pages behavior.
+// ---------------------------------------------------------------------------
+describe('recover local pages (web/IndexedDB)', () => {
+  it('scans every raw page ignoring a corrupt catalog, then publishes the confirmed catalog', async () => {
+    const store = createLocalStore(createMockEncryption());
+    await store.initialize();
+    await store.saveJournal(makeJournalContent('j1', [makePage('p1'), makePage('p2')]));
+
+    const pageOneBefore = await getRawStorageRecord('canto/j1/pages/p1.json');
+    const pageTwoBefore = await getRawStorageRecord('canto/j1/pages/p2.json');
+    await putRawStorageRecord('canto/j1/page-catalog.json', 'enc:{"corrupt":true}');
+    const corruptCatalog = await getRawStorageRecord('canto/j1/page-catalog.json');
+
+    const scan = await store.scanJournalPages!('j1');
+
+    expect(scan.journalId).toBe('j1');
+    expect(scan.pageCount).toBe(2);
+    expect(scan.pages.map((page) => page.id).sort()).toEqual(['p1', 'p2']);
+    // The scan is read-only: the current catalog is preserved byte-for-byte.
+    await expect(getRawStorageRecord('canto/j1/page-catalog.json')).resolves.toBe(corruptCatalog);
+
+    // Confirmation carries no caller-supplied pages: the store re-scans.
+    await store.restoreJournalCatalog!('j1');
+
+    await expect(getRawStorageRecord('canto/j1/page-catalog.json')).resolves.not.toBe(
+      corruptCatalog,
+    );
+    await expect(getRawStorageRecord('canto/j1/pages/p1.json')).resolves.toBe(pageOneBefore);
+    await expect(getRawStorageRecord('canto/j1/pages/p2.json')).resolves.toBe(pageTwoBefore);
+
+    const overview = await store.getJournalOverview!('j1');
+    expect(overview!.pages.map((page) => page.id).sort()).toEqual(['p1', 'p2']);
+  });
+
+  it('re-scans at confirm so a page saved after the preview scan is published', async () => {
+    const store = createLocalStore(createMockEncryption());
+    await store.initialize();
+    await store.saveJournal(makeJournalContent('j1', [makePage('p1')]));
+
+    // The preview count is captured before the concurrent edit.
+    const preview = await store.scanJournalPages!('j1');
+    expect(preview.pageCount).toBe(1);
+
+    // A save lands between the read-only preview and the explicit confirmation.
+    await store.savePage('j1', makePage('p2'), undefined, true);
+    await expect(getRawStorageRecord('canto/j1/pages/p2.json')).resolves.toBeDefined();
+
+    // Confirmation must publish a fresh complete scan, never the stale preview.
+    await store.restoreJournalCatalog!('j1');
+
+    const overview = await store.getJournalOverview!('j1');
+    // The intervening save is not hidden by an old catalog projection.
+    expect(overview!.pages.map((page) => page.id).sort()).toEqual(['p1', 'p2']);
+    // The preview was stale (1) yet never determined the publication.
+    expect(preview.pageCount).toBe(1);
+  });
+
+  it('rejects confirmation when a raw page became unreadable after the preview scan', async () => {
+    const store = createLocalStore(createMockEncryption());
+    await store.initialize();
+    await store.saveJournal(makeJournalContent('j1', [makePage('p1')]));
+
+    const preview = await store.scanJournalPages!('j1');
+    expect(preview.pageCount).toBe(1);
+    const catalogBefore = await getRawStorageRecord('canto/j1/page-catalog.json');
+
+    // The record degrades after the preview; the fresh confirm-time scan must
+    // fail closed instead of publishing a reduced catalog.
+    await putRawStorageRecord('canto/j1/pages/p1.json', 'enc:not-json');
+
+    await expect(store.restoreJournalCatalog!('j1')).rejects.toMatchObject({
+      code: 'CATALOG_UNREADABLE',
+    });
+    // The then-current catalog is byte-identical.
+    await expect(getRawStorageRecord('canto/j1/page-catalog.json')).resolves.toBe(catalogBefore);
+  });
+
+  it('rejects when a discovered page is unreadable and leaves the catalog untouched', async () => {
+    const store = createLocalStore(createMockEncryption());
+    await store.initialize();
+    await store.saveJournal(makeJournalContent('j1', [makePage('p1')]));
+    const catalogBefore = await getRawStorageRecord('canto/j1/page-catalog.json');
+    await putRawStorageRecord('canto/j1/pages/p-broken.json', 'enc:not-json');
+
+    await expect(store.scanJournalPages!('j1')).rejects.toMatchObject({
+      code: 'CATALOG_UNREADABLE',
+      // Details are opaque record ids; the raw page id/path is never leaked.
+      details: [expect.stringMatching(/^record:[0-9a-f]+$/)],
+    });
+    await expect(getRawStorageRecord('canto/j1/page-catalog.json')).resolves.toBe(catalogBefore);
+  });
+
+  it('rejects a malformed-but-valid-JSON page record and preserves the catalog', async () => {
+    const store = createLocalStore(createMockEncryption());
+    await store.initialize();
+    await store.saveJournal(makeJournalContent('j1', [makePage('p1')]));
+    const catalogBefore = await getRawStorageRecord('canto/j1/page-catalog.json');
+    // Valid JSON, but not a structurally valid Page (text must be a string).
+    await putRawStorageRecord(
+      'canto/j1/pages/p9.json',
+      'enc:' + JSON.stringify({ ...makePage('p9'), text: 42 }),
+    );
+
+    const error = (await store.scanJournalPages!('j1').catch((e: unknown) => e)) as {
+      code: string;
+      details: string[];
+      message: string;
+    };
+    expect(error.code).toBe('CATALOG_UNREADABLE');
+    expect(error.details).toHaveLength(1);
+    expect(error.details[0]).toMatch(/^record:[0-9a-f]+$/);
+    // Neither the raw id/path nor the record body/error text is surfaced.
+    expect(error.details[0]).not.toContain('p9');
+    expect(error.message).not.toContain('p9');
+    await expect(getRawStorageRecord('canto/j1/page-catalog.json')).resolves.toBe(catalogBefore);
+  });
+
+  it('rejects a page whose record id disagrees with its filename and preserves the catalog', async () => {
+    const store = createLocalStore(createMockEncryption());
+    await store.initialize();
+    await store.saveJournal(makeJournalContent('j1', [makePage('p1')]));
+    const catalogBefore = await getRawStorageRecord('canto/j1/page-catalog.json');
+    // The file is named pX.json but its record claims id pY.
+    await putRawStorageRecord('canto/j1/pages/pX.json', 'enc:' + JSON.stringify(makePage('pY')));
+
+    await expect(store.scanJournalPages!('j1')).rejects.toMatchObject({
+      code: 'CATALOG_UNREADABLE',
+      details: [expect.stringMatching(/^record:[0-9a-f]+$/)],
+    });
+    await expect(getRawStorageRecord('canto/j1/page-catalog.json')).resolves.toBe(catalogBefore);
+  });
+
+  it('rejects duplicate discovered page ids and preserves the catalog', async () => {
+    const store = createLocalStore(createMockEncryption());
+    await store.initialize();
+    await store.saveJournal(makeJournalContent('j1', [makePage('p1')]));
+    const catalogBefore = await getRawStorageRecord('canto/j1/page-catalog.json');
+    // A second file that claims the same page id cannot both be published.
+    await putRawStorageRecord(
+      'canto/j1/pages/p1-alias.json',
+      'enc:' + JSON.stringify(makePage('p1')),
+    );
+
+    await expect(store.scanJournalPages!('j1')).rejects.toMatchObject({
+      code: 'CATALOG_UNREADABLE',
+      details: [expect.stringMatching(/^record:[0-9a-f]+$/)],
+    });
+    await expect(getRawStorageRecord('canto/j1/page-catalog.json')).resolves.toBe(catalogBefore);
+  });
+
+  it('rejects a secure journal without a usable key before reading any page', async () => {
+    const key = new Uint8Array(32).fill(7);
+    const store = createLocalStore(createMockEncryption());
+    const journal: JournalContent = {
+      ...makeJournalContent('secure-j', [makePage('p1')]),
+      secure: true,
+    };
+    await store.saveJournal(journal, key);
+
+    await expect(store.scanJournalPages!('secure-j', undefined)).rejects.toMatchObject({
+      code: 'JOURNAL_LOCKED',
+    });
+    await expect(store.scanJournalPages!('secure-j', new Uint8Array(32))).rejects.toMatchObject({
+      code: 'JOURNAL_LOCKED',
+    });
+
+    const scan = await store.scanJournalPages!('secure-j', key);
+    expect(scan.pageCount).toBe(1);
   });
 });

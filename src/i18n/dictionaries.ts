@@ -171,6 +171,17 @@ export interface Dictionary {
     reencryptProgress: string;
     themeOverride: string;
     useGlobalTheme: string;
+    recoverLocalPages: string;
+    recoverDescription: string;
+    recoverScanning: string;
+    recoverFound: string;
+    recoverNone: string;
+    recoverConfirm: string;
+    recoverRestoring: string;
+    recoverSuccess: string;
+    recoverIncomplete: string;
+    recoverLocked: string;
+    recoverFailed: string;
   };
   filterBar: {
     searchPlaceholder: string;
@@ -483,6 +494,18 @@ const en: Dictionary = {
     reencryptProgress: 'Processing {current} of {total}...',
     themeOverride: 'Theme',
     useGlobalTheme: 'Use global theme',
+    recoverLocalPages: 'Recover local pages',
+    recoverDescription:
+      "Scan the page files saved on this device and rebuild this journal's page list. Nothing changes until you confirm.",
+    recoverScanning: 'Scanning local pages...',
+    recoverFound: 'Recoverable pages found: {count}',
+    recoverNone: 'No recoverable pages were found. Nothing was changed.',
+    recoverConfirm: 'Rebuild page list',
+    recoverRestoring: 'Rebuilding page list...',
+    recoverSuccess: 'Page list rebuilt from local files.',
+    recoverIncomplete: 'Some local pages could not be read safely. Nothing was changed.',
+    recoverLocked: 'Unlock this journal before recovering pages.',
+    recoverFailed: 'Recovery could not be completed. Nothing was changed.',
   },
   filterBar: {
     searchPlaceholder: 'Search...',
@@ -809,6 +832,19 @@ const pt: Dictionary = {
     reencryptProgress: 'Processando {current} de {total}...',
     themeOverride: 'Tema',
     useGlobalTheme: 'Usar tema global',
+    recoverLocalPages: 'Recuperar páginas locais',
+    recoverDescription:
+      'Verifica os ficheiros de páginas guardados neste dispositivo e reconstrói a lista de páginas deste diário. Nada muda até confirmares.',
+    recoverScanning: 'A verificar páginas locais...',
+    recoverFound: 'Páginas recuperáveis encontradas: {count}',
+    recoverNone: 'Não foram encontradas páginas recuperáveis. Nada foi alterado.',
+    recoverConfirm: 'Reconstruir lista de páginas',
+    recoverRestoring: 'A reconstruir lista de páginas...',
+    recoverSuccess: 'Lista de páginas reconstruída a partir dos ficheiros locais.',
+    recoverIncomplete:
+      'Algumas páginas locais não puderam ser lidas em segurança. Nada foi alterado.',
+    recoverLocked: 'Desbloqueia este diário antes de recuperar páginas.',
+    recoverFailed: 'Não foi possível concluir a recuperação. Nada foi alterado.',
   },
   filterBar: {
     searchPlaceholder: 'Buscar...',
@@ -1138,6 +1174,19 @@ const es: Dictionary = {
     reencryptProgress: 'Procesando {current} de {total}...',
     themeOverride: 'Tema',
     useGlobalTheme: 'Usar tema global',
+    recoverLocalPages: 'Recuperar páginas locales',
+    recoverDescription:
+      'Analiza los archivos de páginas guardados en este dispositivo y reconstruye la lista de páginas de este diario. Nada cambia hasta que confirmes.',
+    recoverScanning: 'Analizando páginas locales...',
+    recoverFound: 'Páginas recuperables encontradas: {count}',
+    recoverNone: 'No se encontraron páginas recuperables. No se cambió nada.',
+    recoverConfirm: 'Reconstruir lista de páginas',
+    recoverRestoring: 'Reconstruyendo lista de páginas...',
+    recoverSuccess: 'Lista de páginas reconstruida desde los archivos locales.',
+    recoverIncomplete:
+      'Algunas páginas locales no se pudieron leer de forma segura. No se cambió nada.',
+    recoverLocked: 'Desbloquea este diario antes de recuperar páginas.',
+    recoverFailed: 'No se pudo completar la recuperación. No se cambió nada.',
   },
   filterBar: {
     searchPlaceholder: 'Buscar...',
@@ -1470,6 +1519,20 @@ const de: Dictionary = {
     reencryptProgress: 'Verarbeite {current} von {total}...',
     themeOverride: 'Thema',
     useGlobalTheme: 'Globales Thema verwenden',
+    recoverLocalPages: 'Lokale Seiten wiederherstellen',
+    recoverDescription:
+      'Durchsucht die auf diesem Gerät gespeicherten Seitendateien und baut die Seitenliste dieses Journals neu auf. Erst nach deiner Bestätigung ändert sich etwas.',
+    recoverScanning: 'Lokale Seiten werden durchsucht...',
+    recoverFound: 'Wiederherstellbare Seiten gefunden: {count}',
+    recoverNone: 'Keine wiederherstellbaren Seiten gefunden. Es wurde nichts geändert.',
+    recoverConfirm: 'Seitenliste neu aufbauen',
+    recoverRestoring: 'Seitenliste wird neu aufgebaut...',
+    recoverSuccess: 'Seitenliste aus lokalen Dateien neu aufgebaut.',
+    recoverIncomplete:
+      'Einige lokale Seiten konnten nicht sicher gelesen werden. Es wurde nichts geändert.',
+    recoverLocked: 'Entsperre dieses Journal, bevor du Seiten wiederherstellst.',
+    recoverFailed:
+      'Die Wiederherstellung konnte nicht abgeschlossen werden. Es wurde nichts geändert.',
   },
   filterBar: {
     searchPlaceholder: 'Suchen...',
@@ -1801,6 +1864,19 @@ const fr: Dictionary = {
     reencryptProgress: 'Traitement de {current} sur {total}...',
     themeOverride: 'Thème',
     useGlobalTheme: 'Utiliser le thème global',
+    recoverLocalPages: 'Récupérer les pages locales',
+    recoverDescription:
+      "Analyse les fichiers de pages enregistrés sur cet appareil et reconstruit la liste des pages de ce journal. Rien ne change tant que tu n'as pas confirmé.",
+    recoverScanning: 'Analyse des pages locales...',
+    recoverFound: 'Pages récupérables trouvées : {count}',
+    recoverNone: "Aucune page récupérable trouvée. Rien n'a été modifié.",
+    recoverConfirm: 'Reconstruire la liste des pages',
+    recoverRestoring: 'Reconstruction de la liste des pages...',
+    recoverSuccess: 'Liste des pages reconstruite à partir des fichiers locaux.',
+    recoverIncomplete:
+      "Certaines pages locales n'ont pas pu être lues en toute sécurité. Rien n'a été modifié.",
+    recoverLocked: 'Déverrouille ce journal avant de récupérer des pages.',
+    recoverFailed: "La récupération n'a pas pu aboutir. Rien n'a été modifié.",
   },
   filterBar: {
     searchPlaceholder: 'Rechercher...',
@@ -2133,6 +2209,19 @@ const ru: Dictionary = {
     reencryptProgress: 'Обработка {current} из {total}...',
     themeOverride: 'Тема',
     useGlobalTheme: 'Использовать глобальную тему',
+    recoverLocalPages: 'Восстановить локальные страницы',
+    recoverDescription:
+      'Проверяет файлы страниц, сохранённые на этом устройстве, и заново строит список страниц этого дневника. Ничего не изменится до вашего подтверждения.',
+    recoverScanning: 'Проверка локальных страниц...',
+    recoverFound: 'Найдено восстанавливаемых страниц: {count}',
+    recoverNone: 'Восстанавливаемые страницы не найдены. Ничего не изменено.',
+    recoverConfirm: 'Перестроить список страниц',
+    recoverRestoring: 'Перестроение списка страниц...',
+    recoverSuccess: 'Список страниц перестроен из локальных файлов.',
+    recoverIncomplete:
+      'Некоторые локальные страницы не удалось безопасно прочитать. Ничего не изменено.',
+    recoverLocked: 'Разблокируйте дневник, прежде чем восстанавливать страницы.',
+    recoverFailed: 'Не удалось завершить восстановление. Ничего не изменено.',
   },
   filterBar: {
     searchPlaceholder: 'Поиск...',
@@ -2461,6 +2550,18 @@ const zh: Dictionary = {
     reencryptProgress: '处理 {current}/{total}...',
     themeOverride: '主题',
     useGlobalTheme: '使用全局主题',
+    recoverLocalPages: '恢复本地页面',
+    recoverDescription:
+      '扫描保存在此设备上的页面文件，并重建此日记的页面列表。在你确认之前不会有任何更改。',
+    recoverScanning: '正在扫描本地页面...',
+    recoverFound: '找到可恢复页面：{count}',
+    recoverNone: '未找到可恢复的页面。没有做任何更改。',
+    recoverConfirm: '重建页面列表',
+    recoverRestoring: '正在重建页面列表...',
+    recoverSuccess: '已从本地文件重建页面列表。',
+    recoverIncomplete: '部分本地页面无法安全读取。没有做任何更改。',
+    recoverLocked: '请先解锁此日记再恢复页面。',
+    recoverFailed: '无法完成恢复。没有做任何更改。',
   },
   filterBar: {
     searchPlaceholder: '搜索...',
@@ -2779,6 +2880,19 @@ const it: Dictionary = {
     reencryptProgress: 'Elaborazione {current} di {total}...',
     themeOverride: 'Tema',
     useGlobalTheme: 'Usa tema globale',
+    recoverLocalPages: 'Recupera pagine locali',
+    recoverDescription:
+      "Analizza i file delle pagine salvati su questo dispositivo e ricostruisce l'elenco delle pagine di questo diario. Nulla cambia finché non confermi.",
+    recoverScanning: 'Analisi delle pagine locali...',
+    recoverFound: 'Pagine recuperabili trovate: {count}',
+    recoverNone: 'Nessuna pagina recuperabile trovata. Non è stato modificato nulla.',
+    recoverConfirm: 'Ricostruisci elenco pagine',
+    recoverRestoring: "Ricostruzione dell'elenco pagine...",
+    recoverSuccess: 'Elenco pagine ricostruito dai file locali.',
+    recoverIncomplete:
+      'Alcune pagine locali non sono state lette in sicurezza. Non è stato modificato nulla.',
+    recoverLocked: 'Sblocca questo diario prima di recuperare le pagine.',
+    recoverFailed: 'Impossibile completare il recupero. Non è stato modificato nulla.',
   },
   filterBar: {
     searchPlaceholder: 'Cerca...',

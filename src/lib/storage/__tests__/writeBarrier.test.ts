@@ -48,6 +48,46 @@ describe('serializeDeviceKeyWrites mutation queue', () => {
     await new Promise<void>((resolve) => setImmediate(resolve));
   }
 
+  it('runs the read-only recovery scan concurrent with mutations and serializes the confirmed restore', async () => {
+    const gate = deferred<void>();
+    const scanEntered = deferred<void>();
+    const order: string[] = [];
+
+    const mutateStarted = deferred<void>();
+    const mutate = jest.fn(async () => {
+      order.push('mutate:start');
+      mutateStarted.resolve(undefined);
+      await gate.promise;
+      order.push('mutate:end');
+    });
+    const scanJournalPages = jest.fn(async (..._args: unknown[]) => {
+      order.push('scan');
+      scanEntered.resolve(undefined);
+    });
+    const restoreJournalCatalog = jest.fn(async (..._args: unknown[]) => {
+      order.push('restore');
+    });
+    const wrapped = serializeDeviceKeyWrites({ mutate, scanJournalPages, restoreJournalCatalog });
+
+    const mutation = wrapped.mutate();
+    await mutateStarted.promise;
+    const scan = wrapped.scanJournalPages('j1');
+    await scanEntered.promise;
+    // The read-only scan must run while the mutation is still in flight; it is
+    // never queued behind the mutation tail.
+    expect(order).toEqual(['mutate:start', 'scan']);
+
+    const restore = wrapped.restoreJournalCatalog('j1');
+    await flush();
+    // The confirmed restore is a mutation: it waits for the active mutation to
+    // drain so the published catalog cannot interleave with an in-flight write.
+    expect(order).toEqual(['mutate:start', 'scan']);
+
+    gate.resolve();
+    await Promise.all([mutation, scan, restore]);
+    expect(order).toEqual(['mutate:start', 'scan', 'mutate:end', 'restore']);
+  });
+
   it('runs overlapping mutations strictly one at a time in submission order', async () => {
     const { wrapped } = makeStore();
     const order: string[] = [];

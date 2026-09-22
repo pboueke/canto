@@ -28,6 +28,7 @@ import { IconPicker } from '@/components/common/IconPicker';
 import { ThemePickerModal } from '@/components/home/ThemePickerModal';
 import { ConfirmDeleteModal } from './ConfirmDeleteModal';
 import { ChangePasswordModal, type ReencryptionProgress } from './ChangePasswordModal';
+import { RecoverPagesModal } from './RecoverPagesModal';
 import { isBiometricAvailable } from '@/lib/biometric';
 import type { ReencryptionResult } from '@/lib/storage/types';
 import { type ThemeName, themes } from '@/styles/themes';
@@ -62,6 +63,7 @@ export function JournalSettings({
 
   const [settings, setSettings] = useState<JournalSettingsType>({ ...journal.settings });
   const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [showRecoverModal, setShowRecoverModal] = useState(false);
   const [showPasswordModal, setShowPasswordModal] = useState(false);
   const [showIconPicker, setShowIconPicker] = useState(false);
   const [showNameInput, setShowNameInput] = useState(false);
@@ -580,6 +582,18 @@ export function JournalSettings({
             </Text>
           </Pressable>
 
+          <Pressable style={styles.dangerRow} onPress={() => setShowRecoverModal(true)}>
+            <Feather name="refresh-cw" size={18} color={theme.colors.text} />
+            <Text
+              style={[
+                styles.settingLabel,
+                { color: theme.colors.text, fontFamily: theme.fonts.regular },
+              ]}
+            >
+              {t.journalSettings.recoverLocalPages}
+            </Text>
+          </Pressable>
+
           <Pressable style={styles.dangerRow} onPress={() => setShowDeleteModal(true)}>
             <Feather name="trash-2" size={18} color={theme.colors.error} />
             <Text
@@ -687,6 +701,14 @@ export function JournalSettings({
           </View>
         </View>
       </Modal>
+
+      <RecoverPagesModal
+        visible={showRecoverModal}
+        journal={journal}
+        derivedKey={derivedKey}
+        onClose={() => setShowRecoverModal(false)}
+        onRecovered={onJournalChanged}
+      />
 
       <ConfirmDeleteModal
         visible={showDeleteModal}

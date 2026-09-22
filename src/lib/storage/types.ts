@@ -27,6 +27,17 @@ export interface JournalSyncSnapshot {
 }
 
 /**
+ * Result of a read-only complete scan of the authoritative raw page records.
+ * The scan powers the preview count only; a later restore re-scans and never
+ * trusts this snapshot.
+ */
+export interface JournalPageScan {
+  journalId: string;
+  pageCount: number;
+  pages: readonly Page[];
+}
+
+/**
  * Keyless evidence recorded with an in-progress import. It lets startup verify
  * a completed, non-password-protected content root before replaying the final
  * journal-index publication.
@@ -66,6 +77,29 @@ export interface LocalStore {
    * local page JSON records. Missing or invalid catalogs rebuild internally.
    */
   getJournalSyncSnapshot?(id: string, derivedKey?: Uint8Array): Promise<JournalSyncSnapshot | null>;
+
+  /**
+   * Read-only complete scan of every discovered raw page record used to power
+   * the opt-in recovery tool. The page catalog is deliberately ignored; a
+   * single unreadable, malformed, or ambiguous page fails closed and no
+   * projection is published.
+   */
+  scanJournalPages?(
+    journalId: string,
+    derivedKey?: Uint8Array,
+    options?: JournalOverviewReadOptions,
+  ): Promise<JournalPageScan>;
+
+  /**
+   * Publish the CURRENT authoritative raw-page set as the journal's page
+   * catalog after an explicit recovery confirmation. The store performs its
+   * own complete raw-page scan inside the serialized mutation slot and
+   * publishes only that fresh, fully validated set, so a save that landed
+   * after the preview scan is never hidden and an unreadable record still
+   * fails closed. Catalog-only: raw page records are never touched and no
+   * caller can supply arbitrary catalog rows.
+   */
+  restoreJournalCatalog?(journalId: string, derivedKey?: Uint8Array): Promise<JournalPageScan>;
 
   /** Save or update journal metadata and settings. derivedKey for password-protected journals. */
   saveJournal(journal: JournalContent, derivedKey?: Uint8Array): Promise<void>;
