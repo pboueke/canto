@@ -6,6 +6,8 @@ const { applyReleaseSigningConfig } = require('../withReleaseSigningConfig');
 const {
   applyOptimizingProguardConfig,
   upsertOptimizedResourceShrinking,
+  upsertExpoRecordConverterKeepRule,
+  EXPO_RECORD_CONVERTER_KEEP_RULE,
 } = require('../withAndroidReleaseOptimization');
 const { registerCantoArchivePackage, syncCantoArchiveSources } = require('../withCantoArchive');
 
@@ -40,7 +42,7 @@ class MainApplication {
 }`;
 
 describe('Android config plugin transformations', () => {
-  it('disables release shrinking until Expo Record conversion works in a Play build', () => {
+  it('enables R8 while keeping resource shrinking separate for the candidate build', () => {
     const config = require('../../app.config');
     const buildPropertyPlugins = config.plugins.filter(
       (plugin) => Array.isArray(plugin) && plugin[0] === 'expo-build-properties',
@@ -49,7 +51,7 @@ describe('Android config plugin transformations', () => {
     expect(buildPropertyPlugins).toHaveLength(1);
     expect(buildPropertyPlugins[0][1]).toMatchObject({
       android: {
-        enableMinifyInReleaseBuilds: false,
+        enableMinifyInReleaseBuilds: true,
         enableShrinkResourcesInReleaseBuilds: false,
       },
     });
@@ -173,6 +175,23 @@ describe('Android config plugin transformations', () => {
     expect(properties).toEqual([
       { type: 'property', key: 'android.r8.optimizedResourceShrinking', value: 'true' },
     ]);
+  });
+
+  it('keeps only the Expo Record converter and its nested classes exactly once', () => {
+    const original = '# project-specific rules\n';
+    const once = upsertExpoRecordConverterKeepRule(original);
+
+    expect(upsertExpoRecordConverterKeepRule(once)).toBe(once);
+    expect(
+      once.match(/-keep class expo\.modules\.kotlin\.records\.RecordTypeConverter\*/g),
+    ).toHaveLength(1);
+    expect(once).toContain(EXPO_RECORD_CONVERTER_KEEP_RULE);
+    expect(upsertExpoRecordConverterKeepRule(`# ${EXPO_RECORD_CONVERTER_KEEP_RULE}\n`)).toContain(
+      `\n${EXPO_RECORD_CONVERTER_KEEP_RULE}\n`,
+    );
+    expect(() =>
+      upsertExpoRecordConverterKeepRule(`${once}${EXPO_RECORD_CONVERTER_KEEP_RULE}\n`),
+    ).toThrow(/duplicate Expo Record converter/);
   });
 
   it('registers CantoArchivePackage exactly once', () => {
