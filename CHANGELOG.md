@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.20.2 - Android release and import fixes
+
+- **fix: Android release native options** — temporarily disable R8 minification and resource shrinking after the published 0.20.1 build failed to convert Expo SecureStore and document-picker options. Release signing and production configuration remain enabled; shrinking will return only after verification on a Play-installed build.
+- **fix: first-journal and backup import storage** — read the native journal index before creating a new journal directory, so a first write cannot mistake its own empty directory for pre-existing orphaned data.
+- **fix: cloud import feedback** — report an unavailable sync manager instead of silently ignoring an Import from Google Drive tap when local storage initialization fails. Drive sign-in and import still require Play-installed verification.
+- **fix: large backup exports** — generate native ZIP archives as binary data instead of a base64 string to reduce peak JavaScript memory use; preserve native and web archive round-trip tests.
+- test: add first-write and sync-initialization regressions, and guard the release configuration against accidentally re-enabling shrinking.
+
 ## v0.20.1 - Safer local journal recovery
 
 - **feat: opt-in local-page recovery** — Journal Settings now offers **Recover local pages**. It performs a read-only scan of the current journal’s raw page records, shows the recoverable count, and restores only that journal’s page catalog after explicit confirmation. The tool never creates a separate journal, exports a forensic package, or rewrites raw page records.

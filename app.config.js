@@ -5,8 +5,12 @@ const ANDROID_PLUGINS = [
     'expo-build-properties',
     {
       android: {
-        enableMinifyInReleaseBuilds: true,
-        enableShrinkResourcesInReleaseBuilds: true,
+        // R8 in the published 0.20.1 bundle breaks Expo Record conversion
+        // (SecureStoreOptions and DocumentPickerOptions). Keep release mode,
+        // but do not shrink code/resources until a targeted R8 fix is tested
+        // on a Play-installed build.
+        enableMinifyInReleaseBuilds: false,
+        enableShrinkResourcesInReleaseBuilds: false,
       },
     },
   ],

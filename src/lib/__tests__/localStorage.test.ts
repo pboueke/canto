@@ -1,5 +1,5 @@
 import { createLocalStore } from '../storage/local';
-import { File } from 'expo-file-system';
+import { Directory, File } from 'expo-file-system';
 import type { EncryptionService } from '../encryption';
 import type { JournalContent, Page, Attachment } from 'canto-data';
 import {
@@ -2012,6 +2012,66 @@ describe('fail-closed integrity reads and mutations (native)', () => {
     // Nothing was deleted or rewritten.
     expect(filesystem['/mock-docs/canto/j1/metadata.json']).toBe('enc:{"id":"j1"}');
     expect(filesystem['/mock-docs/canto/journals.json']).toBe('enc:not-json');
+  });
+
+  it('allows first journal writes when a real filesystem lists newly created empty directories', async () => {
+    // Unlike the in-memory mock, expo-file-system lists an empty directory
+    // immediately after create(). Staging it before reading the absent index
+    // must not be mistaken for pre-existing durable journal data.
+    const created = new Set<string>();
+    const originalCreate = Directory.prototype.create;
+    const originalList = Directory.prototype.list;
+    const originalExists = Object.getOwnPropertyDescriptor(Directory.prototype, 'exists')!.get!;
+    const existsSpy = jest.spyOn(Directory.prototype, 'exists', 'get').mockImplementation(function (
+      this: Directory,
+    ) {
+      return created.has(this.uri) || originalExists.call(this);
+    });
+    const createSpy = jest.spyOn(Directory.prototype, 'create').mockImplementation(function (
+      this: Directory,
+    ) {
+      const result = originalCreate.call(this);
+      created.add(this.uri);
+      return result;
+    });
+    const listSpy = jest.spyOn(Directory.prototype, 'list').mockImplementation(function (
+      this: Directory,
+    ) {
+      const entries = originalList.call(this);
+      if (this.uri === '/mock-docs/canto') {
+        for (const uri of created) {
+          if (
+            uri.startsWith('/mock-docs/canto/') &&
+            !uri.slice('/mock-docs/canto/'.length).includes('/')
+          ) {
+            entries.push(new Directory(uri));
+          }
+        }
+      }
+      return entries;
+    });
+    try {
+      const store = createLocalStore(createMockEncryption());
+      await store.initialize();
+      await expect(store.saveJournal(makeJournalContent('first'))).resolves.toBeUndefined();
+      expect(created.has('/mock-docs/canto/first')).toBe(true);
+      expect(listSpy).toHaveBeenCalled();
+      expect(filesystem['/mock-docs/canto/journals.json']).toBeDefined();
+
+      for (const key of Object.keys(filesystem)) delete filesystem[key];
+      created.clear();
+      const second = createLocalStore(createMockEncryption());
+      await second.initialize();
+      if (!second.saveJournalMetadata) throw new Error('Native store must save journal metadata');
+      await expect(
+        second.saveJournalMetadata(makeJournalContent('metadata-first')),
+      ).resolves.toBeUndefined();
+      expect(filesystem['/mock-docs/canto/journals.json']).toBeDefined();
+    } finally {
+      createSpy.mockRestore();
+      listSpy.mockRestore();
+      existsSpy.mockRestore();
+    }
   });
 
   it('a missing index over existing durable journal data fails closed instead of listing an empty library', async () => {

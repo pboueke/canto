@@ -46,6 +46,7 @@ import type { ReactNode } from 'react';
 import { renderHook, act } from '@testing-library/react-native';
 import type { SyncState } from '@/lib/sync/manager';
 import { SyncManagerProvider, useSyncManager, useSyncState } from '../SyncManagerContext';
+import { getLocalStore } from '@/hooks/useStorage';
 
 const wrapper = ({ children }: { children: ReactNode }) => (
   <SyncManagerProvider>{children}</SyncManagerProvider>
@@ -54,6 +55,7 @@ const wrapper = ({ children }: { children: ReactNode }) => (
 describe('SyncManagerContext', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    jest.mocked(getLocalStore).mockResolvedValue({} as Awaited<ReturnType<typeof getLocalStore>>);
     mockAuthValue = {
       accessToken: 'test-token',
       getAccessToken: jest.fn().mockResolvedValue('fresh-token'),
@@ -68,6 +70,22 @@ describe('SyncManagerContext', () => {
     expect(result.current.syncJournal).toBeInstanceOf(Function);
     expect(result.current.scheduleSyncDebounced).toBeInstanceOf(Function);
     expect(result.current.getSyncState).toBeInstanceOf(Function);
+  });
+
+  it('reports unavailable sync without an unhandled rejection when storage bootstrap fails', async () => {
+    const warn = jest.spyOn(console, 'warn').mockImplementation();
+    jest.mocked(getLocalStore).mockRejectedValueOnce(new Error('native options conversion failed'));
+    try {
+      const { result } = renderHook(() => useSyncManager(), { wrapper });
+      await act(async () => {});
+      expect(result.current.manager).toBeNull();
+      expect(warn).toHaveBeenCalledWith(
+        '[Canto] Sync manager unavailable: storage initialization failed',
+      );
+      expect(await result.current.syncJournal('j1')).toEqual({ kind: 'not-ready' });
+    } finally {
+      warn.mockRestore();
+    }
   });
 
   it('syncJournal returns result when signed in', async () => {

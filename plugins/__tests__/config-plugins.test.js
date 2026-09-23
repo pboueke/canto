@@ -40,7 +40,7 @@ class MainApplication {
 }`;
 
 describe('Android config plugin transformations', () => {
-  it('represents release minification and resource shrinking once in Expo config', () => {
+  it('disables release shrinking until Expo Record conversion works in a Play build', () => {
     const config = require('../../app.config');
     const buildPropertyPlugins = config.plugins.filter(
       (plugin) => Array.isArray(plugin) && plugin[0] === 'expo-build-properties',
@@ -49,8 +49,8 @@ describe('Android config plugin transformations', () => {
     expect(buildPropertyPlugins).toHaveLength(1);
     expect(buildPropertyPlugins[0][1]).toMatchObject({
       android: {
-        enableMinifyInReleaseBuilds: true,
-        enableShrinkResourcesInReleaseBuilds: true,
+        enableMinifyInReleaseBuilds: false,
+        enableShrinkResourcesInReleaseBuilds: false,
       },
     });
   });

@@ -1008,6 +1008,9 @@ export function createLocalStore(encryption: EncryptionService): LocalStore {
       // Without a usable key the write would silently replace password
       // ciphertext with device-only data — fail closed instead.
       if (journal.secure) requireUsableDerivedKey(derivedKey);
+      // An empty directory is visible on a real filesystem. Check the index
+      // before creating one, or a first journal looks like orphan durable data.
+      const index = await readIndex();
       ensureDir(getJournalDir(journal.id));
       ensureDir(getPagesDir(journal.id));
       ensureDir(getAttachmentsDir(journal.id));
@@ -1015,7 +1018,6 @@ export function createLocalStore(encryption: EncryptionService): LocalStore {
       const metadata = { ...journal } as Partial<JournalContent>;
       delete metadata.pages;
       const journalMetadata = metadata as Omit<JournalContent, 'pages'>;
-      const index = await readIndex();
       const entry = journalIndexEntry(journalMetadata);
       const existing = index.journals.findIndex((j) => j.id === journal.id);
       if (existing >= 0) {
@@ -1030,8 +1032,8 @@ export function createLocalStore(encryption: EncryptionService): LocalStore {
 
     async saveJournalMetadata(metadata, derivedKey): Promise<void> {
       if (metadata.secure) requireUsableDerivedKey(derivedKey);
-      ensureDir(getJournalDir(metadata.id));
       const index = await readIndex();
+      ensureDir(getJournalDir(metadata.id));
       const entry = journalIndexEntry(metadata);
       const existing = index.journals.findIndex((journal) => journal.id === metadata.id);
       if (existing >= 0) index.journals[existing] = entry;
