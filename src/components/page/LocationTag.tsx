@@ -1,4 +1,5 @@
-import { Alert, Linking, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Linking, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import { notify } from '@/lib/dialogs';
 import { Feather } from '@expo/vector-icons';
 import * as Clipboard from 'expo-clipboard';
 import { useTheme } from '@/hooks/useTheme';
@@ -27,7 +28,7 @@ export function LocationTag({ location, editable, onRemove }: LocationTagProps) 
 
   const handleLongPress = async () => {
     await Clipboard.setStringAsync(`${location.latitude},${location.longitude}`);
-    Alert.alert(t.page.locationCopied);
+    notify(t.page.locationCopied);
   };
 
   return (

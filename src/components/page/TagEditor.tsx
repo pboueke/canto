@@ -5,6 +5,7 @@ import { useTheme } from '@/hooks/useTheme';
 import { useI18n } from '@/hooks/useI18n';
 import { Tag } from '@/components/common/Tag';
 import { webModalContent } from '@/styles/web';
+import { PrivacyShield } from '@/components/common/PrivacyShield';
 
 interface TagEditorProps {
   tags: string[];
@@ -132,6 +133,7 @@ export function TagEditor({ tags, allJournalTags, editable, onChange }: TagEdito
             )}
           </View>
         </View>
+        <PrivacyShield />
       </Modal>
     </View>
   );

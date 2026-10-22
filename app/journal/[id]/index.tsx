@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Alert, FlatList, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
 import { usePagination } from '@/hooks/usePagination';
 import { useLocalSearchParams, router, useFocusEffect } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ThemeContext, useTheme } from '@/hooks/useTheme';
 import { useI18n } from '@/hooks/useI18n';
-import { useJournalOverview, useCreatePage } from '@/hooks/useStorage';
+import { useJournalOverview, useCreatePage, listDrafts } from '@/hooks/useStorage';
 import { useJournalKeys } from '@/contexts/JournalKeyContext';
 import { useKeyLease } from '@/hooks/useKeyLease';
 import { useFilter } from '@/hooks/useFilter';
@@ -16,6 +16,10 @@ import { JournalSettings } from '@/components/journal/JournalSettings';
 import { ExportJournalModal } from '@/components/journal/ExportJournalModal';
 import { SyncModal } from '@/components/journal/SyncModal';
 import { FloatingActionButton } from '@/components/common/FloatingActionButton';
+import { LockedPlaceholder } from '@/components/common/LockedPlaceholder';
+import { JournalIntegrityPanel } from '@/components/journal/JournalIntegrityPanel';
+import { StorageIntegrityError } from '@/lib/storage/integrity';
+import { notify } from '@/lib/dialogs';
 import { useGoogleAuth } from '@/contexts/GoogleAuthContext';
 import { useSyncManager, useSyncState } from '@/contexts/SyncManagerContext';
 import { type ThemeName, themes } from '@/styles/themes';
@@ -34,7 +38,7 @@ export default function JournalScreen() {
   const { theme: globalTheme, setThemeName } = useTheme();
   const { t } = useI18n();
   const { fontFamily, fontSize } = useFontPrefs();
-  const { getKey, deriveAndCache } = useJournalKeys();
+  const { getKey, deriveAndCache, onJournalLocked } = useJournalKeys();
   const insets = useSafeAreaInsets();
 
   // URL params are read once on mount to seed the filter.
@@ -51,11 +55,51 @@ export default function JournalScreen() {
   const {
     overview,
     loading,
+    error: overviewError,
     status: overviewStatus,
     migrationProgress,
     refresh,
   } = useJournalOverview(id, derivedKey);
   const journal = overview?.metadata ?? null;
+  // An integrity state after a verified unlock is shown in place, never
+  // mistaken for a missing journal (which would bounce back home).
+  const storageError = overviewError instanceof StorageIntegrityError ? overviewError : null;
+  // Without a key in memory (web reload, deep link, auto-lock), a password
+  // layer that does not open means "locked", not "damaged": send the user
+  // home to unlock, exactly like a missing journal.
+  const needsUnlock =
+    !derivedKey &&
+    !!storageError &&
+    (storageError.causeLayer === 'PASSWORD_DECRYPT_FAILED' ||
+      storageError.code === 'LEGACY_ZERO_KEY');
+  const integrityError = needsUnlock ? null : storageError;
+  const [revoked, setRevoked] = useState(false);
+  const [draftPageIds, setDraftPageIds] = useState<string[]>([]);
+
+  useEffect(() => {
+    if (!id) return;
+    return onJournalLocked(id, () => setRevoked(true));
+  }, [id, onJournalLocked]);
+
+  useFocusEffect(
+    useCallback(() => {
+      if (!id) return;
+      let active = true;
+      void listDrafts(id)
+        .then((ids) => {
+          if (!active) return;
+          setDraftPageIds((current) =>
+            current.length === ids.length && current.every((pageId, i) => pageId === ids[i])
+              ? current
+              : ids,
+          );
+        })
+        .catch(() => undefined);
+      return () => {
+        active = false;
+      };
+    }, [id]),
+  );
   const [showSettings, setShowSettings] = useState(false);
   const [showExportModal, setShowExportModal] = useState(false);
   const [showSyncModal, setShowSyncModal] = useState(false);
@@ -84,10 +128,10 @@ export default function JournalScreen() {
   }, [journal, getKey, deriveAndCache]);
 
   useEffect(() => {
-    if (!loading && !journal) {
+    if (!loading && !journal && !integrityError && !revoked) {
       router.replace('/');
     }
-  }, [loading, journal]);
+  }, [loading, journal, integrityError, revoked]);
 
   const overrideName = journal?.settings.themeOverride as ThemeName | undefined;
   const overrideRawTheme = overrideName && overrideName in themes ? themes[overrideName] : null;
@@ -111,6 +155,15 @@ export default function JournalScreen() {
       });
     return sorted;
   }, [overview, journal?.settings.sort]);
+
+  // Pages with an encrypted unsaved draft, so a draft stored by an auto-lock
+  // can be found again after unlocking.
+  // Includes pages deleted elsewhere (sync): their unsaved draft is still the
+  // user's work, and opening it can restore the page.
+  const draftPages = useMemo(() => {
+    const ids = new Set(draftPageIds);
+    return (overview?.pages ?? []).filter((page) => ids.has(page.id));
+  }, [overview, draftPageIds]);
 
   const hasAnniversaries = useMemo(
     () => getAnniversaryPages(pages, new Date()).length > 0,
@@ -192,6 +245,30 @@ export default function JournalScreen() {
     () => ({ theme, setThemeName, isDark }),
     [theme, setThemeName, isDark],
   );
+
+  if (revoked && locked) {
+    return (
+      <ThemeContext.Provider value={themeContextValue}>
+        <LockedPlaceholder />
+      </ThemeContext.Provider>
+    );
+  }
+
+  if (integrityError && !journal && id) {
+    return (
+      <ThemeContext.Provider value={themeContextValue}>
+        <View style={[styles.container, { paddingTop: insets.top }]}>
+          <JournalIntegrityPanel
+            journalId={id}
+            code={integrityError.code}
+            derivedKey={derivedKey}
+            onRecovered={refresh}
+            onBack={() => router.replace('/')}
+          />
+        </View>
+      </ThemeContext.Provider>
+    );
+  }
 
   if (loading && !journal) {
     return (
@@ -283,6 +360,39 @@ export default function JournalScreen() {
           </View>
         )}
 
+        {draftPages.map((page) => (
+          <Pressable
+            key={page.id}
+            testID={`draft-row-${page.id}`}
+            accessibilityRole="button"
+            onPress={() => {
+              const themeParam = overrideName ? `&themeOverride=${overrideName}` : '';
+              router.push(`/page/${page.id}?journalId=${journal.id}&edit=true${themeParam}`);
+            }}
+            style={[
+              styles.draftRow,
+              { backgroundColor: theme.colors.highlight, borderColor: theme.colors.border },
+            ]}
+          >
+            <Text
+              style={[
+                styles.draftRowText,
+                { color: theme.colors.text, fontFamily: theme.fonts.bold },
+              ]}
+            >
+              {t.privacy.unsavedDraft}
+            </Text>
+            <Text
+              style={[
+                styles.draftRowText,
+                { color: theme.colors.textSecondary, fontFamily: theme.fonts.regular },
+              ]}
+            >
+              {new Date(page.date).toLocaleDateString()}
+            </Text>
+          </Pressable>
+        ))}
+
         {filteredPages.length === 0 ? (
           <View style={styles.emptyContainer}>
             <Text style={[styles.empty, { color: theme.colors.textSecondary }]}>
@@ -327,7 +437,7 @@ export default function JournalScreen() {
             // instead of writing with a revoked key; the journal returns to
             // its locked state until it is unlocked again.
             if (locked) {
-              Alert.alert(t.page.unlockRequired);
+              notify(t.page.unlockRequired);
               return;
             }
             try {
@@ -340,7 +450,7 @@ export default function JournalScreen() {
               // Handler error boundary: never leave an unhandled promise
               // rejection from a locked/recovery page creation.
               const message = err instanceof Error ? err.message : String(err);
-              Alert.alert(t.page.unlockRequired, message);
+              notify(t.page.unlockRequired, message);
             }
           }}
           backgroundColor={theme.colors.popAction.new.background}
@@ -402,5 +512,19 @@ const styles = StyleSheet.create({
   anniversaryText: {
     color: '#fff',
     fontSize: 13,
+  },
+  draftRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginHorizontal: 10,
+    marginTop: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 8,
+    borderWidth: 1,
+  },
+  draftRowText: {
+    fontSize: 14,
   },
 });

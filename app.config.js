@@ -17,6 +17,7 @@ const ANDROID_PLUGINS = [
   './plugins/withReleaseSigningConfig',
   './plugins/withAndroidReleaseOptimization',
   './plugins/withCantoArchive',
+  './plugins/withAndroidRecentsPrivacy',
 ];
 
 function pluginName(plugin) {

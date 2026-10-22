@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, fireEvent } from '@testing-library/react-native';
+import { act, render, fireEvent } from '@testing-library/react-native';
 import { Image } from 'react-native';
 import { ImageCarousel } from '../ImageCarousel';
 import type { Attachment } from 'canto-data';
@@ -56,15 +56,26 @@ jest.mock('@/hooks/useI18n', () => ({
   }),
 }));
 
+let mockOverlay = { covered: false, locked: false };
+const mockOverlayListeners = new Set<() => void>();
 jest.mock('@/contexts/JournalKeyContext', () => ({
-  useJournalKeys: () => ({ onAutoLock: mockOnAutoLock }),
+  useJournalKeys: () => ({
+    onAutoLock: mockOnAutoLock,
+    getOverlayState: () => mockOverlay,
+    subscribePrivacyCover: (listener: () => void) => {
+      mockOverlayListeners.add(listener);
+      return () => mockOverlayListeners.delete(listener);
+    },
+  }),
 }));
 
 jest.mock('../ImageViewing', () => {
   const { View } = require('react-native');
   return {
     __esModule: true,
-    default: () => <View testID="image-viewing-mock" />,
+    default: ({ visible }: { visible: boolean }) => (
+      <View testID="image-viewing-mock" accessibilityHint={visible ? 'open' : 'closed'} />
+    ),
   };
 });
 
@@ -260,5 +271,22 @@ describe('ImageCarousel', () => {
     // Only non-deleted images should have the image label
     const imageLabels = queryAllByLabelText(/Image \d+ of \d+/);
     expect(imageLabels).toHaveLength(1);
+  });
+
+  // Cross-platform review: the native full-screen viewer is a third-party
+  // modal no shield can sit inside, so it closes when content must be hidden.
+  it.each([
+    ['covered', { covered: true, locked: false }],
+    ['locked', { covered: false, locked: true }],
+  ])('closes the full-screen viewer when the app is %s', (_label, next) => {
+    const { getByTestId } = render(<ImageCarousel {...defaultProps} />);
+    fireEvent.press(getByTestId('carousel-image-img-1'));
+    expect(getByTestId('image-viewing-mock').props.accessibilityHint).toBe('open');
+    act(() => {
+      mockOverlay = next;
+      for (const listener of mockOverlayListeners) listener();
+    });
+    expect(getByTestId('image-viewing-mock').props.accessibilityHint).toBe('closed');
+    mockOverlay = { covered: false, locked: false };
   });
 });

@@ -3,6 +3,7 @@ import { Feather } from '@expo/vector-icons';
 import { useTheme } from '@/hooks/useTheme';
 import { useI18n } from '@/hooks/useI18n';
 import { webModalContent } from '@/styles/web';
+import { PrivacyShield } from '@/components/common/PrivacyShield';
 
 interface AddAttachmentPopupProps {
   visible: boolean;
@@ -149,6 +150,7 @@ export function AddAttachmentPopup({
           </View>
         </View>
       </View>
+      <PrivacyShield />
     </Modal>
   );
 }

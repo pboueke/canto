@@ -137,4 +137,57 @@ describe('RecoverPagesModal', () => {
     expect(onClose).toHaveBeenCalledTimes(1);
     expect(mockRestore).not.toHaveBeenCalled();
   });
+
+  it('explains how many pages will be re-encrypted with the password', async () => {
+    mockScan.mockResolvedValue({ journalId: 'j1', pageCount: 3, pages, legacyPageCount: 2 });
+    const key = new Uint8Array(32).fill(4);
+    const { getByText } = render(
+      <RecoverPagesModal
+        visible
+        journal={{ id: 'j1' }}
+        derivedKey={key}
+        onClose={jest.fn()}
+        onRecovered={jest.fn()}
+      />,
+    );
+    await waitFor(() =>
+      expect(
+        getByText(dictionaries.en.journalSettings.recoverLegacy.replace('{count}', '2')),
+      ).toBeTruthy(),
+    );
+    expect(mockScan).toHaveBeenCalledWith('j1', key);
+  });
+
+  it('explains a recovery refused because no record confirms the password', async () => {
+    mockRestore.mockRejectedValue(new StorageIntegrityError('KEY_UNVERIFIABLE', 'unverifiable'));
+    mockScan.mockResolvedValue({ journalId: 'j1', pageCount: 1, pages, legacyPageCount: 1 });
+    const { getByText } = render(
+      <RecoverPagesModal
+        visible
+        journal={{ id: 'j1' }}
+        onClose={jest.fn()}
+        onRecovered={jest.fn()}
+      />,
+    );
+    await waitFor(() => expect(getByText('Recoverable pages found: 1')).toBeTruthy());
+    fireEvent.press(getByText(dictionaries.en.journalSettings.recoverConfirm));
+    await waitFor(() =>
+      expect(getByText(dictionaries.en.journalIntegrity.unverifiableMessage)).toBeTruthy(),
+    );
+  });
+
+  it('maps a legacy zero-key failure to its own explanation', async () => {
+    mockScan.mockRejectedValue(new StorageIntegrityError('LEGACY_ZERO_KEY', 'legacy'));
+    const { getByText } = render(
+      <RecoverPagesModal
+        visible
+        journal={{ id: 'j1' }}
+        onClose={jest.fn()}
+        onRecovered={jest.fn()}
+      />,
+    );
+    await waitFor(() =>
+      expect(getByText(dictionaries.en.journalIntegrity.legacyMessage)).toBeTruthy(),
+    );
+  });
 });

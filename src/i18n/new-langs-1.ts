@@ -166,6 +166,10 @@ export const ja: Dictionary = {
     recoverIncomplete: '一部のローカルページを安全に読み取れませんでした。何も変更されていません。',
     recoverLocked: 'ページを復元する前にこのジャーナルのロックを解除してください。',
     recoverFailed: '復元を完了できませんでした。何も変更されていません。',
+    recoverLegacy:
+      'そのうち {count} ページはジャーナルのロック中に保存されたもので、パスワードで再暗号化されます。',
+    draftsPending:
+      'このジャーナルには未保存の下書きがあります。パスワードを変更する前に、それぞれを開いて保存または破棄してください。',
   },
   filterBar: {
     searchPlaceholder: '検索...',
@@ -211,6 +215,24 @@ export const ja: Dictionary = {
     rotating: 'デバイスキーを更新中...',
     rotateSuccess: 'デバイスキーが正常に更新されました',
     doNotClose: 'アプリを閉じないでください',
+    blockScreenshots: 'スクリーンショットをブロック',
+    blockScreenshotsHint:
+      '最近使ったアプリの画面で Canto を非表示にし、スクリーンショットと画面録画をブロックします。',
+    rotateBlockedUnrecovered:
+      '一部のジャーナルデータを先に復元する必要があるため、デバイスキーは更新されませんでした。何も変更されていません。',
+    rotateBlockedUnreadable:
+      '一部のジャーナルデータを読み取れなかったため、デバイスキーは更新されませんでした。何も変更されていません。',
+    rotateBlockedSpace:
+      'デバイスキーを安全に更新するための空き容量が足りません。何も変更されていません。',
+    rotateBlockedPending:
+      '前回のキー更新がまだ完了していません。Canto を再起動してから、もう一度お試しください。',
+    rotateBlockedUnsupported:
+      '古い添付ファイルが大きすぎるため、安全に更新できません。何も変更されていません。',
+    rotateBlockedOtherTabs:
+      'Canto が別のブラウザタブで開かれています。他のタブを閉じてから、もう一度お試しください。何も変更されていません。',
+    rotateInterrupted:
+      'キーの更新が中断されました。データは安全です。Canto を再起動して完了してください。',
+    rotateFailed: 'キーの更新に失敗しました。何も変更されていません。',
   },
   backup: {
     export: 'エクスポート',
@@ -337,6 +359,35 @@ export const ja: Dictionary = {
     indexDetail: 'ジャーナルのインデックスを安全に読み取れません。',
     instructions:
       'アプリをインストールしたままにし、データの消去や再インストールはしないでください。暗号化されたファイルが唯一のコピーです。サポートにこのメッセージを伝えて連絡してください。',
+  },
+  privacy: {
+    locked: 'ジャーナルはロックされています',
+    lockedHint: '続けるにはホーム画面でこのジャーナルのロックを解除してください。',
+    draftRestored: '未保存の変更を復元しました',
+    discardDraft: '下書きを破棄',
+    unsavedDraft: '未保存の下書き',
+    draftConflictTitle: '下書きの後にこのページが変更されました',
+    draftConflictMessage:
+      '未保存の下書きを保存した後に、保存済みのページが更新されました。下書きで続けますか？それとも保存済みのバージョンを残して下書きを破棄しますか？',
+    useDraft: '下書きを使う',
+    keepSaved: '保存済みを残す',
+  },
+  journalIntegrity: {
+    title: 'このジャーナルには対応が必要です',
+    legacyMessage:
+      '一部のページは、ジャーナルのロック中に以前のバージョンの Canto によって保存されました。内容は失われておらず、パスワードで復元できます。',
+    unreadableMessage:
+      'このジャーナルの一部のデータを安全に読み取れませんでした。何も削除されていません。',
+    interruptedMessage:
+      'デバイスキーの更新が中断されました。データは安全です。Canto を再起動して完了してください。',
+    recover: 'ページを復元',
+    copyDiagnostics: '診断情報をコピー',
+    diagnosticsCopied: '診断情報をコピーしました。件数のみが含まれ、書いた内容は一切含まれません。',
+    diagnosticsCopyManually:
+      '自動でコピーできませんでした。下のテキストを選択してコピーしてください。',
+    back: 'ジャーナル一覧に戻る',
+    unverifiableMessage:
+      '保存されているジャーナルのデータではこのパスワードを確認できないため、何も再暗号化されていません。診断情報をコピーしてサポートにお問い合わせください。',
   },
 };
 
@@ -507,6 +558,9 @@ export const ko: Dictionary = {
       '일부 로컬 페이지를 안전하게 읽을 수 없습니다. 아무것도 변경되지 않았습니다.',
     recoverLocked: '페이지를 복구하기 전에 이 저널의 잠금을 해제하세요.',
     recoverFailed: '복구를 완료할 수 없습니다. 아무것도 변경되지 않았습니다.',
+    recoverLegacy: '그중 {count}개는 저널이 잠기는 동안 저장되었으며 비밀번호로 다시 암호화됩니다.',
+    draftsPending:
+      '이 저널에 저장하지 않은 초안이 있습니다. 비밀번호를 변경하기 전에 각 초안을 열어 저장하거나 삭제하세요.',
   },
   filterBar: {
     searchPlaceholder: '검색...',
@@ -551,6 +605,23 @@ export const ko: Dictionary = {
     rotating: '기기 키 갱신 중...',
     rotateSuccess: '기기 키가 성공적으로 갱신되었습니다',
     doNotClose: '앱을 닫지 마세요',
+    blockScreenshots: '스크린샷 차단',
+    blockScreenshotsHint: '최근 앱 화면에서 Canto를 숨기고 스크린샷과 화면 녹화를 차단합니다.',
+    rotateBlockedUnrecovered:
+      '일부 저널 데이터를 먼저 복구해야 하므로 기기 키를 갱신하지 않았습니다. 아무것도 변경되지 않았습니다.',
+    rotateBlockedUnreadable:
+      '일부 저널 데이터를 읽을 수 없어 기기 키를 갱신하지 않았습니다. 아무것도 변경되지 않았습니다.',
+    rotateBlockedSpace:
+      '기기 키를 안전하게 갱신할 여유 저장 공간이 부족합니다. 아무것도 변경되지 않았습니다.',
+    rotateBlockedPending:
+      '이전 키 갱신이 아직 완료되지 않았습니다. Canto를 다시 시작한 후 다시 시도하세요.',
+    rotateBlockedUnsupported:
+      '오래된 첨부파일이 너무 커서 안전하게 갱신할 수 없습니다. 아무것도 변경되지 않았습니다.',
+    rotateBlockedOtherTabs:
+      'Canto가 다른 브라우저 탭에서 열려 있습니다. 다른 탭을 닫은 후 다시 시도하세요. 아무것도 변경되지 않았습니다.',
+    rotateInterrupted:
+      '키 갱신이 중단되었습니다. 데이터는 안전합니다. Canto를 다시 시작하여 완료하세요.',
+    rotateFailed: '키 갱신에 실패했습니다. 아무것도 변경되지 않았습니다.',
   },
   backup: {
     export: '내보내기',
@@ -674,6 +745,35 @@ export const ko: Dictionary = {
     indexDetail: '저널 인덱스를 안전하게 읽을 수 없습니다.',
     instructions:
       '앱을 설치한 상태로 유지하고 데이터를 지우거나 재설치하지 마세요. 암호화된 파일이 유일한 사본입니다. 지원팀에 이 메시지를 알려 연락하세요.',
+  },
+  privacy: {
+    locked: '저널이 잠겼습니다',
+    lockedHint: '계속하려면 홈 화면에서 이 저널의 잠금을 해제하세요.',
+    draftRestored: '저장하지 않은 변경 사항을 복원했습니다',
+    discardDraft: '초안 삭제',
+    unsavedDraft: '저장하지 않은 초안',
+    draftConflictTitle: '초안 이후 이 페이지가 변경되었습니다',
+    draftConflictMessage:
+      '저장하지 않은 초안이 저장된 후 저장된 페이지가 업데이트되었습니다. 초안으로 계속할까요, 아니면 저장된 버전을 유지하고 초안을 삭제할까요?',
+    useDraft: '내 초안 사용',
+    keepSaved: '저장된 버전 유지',
+  },
+  journalIntegrity: {
+    title: '이 저널에 확인이 필요합니다',
+    legacyMessage:
+      '일부 페이지는 저널이 잠기는 동안 이전 버전의 Canto에서 저장되었습니다. 내용은 그대로이며 비밀번호로 복구할 수 있습니다.',
+    unreadableMessage:
+      '이 저널의 일부 데이터를 안전하게 읽을 수 없습니다. 아무것도 삭제되지 않았습니다.',
+    interruptedMessage:
+      '기기 키 갱신이 중단되었습니다. 데이터는 안전합니다. Canto를 다시 시작하여 완료하세요.',
+    recover: '페이지 복구',
+    copyDiagnostics: '진단 정보 복사',
+    diagnosticsCopied:
+      '진단 정보를 복사했습니다. 개수만 포함되며 작성한 내용은 절대 포함되지 않습니다.',
+    diagnosticsCopyManually: '자동으로 복사할 수 없습니다. 아래 텍스트를 선택해 복사하세요.',
+    back: '저널 목록으로 돌아가기',
+    unverifiableMessage:
+      '저장된 저널 데이터로 이 비밀번호를 확인할 수 없어 아무것도 다시 암호화하지 않았습니다. 진단 정보를 복사하여 지원팀에 문의하세요.',
   },
 };
 
@@ -843,6 +943,9 @@ export const ar: Dictionary = {
     recoverIncomplete: 'تعذر قراءة بعض الصفحات المحلية بأمان. لم يتم تغيير أي شيء.',
     recoverLocked: 'افتح قفل هذه المذكرة قبل استعادة الصفحات.',
     recoverFailed: 'تعذر إكمال الاستعادة. لم يتم تغيير أي شيء.',
+    recoverLegacy: 'تم حفظ {count} منها أثناء قفل المذكرة وسيُعاد تشفيرها بكلمة المرور الخاصة بك.',
+    draftsPending:
+      'تحتوي هذه المذكرة على مسودات غير محفوظة. افتح كل مسودة واحفظها أو تجاهلها قبل تغيير كلمة المرور.',
   },
   filterBar: {
     searchPlaceholder: 'بحث...',
@@ -887,6 +990,20 @@ export const ar: Dictionary = {
     rotating: 'جارٍ تدوير مفتاح الجهاز...',
     rotateSuccess: 'تم تدوير مفتاح الجهاز بنجاح',
     doNotClose: 'لا تغلق التطبيق',
+    blockScreenshots: 'حظر لقطات الشاشة',
+    blockScreenshotsHint: 'يخفي Canto في شاشة التطبيقات الحديثة ويحظر لقطات الشاشة وتسجيلها.',
+    rotateBlockedUnrecovered:
+      'يجب استعادة بعض بيانات المذكرات أولًا، لذلك لم يتم تدوير مفتاح الجهاز. لم يتم تغيير أي شيء.',
+    rotateBlockedUnreadable:
+      'تعذرت قراءة بعض بيانات المذكرات، لذلك لم يتم تدوير مفتاح الجهاز. لم يتم تغيير أي شيء.',
+    rotateBlockedSpace: 'لا توجد مساحة تخزين كافية لتدوير مفتاح الجهاز بأمان. لم يتم تغيير أي شيء.',
+    rotateBlockedPending: 'لا يزال تدوير مفتاح سابق قيد الإكمال. أعد تشغيل Canto ثم حاول مرة أخرى.',
+    rotateBlockedUnsupported:
+      'أحد المرفقات القديمة كبير جدًا بحيث لا يمكن تدويره بأمان. لم يتم تغيير أي شيء.',
+    rotateBlockedOtherTabs:
+      'Canto مفتوح في علامة تبويب أخرى في المتصفح. أغلق علامات التبويب الأخرى ثم حاول مرة أخرى. لم يتم تغيير أي شيء.',
+    rotateInterrupted: 'تمت مقاطعة تدوير المفتاح. بياناتك آمنة. أعد تشغيل Canto لإكماله.',
+    rotateFailed: 'فشل تدوير المفتاح. لم يتم تغيير أي شيء.',
   },
   backup: {
     export: 'تصدير',
@@ -1008,6 +1125,32 @@ export const ar: Dictionary = {
     indexDetail: 'لا يمكن قراءة فهرس اليوميات بأمان.',
     instructions:
       'أبقِ التطبيق مثبتاً ولا تمسح بياناته ولا تعيد تثبيته. ملفاتك المشفرة هي النسخة الوحيدة. تواصل مع الدعم واذكر هذه الرسالة.',
+  },
+  privacy: {
+    locked: 'المذكرة مقفلة',
+    lockedHint: 'افتح قفل هذه المذكرة من الشاشة الرئيسية للمتابعة.',
+    draftRestored: 'تمت استعادة التغييرات غير المحفوظة',
+    discardDraft: 'تجاهل المسودة',
+    unsavedDraft: 'مسودة غير محفوظة',
+    draftConflictTitle: 'تغيرت هذه الصفحة منذ مسودتك',
+    draftConflictMessage:
+      'تم تحديث الصفحة المحفوظة بعد تخزين مسودتك غير المحفوظة. هل تريد المتابعة بمسودتك، أم الاحتفاظ بالنسخة المحفوظة وتجاهل المسودة؟',
+    useDraft: 'استخدام مسودتي',
+    keepSaved: 'الاحتفاظ بالنسخة المحفوظة',
+  },
+  journalIntegrity: {
+    title: 'هذه المذكرة تحتاج إلى انتباهك',
+    legacyMessage:
+      'تم حفظ بعض الصفحات بواسطة إصدار أقدم من Canto أثناء قفل المذكرة. إنها سليمة ويمكن استعادتها بكلمة المرور الخاصة بك.',
+    unreadableMessage: 'تعذرت قراءة بعض بيانات هذه المذكرة بأمان. لم يتم حذف أي شيء.',
+    interruptedMessage: 'تمت مقاطعة تدوير مفتاح الجهاز. بياناتك آمنة. أعد تشغيل Canto لإكماله.',
+    recover: 'استعادة الصفحات',
+    copyDiagnostics: 'نسخ بيانات التشخيص',
+    diagnosticsCopied: 'تم نسخ بيانات التشخيص. تحتوي على أعداد فقط، ولا تحتوي أبدًا على ما كتبته.',
+    diagnosticsCopyManually: 'تعذر النسخ تلقائيًا. حدد النص أدناه وانسخه.',
+    back: 'العودة إلى المذكرات',
+    unverifiableMessage:
+      'لا يمكن لـ Canto تأكيد كلمة المرور هذه من بيانات المذكرة المخزنة، لذلك لم تتم إعادة تشفير أي شيء. انسخ بيانات التشخيص وتواصل مع الدعم.',
   },
 };
 
@@ -1177,6 +1320,10 @@ export const hi: Dictionary = {
     recoverIncomplete: 'कुछ स्थानीय पृष्ठ सुरक्षित रूप से पढ़े नहीं जा सके। कुछ नहीं बदला गया।',
     recoverLocked: 'पृष्ठ पुनर्प्राप्त करने से पहले इस जर्नल को अनलॉक करें।',
     recoverFailed: 'पुनर्प्राप्ति पूरी नहीं हो सकी। कुछ नहीं बदला गया।',
+    recoverLegacy:
+      'इनमें से {count} पृष्ठ जर्नल लॉक होते समय सहेजे गए थे और आपके पासवर्ड से फिर से एन्क्रिप्ट किए जाएँगे।',
+    draftsPending:
+      'इस जर्नल में बिना सहेजे ड्राफ़्ट हैं। पासवर्ड बदलने से पहले हर ड्राफ़्ट खोलकर उसे सहेजें या छोड़ें।',
   },
   filterBar: {
     searchPlaceholder: 'खोजें...',
@@ -1222,6 +1369,24 @@ export const hi: Dictionary = {
     rotating: 'डिवाइस कुंजी बदली जा रही है...',
     rotateSuccess: 'डिवाइस कुंजी सफलतापूर्वक बदल दी गई',
     doNotClose: 'ऐप बंद न करें',
+    blockScreenshots: 'स्क्रीनशॉट रोकें',
+    blockScreenshotsHint:
+      'हाल के ऐप्स स्क्रीन में Canto को छिपाता है और स्क्रीनशॉट व स्क्रीन रिकॉर्डिंग रोकता है।',
+    rotateBlockedUnrecovered:
+      'कुछ जर्नल डेटा को पहले पुनर्प्राप्त करना होगा, इसलिए डिवाइस कुंजी नहीं बदली गई। कुछ नहीं बदला गया।',
+    rotateBlockedUnreadable:
+      'कुछ जर्नल डेटा पढ़ा नहीं जा सका, इसलिए डिवाइस कुंजी नहीं बदली गई। कुछ नहीं बदला गया।',
+    rotateBlockedSpace:
+      'डिवाइस कुंजी को सुरक्षित रूप से बदलने के लिए पर्याप्त खाली स्टोरेज नहीं है। कुछ नहीं बदला गया।',
+    rotateBlockedPending:
+      'पिछला कुंजी बदलाव अभी पूरा हो रहा है। Canto को फिर से शुरू करें, फिर दोबारा कोशिश करें।',
+    rotateBlockedUnsupported:
+      'एक पुराना अटैचमेंट सुरक्षित रूप से बदलने के लिए बहुत बड़ा है। कुछ नहीं बदला गया।',
+    rotateBlockedOtherTabs:
+      'Canto किसी दूसरे ब्राउज़र टैब में खुला है। दूसरे टैब बंद करें, फिर दोबारा कोशिश करें। कुछ नहीं बदला गया।',
+    rotateInterrupted:
+      'कुंजी बदलाव बीच में रुक गया। आपका डेटा सुरक्षित है। इसे पूरा करने के लिए Canto को फिर से शुरू करें।',
+    rotateFailed: 'कुंजी बदलाव विफल रहा। कुछ नहीं बदला गया।',
   },
   backup: {
     export: 'निर्यात',
@@ -1347,6 +1512,34 @@ export const hi: Dictionary = {
     indexDetail: 'डायरी इंडेक्स सुरक्षित रूप से नहीं पढ़ा जा सकता।',
     instructions:
       'ऐप इंस्टॉल रखें और उसका डेटा साफ़ न करें या दोबारा इंस्टॉल न करें। आपकी एन्क्रिप्टेड फ़ाइलें ही एकमात्र प्रति हैं। सहायता से संपर्क करें और यह संदेश बताएं।',
+  },
+  privacy: {
+    locked: 'जर्नल लॉक है',
+    lockedHint: 'जारी रखने के लिए होम स्क्रीन से इस जर्नल को अनलॉक करें।',
+    draftRestored: 'बिना सहेजे गए बदलाव बहाल किए गए',
+    discardDraft: 'ड्राफ़्ट छोड़ें',
+    unsavedDraft: 'बिना सहेजा ड्राफ़्ट',
+    draftConflictTitle: 'आपके ड्राफ़्ट के बाद यह पृष्ठ बदल गया',
+    draftConflictMessage:
+      'आपका बिना सहेजा ड्राफ़्ट संग्रहीत होने के बाद सहेजा गया पृष्ठ अपडेट हुआ। अपने ड्राफ़्ट के साथ जारी रखें, या सहेजा गया संस्करण रखें और ड्राफ़्ट छोड़ें?',
+    useDraft: 'मेरा ड्राफ़्ट इस्तेमाल करें',
+    keepSaved: 'सहेजा संस्करण रखें',
+  },
+  journalIntegrity: {
+    title: 'इस जर्नल पर ध्यान देने की ज़रूरत है',
+    legacyMessage:
+      'कुछ पृष्ठ जर्नल लॉक होते समय Canto के पुराने संस्करण द्वारा सहेजे गए थे। वे सुरक्षित हैं और आपके पासवर्ड से पुनर्प्राप्त किए जा सकते हैं।',
+    unreadableMessage:
+      'इस जर्नल का कुछ डेटा सुरक्षित रूप से पढ़ा नहीं जा सका। कुछ भी हटाया नहीं गया।',
+    interruptedMessage:
+      'डिवाइस कुंजी बदलाव बीच में रुक गया। आपका डेटा सुरक्षित है। इसे पूरा करने के लिए Canto को फिर से शुरू करें।',
+    recover: 'पृष्ठ पुनर्प्राप्त करें',
+    copyDiagnostics: 'डायग्नोस्टिक्स कॉपी करें',
+    diagnosticsCopied: 'डायग्नोस्टिक्स कॉपी हो गए। इनमें केवल गिनतियाँ हैं, आपका लिखा कभी नहीं।',
+    diagnosticsCopyManually: 'अपने-आप कॉपी नहीं हो सका। नीचे का टेक्स्ट चुनें और कॉपी करें।',
+    back: 'जर्नल पर वापस जाएँ',
+    unverifiableMessage:
+      'Canto जर्नल के संग्रहीत डेटा से इस पासवर्ड की पुष्टि नहीं कर सकता, इसलिए कुछ भी फिर से एन्क्रिप्ट नहीं किया गया। डायग्नोस्टिक्स कॉपी करें और सहायता से संपर्क करें।',
   },
 };
 
@@ -1516,6 +1709,10 @@ export const tr: Dictionary = {
     recoverIncomplete: 'Bazı yerel sayfalar güvenle okunamadı. Hiçbir şey değiştirilmedi.',
     recoverLocked: 'Sayfaları kurtarmadan önce bu günlüğün kilidini aç.',
     recoverFailed: 'Kurtarma tamamlanamadı. Hiçbir şey değiştirilmedi.',
+    recoverLegacy:
+      'Bunlardan {count} tanesi günlük kilitlenirken kaydedildi ve parolanızla yeniden şifrelenecek.',
+    draftsPending:
+      'Bu günlükte kaydedilmemiş taslaklar var. Parolayı değiştirmeden önce her birini açıp kaydedin veya atın.',
   },
   filterBar: {
     searchPlaceholder: 'Ara...',
@@ -1561,6 +1758,24 @@ export const tr: Dictionary = {
     rotating: 'Cihaz anahtarı yenileniyor...',
     rotateSuccess: 'Cihaz anahtarı başarıyla yenilendi',
     doNotClose: 'Uygulamayı kapatmayın',
+    blockScreenshots: 'Ekran görüntülerini engelle',
+    blockScreenshotsHint:
+      'Canto’yu son uygulamalar ekranında gizler ve ekran görüntüsü ile ekran kaydını engeller.',
+    rotateBlockedUnrecovered:
+      'Bazı günlük verilerinin önce kurtarılması gerekiyor, bu yüzden cihaz anahtarı yenilenmedi. Hiçbir şey değiştirilmedi.',
+    rotateBlockedUnreadable:
+      'Bazı günlük verileri okunamadı, bu yüzden cihaz anahtarı yenilenmedi. Hiçbir şey değiştirilmedi.',
+    rotateBlockedSpace:
+      'Cihaz anahtarını güvenle yenilemek için yeterli boş depolama alanı yok. Hiçbir şey değiştirilmedi.',
+    rotateBlockedPending:
+      'Önceki bir anahtar yenilemesi hâlâ tamamlanıyor. Canto’yu yeniden başlatın ve tekrar deneyin.',
+    rotateBlockedUnsupported:
+      'Eski bir ek, güvenle yenilenemeyecek kadar büyük. Hiçbir şey değiştirilmedi.',
+    rotateBlockedOtherTabs:
+      'Canto başka bir tarayıcı sekmesinde açık. Diğer sekmeleri kapatıp tekrar deneyin. Hiçbir şey değiştirilmedi.',
+    rotateInterrupted:
+      'Anahtar yenileme kesintiye uğradı. Verileriniz güvende. Tamamlamak için Canto’yu yeniden başlatın.',
+    rotateFailed: 'Anahtar yenileme başarısız oldu. Hiçbir şey değiştirilmedi.',
   },
   backup: {
     export: 'Dışa Aktar',
@@ -1685,6 +1900,33 @@ export const tr: Dictionary = {
     indexDetail: 'Günlük dizini güvenle okunamıyor.',
     instructions:
       'Uygulamayı kurulu tutun, verilerini temizlemeyin veya yeniden kurmayın. Şifrelenmiş dosyalarınız tek kopyadır. Destek ile iletişime geçip bu mesajı iletin.',
+  },
+  privacy: {
+    locked: 'Günlük kilitli',
+    lockedHint: 'Devam etmek için bu günlüğün kilidini ana ekrandan açın.',
+    draftRestored: 'Kaydedilmemiş değişiklikler geri yüklendi',
+    discardDraft: 'Taslağı at',
+    unsavedDraft: 'Kaydedilmemiş taslak',
+    draftConflictTitle: 'Bu sayfa taslağınızdan sonra değişti',
+    draftConflictMessage:
+      'Kaydedilmemiş taslağınız saklandıktan sonra kayıtlı sayfa güncellendi. Taslağınızla devam mı edilsin, yoksa kayıtlı sürüm korunup taslak atılsın mı?',
+    useDraft: 'Taslağımı kullan',
+    keepSaved: 'Kayıtlı sürümü koru',
+  },
+  journalIntegrity: {
+    title: 'Bu günlük ilgilenmenizi gerektiriyor',
+    legacyMessage:
+      'Bazı sayfalar, günlük kilitlenirken Canto’nun eski bir sürümü tarafından kaydedildi. Sayfalar sağlam ve parolanızla kurtarılabilir.',
+    unreadableMessage: 'Bu günlüğün bazı verileri güvenle okunamadı. Hiçbir şey silinmedi.',
+    interruptedMessage:
+      'Bir cihaz anahtarı yenilemesi kesintiye uğradı. Verileriniz güvende. Tamamlamak için Canto’yu yeniden başlatın.',
+    recover: 'Sayfaları kurtar',
+    copyDiagnostics: 'Tanılamayı kopyala',
+    diagnosticsCopied: 'Tanılama kopyalandı. Yalnızca sayılar içerir, yazdıklarınızı asla içermez.',
+    diagnosticsCopyManually: 'Otomatik olarak kopyalanamadı. Aşağıdaki metni seçip kopyalayın.',
+    back: 'Günlüklere dön',
+    unverifiableMessage:
+      'Canto bu parolayı günlüğün kayıtlı verileriyle doğrulayamıyor, bu yüzden hiçbir şey yeniden şifrelenmedi. Tanılamayı kopyalayın ve destekle iletişime geçin.',
   },
 };
 
@@ -1855,6 +2097,10 @@ export const nl: Dictionary = {
       "Sommige lokale pagina's konden niet veilig worden gelezen. Er is niets gewijzigd.",
     recoverLocked: "Ontgrendel dit dagboek voordat je pagina's herstelt.",
     recoverFailed: 'Het herstellen kon niet worden voltooid. Er is niets gewijzigd.',
+    recoverLegacy:
+      '{count} daarvan zijn opgeslagen terwijl het dagboek werd vergrendeld en worden opnieuw versleuteld met je wachtwoord.',
+    draftsPending:
+      'Dit dagboek heeft niet-opgeslagen concepten. Open ze elk en sla ze op of verwijder ze voordat je het wachtwoord wijzigt.',
   },
   filterBar: {
     searchPlaceholder: 'Zoeken...',
@@ -1900,6 +2146,24 @@ export const nl: Dictionary = {
     rotating: 'Apparaatsleutel wordt geroteerd...',
     rotateSuccess: 'Apparaatsleutel succesvol geroteerd',
     doNotClose: 'Sluit de app niet',
+    blockScreenshots: 'Screenshots blokkeren',
+    blockScreenshotsHint:
+      'Verbergt Canto in het scherm met recente apps en blokkeert screenshots en schermopnames.',
+    rotateBlockedUnrecovered:
+      'Sommige dagboekgegevens moeten eerst worden hersteld, dus de apparaatsleutel is niet vernieuwd. Er is niets gewijzigd.',
+    rotateBlockedUnreadable:
+      'Sommige dagboekgegevens konden niet worden gelezen, dus de apparaatsleutel is niet vernieuwd. Er is niets gewijzigd.',
+    rotateBlockedSpace:
+      'Er is niet genoeg vrije opslag om de apparaatsleutel veilig te vernieuwen. Er is niets gewijzigd.',
+    rotateBlockedPending:
+      'Een eerdere sleutelvernieuwing wordt nog afgerond. Start Canto opnieuw en probeer het nog eens.',
+    rotateBlockedUnsupported:
+      'Een oudere bijlage is te groot om veilig te vernieuwen. Er is niets gewijzigd.',
+    rotateBlockedOtherTabs:
+      'Canto is geopend in een ander browsertabblad. Sluit de andere tabbladen en probeer het opnieuw. Er is niets gewijzigd.',
+    rotateInterrupted:
+      'De sleutelvernieuwing is onderbroken. Je gegevens zijn veilig. Start Canto opnieuw om te voltooien.',
+    rotateFailed: 'De sleutelvernieuwing is mislukt. Er is niets gewijzigd.',
   },
   backup: {
     export: 'Exporteren',
@@ -2027,5 +2291,35 @@ export const nl: Dictionary = {
     indexDetail: 'De dagboekindex kan niet veilig worden gelezen.',
     instructions:
       'Houd de app geïnstalleerd en verwijder de gegevens niet of installeer niet opnieuw. Uw versleutelde bestanden zijn de enige kopie. Neem contact op met ondersteuning en vermeld dit bericht.',
+  },
+  privacy: {
+    locked: 'Dagboek vergrendeld',
+    lockedHint: 'Ontgrendel dit dagboek via het startscherm om verder te gaan.',
+    draftRestored: 'Niet-opgeslagen wijzigingen hersteld',
+    discardDraft: 'Concept verwijderen',
+    unsavedDraft: 'Niet-opgeslagen concept',
+    draftConflictTitle: 'Deze pagina is gewijzigd sinds je concept',
+    draftConflictMessage:
+      'De opgeslagen pagina is bijgewerkt nadat je niet-opgeslagen concept werd bewaard. Doorgaan met je concept, of de opgeslagen versie houden en het concept verwijderen?',
+    useDraft: 'Mijn concept gebruiken',
+    keepSaved: 'Opgeslagen versie houden',
+  },
+  journalIntegrity: {
+    title: 'Dit dagboek heeft aandacht nodig',
+    legacyMessage:
+      'Sommige pagina’s zijn opgeslagen door een oudere versie van Canto terwijl het dagboek werd vergrendeld. Ze zijn intact en kunnen met je wachtwoord worden hersteld.',
+    unreadableMessage:
+      'Sommige gegevens van dit dagboek konden niet veilig worden gelezen. Er is niets verwijderd.',
+    interruptedMessage:
+      'Een vernieuwing van de apparaatsleutel is onderbroken. Je gegevens zijn veilig. Start Canto opnieuw om te voltooien.',
+    recover: 'Pagina’s herstellen',
+    copyDiagnostics: 'Diagnose kopiëren',
+    diagnosticsCopied:
+      'Diagnose gekopieerd. Die bevat alleen aantallen, nooit wat je hebt geschreven.',
+    diagnosticsCopyManually:
+      'Automatisch kopiëren is niet gelukt. Selecteer de tekst hieronder en kopieer die.',
+    back: 'Terug naar dagboeken',
+    unverifiableMessage:
+      'Canto kan dit wachtwoord niet bevestigen met de opgeslagen gegevens van het dagboek, dus er is niets opnieuw versleuteld. Kopieer de diagnose en neem contact op met support.',
   },
 };

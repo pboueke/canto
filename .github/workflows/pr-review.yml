@@ -8,6 +8,8 @@ jobs:
   review:
     name: Carranca AI Review
     runs-on: ubuntu-latest
+    # The 30-minute review session plus image build and comment posting.
+    timeout-minutes: 40
     if: github.event.pull_request.user.login == 'pboueke'
     permissions:
       contents: read
@@ -34,16 +36,16 @@ jobs:
           PR_AUTHOR="${{ github.event.pull_request.user.login }}"
           PR_TITLE="${{ github.event.pull_request.title }}"
 
-          # Generate diff (truncate at ~100KB on a line boundary)
-          git diff "origin/${BASE_REF}...HEAD" > _review_diff_full.patch
-          DIFF_SIZE=$(wc -c < _review_diff_full.patch)
-          if [ "$DIFF_SIZE" -gt 102400 ]; then
-            head -c 102400 _review_diff_full.patch | head -n -1 > _review_diff.patch
-            TRUNCATED_NOTE="**WARNING: The diff was truncated from ${DIFF_SIZE} bytes to ~100KB. Your review is INCOMPLETE — flag this to the PR author.**"
-          else
-            cp _review_diff_full.patch _review_diff.patch
-            TRUNCATED_NOTE=""
-          fi
+          # The full diff goes into the reviewer's message, never truncated; the
+          # model's context fits large release PRs. A file attachment (-f) is
+          # paged at 50 KiB, which made the model re-read the rest in chunks.
+          # Generated files (lockfile, dependency manifest) and agent notes
+          # (.claude/) are left out.
+          REVIEW_PATHS=(. ':(exclude)package-lock.json' ':(exclude)src/assets/dep-manifest.json' ':(exclude).claude/**')
+          git diff "origin/${BASE_REF}...HEAD" -- "${REVIEW_PATHS[@]}" > _review_diff.patch
+          DIFF_SIZE=$(wc -c < _review_diff.patch)
+          DIFF_FILES=$(git diff --name-only "origin/${BASE_REF}...HEAD" -- "${REVIEW_PATHS[@]}" | wc -l)
+          echo "Review diff: ${DIFF_SIZE} bytes across ${DIFF_FILES} files"
 
           cat > _review_prompt.md <<PROMPT_EOF
           You are a senior code reviewer for canto, a React Native / Expo mobile
@@ -64,13 +66,16 @@ jobs:
           5. Test coverage for new/changed functionality
           6. State management and data flow
 
-          ${TRUNCATED_NOTE}
-
-          Here is the diff:
-
-          \`\`\`diff
-          $(cat _review_diff.patch)
-          \`\`\`
+          The complete diff (${DIFF_SIZE} bytes, ${DIFF_FILES} files) follows this
+          prompt in the same message. Review every file in it without re-reading
+          it from disk. The repository at the PR head is checked out in
+          /workspace; open a file there only to confirm a specific finding.
+          Generated files (package-lock.json, src/assets/dep-manifest.json) and
+          agent notes (.claude/) are excluded. You have no network access beyond
+          the model API, so do not search the web.
+          You have about 25 minutes: review security-critical code first
+          (src/lib/storage, src/lib/encryption, src/contexts, app/), then the
+          rest, and always finish with the review text.
 
           Produce your review as Markdown with these sections:
           - **Summary**: 1-3 sentence overview of what the PR does
@@ -91,14 +96,28 @@ jobs:
           python3 -c "
           import json, os
           cfg = {
-            'provider': {'zai-coding-plan': {'options': {'apiKey': os.environ['OPENAI_API_KEY']}}},
-            'model': 'zai-coding-plan/glm-5.1'
+            'provider': {'opencode-go': {'options': {'apiKey': os.environ['OPENAI_API_KEY']}}},
+            'model': 'opencode-go/deepseek-v4.1-flash'
           }
           json.dump(cfg, open(os.path.expanduser('~/.config/opencode/opencode.json'), 'w'))
           "
 
-          opencode run 'Review this PR per the attached file' \
-            -f /workspace/_review_prompt.md > /workspace/_review_output.md
+          {
+            cat /workspace/_review_prompt.md
+            printf '\n```diff\n'
+            cat /workspace/_review_diff.patch
+            printf '```\n\nEnd of the diff. Write the review now, in the format given above.\n'
+          } > /workspace/_review_input.md
+
+          # The repository is public: keep the agent's trace (tool calls and
+          # their output, on stderr) out of the CI log.
+          status=0
+          opencode run 'Review this pull request per the instructions below.' \
+            < /workspace/_review_input.md \
+            > /workspace/_review_output.md \
+            2> /workspace/_review_trace.log || status=$?
+          echo "reviewer: opencode exited ${status}; review $(wc -c < /workspace/_review_output.md) bytes; trace $(wc -l < /workspace/_review_trace.log) lines (not printed)"
+          exit "$status"
           SCRIPT_EOF
           chmod +x _review.sh
 
@@ -117,8 +136,7 @@ jobs:
               allow:
                 - "api.openai.com:443"
                 - "*.anthropic.com:443"
-                - "z.ai:443"
-                - "api.z.ai:443"
+                - "opencode.ai:443"
             seccomp_profile: default
             read_only: true
             cap_drop_all: true
@@ -129,7 +147,7 @@ jobs:
           policy:
             docs_before_code: off
             tests_before_impl: off
-            max_duration: 600
+            max_duration: 1800
             resource_limits:
               memory: 2g
               cpus: "2.0"
@@ -158,7 +176,8 @@ jobs:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           CARRANCA_CONTAINER_RUNTIME: docker
           CARRANCA_CONFIG_FILE: _carranca_ci.yml
-        run: carranca run --agent reviewer --timeout 600
+        # carranca applies the smaller of --timeout and policy.max_duration.
+        run: carranca run --agent reviewer --timeout 1800
 
       - name: Post review comment
         if: always()

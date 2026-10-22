@@ -10,6 +10,8 @@ import { ThemeContext } from '@/hooks/useTheme';
 import { I18nContext } from '@/hooks/useI18n';
 import { JournalKeyProvider, useJournalKeys } from '@/contexts/JournalKeyContext';
 import { AutoLockModal } from '@/components/common/AutoLockModal';
+import { PrivacyShield } from '@/components/common/PrivacyShield';
+import { initializePrivacy } from '@/lib/privacy';
 import { GoogleAuthProvider } from '@/contexts/GoogleAuthContext';
 import { SyncManagerProvider } from '@/contexts/SyncManagerContext';
 import { CalendarScrollProvider } from '@/contexts/CalendarScrollContext';
@@ -56,6 +58,7 @@ export default function RootLayout() {
 
   useEffect(() => {
     scavengeAttachmentDisplayCache();
+    void initializePrivacy();
   }, []);
 
   useEffect(() => {
@@ -183,6 +186,7 @@ function AppContent({ theme, isDark }: { theme: CantoTheme; isDark: boolean }) {
           />
         </Stack>
       </View>
+      <PrivacyShield />
       <AutoLockModal />
     </View>
   );

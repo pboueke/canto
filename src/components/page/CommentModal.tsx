@@ -4,6 +4,7 @@ import { useTheme } from '@/hooks/useTheme';
 import { useI18n } from '@/hooks/useI18n';
 import type { Comment } from 'canto-data';
 import { webModalContent } from '@/styles/web';
+import { PrivacyShield } from '@/components/common/PrivacyShield';
 
 interface CommentModalProps {
   visible: boolean;
@@ -116,6 +117,7 @@ export function CommentModal({ visible, comment, onSave, onDelete, onClose }: Co
           </View>
         </View>
       </View>
+      <PrivacyShield />
     </Modal>
   );
 }

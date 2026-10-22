@@ -20,8 +20,12 @@ import {
   useSaveJournal,
   getEncryptionService,
   getLocalStore,
+  listDrafts,
   tryLoadJournal,
+  verifyJournalKey,
 } from '@/hooks/useStorage';
+import { deriveKey, DEFAULT_KDF_ITERATIONS } from '@/lib/encryption/password';
+import { base64ToUint8, releaseAndZeroAesKey } from '@/lib/encryption/utils';
 import { useJournalKeys } from '@/contexts/JournalKeyContext';
 import { useSyncManager } from '@/contexts/SyncManagerContext';
 import { IconPicker } from '@/components/common/IconPicker';
@@ -34,6 +38,7 @@ import type { ReencryptionResult } from '@/lib/storage/types';
 import { type ThemeName, themes } from '@/styles/themes';
 import type { JournalContent, JournalSettings as JournalSettingsType } from 'canto-data';
 import { webModalContent } from '@/styles/web';
+import { PrivacyShield } from '@/components/common/PrivacyShield';
 
 interface JournalSettingsProps {
   journal: Omit<JournalContent, 'pages'>;
@@ -180,25 +185,28 @@ export function JournalSettings({
         let newKey: Uint8Array | undefined;
         let newSalt: string = journal.salt;
 
-        // Step 1: Verify current password via trial decryption
+        // Encrypted unsaved drafts are tied to the current password; refuse
+        // rather than lose them. The user saves or discards them first.
+        if ((await listDrafts(journal.id)).length > 0) {
+          throw new Error(t.journalSettings.draftsPending);
+        }
+
+        // Step 1: Verify the current password with a trial key that is never
+        // cached, so a wrong password can't replace the working key.
         // (PBKDF2 always succeeds regardless of password — must actually try to decrypt)
         if (journal.secure && currentPwd && journal.salt) {
-          const trialKey = await deriveAndCache(
-            journal.id,
+          const trialKey = await deriveKey(
             currentPwd,
-            journal.salt,
-            journal.kdfIterations,
+            base64ToUint8(journal.salt),
+            journal.kdfIterations ?? DEFAULT_KDF_ITERATIONS,
           );
-          const trialResult = await tryLoadJournal(journal.id, trialKey);
-          if (!trialResult) {
-            // Wrong password — restore the correct cached key so journal remains accessible
-            if (derivedKey) {
-              setKey(journal.id, derivedKey);
-            } else {
-              clearKey(journal.id);
-            }
-            throw new Error(t.home.wrongPassword);
+          let verdict: Awaited<ReturnType<typeof verifyJournalKey>>;
+          try {
+            verdict = await verifyJournalKey(journal.id, trialKey);
+          } finally {
+            releaseAndZeroAesKey(trialKey);
           }
+          if (verdict !== 'valid') throw new Error(t.home.wrongPassword);
         }
 
         // Step 2: Generate new key if new password provided
@@ -632,6 +640,7 @@ export function JournalSettings({
             </ScrollView>
           </View>
         </View>
+        <PrivacyShield />
       </Modal>
 
       {/* Name change modal */}
@@ -700,6 +709,7 @@ export function JournalSettings({
             </View>
           </View>
         </View>
+        <PrivacyShield />
       </Modal>
 
       <RecoverPagesModal

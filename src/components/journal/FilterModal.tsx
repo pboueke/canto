@@ -4,6 +4,7 @@ import { useTheme } from '@/hooks/useTheme';
 import { useI18n } from '@/hooks/useI18n';
 import { Tag } from '@/components/common/Tag';
 import type { Filter } from 'canto-data';
+import { PrivacyShield } from '@/components/common/PrivacyShield';
 
 interface FilterModalProps {
   visible: boolean;
@@ -158,6 +159,7 @@ export function FilterModal({
           </Pressable>
         </View>
       </View>
+      <PrivacyShield />
     </Modal>
   );
 }

@@ -1,6 +1,7 @@
 import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useTheme } from '@/hooks/useTheme';
+import { PrivacyShield } from '@/components/common/PrivacyShield';
 
 interface DataIntegrityWarningAction {
   label: string;
@@ -134,6 +135,7 @@ export function DataIntegrityWarningModal({
           </View>
         </View>
       </View>
+      <PrivacyShield />
     </Modal>
   );
 }

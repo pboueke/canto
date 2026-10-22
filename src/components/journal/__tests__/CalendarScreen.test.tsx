@@ -1,8 +1,9 @@
 import React from 'react';
 import { FlatList } from 'react-native';
-import { render } from '@testing-library/react-native';
+import { act, render } from '@testing-library/react-native';
 
 const mockUseJournalOverview = jest.fn();
+const mockCalendarLockListeners: (() => void)[] = [];
 
 jest.mock('expo-router', () => ({
   router: { replace: jest.fn(), dismissAll: jest.fn(), push: jest.fn() },
@@ -32,7 +33,13 @@ jest.mock('@/hooks/useStorage', () => ({
   useJournalOverview: (...args: unknown[]) => mockUseJournalOverview(...args),
 }));
 jest.mock('@/contexts/JournalKeyContext', () => ({
-  useJournalKeys: () => ({ getKey: () => null }),
+  useJournalKeys: () => ({
+    getKey: () => null,
+    onJournalLocked: (_id: string, listener: () => void) => {
+      mockCalendarLockListeners.push(listener);
+      return () => undefined;
+    },
+  }),
 }));
 jest.mock('@/contexts/CalendarScrollContext', () => ({
   useCalendarScroll: () => ({ getScrollAnchor: () => null, setScrollAnchor: jest.fn() }),
@@ -43,6 +50,11 @@ jest.mock('@/styles/themes', () => ({ themes: {} }));
 jest.mock('@/components/journal/CalendarHeader', () => ({ CalendarHeader: () => null }));
 jest.mock('@/components/journal/AnniversaryRow', () => ({ AnniversaryRow: () => null }));
 jest.mock('@/components/journal/MonthPreview', () => ({ MonthPreview: () => null }));
+jest.mock('@/components/common/LockedPlaceholder', () => {
+  const React = require('react');
+  const { Text } = require('react-native');
+  return { LockedPlaceholder: () => React.createElement(Text, { testID: 'journal-locked' }) };
+});
 
 import JournalCalendarScreen from '../../../../app/journal/[id]/calendar';
 
@@ -86,5 +98,14 @@ describe('JournalCalendarScreen', () => {
       windowSize: 5,
       removeClippedSubviews: true,
     });
+  });
+
+  it('replaces the calendar with the locked placeholder once the journal locks', () => {
+    const { getByTestId, UNSAFE_queryByType } = render(<JournalCalendarScreen />);
+    act(() => {
+      for (const listener of mockCalendarLockListeners) listener();
+    });
+    expect(getByTestId('journal-locked')).toBeTruthy();
+    expect(UNSAFE_queryByType(FlatList)).toBeNull();
   });
 });

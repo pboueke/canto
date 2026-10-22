@@ -21,7 +21,20 @@ export type IntegrityCode =
   | 'CATALOG_UNREADABLE'
   | 'JOURNAL_UNREADABLE'
   | 'DEVICE_KEY_UNAVAILABLE'
-  | 'JOURNAL_LOCKED';
+  | 'JOURNAL_LOCKED'
+  /**
+   * Every unreadable record was written by 0.20.0 or earlier under an
+   * auto-locked (zeroed) password key. The data is intact and the explicit
+   * recovery flow can re-encrypt it with the verified journal key.
+   */
+  | 'LEGACY_ZERO_KEY'
+  /** A device-key rotation passed its commit point and must finish on restart. */
+  | 'ROTATION_INTERRUPTED'
+  /**
+   * Recovery would re-encrypt legacy records, but no stored record can confirm
+   * the supplied password. Nothing is changed.
+   */
+  | 'KEY_UNVERIFIABLE';
 
 export interface StorageIntegrityErrorOptions {
   /** Which layer of the record failed to be read. */
@@ -57,6 +70,34 @@ export class JournalLockedError extends StorageIntegrityError {
   constructor(message = 'Journal is locked; unlock before saving.') {
     super('JOURNAL_LOCKED', message);
     this.name = 'JournalLockedError';
+  }
+}
+
+/**
+ * A device-key rotation passed its durable commit point but could not finish
+ * in this process. Both keys stay available; writes are refused until the
+ * next startup replays the committed transaction, so no later edit can be
+ * overwritten by the replay.
+ */
+export class RotationInterruptedError extends StorageIntegrityError {
+  constructor(message = 'Device-key rotation was interrupted; restart to finish.') {
+    super('ROTATION_INTERRUPTED', message);
+    this.name = 'RotationInterruptedError';
+  }
+}
+
+/**
+ * A journal password change was refused because encrypted unsaved drafts
+ * exist. They are encrypted with the current password and may reference
+ * attachments the re-encryption would not carry over, so the user must save
+ * or discard them first instead of losing them silently.
+ */
+export class DraftsPendingError extends Error {
+  constructor(
+    message = 'Unsaved drafts must be saved or discarded before the journal password changes.',
+  ) {
+    super(message);
+    this.name = 'DraftsPendingError';
   }
 }
 

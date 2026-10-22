@@ -1,5 +1,6 @@
 import { Modal, Image, Pressable, StyleSheet, View, Text } from 'react-native';
 import { webModalContent } from '@/styles/web';
+import { PrivacyShield } from '@/components/common/PrivacyShield';
 
 interface ImageSource {
   uri: string;
@@ -26,6 +27,7 @@ export default function ImageViewing({ images, imageIndex, visible, onRequestClo
           <Image source={{ uri: src.uri }} style={styles.image} resizeMode="contain" />
         </View>
       </Pressable>
+      <PrivacyShield />
     </Modal>
   );
 }
