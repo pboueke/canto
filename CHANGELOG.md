@@ -1,5 +1,17 @@
 # Changelog
 
+## v0.21.0 - Lock-screen privacy and device-key integrity
+
+- **fix: Android device-key rotation lost journal access** — on Android, rotating the device key re-encrypted only the journal index, then deleted the old key every journal record still needed, leaving all journals unreadable. Rotation now covers every journal record and refuses to commit unless every journal was staged. This affected rotations in 0.19.2–0.20.2.
+- **fix: safer device-key rotation** — rotation re-encrypts everything before a single commit point, verifies a sample with the new key, and rolls back (or finishes on restart) if interrupted. It refuses to start while unrecovered data, pending imports, unfinished transactions, low storage, or other open browser tabs could make it unsafe.
+- **feat: full-screen session lock** — when auto-lock fires, an opaque lock screen covers the app and every open dialog, so text typed before the lock is no longer visible. Opening the journal again requires the password.
+- **feat: encrypted unsaved drafts** — unsaved edits are stored encrypted on this device when the app goes to the background, before a lock, and a few seconds after typing stops. They are offered again after unlock or a restart, are never synced, exported, or imported, and must be saved or discarded before changing the journal password.
+- **feat: privacy in recent apps** — Android hides Canto's content in the recent apps screen. A new **Block screenshots** option in Security also blocks screenshots and screen recording.
+- **feat: journal integrity panel** — journals with unreadable data explain what happened and offer **Copy diagnostics**, a report with counts only (never titles, page text, or keys). Journals auto-locked by 0.20.0 or earlier can be recovered with the correct password.
+- **fix: password checks** — unlocking and changing a password verify the password against the journal's records before opening or rewriting anything.
+- **fix: web confirmations** — delete, discard, and other confirmations now appear on web, where they previously did nothing.
+- test: native and web rotation safety (with Android-accurate file paths), lock privacy, draft, zero-key recovery, and diagnostics end-to-end coverage.
+
 ## v0.20.2 - Android release and import fixes
 
 - **fix: Android release native options** — temporarily disable R8 minification and resource shrinking after the published 0.20.1 build failed to convert Expo SecureStore and document-picker options. Release signing and production configuration remain enabled; shrinking will return only after verification on a Play-installed build.
