@@ -284,13 +284,18 @@ describe('Android recents privacy plugin', () => {
     ).toHaveLength(1);
   });
 
-  it('blocks screen-capture permissions Canto never uses', () => {
+  it('blocks the media permission Canto never uses', () => {
     const config = require('../../app.config');
-    expect(config.android.blockedPermissions).toEqual(
-      expect.arrayContaining([
-        'android.permission.READ_MEDIA_IMAGES',
-        'android.permission.DETECT_SCREEN_CAPTURE',
-      ]),
+    expect(config.android.blockedPermissions).toContain('android.permission.READ_MEDIA_IMAGES');
+  });
+
+  it('keeps DETECT_SCREEN_CAPTURE, which expo-screen-capture needs at startup', () => {
+    // On API 34+ the module registers a screen-capture callback when it is
+    // created; without this install-time permission Android throws and the
+    // app aborts on launch (0.21.0 internal build, versionCode 31).
+    const config = require('../../app.config');
+    expect(config.android.blockedPermissions ?? []).not.toContain(
+      'android.permission.DETECT_SCREEN_CAPTURE',
     );
   });
 
