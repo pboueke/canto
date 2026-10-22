@@ -8,6 +8,8 @@ jobs:
   review:
     name: Carranca AI Review
     runs-on: ubuntu-latest
+    # The 30-minute review session plus image build and comment posting.
+    timeout-minutes: 40
     if: github.event.pull_request.user.login == 'pboueke'
     permissions:
       contents: read
@@ -34,10 +36,12 @@ jobs:
           PR_AUTHOR="${{ github.event.pull_request.user.login }}"
           PR_TITLE="${{ github.event.pull_request.title }}"
 
-          # The full diff is attached to the reviewer as a file, never truncated
-          # into the prompt; the model's context fits large release PRs.
-          # Generated files (lockfile, dependency manifest) are left out.
-          REVIEW_PATHS=(. ':(exclude)package-lock.json' ':(exclude)src/assets/dep-manifest.json')
+          # The full diff goes into the reviewer's message, never truncated; the
+          # model's context fits large release PRs. A file attachment (-f) is
+          # paged at 50 KiB, which made the model re-read the rest in chunks.
+          # Generated files (lockfile, dependency manifest) and agent notes
+          # (.claude/) are left out.
+          REVIEW_PATHS=(. ':(exclude)package-lock.json' ':(exclude)src/assets/dep-manifest.json' ':(exclude).claude/**')
           git diff "origin/${BASE_REF}...HEAD" -- "${REVIEW_PATHS[@]}" > _review_diff.patch
           DIFF_SIZE=$(wc -c < _review_diff.patch)
           DIFF_FILES=$(git diff --name-only "origin/${BASE_REF}...HEAD" -- "${REVIEW_PATHS[@]}" | wc -l)
@@ -62,11 +66,13 @@ jobs:
           5. Test coverage for new/changed functionality
           6. State management and data flow
 
-          The complete diff (${DIFF_SIZE} bytes, ${DIFF_FILES} files) is attached
-          as _review_diff.patch and is also at /workspace/_review_diff.patch.
-          Review every file in it; the repository at the PR head is checked out
-          in /workspace for surrounding context. Generated files
-          (package-lock.json, src/assets/dep-manifest.json) are excluded.
+          The complete diff (${DIFF_SIZE} bytes, ${DIFF_FILES} files) follows this
+          prompt in the same message. Review every file in it without re-reading
+          it from disk. The repository at the PR head is checked out in
+          /workspace; open a file there only to confirm a specific finding.
+          Generated files (package-lock.json, src/assets/dep-manifest.json) and
+          agent notes (.claude/) are excluded. You have no network access beyond
+          the model API, so do not search the web.
           You have about 25 minutes: review security-critical code first
           (src/lib/storage, src/lib/encryption, src/contexts, app/), then the
           rest, and always finish with the review text.
@@ -96,9 +102,22 @@ jobs:
           json.dump(cfg, open(os.path.expanduser('~/.config/opencode/opencode.json'), 'w'))
           "
 
-          opencode run 'Review this PR per the attached prompt and full diff' \
-            -f /workspace/_review_prompt.md \
-            -f /workspace/_review_diff.patch > /workspace/_review_output.md
+          {
+            cat /workspace/_review_prompt.md
+            printf '\n```diff\n'
+            cat /workspace/_review_diff.patch
+            printf '```\n\nEnd of the diff. Write the review now, in the format given above.\n'
+          } > /workspace/_review_input.md
+
+          # The repository is public: keep the agent's trace (tool calls and
+          # their output, on stderr) out of the CI log.
+          status=0
+          opencode run 'Review this pull request per the instructions below.' \
+            < /workspace/_review_input.md \
+            > /workspace/_review_output.md \
+            2> /workspace/_review_trace.log || status=$?
+          echo "reviewer: opencode exited ${status}; review $(wc -c < /workspace/_review_output.md) bytes; trace $(wc -l < /workspace/_review_trace.log) lines (not printed)"
+          exit "$status"
           SCRIPT_EOF
           chmod +x _review.sh
 
@@ -157,6 +176,7 @@ jobs:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           CARRANCA_CONTAINER_RUNTIME: docker
           CARRANCA_CONFIG_FILE: _carranca_ci.yml
+        # carranca applies the smaller of --timeout and policy.max_duration.
         run: carranca run --agent reviewer --timeout 1800
 
       - name: Post review comment
