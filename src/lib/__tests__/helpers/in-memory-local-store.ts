@@ -328,6 +328,14 @@ export function createInMemoryLocalStore(
     async reencryptAll(): Promise<void> {
       // not needed for sync tests
     },
+
+    async recordFirstInstall(): Promise<void> {
+      // no-op for sync test helpers
+    },
+
+    async hasExistingData(): Promise<boolean> {
+      return store.size > 0;
+    },
   };
 
   return localStore;

@@ -549,4 +549,318 @@ describe('importNativeJournal', () => {
       expect.objectContaining({ error: 'Chunked attachment import is unavailable on this device' }),
     ]);
   });
+
+  it('derives a legacy key without explicit kdf iterations', async () => {
+    mockReadNativeArchiveText.mockImplementation(async (_archive, name: string) => {
+      if (name === 'manifest.json') return JSON.stringify({ ...manifest, salt: 'dGVzdA==' });
+      if (name === 'journal.json') return JSON.stringify(makeJournal());
+      if (name === 'pages/source-page.json') return JSON.stringify(makePage());
+      throw new Error(`unexpected entry ${name}`);
+    });
+
+    await expect(importNativeJournal('content://backup', 'Imported')).resolves.toMatchObject({
+      journalId: expect.any(String),
+    });
+  });
+
+  it('skips an attachment entry that no page owns', async () => {
+    mockOpenNativeArchive.mockResolvedValue({
+      id: 'orphan-archive',
+      entries: [
+        { name: 'manifest.json', size: 100, directory: false },
+        { name: 'journal.json', size: 100, directory: false },
+        { name: 'pages/source-page.json', size: 100, directory: false },
+        { name: 'attachments/file-orphan.bin', size: 3, directory: false },
+      ],
+    });
+    mockReadNativeArchiveText.mockImplementation(async (_archive, name: string) => {
+      if (name === 'manifest.json') return JSON.stringify(manifest);
+      if (name === 'journal.json') return JSON.stringify(makeJournal());
+      if (name === 'pages/source-page.json') return JSON.stringify(makePage());
+      throw new Error(`unexpected entry ${name}`);
+    });
+
+    const result = await importNativeJournal('content://backup', 'Imported');
+    expect(result.skippedAttachments).toBeUndefined();
+    expect(mockStore.saveAttachmentStream).not.toHaveBeenCalled();
+  });
+
+  it('generates a thumbnail for an encrypted image attachment through the base64 reader', async () => {
+    const key = new Uint8Array(32).fill(7);
+    const sourcePage = {
+      ...makePage(),
+      images: [
+        {
+          id: 'image-1',
+          path: 'image-image-1.jpg',
+          name: 'photo.jpg',
+          type: 'image' as const,
+          encrypted: true,
+          deleted: false,
+        },
+      ],
+    };
+    const encryptedPage = await aesGcmEncryptBytes(JSON.stringify(sourcePage), key);
+    const encryptedJournal = await aesGcmEncryptBytes(
+      JSON.stringify({ ...makeJournal(), secure: true }),
+      key,
+    );
+    const encryptedAttachment = await aesGcmEncryptBytes('AQI=', key);
+    const locations = new Map([
+      ['journal.json', 'file:///encrypted-journal'],
+      ['pages/source-page.json', 'file:///encrypted-page'],
+      ['attachments/image-image-1.jpg', 'file:///encrypted-attachment'],
+    ]);
+    mockExtractedBytes.set('file:///encrypted-journal', encryptedJournal);
+    mockExtractedBytes.set('file:///encrypted-page', encryptedPage);
+    mockExtractedBytes.set('file:///encrypted-attachment', encryptedAttachment);
+    mockOpenNativeArchive.mockResolvedValue({
+      id: 'encrypted-image-archive',
+      entries: [
+        { name: 'manifest.json', size: 100, directory: false },
+        { name: 'journal.json', size: encryptedJournal.length, directory: false },
+        { name: 'pages/source-page.json', size: encryptedPage.length, directory: false },
+        {
+          name: 'attachments/image-image-1.jpg',
+          size: encryptedAttachment.length,
+          directory: false,
+        },
+      ],
+    });
+    mockReadNativeArchiveText.mockImplementation(async (_archive, name: string) => {
+      if (name === 'manifest.json') return JSON.stringify({ ...manifest, encrypted: true });
+      throw new Error(`unexpected plaintext read: ${name}`);
+    });
+    mockExtractNativeArchiveEntry.mockImplementation(async (_archive, name: string) => ({
+      uri: locations.get(name)!,
+      size: mockExtractedBytes.get(locations.get(name)!)!.length,
+    }));
+    mockGenerateImportThumbnail.mockResolvedValueOnce('encrypted-thumbnail');
+    mockStore.saveAttachment.mockResolvedValueOnce('canto/imported/image-1');
+
+    await importNativeJournal('content://backup', 'Imported', key);
+    const saved = mockStore.saveJournal.mock.calls[0][0] as JournalContent;
+    expect(saved.pages[0].thumbnail).toBe('encrypted-thumbnail');
+  });
+
+  it('falls back to the archive entry name and a string error for unnamed owners', async () => {
+    const sourcePage = {
+      ...makePage(),
+      images: [
+        {
+          id: 'image-1',
+          path: 'image-image-1.jpg',
+          name: '',
+          type: 'image' as const,
+          encrypted: false,
+          deleted: false,
+        },
+      ],
+    };
+    mockOpenNativeArchive.mockResolvedValue({
+      id: 'unnamed-archive',
+      entries: [
+        { name: 'manifest.json', size: 100, directory: false },
+        { name: 'journal.json', size: 100, directory: false },
+        { name: 'pages/source-page.json', size: 100, directory: false },
+        { name: 'attachments/image-image-1.jpg', size: 3, directory: false },
+      ],
+    });
+    mockReadNativeArchiveText.mockImplementation(async (_archive, name: string) => {
+      if (name === 'manifest.json') return JSON.stringify(manifest);
+      if (name === 'journal.json') return JSON.stringify(makeJournal());
+      if (name === 'pages/source-page.json') return JSON.stringify(sourcePage);
+      throw new Error(`unexpected entry ${name}`);
+    });
+    mockExtractedBytes.set('file:///unnamed', new Uint8Array([1, 2, 3]));
+    mockExtractNativeArchiveEntry.mockResolvedValue({ uri: 'file:///unnamed', size: 3 });
+
+    mockStore.saveAttachmentStream.mockRejectedValueOnce('string failure');
+
+    const result = await importNativeJournal('content://backup', 'Imported');
+    expect(result.attachmentErrors).toEqual([
+      expect.objectContaining({
+        name: 'attachments/image-image-1.jpg',
+        error: 'string failure',
+      }),
+    ]);
+  });
+
+  it('removes a temporary extraction file when it exists', async () => {
+    const sourcePage = {
+      ...makePage(),
+      images: [
+        {
+          id: 'image-1',
+          path: 'image-image-1.jpg',
+          name: 'photo.jpg',
+          type: 'image' as const,
+          encrypted: false,
+          deleted: false,
+        },
+      ],
+    };
+    mockOpenNativeArchive.mockResolvedValue({
+      id: 'temp-archive',
+      entries: [
+        { name: 'manifest.json', size: 100, directory: false },
+        { name: 'journal.json', size: 100, directory: false },
+        { name: 'pages/source-page.json', size: 100, directory: false },
+        { name: 'attachments/image-image-1.jpg', size: 3, directory: false },
+      ],
+    });
+    mockReadNativeArchiveText.mockImplementation(async (_archive, name: string) => {
+      if (name === 'manifest.json') return JSON.stringify(manifest);
+      if (name === 'journal.json') return JSON.stringify(makeJournal());
+      if (name === 'pages/source-page.json') return JSON.stringify(sourcePage);
+      throw new Error(`unexpected entry ${name}`);
+    });
+    mockExtractNativeArchiveEntry.mockImplementation(async (_archive, _entry, destination) => {
+      mockExtractedBytes.set(destination, new Uint8Array([1, 2, 3]));
+      return { uri: destination, size: 3 };
+    });
+    mockStore.saveAttachmentStream.mockResolvedValueOnce('canto/imported/image-1');
+
+    await importNativeJournal('content://backup', 'Imported');
+
+    expect(mockExtractNativeArchiveEntry).toHaveBeenCalled();
+    expect(mockExtractedBytes.has(mockExtractNativeArchiveEntry.mock.calls[0][2])).toBe(false);
+  });
+
+  it('keeps page attachments that have no matching archive entry', async () => {
+    const sourcePage = {
+      ...makePage(),
+      images: [
+        {
+          id: 'image-1',
+          path: 'image-missing.jpg',
+          name: 'missing.jpg',
+          type: 'image' as const,
+          encrypted: false,
+          deleted: false,
+        },
+      ],
+      files: [
+        {
+          id: 'file-1',
+          path: 'file-missing.bin',
+          name: 'missing.bin',
+          type: 'file' as const,
+          encrypted: false,
+          deleted: false,
+        },
+      ],
+    };
+    mockReadNativeArchiveText.mockImplementation(async (_archive, name: string) => {
+      if (name === 'manifest.json') return JSON.stringify(manifest);
+      if (name === 'journal.json') return JSON.stringify(makeJournal());
+      if (name === 'pages/source-page.json') return JSON.stringify(sourcePage);
+      throw new Error(`unexpected entry ${name}`);
+    });
+
+    await importNativeJournal('content://backup', 'Imported');
+    const saved = mockStore.saveJournal.mock.calls[0][0] as JournalContent;
+    expect(saved.pages[0].files[0].path).toBe('file-missing.bin');
+    expect(saved.pages[0].images[0].path).toBe('image-missing.jpg');
+  });
+
+  it('stops between pages when the import is cancelled', async () => {
+    const controller = new AbortController();
+    mockOpenNativeArchive.mockResolvedValue({
+      id: 'two-page-archive',
+      entries: [
+        { name: 'manifest.json', size: 100, directory: false },
+        { name: 'journal.json', size: 100, directory: false },
+        { name: 'pages/source-page.json', size: 100, directory: false },
+        { name: 'pages/second-page.json', size: 100, directory: false },
+      ],
+    });
+    mockReadNativeArchiveText.mockImplementation(async (_archive, name: string) => {
+      if (name === 'manifest.json') return JSON.stringify(manifest);
+      if (name === 'journal.json') return JSON.stringify(makeJournal());
+      if (name === 'pages/source-page.json') return JSON.stringify(makePage());
+      if (name === 'pages/second-page.json') return JSON.stringify(makePage());
+      throw new Error(`unexpected entry ${name}`);
+    });
+
+    await expect(
+      importNativeJournal(
+        'content://backup',
+        'Imported',
+        undefined,
+        (progress) => {
+          if (progress.phase === 'pages') controller.abort();
+        },
+        controller.signal,
+      ),
+    ).rejects.toThrow('Backup import cancelled');
+  });
+
+  it('keeps a legacy encrypted flag device-only inside an unencrypted archive', async () => {
+    const sourcePage = {
+      ...makePage(),
+      files: [
+        {
+          id: 'file-1',
+          path: 'file-file-1.bin',
+          name: 'secret.bin',
+          type: 'file' as const,
+          encrypted: true,
+          deleted: false,
+        },
+      ],
+    };
+    mockOpenNativeArchive.mockResolvedValue({
+      id: 'legacy-flag-archive',
+      entries: [
+        { name: 'manifest.json', size: 100, directory: false },
+        { name: 'journal.json', size: 100, directory: false },
+        { name: 'pages/source-page.json', size: 100, directory: false },
+        { name: 'attachments/file-file-1.bin', size: 3, directory: false },
+      ],
+    });
+    mockReadNativeArchiveText.mockImplementation(async (_archive, name: string) => {
+      if (name === 'manifest.json') return JSON.stringify(manifest);
+      if (name === 'journal.json') return JSON.stringify(makeJournal());
+      if (name === 'pages/source-page.json') return JSON.stringify(sourcePage);
+      throw new Error(`unexpected entry ${name}`);
+    });
+    mockExtractedBytes.set('file:///legacy-flag', new Uint8Array([1, 2, 3]));
+    mockExtractNativeArchiveEntry.mockResolvedValue({ uri: 'file:///legacy-flag', size: 3 });
+    mockStore.saveAttachmentStream.mockResolvedValueOnce('canto/imported/file-1');
+
+    await importNativeJournal('content://backup', 'Imported');
+
+    expect(mockStore.saveAttachmentStream).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.any(String),
+      expect.objectContaining({ encrypted: false }),
+      expect.anything(),
+      undefined,
+    );
+  });
+
+  it('stops an encrypted entry read when the import is cancelled mid-extraction', async () => {
+    const key = new Uint8Array(32).fill(7);
+    const controller = new AbortController();
+    mockOpenNativeArchive.mockResolvedValue({
+      id: 'cancel-encrypted',
+      entries: [
+        { name: 'manifest.json', size: 100, directory: false },
+        { name: 'journal.json', size: 100, directory: false },
+      ],
+    });
+    mockReadNativeArchiveText.mockImplementation(async (_archive, name: string) => {
+      if (name === 'manifest.json') return JSON.stringify({ ...manifest, encrypted: true });
+      throw new Error(`unexpected plaintext read: ${name}`);
+    });
+    mockExtractNativeArchiveEntry.mockImplementationOnce(async () => {
+      controller.abort();
+      return { uri: 'file:///cancelled-encrypted', size: 0 };
+    });
+
+    await expect(
+      importNativeJournal('content://backup', 'Imported', key, undefined, controller.signal),
+    ).rejects.toThrow('Backup import cancelled');
+  });
 });

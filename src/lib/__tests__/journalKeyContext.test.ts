@@ -451,3 +451,115 @@ describe('JournalKeyContext — AppState auto-lock', () => {
     expect(mockRemove).toHaveBeenCalled();
   });
 });
+
+describe('JournalKeyContext — revocable key leases', () => {
+  it('createLease returns a lease tied to the current key epoch', async () => {
+    const { result } = renderHook(() => useJournalKeys(), { wrapper });
+    const key = new Uint8Array(32).fill(0x41);
+
+    act(() => result.current.setKey('lease-j1', key));
+    const lease = result.current.createLease('lease-j1');
+
+    expect(lease.journalId).toBe('lease-j1');
+    expect(result.current.isLeaseValid(lease)).toBe(true);
+  });
+
+  it('a lease created before any key exists is not valid', () => {
+    const { result } = renderHook(() => useJournalKeys(), { wrapper });
+    const lease = result.current.createLease('never-unlocked');
+    expect(result.current.isLeaseValid(lease)).toBe(false);
+  });
+
+  it('clearKey revokes leases and notifies journal lock listeners', async () => {
+    const { result } = renderHook(() => useJournalKeys(), { wrapper });
+    const key = new Uint8Array(32).fill(0x42);
+    act(() => result.current.setKey('lease-j2', key));
+    const lease = result.current.createLease('lease-j2');
+    const listener = jest.fn();
+    const unsubscribe = result.current.onJournalLocked('lease-j2', listener);
+
+    act(() => result.current.clearKey('lease-j2'));
+
+    expect(result.current.isLeaseValid(lease)).toBe(false);
+    expect(listener).toHaveBeenCalledTimes(1);
+    expect(key.every((b) => b === 0)).toBe(true);
+    expect(unsubscribe).not.toThrow();
+  });
+
+  it('clearAll revokes every lease and notifies every journal lock listener', () => {
+    const { result } = renderHook(() => useJournalKeys(), { wrapper });
+    const k1 = new Uint8Array(32).fill(0x51);
+    const k2 = new Uint8Array(32).fill(0x52);
+    act(() => {
+      result.current.setKey('lease-a', k1);
+      result.current.setKey('lease-b', k2);
+    });
+    const leaseA = result.current.createLease('lease-a');
+    const leaseB = result.current.createLease('lease-b');
+    const listenerA = jest.fn();
+    const listenerB = jest.fn();
+    result.current.onJournalLocked('lease-a', listenerA);
+    result.current.onJournalLocked('lease-b', listenerB);
+
+    act(() => result.current.clearAll());
+
+    expect(result.current.isLeaseValid(leaseA)).toBe(false);
+    expect(result.current.isLeaseValid(leaseB)).toBe(false);
+    expect(listenerA).toHaveBeenCalledTimes(1);
+    expect(listenerB).toHaveBeenCalledTimes(1);
+  });
+
+  it('re-deriving a key invalidates an older lease (unlock cycle)', async () => {
+    const { result } = renderHook(() => useJournalKeys(), { wrapper });
+    const first = new Uint8Array(32).fill(0x61);
+    act(() => result.current.setKey('lease-rotate', first));
+    const oldLease = result.current.createLease('lease-rotate');
+
+    // Unlock again with a freshly derived key, exactly like a re-unlock.
+    let second: Uint8Array;
+    await act(async () => {
+      second = await result.current.deriveAndCache('lease-rotate', 'pw', SALT_B64, 1000);
+    });
+    expect(second!.length).toBe(32);
+    expect(result.current.isLeaseValid(oldLease)).toBe(false);
+    expect(result.current.isLeaseValid(result.current.createLease('lease-rotate'))).toBe(true);
+  });
+
+  it('unsubscribed journal lock listeners are not notified', () => {
+    const { result } = renderHook(() => useJournalKeys(), { wrapper });
+    const key = new Uint8Array(32).fill(0x71);
+    act(() => result.current.setKey('lease-sub', key));
+    const listener = jest.fn();
+    const unsubscribe = result.current.onJournalLocked('lease-sub', listener);
+    unsubscribe();
+
+    act(() => result.current.clearKey('lease-sub'));
+    expect(listener).not.toHaveBeenCalled();
+  });
+
+  it('auto-lock through AppState revokes active leases (mount → lock → save must reject)', async () => {
+    mockGetAutoLockTimeout.mockResolvedValue(1);
+    const { result } = renderHook(() => useJournalKeys(), { wrapper });
+    const key = new Uint8Array(32).fill(0x81);
+    act(() => result.current.setKey('lease-live', key));
+    const lease = result.current.createLease('lease-live');
+    expect(result.current.isLeaseValid(lease)).toBe(true);
+
+    // Background beyond the auto-lock timeout, then foreground again.
+    await act(async () => {
+      appStateHandler!('background');
+    });
+    jest.advanceTimersByTime(10);
+    await act(async () => {
+      appStateHandler!('active');
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    // The mounted screen's lease is revoked and the old key bytes are zeroed,
+    // so any retained save must be refused by the lease check (and the storage
+    // zero-key defense as a second layer).
+    expect(result.current.isLeaseValid(lease)).toBe(false);
+    expect(key.every((b) => b === 0)).toBe(true);
+  });
+});

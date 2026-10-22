@@ -83,6 +83,8 @@ function createMockLocalStore(journal: JournalContent | null): LocalStore {
     deleteAttachment: jest.fn(),
     reencryptJournal: jest.fn(),
     reencryptAll: jest.fn(),
+    recordFirstInstall: jest.fn(),
+    hasExistingData: jest.fn().mockResolvedValue(false),
   };
 }
 

@@ -21,14 +21,37 @@ make install
 
 ### Android-specific setup
 
-1. Set `JAVA_HOME` to your JDK 21 path (Android Studio bundles one)
+1. Set `JAVA_HOME` to your JDK 25 path
 2. Set `ANDROID_HOME` to your Android SDK path (`$HOME/Android/Sdk` on Linux)
 3. Create an AVD in Android Studio Device Manager
+
+The tracked Android commands keep JDK 25 and enable the native-access option required by Gradle's native tooling; no JDK downgrade is needed.
 
 ```bash
 make emulator   # Starts the first available AVD
 make android    # Builds and runs on the emulator
 ```
+
+#### Building a signed Android release
+
+The tracked release script regenerates Android from the Expo configuration, verifies the native archive bridge and R8 settings, enables the JDK 25 native-access option while preserving any existing `JAVA_TOOL_OPTIONS`, and builds the signed AAB.
+
+1. Copy the environment template and fill in the two passwords locally:
+
+   ```bash
+   cp android_build.env.example android_build.env
+   ```
+
+2. Keep the upload keystore at `upload-keystore.jks`, or set `ANDROID_KEYSTORE_PATH` in `android_build.env`. Relative paths are resolved from the repository root.
+3. Build the release bundle:
+
+   ```bash
+   ./scripts/build-android-release.sh
+   ```
+
+Set `ANDROID_BUILD_ENV_FILE` in your shell to use a different env file. The AAB is written to `android/app/build/outputs/bundle/release/app-release.aab`; R8 mapping and reports are under `android/app/build/outputs/mapping/release/`.
+
+Never commit `android_build.env`, a keystore, copied credentials, or generated Android outputs. A successful local build proves that R8 ran, but the release is not accepted until the uploaded internal-track artifact meets the optimization, obfuscation, and shrinking thresholds reported by Google Play.
 
 ### Web
 
@@ -51,7 +74,7 @@ All PRs must pass these checks before merging:
 ```bash
 make lint       # ESLint (TypeScript strict)
 make typecheck  # tsc --noEmit
-make test       # Jest (588+ tests)
+make test       # Jest (1,400+ tests)
 make check      # Runs all three
 ```
 
@@ -65,11 +88,11 @@ Husky runs automatically on commit:
 
 ### Test coverage
 
-Coverage threshold is 80%. Run `make test-coverage` to generate a report.
+Coverage thresholds are 95% statements, 90% branches, 95% functions, and 95% lines. Run `make test-coverage` to generate a report.
 
 ## Project Structure
 
-```
+```text
 canto/
 ├── app/                    # Expo Router screens (file-based routing)
 │   ├── _layout.tsx         # Root layout with theme & i18n providers

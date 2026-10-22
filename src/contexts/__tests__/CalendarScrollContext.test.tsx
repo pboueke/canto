@@ -79,4 +79,11 @@ describe('CalendarScrollContext', () => {
     expect(() => renderHook(() => useCalendarScroll())).toThrow(/CalendarScrollProvider/);
     spy.mockRestore();
   });
+
+  it('returns null anchors for journals that were never scrolled', () => {
+    const { result } = renderHook(() => useCalendarScroll(), { wrapper });
+
+    expect(result.current.getMonthAnchor('unseen')).toBeNull();
+    expect(result.current.getScrollAnchor('unseen')).toBeNull();
+  });
 });

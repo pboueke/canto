@@ -1,5 +1,6 @@
 import React from 'react';
 import { render } from '@testing-library/react-native';
+import { StyleSheet } from 'react-native';
 
 jest.mock('react-native-markdown-display', () => {
   const { Text } = require('react-native');
@@ -56,22 +57,32 @@ describe('PageContent font scaling', () => {
     mockScale.value = 1.0;
     const { getByTestId } = render(<PageContent content="hi" isEditing={false} />);
     expect(getByTestId('markdown').props.children).toBe('fontSize=14|hi');
+    expect(StyleSheet.flatten(getByTestId('page-content-viewer').props.style).minHeight).toBe(
+      22 * 4,
+    );
   });
 
   it('applies scale=1.3 to markdown body fontSize when viewing', () => {
     mockScale.value = 1.3;
     const { getByTestId } = render(<PageContent content="hi" isEditing={false} />);
     expect(getByTestId('markdown').props.children).toBe(`fontSize=${14 * 1.3}|hi`);
+    expect(
+      StyleSheet.flatten(getByTestId('page-content-viewer').props.style).minHeight,
+    ).toBeCloseTo(22 * 1.3 * 4);
   });
 
-  it('applies scale to TextInput fontSize when editing', () => {
+  it('reconciles TextInput typography and minimum height when scale changes', () => {
+    mockScale.value = 1.0;
+    const view = render(<PageContent content="" isEditing={true} />);
+
     mockScale.value = 1.3;
-    const { getByPlaceholderText } = render(<PageContent content="" isEditing={true} />);
-    const input = getByPlaceholderText('Start writing...');
-    const style = Array.isArray(input.props.style)
-      ? Object.assign({}, ...input.props.style)
-      : input.props.style;
-    expect(style.fontSize).toBe(14 * 1.3);
-    expect(style.lineHeight).toBe(22 * 1.3);
+    view.rerender(<PageContent content="" isEditing={true} />);
+
+    const input = view.getByPlaceholderText('Start writing...');
+    const style = StyleSheet.flatten(input.props.style);
+    expect(style.fontSize).toBeCloseTo(14 * 1.3);
+    expect(style.lineHeight).toBeCloseTo(22 * 1.3);
+    expect(style.minHeight).toBeCloseTo(22 * 1.3 * 16);
+    expect(style.height).toBeCloseTo(22 * 1.3 * 16);
   });
 });

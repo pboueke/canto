@@ -46,6 +46,7 @@ import type { ReactNode } from 'react';
 import { renderHook, act } from '@testing-library/react-native';
 import type { SyncState } from '@/lib/sync/manager';
 import { SyncManagerProvider, useSyncManager, useSyncState } from '../SyncManagerContext';
+import { getLocalStore } from '@/hooks/useStorage';
 
 const wrapper = ({ children }: { children: ReactNode }) => (
   <SyncManagerProvider>{children}</SyncManagerProvider>
@@ -54,6 +55,7 @@ const wrapper = ({ children }: { children: ReactNode }) => (
 describe('SyncManagerContext', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    jest.mocked(getLocalStore).mockResolvedValue({} as Awaited<ReturnType<typeof getLocalStore>>);
     mockAuthValue = {
       accessToken: 'test-token',
       getAccessToken: jest.fn().mockResolvedValue('fresh-token'),
@@ -68,6 +70,22 @@ describe('SyncManagerContext', () => {
     expect(result.current.syncJournal).toBeInstanceOf(Function);
     expect(result.current.scheduleSyncDebounced).toBeInstanceOf(Function);
     expect(result.current.getSyncState).toBeInstanceOf(Function);
+  });
+
+  it('reports unavailable sync without an unhandled rejection when storage bootstrap fails', async () => {
+    const warn = jest.spyOn(console, 'warn').mockImplementation();
+    jest.mocked(getLocalStore).mockRejectedValueOnce(new Error('native options conversion failed'));
+    try {
+      const { result } = renderHook(() => useSyncManager(), { wrapper });
+      await act(async () => {});
+      expect(result.current.manager).toBeNull();
+      expect(warn).toHaveBeenCalledWith(
+        '[Canto] Sync manager unavailable: storage initialization failed',
+      );
+      expect(await result.current.syncJournal('j1')).toEqual({ kind: 'not-ready' });
+    } finally {
+      warn.mockRestore();
+    }
   });
 
   it('syncJournal returns result when signed in', async () => {
@@ -227,6 +245,64 @@ describe('SyncManagerContext', () => {
     await act(async () => {});
 
     expect(mockDisconnect).toHaveBeenCalled();
+  });
+
+  it('syncJournal reports not-ready before the manager finishes initialising', async () => {
+    const { getLocalStore } = jest.requireMock('@/hooks/useStorage') as {
+      getLocalStore: jest.Mock;
+    };
+    const original = getLocalStore.getMockImplementation();
+    let resolveStore!: (store: unknown) => void;
+    getLocalStore.mockImplementationOnce(() => new Promise((resolve) => (resolveStore = resolve)));
+    try {
+      const { result } = renderHook(() => useSyncManager(), { wrapper });
+
+      await expect(result.current.syncJournal('j1')).resolves.toEqual({ kind: 'not-ready' });
+      expect(mockRunJournalSync).not.toHaveBeenCalled();
+
+      await act(async () => {
+        resolveStore({});
+      });
+    } finally {
+      if (original) getLocalStore.mockImplementation(original);
+      else getLocalStore.mockResolvedValue({});
+    }
+  });
+
+  it('disposes a manager that finishes initialising only after unmount', async () => {
+    const { getLocalStore } = jest.requireMock('@/hooks/useStorage') as {
+      getLocalStore: jest.Mock;
+    };
+    const original = getLocalStore.getMockImplementation();
+    let resolveStore!: (store: unknown) => void;
+    getLocalStore.mockImplementationOnce(() => new Promise((resolve) => (resolveStore = resolve)));
+    try {
+      const { unmount } = renderHook(() => useSyncManager(), { wrapper });
+      unmount();
+
+      await act(async () => {
+        resolveStore({});
+      });
+
+      expect(mockDispose).toHaveBeenCalled();
+      expect(mockDisconnect).toHaveBeenCalled();
+    } finally {
+      if (original) getLocalStore.mockImplementation(original);
+      else getLocalStore.mockResolvedValue({});
+    }
+  });
+
+  it('skips scheduling when the access token cannot be refreshed', async () => {
+    mockAuthValue.getAccessToken = jest.fn().mockResolvedValue(null);
+    const { result } = renderHook(() => useSyncManager(), { wrapper });
+    await act(async () => {});
+
+    await act(async () => {
+      result.current.scheduleSyncDebounced('j1');
+    });
+    await act(async () => {});
+
+    expect(mockScheduleSyncDebounced).not.toHaveBeenCalled();
   });
 });
 

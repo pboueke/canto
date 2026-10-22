@@ -149,4 +149,49 @@ describe('downloadCloudPageAttachments', () => {
     ]);
     expect(remoteStore.downloadAttachmentChunk).not.toHaveBeenCalled();
   });
+
+  it('tolerates a page with no attachment arrays', async () => {
+    const page = { ...makePage([]), images: undefined, files: undefined } as unknown as Page;
+    const localStore = {} as unknown as LocalStore;
+    const remoteStore = {} as unknown as RemoteStore;
+
+    await expect(
+      downloadCloudPageAttachments({
+        journalId: 'j1',
+        page,
+        syncKey: key,
+        localStore,
+        remoteStore,
+      }),
+    ).resolves.toEqual([]);
+  });
+
+  it('fails a chunked download when a remote chunk is missing', async () => {
+    const attachment = chunkedAttachment('missing-chunk');
+    const localStore = {
+      saveAttachmentChunks: jest.fn(
+        async (_j: string, _p: string, _a: Attachment, chunks: AsyncIterable<string>) => {
+          for await (const _chunk of chunks) {
+            void _chunk;
+          }
+          return 'local/missing-chunk';
+        },
+      ),
+    } as unknown as LocalStore;
+    const remoteStore = {
+      downloadAttachmentChunk: jest.fn(async () => undefined),
+      downloadAttachment: jest.fn(),
+      buildRemotePath: jest.fn(),
+    } as unknown as RemoteStore;
+
+    await expect(
+      downloadCloudPageAttachments({
+        journalId: 'j1',
+        page: makePage([attachment]),
+        syncKey: key,
+        localStore,
+        remoteStore,
+      }),
+    ).rejects.toThrow('Attachment chunk not found');
+  });
 });

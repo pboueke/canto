@@ -51,6 +51,25 @@ async function getOrCreateDeviceKey(): Promise<Uint8Array> {
   return keyCreationPromise;
 }
 
+/**
+ * Keyless probe: does a durable device key already exist? Never creates one.
+ * The bootstrap gate uses this to distinguish a fresh install from a populated
+ * library whose key is unavailable — the latter must never be treated as a
+ * new-library signal or overwritten by a freshly generated key.
+ */
+export async function hasDeviceKey(): Promise<boolean> {
+  return localStorage.getItem(DEVICE_KEY_ALIAS) !== null;
+}
+
+/**
+ * Keyless probe: is a previous device key pending from an interrupted
+ * rotation? beginKeyRotation persists the fallback before the current alias,
+ * so the current key can be absent while the previous key is still durable.
+ */
+export async function hasPendingPreviousDeviceKey(): Promise<boolean> {
+  return localStorage.getItem(PREVIOUS_DEVICE_KEY_ALIAS) !== null;
+}
+
 /** Generate a new device key without persisting it. Call commitKeyRotation() after re-encryption succeeds. */
 export async function prepareKeyRotation(): Promise<{ oldKey: Uint8Array; newKey: Uint8Array }> {
   const existingHex = localStorage.getItem(DEVICE_KEY_ALIAS);

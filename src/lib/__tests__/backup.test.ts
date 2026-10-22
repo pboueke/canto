@@ -2,6 +2,7 @@ import JSZip from 'jszip';
 import { aesGcmEncryptBytes, aesGcmDecryptBytes } from '../encryption/utils';
 import { hasNameConflict, resolveNameConflict } from '../backup/conflicts';
 import type { ExportManifest } from '../backup/export';
+import { ExportError } from '../backup/export-errors';
 import type { JournalContent, Page, Attachment } from 'canto-data';
 import { createLocalStore } from '../storage/local';
 import type { EncryptionService } from '../encryption';
@@ -11,6 +12,7 @@ import type { LocalStore } from '../storage';
 // In-memory filesystem mock (same pattern as localStorage.test.ts)
 // ---------------------------------------------------------------------------
 const filesystem: Record<string, string> = {};
+const archiveWriteKinds: Record<string, 'base64' | 'bytes'> = {};
 const mockGenerateThumbnailFromChunks = jest.fn();
 
 jest.mock('expo-file-system', () => {
@@ -35,8 +37,14 @@ jest.mock('expo-file-system', () => {
         filesystem[this.uri] = '';
       }
     }
-    write(content: string) {
+    write(content: string | Uint8Array) {
+      if (content instanceof Uint8Array) {
+        filesystem[this.uri] = Buffer.from(content).toString('base64');
+        archiveWriteKinds[this.uri] = 'bytes';
+        return;
+      }
       filesystem[this.uri] = content;
+      archiveWriteKinds[this.uri] = 'base64';
     }
     text() {
       return Promise.resolve(filesystem[this.uri] ?? '');
@@ -230,6 +238,7 @@ async function buildZip(opts: {
 // ---------------------------------------------------------------------------
 beforeEach(() => {
   for (const key of Object.keys(filesystem)) delete filesystem[key];
+  for (const key of Object.keys(archiveWriteKinds)) delete archiveWriteKinds[key];
   sharedFiles.length = 0;
   mockStore = createLocalStore(mockCreateEncryption());
   mockGenerateThumbnailFromChunks.mockReset();
@@ -403,7 +412,7 @@ describe('exportJournal', () => {
       kdfIterations: 50000,
       pages: [page],
     });
-    await mockStore.saveJournal(journal);
+    await mockStore.saveJournal(journal, key);
 
     await exportJournal(journal, true, key);
 
@@ -433,13 +442,15 @@ describe('exportJournal', () => {
   });
 
   it('includes salt/kdfIterations in manifest even when export is unencrypted', async () => {
+    const key = new Uint8Array(32);
+    key.fill(0xab);
     const journal = makeJournal('j1', {
       secure: true,
       salt: 'somesalt',
       kdfIterations: 100000,
       pages: [],
     });
-    await mockStore.saveJournal(journal);
+    await mockStore.saveJournal(journal, key);
 
     await exportJournal(journal, false);
 
@@ -500,7 +511,7 @@ describe('exportJournal', () => {
       kdfIterations: 50000,
       pages: [page],
     });
-    await mockStore.saveJournal(journal);
+    await mockStore.saveJournal(journal, key);
 
     // Save attachment data
     const validBase64 = btoa('fake-image-data');
@@ -583,6 +594,85 @@ describe('exportJournal', () => {
     expect(zip.file(/^pages\//).length).toBe(0);
     expect(zip.file('manifest.json')).not.toBeNull();
     expect(zip.file('journal.json')).not.toBeNull();
+  });
+
+  it('classifies missing attachment data as an integrity failure and never changes journal files', async () => {
+    const attachment = makeAttachment('a1');
+    const page = makePage('p1', { images: [attachment] });
+    const journal = makeJournal('j1', { pages: [page] });
+    await mockStore.saveJournal(journal);
+
+    // The page references an attachment whose disk data is gone. A complete
+    // export cannot be produced without it, so the export must fail closed
+    // with an integrity classification and touch no journal file.
+    Object.keys(filesystem)
+      .filter((key) => key.includes('/attachments/'))
+      .forEach((key) => delete filesystem[key]);
+    const before = Object.fromEntries(
+      Object.entries(filesystem).filter(([key]) => key.startsWith('/mock-docs')),
+    );
+
+    await expect(exportJournal(journal, false)).rejects.toBeInstanceOf(ExportError);
+    await expect(exportJournal(journal, false)).rejects.toMatchObject({ kind: 'integrity' });
+    expect(Object.keys(filesystem).filter((k) => k.endsWith('.canto.zip'))).toHaveLength(0);
+    const after = Object.fromEntries(
+      Object.entries(filesystem).filter(([key]) => key.startsWith('/mock-docs')),
+    );
+    expect(after).toEqual(before);
+  });
+
+  it('never downgrades a requested encrypted export to plaintext when the key is missing or revoked', async () => {
+    const key = new Uint8Array(32);
+    key.fill(0xab);
+    const journal = makeJournal('j1', { secure: true, pages: [makePage('p1')] });
+    await mockStore.saveJournal(journal, key);
+
+    // Missing derived key: encrypted export is impossible; plaintext must not leak.
+    await expect(exportJournal(journal, true)).rejects.toMatchObject({ kind: 'integrity' });
+
+    // Revoked (all-zero) key: the zero-key storage guard must reject first.
+    await expect(exportJournal(journal, true, new Uint8Array(32))).rejects.toMatchObject({
+      kind: 'integrity',
+    });
+
+    // No archive may have been written by either attempt.
+    expect(Object.keys(filesystem).filter((k) => k.endsWith('.canto.zip'))).toHaveLength(0);
+  });
+
+  it('writes the generated archive as binary bytes so large exports avoid a base64 archive copy', async () => {
+    const journal = makeJournal('j1', { pages: [makePage('p1')] });
+    await mockStore.saveJournal(journal);
+
+    await exportJournal(journal, false);
+
+    const zipUri = Object.keys(filesystem).find((key) => key.endsWith('.canto.zip'))!;
+    expect(archiveWriteKinds[zipUri]).toBe('bytes');
+    const zip = await JSZip.loadAsync(filesystem[zipUri], { base64: true });
+    expect(zip.file('manifest.json')).not.toBeNull();
+    expect(sharedFiles).toEqual([zipUri]);
+  });
+
+  it('classifies archive construction failures as archive errors and never opens the share sheet', async () => {
+    const journal = makeJournal('j1', { pages: [makePage('p1')] });
+    await mockStore.saveJournal(journal);
+    const generateAsync = jest
+      .spyOn(JSZip.prototype, 'generateAsync')
+      .mockRejectedValueOnce(new Error('disk full'));
+
+    await expect(exportJournal(journal, false)).rejects.toMatchObject({ kind: 'archive' });
+    expect(sharedFiles).toHaveLength(0);
+    generateAsync.mockRestore();
+  });
+
+  it('classifies a native share-sheet rejection as a share error while leaving the archive on disk', async () => {
+    const journal = makeJournal('j1', { pages: [makePage('p1')] });
+    await mockStore.saveJournal(journal);
+    const shareAsync = require('expo-sharing').shareAsync as jest.Mock;
+    shareAsync.mockRejectedValueOnce(new Error('No activity found'));
+
+    await expect(exportJournal(journal, false)).rejects.toMatchObject({ kind: 'share' });
+    expect(Object.keys(filesystem).filter((k) => k.endsWith('.canto.zip'))).toHaveLength(1);
+    shareAsync.mockResolvedValue(undefined);
   });
 });
 
@@ -1409,6 +1499,40 @@ describe('importJournal', () => {
     expect(importedAtt!.path).toBe('');
   });
 
+  it('reports a chunked attachment import when the store cannot stream payloads', async () => {
+    const att = makeAttachment('a1', { name: 'photo.jpg', path: 'image-a1.jpg' });
+    const page = makePage('p1', { images: [att] });
+    const journal = makeJournal('j1', { title: 'No Stream' });
+    const uri = await buildZip({
+      manifest: {
+        version: 1,
+        appVersion: '0.9.0',
+        exportDate: '2026-03-13T00:00:00Z',
+        encrypted: false,
+        journalTitle: 'No Stream',
+      },
+      journalJson: JSON.stringify(journal),
+      pages: [{ id: 'p1', json: JSON.stringify(page) }],
+      attachments: [{ filename: 'image-a1.jpg', data: btoa('fake-image-data') }],
+    });
+
+    const storeWithStream = mockStore as {
+      saveAttachmentStream?: LocalStore['saveAttachmentStream'];
+    };
+    const original = storeWithStream.saveAttachmentStream;
+    storeWithStream.saveAttachmentStream = undefined;
+    try {
+      const result = await importJournal(uri, 'No Stream');
+
+      expect(result.attachmentErrors).toHaveLength(1);
+      expect(result.attachmentErrors![0].error).toBe(
+        'Chunked attachment import is unavailable on this device',
+      );
+    } finally {
+      storeWithStream.saveAttachmentStream = original;
+    }
+  });
+
   it('streams oversized flat-v1 attachments without materializing entry async output', async () => {
     const source = new Uint8Array(1024 * 1024 + 31);
     source.forEach((_, index) => {
@@ -1447,7 +1571,7 @@ describe('importJournal', () => {
       if (this.name.startsWith('attachments/')) {
         throw new Error(`Unbounded ZIP entry read: ${String(args[0])}`);
       }
-      return Reflect.apply(originalAsync, this, args);
+      return originalAsync.apply(this, args);
     });
 
     const result = await importJournal(uri, 'Streamed import');
@@ -1481,17 +1605,18 @@ describe('importJournal', () => {
     });
 
     jest.spyOn(mockStore, 'getJournalOverview').mockRejectedValue(new Error('unreadable metadata'));
-    const deleteSpy = jest.spyOn(mockStore, 'deleteJournal');
 
     await expect(importJournal(uri, 'Imported journal', key)).rejects.toThrow(
       'Imported journal failed storage verification: unreadable metadata',
     );
 
-    expect(deleteSpy).toHaveBeenCalledTimes(1);
-    const importedId = deleteSpy.mock.calls[0][0];
-    expect(importedId).not.toBe('source-journal');
-    expect(mockStore.getJournalOverview).toHaveBeenCalledWith(importedId, key);
+    // Rollback goes through the serialized-abort path (the same mutation queue
+    // as deleteJournal), so the imported journal must be fully gone afterwards.
+    expect(mockStore.getJournalOverview).toHaveBeenCalledWith(expect.any(String), key);
     expect(await mockStore.listJournals()).toEqual([]);
+    const importedId = (mockStore.getJournalOverview as jest.Mock).mock.calls[0][0];
+    expect(importedId).not.toBe('source-journal');
+    expect(await mockStore.getJournal(importedId)).toBeNull();
   });
 
   it('keeps the original write error when rollback cleanup fails', async () => {
@@ -1509,8 +1634,10 @@ describe('importJournal', () => {
     });
 
     jest.spyOn(mockStore, 'saveJournal').mockRejectedValue(new Error('disk full'));
-    const deleteSpy = jest
-      .spyOn(mockStore, 'deleteJournal')
+    // Rollback cleanup itself fails; the original write error must still surface
+    // while startup recovery owns any leftover marker.
+    const abortSpy = jest
+      .spyOn(mockStore, 'abortJournalImport')
       .mockRejectedValue(new Error('cleanup failed'));
     const consoleWarnSpy = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
 
@@ -1518,8 +1645,7 @@ describe('importJournal', () => {
       'Imported journal failed storage verification: disk full',
     );
 
-    expect(deleteSpy).toHaveBeenCalledTimes(1);
-    expect(deleteSpy.mock.calls[0][0]).not.toBe('source-journal');
+    expect(abortSpy).toHaveBeenCalledTimes(1);
     consoleWarnSpy.mockRestore();
   });
 });
@@ -1655,7 +1781,7 @@ describe('export → import round-trip', () => {
       kdfIterations: 50000,
       pages: [page],
     });
-    await mockStore.saveJournal(journal);
+    await mockStore.saveJournal(journal, key);
 
     await exportJournal(journal, true, key);
 
@@ -1718,7 +1844,7 @@ describe('export → import round-trip', () => {
       kdfIterations: 50000,
       pages: [page],
     });
-    await mockStore.saveJournal(journal);
+    await mockStore.saveJournal(journal, key);
 
     // Save attachment data
     const encData = btoa('encrypted-image-binary');

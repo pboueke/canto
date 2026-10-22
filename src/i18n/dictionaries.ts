@@ -104,6 +104,7 @@ export interface Dictionary {
     takePhoto: string;
     takeEncryptedPhoto: string;
     cameraPermissionDenied: string;
+    unlockRequired: string;
   };
   settings: {
     theme: string;
@@ -170,6 +171,17 @@ export interface Dictionary {
     reencryptProgress: string;
     themeOverride: string;
     useGlobalTheme: string;
+    recoverLocalPages: string;
+    recoverDescription: string;
+    recoverScanning: string;
+    recoverFound: string;
+    recoverNone: string;
+    recoverConfirm: string;
+    recoverRestoring: string;
+    recoverSuccess: string;
+    recoverIncomplete: string;
+    recoverLocked: string;
+    recoverFailed: string;
   };
   filterBar: {
     searchPlaceholder: string;
@@ -221,6 +233,9 @@ export interface Dictionary {
     exporting: string;
     exportComplete: string;
     exportError: string;
+    exportErrorData: string;
+    exportErrorArchive: string;
+    exportErrorShare: string;
     importPassword: string;
     importConflict: string;
     importRename: string;
@@ -316,6 +331,13 @@ export interface Dictionary {
     retry: string;
     acknowledge: string;
   };
+  recovery: {
+    title: string;
+    message: string;
+    deviceKeyDetail: string;
+    indexDetail: string;
+    instructions: string;
+  };
 }
 
 const en: Dictionary = {
@@ -404,6 +426,7 @@ const en: Dictionary = {
     takePhoto: 'Take Photo',
     takeEncryptedPhoto: 'Encrypted Photo',
     cameraPermissionDenied: 'Camera permission denied',
+    unlockRequired: 'Unlock this journal before saving.',
   },
   settings: {
     theme: 'Theme',
@@ -471,6 +494,18 @@ const en: Dictionary = {
     reencryptProgress: 'Processing {current} of {total}...',
     themeOverride: 'Theme',
     useGlobalTheme: 'Use global theme',
+    recoverLocalPages: 'Recover local pages',
+    recoverDescription:
+      "Scan the page files saved on this device and rebuild this journal's page list. Nothing changes until you confirm.",
+    recoverScanning: 'Scanning local pages...',
+    recoverFound: 'Recoverable pages found: {count}',
+    recoverNone: 'No recoverable pages were found. Nothing was changed.',
+    recoverConfirm: 'Rebuild page list',
+    recoverRestoring: 'Rebuilding page list...',
+    recoverSuccess: 'Page list rebuilt from local files.',
+    recoverIncomplete: 'Some local pages could not be read safely. Nothing was changed.',
+    recoverLocked: 'Unlock this journal before recovering pages.',
+    recoverFailed: 'Recovery could not be completed. Nothing was changed.',
   },
   filterBar: {
     searchPlaceholder: 'Search...',
@@ -526,6 +561,10 @@ const en: Dictionary = {
     exporting: 'Exporting...',
     exportComplete: 'Export ready',
     exportError: 'Export failed',
+    exportErrorData: 'Some journal data could not be read. No files were changed or deleted.',
+    exportErrorArchive:
+      'The backup archive could not be created. Check available storage and try again.',
+    exportErrorShare: 'The backup was created but could not be shared. Please try again.',
     importPassword: 'This backup is encrypted. Enter the password:',
     importConflict: 'A journal with this name already exists',
     importRename: 'Rename journal',
@@ -628,6 +667,15 @@ const en: Dictionary = {
     retry: 'Retry',
     acknowledge: 'OK',
   },
+  recovery: {
+    title: 'Data preservation needed',
+    message: 'Canto detected a storage integrity problem. Nothing was changed or deleted.',
+    deviceKeyDetail:
+      'This device currently cannot access the key that protects your journal files.',
+    indexDetail: 'The journal index cannot be read safely.',
+    instructions:
+      'Keep the app installed and do not clear its data or reinstall it. Your encrypted files are the only copy. Contact support and mention this message.',
+  },
 };
 
 const pt: Dictionary = {
@@ -716,6 +764,7 @@ const pt: Dictionary = {
     takePhoto: 'Tirar Foto',
     takeEncryptedPhoto: 'Foto Criptografada',
     cameraPermissionDenied: 'Permissão de câmera negada',
+    unlockRequired: 'Desbloqueie este diário antes de salvar.',
   },
   settings: {
     theme: 'Tema',
@@ -783,6 +832,19 @@ const pt: Dictionary = {
     reencryptProgress: 'Processando {current} de {total}...',
     themeOverride: 'Tema',
     useGlobalTheme: 'Usar tema global',
+    recoverLocalPages: 'Recuperar páginas locais',
+    recoverDescription:
+      'Verifica os ficheiros de páginas guardados neste dispositivo e reconstrói a lista de páginas deste diário. Nada muda até confirmares.',
+    recoverScanning: 'A verificar páginas locais...',
+    recoverFound: 'Páginas recuperáveis encontradas: {count}',
+    recoverNone: 'Não foram encontradas páginas recuperáveis. Nada foi alterado.',
+    recoverConfirm: 'Reconstruir lista de páginas',
+    recoverRestoring: 'A reconstruir lista de páginas...',
+    recoverSuccess: 'Lista de páginas reconstruída a partir dos ficheiros locais.',
+    recoverIncomplete:
+      'Algumas páginas locais não puderam ser lidas em segurança. Nada foi alterado.',
+    recoverLocked: 'Desbloqueia este diário antes de recuperar páginas.',
+    recoverFailed: 'Não foi possível concluir a recuperação. Nada foi alterado.',
   },
   filterBar: {
     searchPlaceholder: 'Buscar...',
@@ -838,6 +900,11 @@ const pt: Dictionary = {
     exporting: 'Exportando...',
     exportComplete: 'Exportação pronta',
     exportError: 'Falha na exportação',
+    exportErrorData:
+      'Não foi possível ler alguns dados do diário. Nenhum arquivo foi alterado ou excluído.',
+    exportErrorArchive:
+      'Não foi possível criar o arquivo de backup. Verifique o espaço disponível e tente novamente.',
+    exportErrorShare: 'O backup foi criado, mas não pôde ser compartilhado. Tente novamente.',
     importPassword: 'Este backup está criptografado. Digite a senha:',
     importConflict: 'Um diário com este nome já existe',
     importRename: 'Renomear diário',
@@ -940,6 +1007,16 @@ const pt: Dictionary = {
     retry: 'Tentar novamente',
     acknowledge: 'OK',
   },
+  recovery: {
+    title: 'Preservação de dados necessária',
+    message:
+      'O Canto detectou um problema de integridade do armazenamento. Nada foi alterado ou excluído.',
+    deviceKeyDetail:
+      'Este dispositivo não consegue acessar a chave que protege seus arquivos de diário.',
+    indexDetail: 'O índice de diários não pode ser lido com segurança.',
+    instructions:
+      'Mantenha o aplicativo instalado e não limpe os dados nem reinstale. Seus arquivos criptografados são a única cópia. Entre em contato com o suporte informando esta mensagem.',
+  },
 };
 
 const es: Dictionary = {
@@ -1028,6 +1105,7 @@ const es: Dictionary = {
     takePhoto: 'Tomar Foto',
     takeEncryptedPhoto: 'Foto Cifrada',
     cameraPermissionDenied: 'Permiso de cámara denegado',
+    unlockRequired: 'Desbloquea este diario antes de guardar.',
   },
   settings: {
     theme: 'Tema',
@@ -1096,6 +1174,19 @@ const es: Dictionary = {
     reencryptProgress: 'Procesando {current} de {total}...',
     themeOverride: 'Tema',
     useGlobalTheme: 'Usar tema global',
+    recoverLocalPages: 'Recuperar páginas locales',
+    recoverDescription:
+      'Analiza los archivos de páginas guardados en este dispositivo y reconstruye la lista de páginas de este diario. Nada cambia hasta que confirmes.',
+    recoverScanning: 'Analizando páginas locales...',
+    recoverFound: 'Páginas recuperables encontradas: {count}',
+    recoverNone: 'No se encontraron páginas recuperables. No se cambió nada.',
+    recoverConfirm: 'Reconstruir lista de páginas',
+    recoverRestoring: 'Reconstruyendo lista de páginas...',
+    recoverSuccess: 'Lista de páginas reconstruida desde los archivos locales.',
+    recoverIncomplete:
+      'Algunas páginas locales no se pudieron leer de forma segura. No se cambió nada.',
+    recoverLocked: 'Desbloquea este diario antes de recuperar páginas.',
+    recoverFailed: 'No se pudo completar la recuperación. No se cambió nada.',
   },
   filterBar: {
     searchPlaceholder: 'Buscar...',
@@ -1151,6 +1242,12 @@ const es: Dictionary = {
     exporting: 'Exportando...',
     exportComplete: 'Exportación lista',
     exportError: 'Error al exportar',
+    exportErrorData:
+      'No se pudieron leer algunos datos del diario. No se modificó ni eliminó ningún archivo.',
+    exportErrorArchive:
+      'No se pudo crear el archivo de copia de seguridad. Comprueba el espacio disponible e inténtalo de nuevo.',
+    exportErrorShare:
+      'La copia de seguridad se creó, pero no se pudo compartir. Inténtalo de nuevo.',
     importPassword: 'Este respaldo está cifrado. Ingrese la contraseña:',
     importConflict: 'Ya existe un diario con este nombre',
     importRename: 'Renombrar diario',
@@ -1256,6 +1353,16 @@ const es: Dictionary = {
     retry: 'Reintentar',
     acknowledge: 'OK',
   },
+  recovery: {
+    title: 'Es necesaria la preservación de datos',
+    message:
+      'Canto detectó un problema de integridad del almacenamiento. No se cambió ni eliminó nada.',
+    deviceKeyDetail:
+      'Este dispositivo no puede acceder a la clave que protege tus archivos de diario.',
+    indexDetail: 'El índice de diarios no se puede leer de forma segura.',
+    instructions:
+      'Mantén la aplicación instalada y no borres sus datos ni la reinstales. Tus archivos cifrados son la única copia. Contacta con el soporte y menciona este mensaje.',
+  },
 };
 
 const de: Dictionary = {
@@ -1344,6 +1451,7 @@ const de: Dictionary = {
     takePhoto: 'Foto aufnehmen',
     takeEncryptedPhoto: 'Verschlüsseltes Foto',
     cameraPermissionDenied: 'Kameraberechtigung verweigert',
+    unlockRequired: 'Entsperre dieses Journal, bevor du speicherst.',
   },
   settings: {
     theme: 'Thema',
@@ -1411,6 +1519,20 @@ const de: Dictionary = {
     reencryptProgress: 'Verarbeite {current} von {total}...',
     themeOverride: 'Thema',
     useGlobalTheme: 'Globales Thema verwenden',
+    recoverLocalPages: 'Lokale Seiten wiederherstellen',
+    recoverDescription:
+      'Durchsucht die auf diesem Gerät gespeicherten Seitendateien und baut die Seitenliste dieses Journals neu auf. Erst nach deiner Bestätigung ändert sich etwas.',
+    recoverScanning: 'Lokale Seiten werden durchsucht...',
+    recoverFound: 'Wiederherstellbare Seiten gefunden: {count}',
+    recoverNone: 'Keine wiederherstellbaren Seiten gefunden. Es wurde nichts geändert.',
+    recoverConfirm: 'Seitenliste neu aufbauen',
+    recoverRestoring: 'Seitenliste wird neu aufgebaut...',
+    recoverSuccess: 'Seitenliste aus lokalen Dateien neu aufgebaut.',
+    recoverIncomplete:
+      'Einige lokale Seiten konnten nicht sicher gelesen werden. Es wurde nichts geändert.',
+    recoverLocked: 'Entsperre dieses Journal, bevor du Seiten wiederherstellst.',
+    recoverFailed:
+      'Die Wiederherstellung konnte nicht abgeschlossen werden. Es wurde nichts geändert.',
   },
   filterBar: {
     searchPlaceholder: 'Suchen...',
@@ -1466,6 +1588,12 @@ const de: Dictionary = {
     exporting: 'Exportiere...',
     exportComplete: 'Export bereit',
     exportError: 'Export fehlgeschlagen',
+    exportErrorData:
+      'Einige Journaldaten konnten nicht gelesen werden. Es wurden keine Dateien geändert oder gelöscht.',
+    exportErrorArchive:
+      'Das Backup-Archiv konnte nicht erstellt werden. Überprüfe den verfügbaren Speicherplatz und versuche es erneut.',
+    exportErrorShare:
+      'Das Backup wurde erstellt, konnte aber nicht geteilt werden. Bitte versuche es erneut.',
     importPassword: 'Dieses Backup ist verschlüsselt. Passwort eingeben:',
     importConflict: 'Ein Tagebuch mit diesem Namen existiert bereits',
     importRename: 'Tagebuch umbenennen',
@@ -1569,6 +1697,16 @@ const de: Dictionary = {
     retry: 'Erneut versuchen',
     acknowledge: 'OK',
   },
+  recovery: {
+    title: 'Datenerhalt erforderlich',
+    message:
+      'Canto hat ein Problem mit der Speicherintegrität erkannt. Es wurde nichts geändert oder gelöscht.',
+    deviceKeyDetail:
+      'Dieses Gerät kann derzeit nicht auf den Schlüssel zugreifen, der deine Journaldateien schützt.',
+    indexDetail: 'Der Journal-Index kann nicht sicher gelesen werden.',
+    instructions:
+      'Lass die App installiert und lösche weder ihre Daten noch installiere sie neu. Deine verschlüsselten Dateien sind die einzige Kopie. Kontaktiere den Support und erwähne diese Meldung.',
+  },
 };
 
 const fr: Dictionary = {
@@ -1657,6 +1795,7 @@ const fr: Dictionary = {
     takePhoto: 'Prendre une Photo',
     takeEncryptedPhoto: 'Photo Chiffrée',
     cameraPermissionDenied: 'Autorisation de la caméra refusée',
+    unlockRequired: 'Déverrouillez ce journal avant d’enregistrer.',
   },
   settings: {
     theme: 'Thème',
@@ -1725,6 +1864,19 @@ const fr: Dictionary = {
     reencryptProgress: 'Traitement de {current} sur {total}...',
     themeOverride: 'Thème',
     useGlobalTheme: 'Utiliser le thème global',
+    recoverLocalPages: 'Récupérer les pages locales',
+    recoverDescription:
+      "Analyse les fichiers de pages enregistrés sur cet appareil et reconstruit la liste des pages de ce journal. Rien ne change tant que tu n'as pas confirmé.",
+    recoverScanning: 'Analyse des pages locales...',
+    recoverFound: 'Pages récupérables trouvées : {count}',
+    recoverNone: "Aucune page récupérable trouvée. Rien n'a été modifié.",
+    recoverConfirm: 'Reconstruire la liste des pages',
+    recoverRestoring: 'Reconstruction de la liste des pages...',
+    recoverSuccess: 'Liste des pages reconstruite à partir des fichiers locaux.',
+    recoverIncomplete:
+      "Certaines pages locales n'ont pas pu être lues en toute sécurité. Rien n'a été modifié.",
+    recoverLocked: 'Déverrouille ce journal avant de récupérer des pages.',
+    recoverFailed: "La récupération n'a pas pu aboutir. Rien n'a été modifié.",
   },
   filterBar: {
     searchPlaceholder: 'Rechercher...',
@@ -1780,6 +1932,12 @@ const fr: Dictionary = {
     exporting: 'Exportation...',
     exportComplete: 'Exportation prête',
     exportError: "Échec de l'exportation",
+    exportErrorData:
+      'Certaines données du journal n’ont pas pu être lues. Aucun fichier n’a été modifié ni supprimé.',
+    exportErrorArchive:
+      'L’archive de sauvegarde n’a pas pu être créée. Vérifiez l’espace disponible et réessayez.',
+    exportErrorShare:
+      'La sauvegarde a été créée mais n’a pas pu être partagée. Veuillez réessayer.',
     importPassword: 'Cette sauvegarde est chiffrée. Entrez le mot de passe :',
     importConflict: 'Un journal avec ce nom existe déjà',
     importRename: 'Renommer le journal',
@@ -1885,6 +2043,16 @@ const fr: Dictionary = {
     retry: 'Réessayer',
     acknowledge: 'OK',
   },
+  recovery: {
+    title: 'Préservation des données requise',
+    message:
+      'Canto a détecté un problème d’intégrité du stockage. Rien n’a été modifié ni supprimé.',
+    deviceKeyDetail:
+      'Cet appareil ne peut actuellement pas accéder à la clé qui protège vos fichiers de journal.',
+    indexDetail: 'L’index des journaux ne peut pas être lu en toute sécurité.',
+    instructions:
+      'Gardez l’application installée, ne videz pas ses données et ne la réinstallez pas. Vos fichiers chiffrés sont la seule copie. Contactez l’assistance en mentionnant ce message.',
+  },
 };
 
 const ru: Dictionary = {
@@ -1973,6 +2141,7 @@ const ru: Dictionary = {
     takePhoto: 'Сделать фото',
     takeEncryptedPhoto: 'Зашифрованное фото',
     cameraPermissionDenied: 'Доступ к камере запрещён',
+    unlockRequired: 'Разблокируйте журнал перед сохранением.',
   },
   settings: {
     theme: 'Тема',
@@ -2040,6 +2209,19 @@ const ru: Dictionary = {
     reencryptProgress: 'Обработка {current} из {total}...',
     themeOverride: 'Тема',
     useGlobalTheme: 'Использовать глобальную тему',
+    recoverLocalPages: 'Восстановить локальные страницы',
+    recoverDescription:
+      'Проверяет файлы страниц, сохранённые на этом устройстве, и заново строит список страниц этого дневника. Ничего не изменится до вашего подтверждения.',
+    recoverScanning: 'Проверка локальных страниц...',
+    recoverFound: 'Найдено восстанавливаемых страниц: {count}',
+    recoverNone: 'Восстанавливаемые страницы не найдены. Ничего не изменено.',
+    recoverConfirm: 'Перестроить список страниц',
+    recoverRestoring: 'Перестроение списка страниц...',
+    recoverSuccess: 'Список страниц перестроен из локальных файлов.',
+    recoverIncomplete:
+      'Некоторые локальные страницы не удалось безопасно прочитать. Ничего не изменено.',
+    recoverLocked: 'Разблокируйте дневник, прежде чем восстанавливать страницы.',
+    recoverFailed: 'Не удалось завершить восстановление. Ничего не изменено.',
   },
   filterBar: {
     searchPlaceholder: 'Поиск...',
@@ -2095,6 +2277,12 @@ const ru: Dictionary = {
     exporting: 'Экспорт...',
     exportComplete: 'Экспорт готов',
     exportError: 'Ошибка экспорта',
+    exportErrorData:
+      'Не удалось прочитать часть данных журнала. Никакие файлы не были изменены или удалены.',
+    exportErrorArchive:
+      'Не удалось создать архив резервной копии. Проверьте свободное место и попробуйте снова.',
+    exportErrorShare:
+      'Резервная копия создана, но не удалось открыть окно отправки. Попробуйте ещё раз.',
     importPassword: 'Эта резервная копия зашифрована. Введите пароль:',
     importConflict: 'Дневник с таким именем уже существует',
     importRename: 'Переименовать дневник',
@@ -2198,6 +2386,15 @@ const ru: Dictionary = {
     retry: 'Повторить',
     acknowledge: 'OK',
   },
+  recovery: {
+    title: 'Требуется сохранность данных',
+    message: 'Canto обнаружил проблему целостности хранилища. Ничего не было изменено или удалено.',
+    deviceKeyDetail:
+      'Это устройство сейчас не может получить доступ к ключу, защищающему файлы журнала.',
+    indexDetail: 'Индекс журналов не может быть прочитан безопасно.',
+    instructions:
+      'Не удаляйте приложение, не очищайте его данные и не переустанавливайте. Зашифрованные файлы — единственная копия. Обратитесь в поддержку, указав это сообщение.',
+  },
 };
 
 const zh: Dictionary = {
@@ -2285,6 +2482,7 @@ const zh: Dictionary = {
     takePhoto: '拍照',
     takeEncryptedPhoto: '加密照片',
     cameraPermissionDenied: '相机权限被拒绝',
+    unlockRequired: '保存前请先解锁此日记。',
   },
   settings: {
     theme: '主题',
@@ -2352,6 +2550,18 @@ const zh: Dictionary = {
     reencryptProgress: '处理 {current}/{total}...',
     themeOverride: '主题',
     useGlobalTheme: '使用全局主题',
+    recoverLocalPages: '恢复本地页面',
+    recoverDescription:
+      '扫描保存在此设备上的页面文件，并重建此日记的页面列表。在你确认之前不会有任何更改。',
+    recoverScanning: '正在扫描本地页面...',
+    recoverFound: '找到可恢复页面：{count}',
+    recoverNone: '未找到可恢复的页面。没有做任何更改。',
+    recoverConfirm: '重建页面列表',
+    recoverRestoring: '正在重建页面列表...',
+    recoverSuccess: '已从本地文件重建页面列表。',
+    recoverIncomplete: '部分本地页面无法安全读取。没有做任何更改。',
+    recoverLocked: '请先解锁此日记再恢复页面。',
+    recoverFailed: '无法完成恢复。没有做任何更改。',
   },
   filterBar: {
     searchPlaceholder: '搜索...',
@@ -2406,6 +2616,9 @@ const zh: Dictionary = {
     exporting: '正在导出...',
     exportComplete: '导出完成',
     exportError: '导出失败',
+    exportErrorData: '无法读取部分日记数据。没有文件被更改或删除。',
+    exportErrorArchive: '无法创建备份压缩包。请检查可用空间后重试。',
+    exportErrorShare: '备份已创建，但无法共享。请重试。',
     importPassword: '此备份已加密。请输入密码：',
     importConflict: '已存在同名日记',
     importRename: '重命名日记',
@@ -2503,6 +2716,14 @@ const zh: Dictionary = {
     retry: '重试',
     acknowledge: '确定',
   },
+  recovery: {
+    title: '需要保护数据',
+    message: 'Canto 检测到存储完整性问题。没有任何内容被更改或删除。',
+    deviceKeyDetail: '此设备目前无法访问保护日记文件的密钥。',
+    indexDetail: '无法安全地读取日记索引。',
+    instructions:
+      '请保持应用已安装，不要清除其数据或重新安装。您的加密文件是唯一副本。请联系支持并提及此消息。',
+  },
 };
 
 const it: Dictionary = {
@@ -2591,6 +2812,7 @@ const it: Dictionary = {
     takePhoto: 'Scatta Foto',
     takeEncryptedPhoto: 'Foto Crittografata',
     cameraPermissionDenied: 'Permesso fotocamera negato',
+    unlockRequired: 'Sblocca questo diario prima di salvare.',
   },
   settings: {
     theme: 'Tema',
@@ -2658,6 +2880,19 @@ const it: Dictionary = {
     reencryptProgress: 'Elaborazione {current} di {total}...',
     themeOverride: 'Tema',
     useGlobalTheme: 'Usa tema globale',
+    recoverLocalPages: 'Recupera pagine locali',
+    recoverDescription:
+      "Analizza i file delle pagine salvati su questo dispositivo e ricostruisce l'elenco delle pagine di questo diario. Nulla cambia finché non confermi.",
+    recoverScanning: 'Analisi delle pagine locali...',
+    recoverFound: 'Pagine recuperabili trovate: {count}',
+    recoverNone: 'Nessuna pagina recuperabile trovata. Non è stato modificato nulla.',
+    recoverConfirm: 'Ricostruisci elenco pagine',
+    recoverRestoring: "Ricostruzione dell'elenco pagine...",
+    recoverSuccess: 'Elenco pagine ricostruito dai file locali.',
+    recoverIncomplete:
+      'Alcune pagine locali non sono state lette in sicurezza. Non è stato modificato nulla.',
+    recoverLocked: 'Sblocca questo diario prima di recuperare le pagine.',
+    recoverFailed: 'Impossibile completare il recupero. Non è stato modificato nulla.',
   },
   filterBar: {
     searchPlaceholder: 'Cerca...',
@@ -2713,6 +2948,11 @@ const it: Dictionary = {
     exporting: 'Esportazione...',
     exportComplete: 'Esportazione pronta',
     exportError: 'Esportazione fallita',
+    exportErrorData:
+      'Non è stato possibile leggere alcuni dati del diario. Nessun file è stato modificato o eliminato.',
+    exportErrorArchive:
+      'Non è stato possibile creare l’archivio di backup. Controlla lo spazio disponibile e riprova.',
+    exportErrorShare: 'Il backup è stato creato ma non è stato possibile condividerlo. Riprova.',
     importPassword: 'Questo backup e crittografato. Inserisci la password:',
     importConflict: 'Un diario con questo nome esiste gia',
     importRename: 'Rinomina diario',
@@ -2816,6 +3056,16 @@ const it: Dictionary = {
     failedItems: 'Elementi falliti',
     retry: 'Riprova',
     acknowledge: 'OK',
+  },
+  recovery: {
+    title: 'È necessaria la conservazione dei dati',
+    message:
+      'Canto ha rilevato un problema di integrità dello storage. Non è stato modificato né eliminato nulla.',
+    deviceKeyDetail:
+      'Questo dispositivo attualmente non può accedere alla chiave che protegge i file del diario.',
+    indexDetail: 'L’indice dei diari non può essere letto in modo sicuro.',
+    instructions:
+      'Tieni installata l’app, non cancellarne i dati e non reinstallarla. I tuoi file crittografati sono l’unica copia. Contatta l’assistenza citando questo messaggio.',
   },
 };
 

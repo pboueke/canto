@@ -1,0 +1,3 @@
+* play console requires us to use DEX code optimization to meet the minimum obfuscation treshhold of 25%, we need to make sure the build proccess for the app meets this critera
+* page styling, specially on the main text input, needs to be improved
+    * on a new line, the cursor and the border collide, making the cursor not visible

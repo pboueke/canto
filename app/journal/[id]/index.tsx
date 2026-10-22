@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, FlatList, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Alert, FlatList, StyleSheet, Text, View } from 'react-native';
 import { usePagination } from '@/hooks/usePagination';
 import { useLocalSearchParams, router, useFocusEffect } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -7,6 +7,7 @@ import { ThemeContext, useTheme } from '@/hooks/useTheme';
 import { useI18n } from '@/hooks/useI18n';
 import { useJournalOverview, useCreatePage } from '@/hooks/useStorage';
 import { useJournalKeys } from '@/contexts/JournalKeyContext';
+import { useKeyLease } from '@/hooks/useKeyLease';
 import { useFilter } from '@/hooks/useFilter';
 import { JournalHeader } from '@/components/journal/JournalHeader';
 import { PageListItem } from '@/components/journal/PageListItem';
@@ -44,6 +45,9 @@ export default function JournalScreen() {
   }).current;
 
   const derivedKey = id ? getKey(id) : null;
+  // Auto-lock write capability: revoked before clearKey/clearAll zeroes key
+  // material, so the new-page action can never create a page with a zeroed key.
+  const { locked } = useKeyLease(id);
   const {
     overview,
     loading,
@@ -319,10 +323,24 @@ export default function JournalScreen() {
         <FloatingActionButton
           icon="+"
           onPress={async () => {
-            const pageId = await createPage();
-            if (pageId) {
-              const themeParam = overrideName ? `&themeOverride=${overrideName}` : '';
-              router.push(`/page/${pageId}?journalId=${journal.id}&edit=true${themeParam}`);
+            // A revoked lease (auto-lock) must reject the new-page mutation
+            // instead of writing with a revoked key; the journal returns to
+            // its locked state until it is unlocked again.
+            if (locked) {
+              Alert.alert(t.page.unlockRequired);
+              return;
+            }
+            try {
+              const pageId = await createPage();
+              if (pageId) {
+                const themeParam = overrideName ? `&themeOverride=${overrideName}` : '';
+                router.push(`/page/${pageId}?journalId=${journal.id}&edit=true${themeParam}`);
+              }
+            } catch (err) {
+              // Handler error boundary: never leave an unhandled promise
+              // rejection from a locked/recovery page creation.
+              const message = err instanceof Error ? err.message : String(err);
+              Alert.alert(t.page.unlockRequired, message);
             }
           }}
           backgroundColor={theme.colors.popAction.new.background}

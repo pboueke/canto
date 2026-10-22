@@ -1,5 +1,29 @@
 # Changelog
 
+## v0.20.2 - Android release and import fixes
+
+- **fix: Android release native options** — temporarily disable R8 minification and resource shrinking after the published 0.20.1 build failed to convert Expo SecureStore and document-picker options. Release signing and production configuration remain enabled; shrinking will return only after verification on a Play-installed build.
+- **fix: first-journal and backup import storage** — read the native journal index before creating a new journal directory, so a first write cannot mistake its own empty directory for pre-existing orphaned data.
+- **fix: cloud import feedback** — report an unavailable sync manager instead of silently ignoring an Import from Google Drive tap when local storage initialization fails. Drive sign-in and import still require Play-installed verification.
+- **fix: large backup exports** — generate native ZIP archives as binary data instead of a base64 string to reduce peak JavaScript memory use; preserve native and web archive round-trip tests.
+- test: add first-write and sync-initialization regressions, and guard the release configuration against accidentally re-enabling shrinking.
+
+## v0.20.1 - Safer local journal recovery
+
+- **feat: opt-in local-page recovery** — Journal Settings now offers **Recover local pages**. It performs a read-only scan of the current journal’s raw page records, shows the recoverable count, and restores only that journal’s page catalog after explicit confirmation. The tool never creates a separate journal, exports a forensic package, or rewrites raw page records.
+- **fix: fail-closed journal persistence recovery** — native and web storage now treat unreadable or missing indexes, catalogs, page records, and unavailable device keys as integrity conditions rather than publishing an empty or reduced view. Catalog rebuilds validate every raw page record and use serialized, crash-recoverable transactions.
+- **fix: safer recovery authorization and diagnostics** — auto-locked secure journals reject recovery and mutation attempts until unlocked; malformed, mismatched, duplicate, or unreadable raw records block recovery without changing the existing catalog. Recovery diagnostics use localized messages and opaque record identifiers rather than paths, page content, or keys.
+- **fix: safer backup export integrity handling** — exports of unreadable journal data now fail with an actionable integrity diagnostic and leave source records untouched.
+- test: added native/web recovery, transaction, write-barrier, auto-lock, backup, and settings-UI regression coverage; raised Jest coverage thresholds.
+
+## v0.20.0 - Editor polish and optimized Android releases
+
+- **fix: responsive journal editor and viewer sizing** — the multiline editor now uses a scale-derived 16-line minimum, grows and shrinks with its content without nested scrolling, preserves web caret and outer-scroll positions, and keeps the inner input borderless so focus decoration cannot overlap text. Read mode keeps a smaller four-line minimum.
+- **build: optimized Android release bundles** — release builds enable R8 minification, code/resource shrinking, the optimizing ProGuard baseline, and AGP 8.12 optimized resource shrinking through durable Expo configuration.
+- **build: reproducible secret-safe Android releases** — the tracked release script clean-prebuilds Android, validates signing/R8/version settings, supports JDK 25 native access, loads ignored signing credentials, and verifies the signed AAB output.
+- **fix: prebuild-safe native archive bridge** — canonical `CantoArchive` Kotlin sources now live outside the generated Android tree and are restored and registered idempotently by an Expo config plugin.
+- **dev: side-by-side Android debug installs** — debug builds use `com.boueke.canto.debug`, preserving the installed production app and its local data while release builds remain `com.boueke.canto`.
+
 ## v0.19.2 - Large-journal performance, safer backups, and resilient sync
 
 - **fix: transactional backup imports** — native and web imports now verify the newly persisted journal's metadata, settings, and page count before publishing it; failed verification rolls the import back. Imported page modification timestamps are preserved.

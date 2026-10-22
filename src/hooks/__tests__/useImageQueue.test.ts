@@ -23,7 +23,7 @@ describe('useImageQueue', () => {
 
   it('returns empty state initially', () => {
     const loadImage = jest.fn();
-    const { result, unmount } = renderHook(() => useImageQueue(loadImage));
+    const { result } = renderHook(() => useImageQueue(loadImage));
     expect(result.current.loadedImages).toEqual({});
     expect(result.current.loadingImages).toEqual({});
   });
@@ -381,6 +381,108 @@ describe('useImageQueue', () => {
 
     expect(result.current.failedImages).toEqual({});
   });
+
+  it('releases a lease that resolves after unmount instead of publishing it', async () => {
+    let resolveLoad!: (value: { uri: string; release(): void }) => void;
+    const release = jest.fn();
+    const loadImage = jest.fn(
+      () => new Promise<{ uri: string; release(): void }>((resolve) => (resolveLoad = resolve)),
+    );
+    const { result, unmount } = renderHook(() => useImageQueue(loadImage));
+
+    await act(async () => {
+      result.current.enqueue([makeAttachment('unmounted-lease')]);
+      await Promise.resolve();
+    });
+
+    // Resolve the underlying work but let the unmount cleanup win before the
+    // queue's publish callback observes the result.
+    resolveLoad({ uri: 'file:///late', release });
+    await Promise.resolve();
+    act(() => {
+      unmount();
+    });
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(release).toHaveBeenCalledTimes(1);
+  });
+
+  it('cancels without touching state after the hook has unmounted', () => {
+    const loadImage = jest.fn().mockResolvedValue('data:abc');
+    const { result, unmount } = renderHook(() => useImageQueue(loadImage));
+    unmount();
+
+    expect(() => act(() => result.current.cancelAll())).not.toThrow();
+  });
+
+  it('leaves the queue untouched when prioritising the head or an unknown attachment', async () => {
+    const loadImage = jest.fn().mockImplementation(() => new Promise<string | null>(() => {}));
+    const { result, unmount } = renderHook(() => useImageQueue(loadImage));
+
+    await act(async () => {
+      result.current.enqueue([makeAttachment('active'), makeAttachment('queued')]);
+      await Promise.resolve();
+    });
+
+    act(() => {
+      result.current.prioritize(makeAttachment('queued'));
+      result.current.prioritize(makeAttachment('absent'));
+    });
+
+    expect(loadImage).toHaveBeenCalledTimes(1);
+    unmount();
+  });
+
+  it('rejects a materialization whose signal was already aborted', async () => {
+    const loadImage = jest.fn().mockResolvedValue('data:never');
+    const { result } = renderHook(() => useImageQueue(loadImage));
+
+    await act(async () => {
+      result.current.enqueue([makeAttachment('aborted-before-start')]);
+      // Cancel before the serialized materialization microtask begins.
+      result.current.cancelAll();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(loadImage).not.toHaveBeenCalled();
+    expect(result.current.loadedImages).toEqual({});
+  });
+
+  it('does not mark queued work as loading once the hook has unmounted', async () => {
+    let resolveFirst!: (value: string | null) => void;
+    const loadImage = jest
+      .fn()
+      .mockImplementationOnce(
+        () => new Promise<string | null>((resolve) => (resolveFirst = resolve)),
+      )
+      .mockResolvedValue('data:second');
+    const { result, unmount } = renderHook(() => useImageQueue(loadImage));
+
+    await act(async () => {
+      result.current.enqueue([makeAttachment('live'), makeAttachment('pending')]);
+      await Promise.resolve();
+    });
+
+    expect(loadImage).toHaveBeenCalledTimes(1);
+    unmount();
+
+    await act(async () => {
+      resolveFirst('data:live');
+      await Promise.resolve();
+      await Promise.resolve();
+      await jest.runOnlyPendingTimersAsync();
+      await Promise.resolve();
+    });
+
+    // The queued item still drains through processNext after unmount, but it
+    // must not be published as loading because no state update can land.
+    expect(loadImage).toHaveBeenCalledTimes(2);
+    expect(result.current.loadingImages).not.toHaveProperty('pending');
+  });
 });
 
 describe('enqueueThumbnail', () => {
@@ -516,5 +618,30 @@ describe('enqueueThumbnail', () => {
 
     expect(load).not.toHaveBeenCalled();
     expect(onLoaded).not.toHaveBeenCalled();
+  });
+
+  it('does not resolve a cancelled thumbnail whose load later fails', async () => {
+    let rejectLoad!: (error: Error) => void;
+    const load = jest.fn(
+      () => new Promise<string | null>((_resolve, reject) => (rejectLoad = reject)),
+    );
+    const onLoaded = jest.fn();
+
+    const cancel = enqueueThumbnail('cancel-then-reject', load, onLoaded);
+    await Promise.resolve();
+    cancel();
+
+    await act(async () => {
+      rejectLoad(new Error('cancelled thumbnail failure'));
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(onLoaded).not.toHaveBeenCalled();
+
+    // Drain the finally setTimeout so the shared queue is left idle.
+    await Promise.resolve();
+    jest.runAllTimers();
+    await Promise.resolve();
   });
 });

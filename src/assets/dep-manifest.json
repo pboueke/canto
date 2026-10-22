@@ -25,6 +25,11 @@
     "license": "MIT"
   },
   {
+    "name": "@react-navigation/native",
+    "version": "7.1.33",
+    "license": "MIT"
+  },
+  {
     "name": "canto-data",
     "version": "1.2.0",
     "license": "MIT"
@@ -37,6 +42,11 @@
   {
     "name": "expo-auth-session",
     "version": "55.0.13",
+    "license": "MIT"
+  },
+  {
+    "name": "expo-build-properties",
+    "version": "55.0.18",
     "license": "MIT"
   },
   {

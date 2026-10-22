@@ -1,4 +1,9 @@
-import { createPageCatalog, isPageCatalogV1 } from '../journal-overview';
+import {
+  catalogDigest,
+  createPageCatalog,
+  createPageCatalogFromPreviews,
+  isPageCatalogV1,
+} from '../journal-overview';
 import type { Page } from 'canto-data';
 
 function makePage(id: string, tags: string[] = []): Page {
@@ -32,5 +37,21 @@ describe('PageCatalogV1 validation', () => {
     expect(isPageCatalogV1(null, 'journal-1')).toBe(false);
     expect(isPageCatalogV1('not a catalog', 'journal-1')).toBe(false);
     expect(isPageCatalogV1({ version: 1, journalId: 'journal-1' }, 'journal-1')).toBe(false);
+  });
+});
+
+describe('catalog digest and preview helpers', () => {
+  it('builds a digest that distinguishes deleted and live pages', () => {
+    const digest = catalogDigest([makePage('p1'), { ...makePage('p2'), deleted: true }]);
+    expect(digest).toContain('p1:10:0');
+    expect(digest).toContain('p2:10:1');
+  });
+
+  it('defaults a missing preview modification timestamp to zero', () => {
+    const catalog = createPageCatalogFromPreviews('journal-1', [
+      { id: 'p1', text: '', date: '', tags: [] } as never,
+    ]);
+    expect(catalog.latestModified).toBe(0);
+    expect(catalog.digest).toBe('p1:0:0');
   });
 });

@@ -46,6 +46,20 @@ describe('Device Encryption', () => {
     expect(SecureStore.getItemAsync.mock.calls.length).toBeLessThanOrEqual(1);
   });
 
+  it('shares a single key-creation promise across concurrent devices', async () => {
+    const SecureStore = require('expo-secure-store');
+    SecureStore.getItemAsync.mockClear();
+
+    const first = createDeviceEncryption();
+    const second = createDeviceEncryption();
+    await Promise.all([first.encrypt('one'), second.encrypt('two')]);
+
+    const keyReads = SecureStore.getItemAsync.mock.calls.filter(
+      ([key]: [string]) => key === 'canto_device_encryption_key',
+    );
+    expect(keyReads).toHaveLength(1);
+  });
+
   it('clearKey zeros and nullifies the cached key', async () => {
     const device = createDeviceEncryption();
     // Warm up the cache

@@ -1,4 +1,5 @@
 import { createLocalStore } from '../storage/local';
+import { Directory, File } from 'expo-file-system';
 import type { EncryptionService } from '../encryption';
 import type { JournalContent, Page, Attachment } from 'canto-data';
 import {
@@ -6,7 +7,11 @@ import {
   chunkedContentForBase64,
   encodeChunkFrame,
 } from '../storage/attachment-content';
-import { getStorageIoCounters, resetStorageIoCounters } from '../storage/io-counters';
+import {
+  getStorageIoCounters,
+  resetStorageIoCounters,
+  recordStorageIo,
+} from '../storage/io-counters';
 
 // In-memory filesystem mock
 const filesystem: Record<string, string> = {};
@@ -423,6 +428,21 @@ describe('createLocalStore', () => {
     });
   });
 
+  it('skips IO counter updates when development diagnostics are disabled', () => {
+    const globalWithDev = globalThis as { __DEV__?: boolean };
+    const original = globalWithDev.__DEV__;
+    try {
+      resetStorageIoCounters();
+      globalWithDev.__DEV__ = false;
+
+      recordStorageIo('metadataReads');
+
+      expect(getStorageIoCounters().metadataReads).toBe(0);
+    } finally {
+      globalWithDev.__DEV__ = original;
+    }
+  });
+
   it('builds a sync snapshot from metadata and catalog without page reads', async () => {
     const store = createLocalStore(createMockEncryption());
     await store.saveJournal(
@@ -603,17 +623,28 @@ describe('createLocalStore', () => {
     });
   });
 
-  it('saves an edit when a legacy journal has a malformed unrelated page', async () => {
+  it('rejects a save covering a malformed unrelated page and leaves every file unchanged', async () => {
     const store = createLocalStore(createMockEncryption());
     await store.saveJournal(makeJournalContent('j1', [makePage('p1'), makePage('p2')]));
     delete filesystem['/mock-docs/canto/j1/page-catalog.json'];
     filesystem['/mock-docs/canto/j1/pages/p2.json'] = 'enc:local corruption';
+    const page1Before = filesystem['/mock-docs/canto/j1/pages/p1.json'];
+    const page2Before = filesystem['/mock-docs/canto/j1/pages/p2.json'];
 
+    // A rebuild may publish only after every discovered page validates. The
+    // unreadable page must block the mutation and never be silently omitted
+    // from a reduced catalog projection.
     await expect(
       store.savePage('j1', { ...makePage('p1'), text: 'Saved edit' }, undefined, true),
-    ).resolves.toBeUndefined();
+    ).rejects.toMatchObject({
+      code: 'CATALOG_UNREADABLE',
+      details: [expect.stringMatching(/^record:[0-9a-f]+$/)],
+    });
 
-    await expect(store.getPage('j1', 'p1')).resolves.toMatchObject({ text: 'Saved edit' });
+    expect(filesystem['/mock-docs/canto/j1/page-catalog.json']).toBeUndefined();
+    expect(filesystem['/mock-docs/canto/j1/pages/p1.json']).toBe(page1Before);
+    expect(filesystem['/mock-docs/canto/j1/pages/p2.json']).toBe(page2Before);
+    await expect(store.getPage('j1', 'p1')).resolves.toMatchObject({ text: 'Page p1 content' });
   });
 
   it('getPage returns null for non-existent page', async () => {
@@ -758,6 +789,59 @@ describe('deletePage edge cases', () => {
     const result = await store.getPage('j1', 'p1');
     expect(result).not.toBeNull();
     expect(result!.deleted).toBe(true);
+  });
+});
+
+describe('secure journal write guards (native)', () => {
+  it('rejects keyless and all-zero-key savePage/deletePage for a secure journal and leaves files unchanged', async () => {
+    const key = new Uint8Array(32).fill(7);
+    const store = createLocalStore(createMockEncryption());
+    const journal: JournalContent = {
+      ...makeJournalContent('secure-j', [makePage('p1')]),
+      secure: true,
+    };
+    await store.saveJournal(journal, key);
+
+    const journalRoot = '/mock-docs/canto/secure-j';
+    const before = {
+      catalog: filesystem[`${journalRoot}/page-catalog.json`],
+      page: filesystem[`${journalRoot}/pages/p1.json`],
+      metadata: filesystem[`${journalRoot}/metadata.json`],
+    };
+    expect(before.catalog).toBeDefined();
+
+    // Missing key: the secure status comes from the device-only index entry,
+    // so both mutations reject before any filesystem write.
+    await expect(store.savePage('secure-j', makePage('p2'), undefined)).rejects.toMatchObject({
+      code: 'JOURNAL_LOCKED',
+    });
+    await expect(store.deletePage('secure-j', 'p1', undefined)).rejects.toMatchObject({
+      code: 'JOURNAL_LOCKED',
+    });
+
+    // Revoked (all-zero) key: rejected by the defense-in-depth guard as well.
+    await expect(
+      store.savePage('secure-j', makePage('p3'), new Uint8Array(32)),
+    ).rejects.toMatchObject({ code: 'JOURNAL_LOCKED' });
+    await expect(store.deletePage('secure-j', 'p1', new Uint8Array(32))).rejects.toMatchObject({
+      code: 'JOURNAL_LOCKED',
+    });
+
+    // Every durable record is byte-identical and nothing new was published.
+    expect(filesystem[`${journalRoot}/page-catalog.json`]).toBe(before.catalog);
+    expect(filesystem[`${journalRoot}/pages/p1.json`]).toBe(before.page);
+    expect(filesystem[`${journalRoot}/metadata.json`]).toBe(before.metadata);
+    expect(filesystem[`${journalRoot}/pages/p2.json`]).toBeUndefined();
+    expect(filesystem[`${journalRoot}/pages/p3.json`]).toBeUndefined();
+  });
+
+  it('still allows keyless page writes for a non-secure journal', async () => {
+    const store = createLocalStore(createMockEncryption());
+    await store.saveJournal(makeJournalContent('ns-j'));
+    await expect(store.savePage('ns-j', makePage('p1'))).resolves.toBeUndefined();
+    expect(filesystem['/mock-docs/canto/ns-j/pages/p1.json']).toBeDefined();
+    await expect(store.deletePage('ns-j', 'p1')).resolves.toBeUndefined();
+    await expect(store.getPage('ns-j', 'p1')).resolves.toMatchObject({ deleted: true });
   });
 });
 
@@ -1128,6 +1212,10 @@ describe('chunked attachment storage (native)', () => {
 
   it('cleans up chunked page attachments and rejects incomplete roots on reads and downloads', async () => {
     const store = createLocalStore(createMockEncryption());
+    // Establish the journal through the store so the device-only index entry
+    // exists; the fail-closed index guard treats raw durable data without an
+    // index as an integrity condition and blocks page mutations below.
+    await store.saveJournal(makeJournalContent('j1'));
     const attachment: Attachment = {
       id: 'missing-root',
       path: '/mock-docs/canto/j1/attachments/chunk-v1-p1-missing-root-generation',
@@ -1192,8 +1280,34 @@ describe('chunked attachment storage (native)', () => {
     await expect(store.getAttachment(path, key)).resolves.toBe('QUJD');
   });
 
-  it('reads legacy device-only chunk frames when metadata retains encrypted', async () => {
+  it('rejects writing an encrypted-flagged attachment without a usable key and leaves no root', async () => {
     const store = createLocalStore(createMockEncryption());
+    const attachment: Attachment = {
+      id: 'locked-chunk-write',
+      path: '',
+      name: 'locked-chunk-write.bin',
+      type: 'file',
+      encrypted: true,
+      deleted: false,
+      content: chunkedContentForBase64('QUJD'),
+    };
+
+    // The password-layer downgrade after auto-lock must fail closed: an
+    // encrypted attachment with no usable key is never persisted device-only.
+    await expect(store.saveAttachment('j1', 'p1', attachment, 'QUJD')).rejects.toMatchObject({
+      code: 'JOURNAL_LOCKED',
+    });
+    expect(
+      filesystem['/mock-docs/canto/j1/attachments/chunk-v1-p1-locked-chunk-write-legacy'],
+    ).toBeUndefined();
+  });
+
+  it('still tolerates legacy device-only chunk frames on read when metadata retains encrypted', async () => {
+    // Pre-19.2 devices can retain encrypted attachment metadata while the
+    // frame itself was written without a password layer (device-only). The
+    // read path must tolerate that legacy state even though new keyless
+    // writes are rejected. Build the legacy root directly, as an old device
+    // or interrupted migration would have left it.
     const attachment: Attachment = {
       id: 'legacy-device-only-chunk',
       path: '',
@@ -1203,12 +1317,14 @@ describe('chunked attachment storage (native)', () => {
       deleted: false,
       content: chunkedContentForBase64('QUJD'),
     };
+    const root = `/mock-docs/canto/j1/attachments/chunk-v1-p1-legacy-device-only-chunk-legacy`;
+    filesystem[`${root}/0`] = 'enc:' + encodeChunkFrame('j1', 'p1', attachment, 0, 'QUJD');
+    filesystem[`${root}/manifest`] =
+      'enc:' + JSON.stringify({ journalId: 'j1', pageId: 'p1', attachment });
 
-    // Pre-19.2 content can retain encrypted metadata while lacking the
-    // password layer. Import turns it into a chunked generation.
-    const path = await store.saveAttachment('j1', 'p1', attachment, 'QUJD');
-
-    await expect(store.getAttachment(path, new Uint8Array(32).fill(7))).resolves.toBe('QUJD');
+    const store = createLocalStore(createMockEncryption());
+    await store.initialize();
+    await expect(store.getAttachment(root, new Uint8Array(32).fill(7))).resolves.toBe('QUJD');
   });
 
   it('keeps the published native generation readable when replacement encryption fails', async () => {
@@ -1666,11 +1782,11 @@ describe('reencryptAll (device key rotation)', () => {
     const newEncrypt = (pt: string) => Promise.resolve(`new:${pt}`);
     await store.reencryptAll(oldDecrypt, oldEncrypt, newEncrypt);
 
-    // Old encryption can no longer decrypt the data (prefix is now "new:", not "old:")
-    // The store still uses old encryption internally, so reads should fail
-    const result = await store.getJournal('j1');
-    // readEncrypted catches errors and returns null when decryption fails
-    expect(result).toBeNull();
+    // Old encryption can no longer decrypt the data (prefix is now "new:", not
+    // "old:"). The store still uses old encryption internally, so reads must
+    // fail closed with a typed integrity error instead of silently reporting
+    // an empty journal.
+    await expect(store.getJournal('j1')).rejects.toMatchObject({ code: 'JOURNAL_UNREADABLE' });
   });
 
   it('re-encrypts multiple journals and their pages', async () => {
@@ -1844,5 +1960,1326 @@ describe('device-key rotation write barrier (native)', () => {
     await concurrentSave;
     // A page mutation commits both the authoritative page and its catalog projection.
     expect(writesDuringRotation).toBe(2);
+  });
+});
+
+describe('fail-closed integrity reads and mutations (native)', () => {
+  it('listJournals throws INDEX_UNREADABLE when the index file exists but is undecryptable', async () => {
+    const encryption = createMockEncryption();
+    encryption.decrypt = jest.fn(() => {
+      throw new Error('Cannot decrypt index');
+    });
+    filesystem['/mock-docs/canto/journals.json'] = 'ciphertext-bytes';
+    const store = createLocalStore(encryption);
+    await store.initialize();
+    await expect(store.listJournals()).rejects.toMatchObject({ code: 'INDEX_UNREADABLE' });
+  });
+
+  it('listJournals throws INDEX_UNREADABLE when the index is not valid JSON', async () => {
+    filesystem['/mock-docs/canto/journals.json'] = 'enc:not-json';
+    const store = createLocalStore(createMockEncryption());
+    await store.initialize();
+    await expect(store.listJournals()).rejects.toMatchObject({ code: 'INDEX_UNREADABLE' });
+  });
+
+  it('an unreadable index blocks metadata publication and never writes a reduced index', async () => {
+    filesystem['/mock-docs/canto/journals.json'] = 'enc:not-json';
+    filesystem['/mock-docs/canto/j1/metadata.json'] = 'enc:{"id":"j1"}';
+    const store = createLocalStore(createMockEncryption());
+    await store.initialize();
+
+    await expect(
+      store.saveJournalMetadata?.({
+        ...makeJournalContent('j1'),
+        title: 'Renamed',
+        pages: undefined,
+      } as Omit<JournalContent, 'pages'>),
+    ).rejects.toMatchObject({ code: 'INDEX_UNREADABLE' });
+
+    expect(filesystem['/mock-docs/canto/journals.json']).toBe('enc:not-json');
+  });
+
+  it('an unreadable index blocks saveJournal and deleteJournal publication', async () => {
+    filesystem['/mock-docs/canto/journals.json'] = 'enc:not-json';
+    filesystem['/mock-docs/canto/j1/metadata.json'] = 'enc:{"id":"j1"}';
+    const store = createLocalStore(createMockEncryption());
+    await store.initialize();
+
+    await expect(store.saveJournal(makeJournalContent('j2'))).rejects.toMatchObject({
+      code: 'INDEX_UNREADABLE',
+    });
+    await expect(store.deleteJournal('j1')).rejects.toMatchObject({ code: 'INDEX_UNREADABLE' });
+    // Nothing was deleted or rewritten.
+    expect(filesystem['/mock-docs/canto/j1/metadata.json']).toBe('enc:{"id":"j1"}');
+    expect(filesystem['/mock-docs/canto/journals.json']).toBe('enc:not-json');
+  });
+
+  it('allows first journal writes when a real filesystem lists newly created empty directories', async () => {
+    // Unlike the in-memory mock, expo-file-system lists an empty directory
+    // immediately after create(). Staging it before reading the absent index
+    // must not be mistaken for pre-existing durable journal data.
+    const created = new Set<string>();
+    const originalCreate = Directory.prototype.create;
+    const originalList = Directory.prototype.list;
+    const originalExists = Object.getOwnPropertyDescriptor(Directory.prototype, 'exists')!.get!;
+    const existsSpy = jest.spyOn(Directory.prototype, 'exists', 'get').mockImplementation(function (
+      this: Directory,
+    ) {
+      return created.has(this.uri) || originalExists.call(this);
+    });
+    const createSpy = jest.spyOn(Directory.prototype, 'create').mockImplementation(function (
+      this: Directory,
+    ) {
+      const result = originalCreate.call(this);
+      created.add(this.uri);
+      return result;
+    });
+    const listSpy = jest.spyOn(Directory.prototype, 'list').mockImplementation(function (
+      this: Directory,
+    ) {
+      const entries = originalList.call(this);
+      if (this.uri === '/mock-docs/canto') {
+        for (const uri of created) {
+          if (
+            uri.startsWith('/mock-docs/canto/') &&
+            !uri.slice('/mock-docs/canto/'.length).includes('/')
+          ) {
+            entries.push(new Directory(uri));
+          }
+        }
+      }
+      return entries;
+    });
+    try {
+      const store = createLocalStore(createMockEncryption());
+      await store.initialize();
+      await expect(store.saveJournal(makeJournalContent('first'))).resolves.toBeUndefined();
+      expect(created.has('/mock-docs/canto/first')).toBe(true);
+      expect(listSpy).toHaveBeenCalled();
+      expect(filesystem['/mock-docs/canto/journals.json']).toBeDefined();
+
+      for (const key of Object.keys(filesystem)) delete filesystem[key];
+      created.clear();
+      const second = createLocalStore(createMockEncryption());
+      await second.initialize();
+      if (!second.saveJournalMetadata) throw new Error('Native store must save journal metadata');
+      await expect(
+        second.saveJournalMetadata(makeJournalContent('metadata-first')),
+      ).resolves.toBeUndefined();
+      expect(filesystem['/mock-docs/canto/journals.json']).toBeDefined();
+    } finally {
+      createSpy.mockRestore();
+      listSpy.mockRestore();
+      existsSpy.mockRestore();
+    }
+  });
+
+  it('a missing index over existing durable journal data fails closed instead of listing an empty library', async () => {
+    const store = createLocalStore(createMockEncryption());
+    await store.saveJournal(makeJournalContent('j1', [makePage('p1')]));
+    delete filesystem['/mock-docs/canto/journals.json'];
+
+    await expect(store.listJournals()).rejects.toMatchObject({
+      code: 'INDEX_UNREADABLE',
+      causeLayer: 'INDEX_ABSENT',
+    });
+    // The durable journal was never treated as evidence of deletion.
+    expect(filesystem['/mock-docs/canto/j1/metadata.json']).toBeDefined();
+    expect(filesystem['/mock-docs/canto/j1/pages/p1.json']).toBeDefined();
+  });
+
+  it('a missing index over existing data blocks every publication and never writes a reduced index', async () => {
+    const store = createLocalStore(createMockEncryption());
+    await store.saveJournal(makeJournalContent('j1', [makePage('p1')]));
+    delete filesystem['/mock-docs/canto/journals.json'];
+
+    await expect(store.deleteJournal('j1')).rejects.toMatchObject({
+      code: 'INDEX_UNREADABLE',
+      causeLayer: 'INDEX_ABSENT',
+    });
+    await expect(store.saveJournal(makeJournalContent('j2'))).rejects.toMatchObject({
+      code: 'INDEX_UNREADABLE',
+      causeLayer: 'INDEX_ABSENT',
+    });
+    // No reduced index was published and the existing journal was not deleted.
+    expect(filesystem['/mock-docs/canto/journals.json']).toBeUndefined();
+    expect(filesystem['/mock-docs/canto/j1/metadata.json']).toBeDefined();
+  });
+
+  it('lets a marker-covered import stage durable data and publish the final index', async () => {
+    const store = createLocalStore(createMockEncryption());
+    await store.initialize();
+    const journalId = 'marker-import';
+    await store.beginJournalImport?.(journalId);
+    await store.updateJournalImport?.(journalId, 'writing');
+
+    // Attachment staging writes durable journal records before the index or
+    // any journal metadata exists. The active import marker is what makes this
+    // an allowed, non-destructive staging state rather than an integrity error.
+    const savedPath = await store.saveAttachment(
+      journalId,
+      'p1',
+      {
+        id: 'a1',
+        path: '',
+        name: 'photo.jpg',
+        type: 'image',
+        encrypted: false,
+        deleted: false,
+      },
+      'QUJD',
+    );
+    expect(savedPath).toBeTruthy();
+
+    await store.updateJournalImport?.(journalId, 'publishing', { expectedPageCount: 1 });
+    await store.saveJournal(makeJournalContent(journalId, [makePage('p1')]));
+    await store.updateJournalImport?.(journalId, 'committed');
+    await store.completeJournalImport?.(journalId);
+
+    // The final index was published with the fully imported journal.
+    expect(await store.listJournals()).toEqual([
+      expect.objectContaining({ id: journalId, title: 'Journal marker-import' }),
+    ]);
+  });
+
+  it('keeps orphan durable directories without an import marker fail-closed', async () => {
+    const store = createLocalStore(createMockEncryption());
+    await store.initialize();
+    // Durable attachment data staged under no journal and no import marker is
+    // an orphan: no index may be published over it, even for another journal.
+    await store.saveAttachment(
+      'orphan-directory',
+      'p1',
+      {
+        id: 'a1',
+        path: '',
+        name: 'photo.jpg',
+        type: 'image',
+        encrypted: false,
+        deleted: false,
+      },
+      'QUJD',
+    );
+
+    await expect(store.saveJournal(makeJournalContent('imported-ok'))).rejects.toMatchObject({
+      code: 'INDEX_UNREADABLE',
+      causeLayer: 'INDEX_ABSENT',
+    });
+    await expect(store.listJournals()).rejects.toMatchObject({
+      code: 'INDEX_UNREADABLE',
+    });
+    expect(filesystem['/mock-docs/canto/journals.json']).toBeUndefined();
+  });
+
+  it('recovery never deletes import journals or markers while the index is unreadable', async () => {
+    const journalId = 'orphaned-import';
+    filesystem['/mock-docs/canto/.imports/orphaned-import'] = JSON.stringify({
+      version: 2,
+      journalId,
+      phase: 'publishing',
+      expectedPageCount: 1,
+    });
+    filesystem[`/mock-docs/canto/${journalId}/metadata.json`] = 'enc:{"id":"orphaned-import"}';
+    filesystem['/mock-docs/canto/journals.json'] = 'enc:not-json';
+
+    const store = createLocalStore(createMockEncryption());
+    await store.initialize();
+
+    // The unreadable index cannot prove the import is committed or uncommitted,
+    // so startup must preserve every directory and marker instead of guessing.
+    expect(filesystem[`/mock-docs/canto/${journalId}/metadata.json`]).toBe(
+      'enc:{"id":"orphaned-import"}',
+    );
+    expect(filesystem['/mock-docs/canto/.imports/orphaned-import']).toBeDefined();
+    await expect(store.listJournals()).rejects.toMatchObject({ code: 'INDEX_UNREADABLE' });
+  });
+
+  it('getJournalOverview fails closed when the catalog is unreadable and a page cannot be read', async () => {
+    const store = createLocalStore(createMockEncryption());
+    await store.saveJournal(makeJournalContent('j1', [makePage('p1')]));
+    filesystem['/mock-docs/canto/j1/page-catalog.json'] = 'enc:not-json';
+    filesystem['/mock-docs/canto/j1/pages/p1.json'] = 'enc:corrupt page data';
+
+    await expect(store.getJournalOverview?.('j1')).rejects.toMatchObject({
+      code: 'CATALOG_UNREADABLE',
+      details: [expect.stringMatching(/^record:[0-9a-f]+$/)],
+    });
+    // The corrupt catalog was never replaced by a reduced projection.
+    expect(filesystem['/mock-docs/canto/j1/page-catalog.json']).toBe('enc:not-json');
+  });
+
+  it('getJournalSyncSnapshot fails closed instead of publishing an incomplete snapshot', async () => {
+    const store = createLocalStore(createMockEncryption());
+    await store.saveJournal(makeJournalContent('j1', [makePage('p1')]));
+    // Force a rebuild path (unreadable catalog) with an unreadable page: the
+    // snapshot must reject rather than become a reduced sync authority.
+    filesystem['/mock-docs/canto/j1/page-catalog.json'] = 'enc:not-json';
+    filesystem['/mock-docs/canto/j1/pages/p1.json'] = 'enc:raw unreadable page';
+
+    await expect(store.getJournalSyncSnapshot!('j1')).rejects.toMatchObject({
+      code: 'CATALOG_UNREADABLE',
+    });
+  });
+
+  it('savePage with a revoked all-zero key is rejected before any file mutation', async () => {
+    const store = createLocalStore(createMockEncryption());
+    await store.saveJournal(makeJournalContent('j1', [makePage('p1')]));
+    const zeroKey = new Uint8Array(32); // already zeroed by auto-lock
+    const catalogBefore = filesystem['/mock-docs/canto/j1/page-catalog.json'];
+    const pageBefore = filesystem['/mock-docs/canto/j1/pages/p1.json'];
+
+    await expect(
+      store.savePage('j1', { ...makePage('p1'), text: 'locked edit' }, zeroKey),
+    ).rejects.toMatchObject({ code: 'JOURNAL_LOCKED' });
+
+    expect(filesystem['/mock-docs/canto/j1/page-catalog.json']).toBe(catalogBefore);
+    expect(filesystem['/mock-docs/canto/j1/pages/p1.json']).toBe(pageBefore);
+  });
+
+  it('serializes concurrent mutations so every committed page survives in the catalog', async () => {
+    const store = createLocalStore(createMockEncryption());
+    await store.saveJournal(makeJournalContent('j1'));
+
+    // Both saves read the same warm catalog baseline. Without serialization,
+    // last-writer-wins would silently drop one committed page.
+    await Promise.all([
+      store.savePage('j1', makePage('p1'), undefined, true),
+      store.savePage('j1', makePage('p2'), undefined, true),
+    ]);
+
+    const overview = await store.getJournalOverview?.('j1');
+    const ids = overview!.pages.map((page) => page.id).sort();
+    expect(ids).toEqual(['p1', 'p2']);
+    await expect(store.getJournal('j1')).resolves.toMatchObject({
+      pages: [expect.objectContaining({ id: 'p1' }), expect.objectContaining({ id: 'p2' })],
+    });
+  });
+
+  it('can read index/catalog state through the typed store seams', async () => {
+    const store = createLocalStore(createMockEncryption());
+    expect(await store.hasExistingData?.()).toBe(false);
+    await store.recordFirstInstall?.();
+    await store.saveJournal(makeJournalContent('j1'));
+    expect(await store.hasExistingData?.()).toBe(true);
+  });
+});
+
+describe('storage behavior coverage (native)', () => {
+  const DEVICE_FAIL_SENTINEL = 'BOOM';
+
+  function createFailingEncryption(): EncryptionService {
+    return {
+      encrypt: jest.fn((data: string) => Promise.resolve(`enc:${data}`)),
+      decrypt: jest.fn((data: string) =>
+        data === DEVICE_FAIL_SENTINEL
+          ? Promise.reject(new Error('device decrypt failed'))
+          : Promise.resolve(data.replace(/^enc:/, '')),
+      ),
+      encryptWithPassword: jest.fn(),
+      decryptWithPassword: jest.fn(),
+      generateSalt: jest.fn(() => new Uint8Array(16)),
+      clearSession: jest.fn(),
+    };
+  }
+
+  it('returns a null sync snapshot when the journal has no metadata', async () => {
+    const store = createLocalStore(createMockEncryption());
+    await store.initialize();
+    await expect(store.getJournalSyncSnapshot!('missing')).resolves.toBeNull();
+  });
+
+  it('defaults a missing page modified timestamp to zero in the sync snapshot', async () => {
+    const store = createLocalStore(createMockEncryption());
+    await store.initialize();
+    await store.saveJournal(makeJournalContent('j1', [makePage('p1')]));
+    await store.savePage(
+      'j1',
+      { ...makePage('p1'), modified: undefined } as unknown as Page,
+      undefined,
+      true,
+    );
+
+    const snapshot = await store.getJournalSyncSnapshot!('j1');
+    expect(snapshot!.pages.get('p1')).toEqual({ modified: 0 });
+  });
+
+  it('fails closed when saving secure journal metadata without a usable key', async () => {
+    const store = createLocalStore(createMockEncryption());
+    await store.initialize();
+    await expect(
+      store.saveJournalMetadata!({
+        ...makeJournalContent('secure-meta'),
+        secure: true,
+        pages: undefined,
+      } as unknown as Omit<JournalContent, 'pages'>),
+    ).rejects.toMatchObject({ code: 'JOURNAL_LOCKED' });
+  });
+
+  it('adds a new journal to the index when saving metadata for an unknown id', async () => {
+    const store = createLocalStore(createMockEncryption());
+    await store.initialize();
+    await store.saveJournalMetadata!({
+      ...makeJournalContent('new-meta'),
+      pages: undefined,
+    } as unknown as Omit<JournalContent, 'pages'>);
+
+    await expect(store.listJournals()).resolves.toEqual([
+      expect.objectContaining({ id: 'new-meta' }),
+    ]);
+  });
+
+  it('rejects updating an import marker that was never begun', async () => {
+    const store = createLocalStore(createMockEncryption());
+    await store.initialize();
+    await expect(store.updateJournalImport?.('missing-marker', 'writing')).rejects.toThrow(
+      'Journal import marker is missing',
+    );
+  });
+
+  it('returns null when opening an overview for a journal without metadata', async () => {
+    const store = createLocalStore(createMockEncryption());
+    await store.initialize();
+    await expect(store.getJournalOverview!('absent-journal')).resolves.toBeNull();
+  });
+
+  it('fails closed when journal metadata cannot be device-decrypted', async () => {
+    const store = createLocalStore(createMockEncryption());
+    await store.initialize();
+    filesystem['/mock-docs/canto/broken-meta/metadata.json'] = DEVICE_FAIL_SENTINEL;
+
+    const failing = createLocalStore(createFailingEncryption());
+    await failing.initialize();
+    await expect(failing.getJournalOverview!('broken-meta')).rejects.toMatchObject({
+      code: 'JOURNAL_UNREADABLE',
+    });
+  });
+
+  it('reports a device-decrypt failure during a catalog rebuild scan', async () => {
+    const store = createLocalStore(createMockEncryption());
+    await store.initialize();
+    await store.saveJournal(makeJournalContent('j1', [makePage('p1'), makePage('p2')]));
+    filesystem['/mock-docs/canto/j1/page-catalog.json'] = 'enc:not-json';
+    filesystem['/mock-docs/canto/j1/pages/p2.json'] = DEVICE_FAIL_SENTINEL;
+
+    const failing = createLocalStore(createFailingEncryption());
+    await failing.initialize();
+    await expect(failing.getJournalOverview!('j1')).rejects.toMatchObject({
+      code: 'CATALOG_UNREADABLE',
+      details: [expect.stringMatching(/^record:[0-9a-f]+$/)],
+    });
+  });
+
+  it('treats an undecryptable page catalog as a rebuild trigger', async () => {
+    const store = createLocalStore(createMockEncryption());
+    await store.initialize();
+    await store.saveJournal(makeJournalContent('j1', [makePage('p1')]));
+    filesystem['/mock-docs/canto/j1/page-catalog.json'] = DEVICE_FAIL_SENTINEL;
+
+    const failing = createLocalStore(createFailingEncryption());
+    await failing.initialize();
+    await expect(failing.getJournalOverview!('j1')).resolves.toMatchObject({
+      pages: [expect.objectContaining({ id: 'p1' })],
+    });
+  });
+
+  it('rebuilds an invalid catalog before soft-deleting a page', async () => {
+    const store = createLocalStore(createMockEncryption());
+    await store.initialize();
+    await store.saveJournal(makeJournalContent('j1', [makePage('p1'), makePage('p2')]));
+    filesystem['/mock-docs/canto/j1/page-catalog.json'] = 'enc:not-json';
+
+    await store.deletePage('j1', 'p1');
+
+    const overview = await store.getJournalOverview!('j1');
+    expect(overview!.pages.find((page) => page.id === 'p1')).toMatchObject({ deleted: true });
+  });
+
+  it('defers a catalog rebuild when the read signal is already aborted', async () => {
+    const store = createLocalStore(createMockEncryption());
+    await store.initialize();
+    await store.saveJournal(makeJournalContent('j1', [makePage('p1')]));
+    delete filesystem['/mock-docs/canto/j1/page-catalog.json'];
+
+    await expect(
+      store.getJournalOverview!('j1', undefined, { signal: { aborted: true } as AbortSignal }),
+    ).rejects.toThrow('Journal catalog rebuild cancelled');
+  });
+
+  it('defers a catalog rebuild when the signal aborts after an empty scan', async () => {
+    const store = createLocalStore(createMockEncryption());
+    await store.initialize();
+    await store.saveJournal(makeJournalContent('j1'));
+    delete filesystem['/mock-docs/canto/j1/page-catalog.json'];
+
+    let reads = 0;
+    const signal = {
+      get aborted() {
+        reads += 1;
+        return reads > 1;
+      },
+    } as AbortSignal;
+
+    await expect(store.getJournalOverview!('j1', undefined, { signal })).rejects.toThrow(
+      'Journal catalog rebuild cancelled',
+    );
+  });
+
+  it('recovers a publishing import with zero expected pages and no pages directory', async () => {
+    const first = createLocalStore(createMockEncryption());
+    await first.initialize();
+    await first.saveJournal(makeJournalContent('m1'));
+    filesystem['/mock-docs/canto/journals.json'] = 'enc:{"journals":[]}';
+    filesystem['/mock-docs/canto/.imports/m1'] = JSON.stringify({
+      version: 2,
+      journalId: 'm1',
+      phase: 'publishing',
+      expectedPageCount: 0,
+    });
+
+    const recovered = createLocalStore(createMockEncryption());
+    await recovered.initialize();
+
+    await expect(recovered.listJournals()).resolves.toEqual([
+      expect.objectContaining({ id: 'm1' }),
+    ]);
+  });
+
+  it('does not recover a publishing import whose metadata is missing', async () => {
+    const first = createLocalStore(createMockEncryption());
+    await first.initialize();
+    filesystem['/mock-docs/canto/journals.json'] = 'enc:{"journals":[]}';
+    filesystem['/mock-docs/canto/.imports/no-metadata'] = JSON.stringify({
+      version: 2,
+      journalId: 'no-metadata',
+      phase: 'publishing',
+      expectedPageCount: 1,
+    });
+
+    const recovered = createLocalStore(createMockEncryption());
+    await recovered.initialize();
+
+    expect(filesystem['/mock-docs/canto/.imports/no-metadata']).toBeUndefined();
+  });
+
+  it('does not recover a publishing import whose metadata id or security mismatches', async () => {
+    const first = createLocalStore(createMockEncryption());
+    await first.initialize();
+    filesystem['/mock-docs/canto/journals.json'] = 'enc:{"journals":[]}';
+    filesystem['/mock-docs/canto/.imports/mismatch'] = JSON.stringify({
+      version: 2,
+      journalId: 'mismatch',
+      phase: 'publishing',
+      expectedPageCount: 0,
+    });
+    filesystem['/mock-docs/canto/mismatch/metadata.json'] = 'enc:{"id":"other"}';
+    filesystem['/mock-docs/canto/.imports/secure'] = JSON.stringify({
+      version: 2,
+      journalId: 'secure',
+      phase: 'publishing',
+      expectedPageCount: 0,
+    });
+    filesystem['/mock-docs/canto/secure/metadata.json'] = 'enc:{"id":"secure","secure":true}';
+
+    const recovered = createLocalStore(createMockEncryption());
+    await recovered.initialize();
+
+    expect(filesystem['/mock-docs/canto/.imports/mismatch']).toBeUndefined();
+    expect(filesystem['/mock-docs/canto/.imports/secure']).toBeUndefined();
+  });
+
+  it('does not recover a publishing import whose catalog is missing', async () => {
+    const first = createLocalStore(createMockEncryption());
+    await first.initialize();
+    filesystem['/mock-docs/canto/journals.json'] = 'enc:{"journals":[]}';
+    filesystem['/mock-docs/canto/.imports/no-catalog'] = JSON.stringify({
+      version: 2,
+      journalId: 'no-catalog',
+      phase: 'publishing',
+      expectedPageCount: 0,
+    });
+    filesystem['/mock-docs/canto/no-catalog/metadata.json'] = 'enc:{"id":"no-catalog"}';
+
+    const recovered = createLocalStore(createMockEncryption());
+    await recovered.initialize();
+
+    expect(filesystem['/mock-docs/canto/.imports/no-catalog']).toBeUndefined();
+  });
+
+  it('defers recovery when only an unparseable marker covers durable data', async () => {
+    const store = createLocalStore(createMockEncryption());
+    await store.initialize();
+    await store.saveJournal(makeJournalContent('j1'));
+    await store.saveJournal(makeJournalContent('other'));
+    filesystem['/mock-docs/canto/.imports/empty-marker'] = '';
+    delete filesystem['/mock-docs/canto/journals.json'];
+
+    await expect(createLocalStore(createMockEncryption()).initialize()).resolves.toBeUndefined();
+    expect(filesystem['/mock-docs/canto/j1/metadata.json']).toBeDefined();
+    expect(filesystem['/mock-docs/canto/other/metadata.json']).toBeDefined();
+  });
+
+  it('ignores non-file entries in the imports directory during recovery', async () => {
+    const store = createLocalStore(createMockEncryption());
+    await store.initialize();
+    await store.saveJournal(makeJournalContent('j1'));
+    filesystem['/mock-docs/canto/.imports/sub/nested'] = 'x';
+    filesystem['/mock-docs/canto/.imports/m1'] = JSON.stringify({
+      version: 2,
+      journalId: 'm1',
+      phase: 'committed',
+    });
+
+    await expect(createLocalStore(createMockEncryption()).initialize()).resolves.toBeUndefined();
+    expect(filesystem['/mock-docs/canto/j1/metadata.json']).toBeDefined();
+  });
+
+  it('ignores non-file entries in the imports directory when resolving active imports', async () => {
+    const store = createLocalStore(createMockEncryption());
+    filesystem['/mock-docs/canto/.imports/sub/nested'] = 'x';
+    filesystem['/mock-docs/canto/.imports/m1'] = JSON.stringify({
+      version: 2,
+      journalId: 'm1',
+      phase: 'writing',
+    });
+    filesystem['/mock-docs/canto/j1/metadata.json'] = 'enc:{"id":"j1"}';
+
+    await expect(store.listJournals()).rejects.toMatchObject({
+      code: 'INDEX_UNREADABLE',
+      causeLayer: 'INDEX_ABSENT',
+    });
+  });
+
+  it('reports durable data when the base directory holds an unrecognized file', async () => {
+    const store = createLocalStore(createMockEncryption());
+    await store.initialize();
+    await store.recordFirstInstall?.();
+    filesystem['/mock-docs/canto/.device-key-rotation-complete'] = 'complete';
+    await expect(store.hasExistingData?.()).resolves.toBe(false);
+
+    filesystem['/mock-docs/canto/stray.txt'] = 'stray';
+    await expect(store.hasExistingData?.()).resolves.toBe(true);
+  });
+
+  it('rejects an oversized legacy attachment before materializing it', async () => {
+    const store = createLocalStore(createMockEncryption());
+    await store.initialize();
+    const attachment: Attachment = {
+      id: 'legacy-too-large',
+      path: '/mock-docs/canto/j1/attachments/legacy-too-large',
+      name: 'legacy-too-large.bin',
+      type: 'file',
+      encrypted: false,
+      deleted: false,
+      size: 512 * 1024 + 1,
+    };
+    await expect(
+      store.forEachAttachmentDisplayChunk!(attachment, async () => undefined),
+    ).rejects.toThrow('Legacy attachment is too large');
+  });
+
+  it('reads encrypted and plain legacy attachments through the display path', async () => {
+    const store = createLocalStore(createMockEncryption());
+    await store.initialize();
+    const derivedKey = new Uint8Array(32).fill(7);
+    filesystem['/mock-docs/canto/j1/attachments/plain-legacy'] = 'enc:AQ==';
+    filesystem['/mock-docs/canto/j1/attachments/enc-legacy'] = 'enc:AQ==';
+
+    const plain: Attachment = {
+      id: 'plain-legacy',
+      path: '/mock-docs/canto/j1/attachments/plain-legacy',
+      name: 'plain-legacy.bin',
+      type: 'file',
+      encrypted: false,
+      deleted: false,
+      size: 1,
+    };
+    const encrypted: Attachment = {
+      ...plain,
+      id: 'enc-legacy',
+      encrypted: true,
+      path: '/mock-docs/canto/j1/attachments/enc-legacy',
+    };
+
+    const plainData: string[] = [];
+    await store.forEachAttachmentDisplayChunk!(plain, async (_i, data) => {
+      plainData.push(data);
+    });
+    expect(plainData).toEqual(['AQ==']);
+
+    const encryptedData: string[] = [];
+    await store.forEachAttachmentDisplayChunk!(
+      encrypted,
+      async (_i, data) => {
+        encryptedData.push(data);
+      },
+      derivedKey,
+    );
+    expect(encryptedData).toEqual(['AQ==']);
+  });
+
+  it('reports a missing legacy attachment on the display path', async () => {
+    const store = createLocalStore(createMockEncryption());
+    await store.initialize();
+    const attachment: Attachment = {
+      id: 'missing-legacy',
+      path: '/mock-docs/canto/j1/attachments/missing-legacy',
+      name: 'missing-legacy.bin',
+      type: 'file',
+      encrypted: false,
+      deleted: false,
+      size: 1,
+    };
+    await expect(
+      store.forEachAttachmentDisplayChunk!(attachment, async () => undefined),
+    ).rejects.toThrow('Attachment not found');
+  });
+
+  it('reports a missing manifest and missing chunk on the chunked display path', async () => {
+    const store = createLocalStore(createMockEncryption());
+    await store.initialize();
+    const root = '/mock-docs/canto/j1/attachments/chunk-v1-p1-display-missing-gen';
+    const attachment: Attachment = {
+      id: 'display-missing',
+      path: root,
+      name: 'display-missing.bin',
+      type: 'file',
+      encrypted: false,
+      deleted: false,
+      content: {
+        format: 'canto-chunked-v1',
+        byteLength: 1,
+        chunkSize: 1,
+        chunkCount: 1,
+        generation: 'gen',
+      },
+    };
+    await expect(
+      store.forEachAttachmentDisplayChunk!(attachment, async () => undefined),
+    ).rejects.toThrow('Attachment manifest missing');
+
+    filesystem[`${root}/manifest`] = `enc:${JSON.stringify({
+      journalId: 'j1',
+      pageId: 'p1',
+      attachment,
+    })}`;
+    await expect(
+      store.forEachAttachmentDisplayChunk!(attachment, async () => undefined),
+    ).rejects.toThrow('Attachment chunk missing');
+  });
+
+  it('detects a display length mismatch against the chunk descriptor', async () => {
+    const store = createLocalStore(createMockEncryption());
+    await store.initialize();
+    const root = '/mock-docs/canto/j1/attachments/chunk-v1-p1-display-mismatch-gen';
+    const attachment: Attachment = {
+      id: 'display-mismatch',
+      path: root,
+      name: 'display-mismatch.bin',
+      type: 'file',
+      encrypted: false,
+      deleted: false,
+      content: {
+        format: 'canto-chunked-v1',
+        byteLength: 5,
+        chunkSize: 5,
+        chunkCount: 1,
+        generation: 'gen',
+      },
+    };
+    filesystem[`${root}/manifest`] = `enc:${JSON.stringify({
+      journalId: 'j1',
+      pageId: 'p1',
+      attachment,
+    })}`;
+    filesystem[`${root}/0`] = `enc:${encodeChunkFrame('j1', 'p1', attachment, 0, 'AQ==')}`;
+    await expect(
+      store.forEachAttachmentDisplayChunk!(attachment, async () => undefined),
+    ).rejects.toThrow('Attachment display length mismatch');
+  });
+
+  it('rolls back a password re-encryption when a source chunk is missing', async () => {
+    const store = createLocalStore(createMockEncryption());
+    await store.initialize();
+    const attachment: Attachment = {
+      id: 'missing-chunk',
+      path: '/mock-docs/canto/j1/attachments/chunk-v1-p1-missing-chunk-gen',
+      name: 'missing-chunk.bin',
+      type: 'file',
+      encrypted: false,
+      deleted: false,
+      content: {
+        format: 'canto-chunked-v1',
+        byteLength: 3,
+        chunkSize: 2,
+        chunkCount: 2,
+        generation: 'gen',
+      },
+    };
+    const journal = makeJournalContent('j1', [{ ...makePage('p1'), files: [attachment] }]);
+
+    await expect(
+      store.reencryptJournal(journal, undefined, new Uint8Array(32).fill(3)),
+    ).rejects.toThrow('Attachment chunk missing');
+  });
+
+  it('copies chunk frames without a password layer when removing the password', async () => {
+    const store = createLocalStore(createMockEncryption());
+    await store.initialize();
+    const attachment: Attachment = {
+      id: 'chunk-remove-password',
+      path: '',
+      name: 'chunk-remove-password.bin',
+      type: 'file',
+      encrypted: false,
+      deleted: false,
+      content: chunkedContentForBase64('QUJD'),
+    };
+    const journal = makeJournalContent('j1', [{ ...makePage('p1'), files: [attachment] }]);
+    await store.saveJournal(journal);
+    const path = await store.saveAttachment('j1', 'p1', attachment, 'QUJD');
+    const loaded = await store.getJournal('j1');
+    loaded!.pages[0].files[0].path = path;
+
+    await store.reencryptJournal(loaded!, undefined, undefined);
+
+    const rotated = await store.getJournal('j1');
+    await expect(store.getAttachment(rotated!.pages[0].files[0].path)).resolves.toBe('QUJD');
+  });
+
+  it('rolls back a journal commit when a staging write fails', async () => {
+    const store = createLocalStore(createMockEncryption());
+    await store.initialize();
+    await store.saveJournal(makeJournalContent('j1'));
+
+    const prototype = File.prototype as unknown as {
+      write: (...args: unknown[]) => unknown;
+    };
+    const originalWrite = prototype.write;
+    prototype.write = () => {
+      throw new Error('disk full');
+    };
+    try {
+      await expect(store.saveJournal(makeJournalContent('j2'))).rejects.toThrow('disk full');
+      await expect(store.savePage('j1', makePage('p1'))).rejects.toThrow('disk full');
+      await expect(store.deleteJournal('j1')).rejects.toThrow('disk full');
+    } finally {
+      prototype.write = originalWrite;
+    }
+  });
+
+  it('cleans up a failed device-key rotation transaction', async () => {
+    const store = createLocalStore(createMockEncryption());
+    await store.initialize();
+    await store.saveJournal(makeJournalContent('j1', [makePage('p1')]));
+
+    await expect(
+      store.reencryptAll!(
+        (ciphertext: string) => Promise.resolve(ciphertext.replace(/^enc:/, '')),
+        (plaintext: string) => Promise.resolve(plaintext),
+        () => Promise.reject(new Error('device rotate failed')),
+      ),
+    ).rejects.toThrow('device rotate failed');
+  });
+
+  it('fails closed when a page record cannot be device-decrypted', async () => {
+    const store = createLocalStore(createMockEncryption());
+    await store.initialize();
+    await store.saveJournal(makeJournalContent('j1', [makePage('p1')]));
+    filesystem['/mock-docs/canto/j1/pages/p2.json'] = DEVICE_FAIL_SENTINEL;
+
+    const failing = createLocalStore(createFailingEncryption());
+    await failing.initialize();
+    await expect(failing.getPage('j1', 'p2')).rejects.toMatchObject({
+      code: 'JOURNAL_UNREADABLE',
+    });
+  });
+
+  it('removes an import marker only when it exists', async () => {
+    const store = createLocalStore(createMockEncryption());
+    await store.initialize();
+    await store.beginJournalImport?.('m1');
+    await store.completeJournalImport?.('m1');
+    expect(filesystem['/mock-docs/canto/.imports/m1']).toBeUndefined();
+    await expect(store.completeJournalImport?.('m1')).resolves.toBeUndefined();
+  });
+
+  it('round-trips a password-encrypted chunked attachment and stream', async () => {
+    const store = createLocalStore(createMockEncryption());
+    await store.initialize();
+    const key = new Uint8Array(32).fill(9);
+    const attachment: Attachment = {
+      id: 'encrypted-chunk',
+      path: '',
+      name: 'encrypted-chunk.bin',
+      type: 'file',
+      encrypted: true,
+      deleted: false,
+      content: chunkedContentForBase64('QUJD'),
+    };
+    attachment.path = await store.saveAttachment('j1', 'p1', attachment, 'QUJD', key);
+    await expect(store.getAttachment(attachment.path, key)).resolves.toBe('QUJD');
+
+    const streamed: Attachment = {
+      ...attachment,
+      id: 'encrypted-stream',
+      path: '',
+      content: {
+        format: 'canto-chunked-v1',
+        byteLength: 3,
+        chunkSize: 2,
+        chunkCount: 2,
+        generation: 'encrypted-stream-generation',
+      },
+    };
+    async function* frames() {
+      yield new Uint8Array([1, 2]);
+      yield new Uint8Array([3]);
+    }
+    streamed.path = await store.saveAttachmentStream!('j1', 'p1', streamed, frames(), key);
+    await expect(store.getAttachment(streamed.path, key)).resolves.toBe('AQID');
+  });
+
+  it('cleans up a password re-encryption transaction when staging fails', async () => {
+    const store = createLocalStore(createMockEncryption());
+    await store.initialize();
+    await store.saveJournal(makeJournalContent('j1', [makePage('p1')]));
+    const loaded = await store.getJournal('j1');
+
+    const prototype = File.prototype as unknown as {
+      write: (...args: unknown[]) => unknown;
+    };
+    const originalWrite = prototype.write;
+    prototype.write = () => {
+      throw new Error('disk full');
+    };
+    try {
+      await expect(
+        store.reencryptJournal(loaded!, undefined, new Uint8Array(32).fill(4)),
+      ).rejects.toThrow('disk full');
+      await expect(
+        store.reencryptAll!(
+          (ciphertext: string) => Promise.resolve(ciphertext.replace(/^enc:/, '')),
+          (plaintext: string) => Promise.resolve(plaintext),
+          (plaintext: string) => Promise.resolve(`enc:${plaintext}`),
+        ),
+      ).rejects.toThrow('disk full');
+    } finally {
+      prototype.write = originalWrite;
+    }
+  });
+
+  it('treats a stray base-directory file as durable during recovery', async () => {
+    filesystem['/mock-docs/canto/.imports/j1'] = JSON.stringify({
+      version: 2,
+      journalId: 'j1',
+      phase: 'writing',
+    });
+    filesystem['/mock-docs/canto/j1/metadata.json'] = 'enc:{"id":"j1"}';
+    filesystem['/mock-docs/canto/stray.txt'] = 'stray';
+
+    await expect(createLocalStore(createMockEncryption()).initialize()).resolves.toBeUndefined();
+    expect(filesystem['/mock-docs/canto/stray.txt']).toBe('stray');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Deterministic publication fault injection: a process kill between commit
+// phases must never expose a partial projection, and the explicit
+// prepared/committing commit point must decide rollback vs replay.
+// ---------------------------------------------------------------------------
+const PUBLICATION_PHASES = ['stage', 'marker', 'apply'] as const;
+type PublicationPhase = (typeof PUBLICATION_PHASES)[number];
+
+/** One-shot write failure, restoring the original File.write after it fires. */
+function armWriteFault(match: (uri: string, content: string) => boolean): () => void {
+  const prototype = File.prototype as unknown as {
+    write: (this: { uri: string }, content: string) => void;
+  };
+  const original = prototype.write;
+  prototype.write = function write(this: { uri: string }, content: string) {
+    if (match(this.uri, content)) {
+      prototype.write = original;
+      throw new Error('injected publication failure');
+    }
+    return original.call(this, content);
+  };
+  return () => {
+    prototype.write = original;
+  };
+}
+
+/**
+ * Faults are keyed to a payload's *content*, not to its staged file index. The
+ * mock encryption is a passthrough, so the staged ciphertext still carries the
+ * JSON payload; matching `file-N` would silently stop covering the intended
+ * target if staging order ever changes (the test would still pass).
+ */
+function armPublicationFault(
+  phase: PublicationPhase,
+  matchesStaged: (content: string) => boolean,
+  applySuffix: string,
+): () => void {
+  return armWriteFault((uri, content) => {
+    if (phase === 'stage') return uri.includes('.transactions/') && matchesStaged(content);
+    if (phase === 'marker') {
+      return uri.endsWith('/marker.json') && content.includes('"phase":"committing"');
+    }
+    return !uri.includes('.transactions/') && uri.endsWith(applySuffix);
+  });
+}
+
+function stagedTransactionFiles(): string[] {
+  return Object.keys(filesystem).filter((key) => key.includes('/.transactions/'));
+}
+
+describe('publication fault injection (native)', () => {
+  it.each(PUBLICATION_PHASES)(
+    'saveJournalMetadata rename never exposes a partial projection when %s is interrupted',
+    async (phase) => {
+      const store = createLocalStore(createMockEncryption());
+      await store.saveJournal(makeJournalContent('j1', [makePage('p1')]));
+      const oldIndex = filesystem['/mock-docs/canto/journals.json'];
+      const oldMetadata = filesystem['/mock-docs/canto/j1/metadata.json'];
+
+      const disarm = armPublicationFault(
+        phase,
+        (content) => content.includes('"journals":'),
+        '/journals.json',
+      );
+      try {
+        await expect(
+          store.saveJournalMetadata!({
+            ...makeJournalContent('j1'),
+            title: 'Renamed',
+            pages: undefined,
+          } as Omit<JournalContent, 'pages'>),
+        ).rejects.toThrow('injected publication failure');
+      } finally {
+        disarm();
+      }
+
+      const recovered = createLocalStore(createMockEncryption());
+      await recovered.initialize();
+
+      const [listed] = await recovered.listJournals();
+      const overview = await recovered.getJournalOverview!('j1');
+      // The projection must be internally consistent: the index entry and the
+      // journal metadata never disagree about which revision is published.
+      expect(listed.title).toBe(overview!.metadata.title);
+      if (phase === 'apply') {
+        // A durable committing marker replays the complete new projection.
+        expect(listed.title).toBe('Renamed');
+      } else {
+        // Prepared/marker failure rolls back to the byte-identical old view.
+        expect(listed.title).toBe('Journal j1');
+        expect(filesystem['/mock-docs/canto/journals.json']).toBe(oldIndex);
+        expect(filesystem['/mock-docs/canto/j1/metadata.json']).toBe(oldMetadata);
+      }
+      expect(stagedTransactionFiles()).toEqual([]);
+    },
+  );
+
+  it.each(PUBLICATION_PHASES)(
+    'warm savePage never exposes a partial page/catalog pair when %s is interrupted',
+    async (phase) => {
+      const store = createLocalStore(createMockEncryption());
+      await store.saveJournal(makeJournalContent('j1', [makePage('p1')]));
+      const oldPage = filesystem['/mock-docs/canto/j1/pages/p1.json'];
+      const oldCatalog = filesystem['/mock-docs/canto/j1/page-catalog.json'];
+
+      const disarm = armPublicationFault(
+        phase,
+        (content) => content.includes('"digest":'),
+        '/page-catalog.json',
+      );
+      try {
+        await expect(
+          store.savePage('j1', { ...makePage('p1'), text: 'edited' }, undefined, true),
+        ).rejects.toThrow('injected publication failure');
+      } finally {
+        disarm();
+      }
+
+      const recovered = createLocalStore(createMockEncryption());
+      await recovered.initialize();
+
+      const page = await recovered.getPage('j1', 'p1');
+      const journal = await recovered.getJournal('j1');
+      const overview = await recovered.getJournalOverview!('j1');
+      // Every page referenced by the catalog is readable after restart.
+      expect(overview!.pages.map((candidate) => candidate.id)).toEqual(['p1']);
+      expect(journal!.pages.map((candidate) => candidate.id)).toEqual(['p1']);
+      if (phase === 'apply') {
+        expect(page!.text).toBe('edited');
+      } else {
+        expect(page!.text).toBe('Page p1 content');
+        expect(filesystem['/mock-docs/canto/j1/pages/p1.json']).toBe(oldPage);
+        expect(filesystem['/mock-docs/canto/j1/page-catalog.json']).toBe(oldCatalog);
+      }
+      expect(stagedTransactionFiles()).toEqual([]);
+    },
+  );
+
+  it.each(PUBLICATION_PHASES)(
+    'saveJournal of a new journal never publishes a partial library when %s is interrupted',
+    async (phase) => {
+      const store = createLocalStore(createMockEncryption());
+      await store.saveJournal(makeJournalContent('j1', [makePage('p1')]));
+
+      const disarm = armPublicationFault(
+        phase,
+        (content) => content.includes('"id":"p9"'),
+        '/j2/pages/p9.json',
+      );
+      try {
+        await expect(store.saveJournal(makeJournalContent('j2', [makePage('p9')]))).rejects.toThrow(
+          'injected publication failure',
+        );
+      } finally {
+        disarm();
+      }
+
+      const recovered = createLocalStore(createMockEncryption());
+      await recovered.initialize();
+
+      const ids = (await recovered.listJournals()).map((journal) => journal.id).sort();
+      if (phase === 'apply') {
+        // Metadata, every page, and the rebuildable catalog were staged before
+        // the durable commit point, so replay publishes the whole journal.
+        expect(ids).toEqual(['j1', 'j2']);
+        await expect(recovered.getJournal('j2')).resolves.toMatchObject({
+          pages: [expect.objectContaining({ id: 'p9' })],
+        });
+      } else {
+        expect(ids).toEqual(['j1']);
+        await expect(recovered.getJournal('j2')).resolves.toBeNull();
+      }
+      expect(stagedTransactionFiles()).toEqual([]);
+    },
+  );
+
+  it.each(PUBLICATION_PHASES)(
+    'index-only deleteJournal never writes a truncated index when %s is interrupted',
+    async (phase) => {
+      const store = createLocalStore(createMockEncryption());
+      await store.saveJournal(makeJournalContent('j1', [makePage('p1')]));
+      await store.saveJournal(makeJournalContent('j2', [makePage('p9')]));
+      const oldIndex = filesystem['/mock-docs/canto/journals.json'];
+
+      const disarm = armPublicationFault(
+        phase,
+        (content) => content.includes('"journals":'),
+        '/journals.json',
+      );
+      try {
+        await expect(store.deleteJournal('j1')).rejects.toThrow('injected publication failure');
+      } finally {
+        disarm();
+      }
+
+      const recovered = createLocalStore(createMockEncryption());
+      await recovered.initialize();
+
+      const ids = (await recovered.listJournals()).map((journal) => journal.id).sort();
+      if (phase === 'apply') {
+        // The index is the only staged entry, so the injected failure lands on
+        // its own write: nothing was partially applied, and the durable commit
+        // marker replays the complete new index exactly once.
+        expect(ids).toEqual(['j2']);
+      } else {
+        // Rollback keeps the byte-identical old index; it is never truncated.
+        expect(ids).toEqual(['j1', 'j2']);
+        expect(filesystem['/mock-docs/canto/journals.json']).toBe(oldIndex);
+        // The journal directory is deleted before the index-only commit, so a
+        // prepared/marker rollback leaves a *ghost* index entry: j1 is still
+        // listed while its data is already gone. This is the documented
+        // "visible but recoverable" window (see deleteJournalRaw); assert it so
+        // the window stays explicit rather than implicit.
+        await expect(recovered.getJournal('j1')).resolves.toBeNull();
+      }
+      expect(stagedTransactionFiles()).toEqual([]);
+    },
+  );
+});
+
+// ---------------------------------------------------------------------------
+// Opt-in recovery tool (native): a read-only complete scan of the authoritative
+// raw page files, followed by an explicitly confirmed catalog publication.
+// The scan never reads the catalog and never writes; the restore only replaces
+// the catalog projection (raw page records are never touched).
+// ---------------------------------------------------------------------------
+describe('recover local pages (native)', () => {
+  it('scans every raw page ignoring a corrupt catalog, then publishes the confirmed catalog', async () => {
+    const journalRoot = '/mock-docs/canto/j1';
+    const catalogPath = `${journalRoot}/page-catalog.json`;
+    const store = createLocalStore(createMockEncryption());
+    await store.initialize();
+    await store.saveJournal(makeJournalContent('j1', [makePage('p1'), makePage('p2')]));
+
+    const pageOneBefore = filesystem[`${journalRoot}/pages/p1.json`];
+    const pageTwoBefore = filesystem[`${journalRoot}/pages/p2.json`];
+    // The catalog is unreadable, but raw page files remain authoritative.
+    filesystem[catalogPath] = 'enc:{"corrupt":true}';
+    const corruptCatalog = filesystem[catalogPath];
+
+    const scan = await store.scanJournalPages!('j1');
+
+    expect(scan.journalId).toBe('j1');
+    expect(scan.pageCount).toBe(2);
+    expect(scan.pages.map((page) => page.id).sort()).toEqual(['p1', 'p2']);
+    // The scan is read-only: the current catalog is preserved byte-for-byte.
+    expect(filesystem[catalogPath]).toBe(corruptCatalog);
+
+    // Confirmation carries no caller-supplied pages: the store re-scans.
+    await store.restoreJournalCatalog!('j1');
+
+    // Restore replaced only the catalog; raw page records are byte-identical.
+    expect(filesystem[catalogPath]).not.toBe(corruptCatalog);
+    expect(filesystem[`${journalRoot}/pages/p1.json`]).toBe(pageOneBefore);
+    expect(filesystem[`${journalRoot}/pages/p2.json`]).toBe(pageTwoBefore);
+
+    const overview = await store.getJournalOverview!('j1');
+    expect(overview!.pages.map((page) => page.id).sort()).toEqual(['p1', 'p2']);
+  });
+
+  it('re-scans at confirm so a page saved after the preview scan is published', async () => {
+    const journalRoot = '/mock-docs/canto/j1';
+    const store = createLocalStore(createMockEncryption());
+    await store.initialize();
+    await store.saveJournal(makeJournalContent('j1', [makePage('p1')]));
+
+    // The preview count is captured before the concurrent edit.
+    const preview = await store.scanJournalPages!('j1');
+    expect(preview.pageCount).toBe(1);
+
+    // A save lands between the read-only preview and the explicit confirmation.
+    await store.savePage('j1', makePage('p2'), undefined, true);
+    expect(filesystem[`${journalRoot}/pages/p2.json`]).toBeDefined();
+
+    // Confirmation must publish a fresh complete scan, never the stale preview.
+    await store.restoreJournalCatalog!('j1');
+
+    const overview = await store.getJournalOverview!('j1');
+    // The intervening save is not hidden by an old catalog projection.
+    expect(overview!.pages.map((page) => page.id).sort()).toEqual(['p1', 'p2']);
+    // The preview was stale (1) yet never determined the publication.
+    expect(preview.pageCount).toBe(1);
+  });
+
+  it('rejects confirmation when a raw page became unreadable after the preview scan', async () => {
+    const journalRoot = '/mock-docs/canto/j1';
+    const store = createLocalStore(createMockEncryption());
+    await store.initialize();
+    await store.saveJournal(makeJournalContent('j1', [makePage('p1')]));
+
+    const preview = await store.scanJournalPages!('j1');
+    expect(preview.pageCount).toBe(1);
+    const catalogBefore = filesystem[`${journalRoot}/page-catalog.json`];
+
+    // The record degrades after the preview; the fresh confirm-time scan must
+    // fail closed instead of publishing a reduced catalog.
+    filesystem[`${journalRoot}/pages/p1.json`] = 'enc:not-json';
+
+    await expect(store.restoreJournalCatalog!('j1')).rejects.toMatchObject({
+      code: 'CATALOG_UNREADABLE',
+    });
+    // The then-current catalog is byte-identical.
+    expect(filesystem[`${journalRoot}/page-catalog.json`]).toBe(catalogBefore);
+  });
+});
+
+describe('recover local pages refuses unsafe scans (native)', () => {
+  it('rejects when a discovered page is unreadable and leaves the catalog untouched', async () => {
+    const catalogPath = '/mock-docs/canto/j1/page-catalog.json';
+    const store = createLocalStore(createMockEncryption());
+    await store.initialize();
+    await store.saveJournal(makeJournalContent('j1', [makePage('p1')]));
+    const catalogBefore = filesystem[catalogPath];
+    filesystem['/mock-docs/canto/j1/pages/p-broken.json'] = 'enc:not-json';
+
+    await expect(store.scanJournalPages!('j1')).rejects.toMatchObject({
+      code: 'CATALOG_UNREADABLE',
+      // Details are opaque record ids; the raw page id/path is never leaked.
+      details: [expect.stringMatching(/^record:[0-9a-f]+$/)],
+    });
+    // Zero mutations: the current catalog is byte-identical.
+    expect(filesystem[catalogPath]).toBe(catalogBefore);
+  });
+
+  it('rejects a malformed-but-valid-JSON page record and preserves the catalog', async () => {
+    const journalRoot = '/mock-docs/canto/j1';
+    const store = createLocalStore(createMockEncryption());
+    await store.initialize();
+    await store.saveJournal(makeJournalContent('j1', [makePage('p1')]));
+    const catalogBefore = filesystem[`${journalRoot}/page-catalog.json`];
+    // Valid JSON, but not a structurally valid Page (text must be a string).
+    filesystem[`${journalRoot}/pages/p9.json`] =
+      'enc:' + JSON.stringify({ ...makePage('p9'), text: 42 });
+
+    const error = (await store.scanJournalPages!('j1').catch((e: unknown) => e)) as {
+      code: string;
+      details: string[];
+      message: string;
+    };
+    expect(error.code).toBe('CATALOG_UNREADABLE');
+    expect(error.details).toHaveLength(1);
+    expect(error.details[0]).toMatch(/^record:[0-9a-f]+$/);
+    // Neither the raw id/path nor the record body/error text is surfaced.
+    expect(error.details[0]).not.toContain('p9');
+    expect(error.message).not.toContain('p9');
+    expect(filesystem[`${journalRoot}/page-catalog.json`]).toBe(catalogBefore);
+  });
+
+  it('rejects a page whose record id disagrees with its filename and preserves the catalog', async () => {
+    const journalRoot = '/mock-docs/canto/j1';
+    const store = createLocalStore(createMockEncryption());
+    await store.initialize();
+    await store.saveJournal(makeJournalContent('j1', [makePage('p1')]));
+    const catalogBefore = filesystem[`${journalRoot}/page-catalog.json`];
+    // The file is named pX.json but its record claims id pY.
+    filesystem[`${journalRoot}/pages/pX.json`] = 'enc:' + JSON.stringify(makePage('pY'));
+
+    await expect(store.scanJournalPages!('j1')).rejects.toMatchObject({
+      code: 'CATALOG_UNREADABLE',
+      details: [expect.stringMatching(/^record:[0-9a-f]+$/)],
+    });
+    expect(filesystem[`${journalRoot}/page-catalog.json`]).toBe(catalogBefore);
+  });
+
+  it('rejects duplicate discovered page ids and preserves the catalog', async () => {
+    const journalRoot = '/mock-docs/canto/j1';
+    const store = createLocalStore(createMockEncryption());
+    await store.initialize();
+    await store.saveJournal(makeJournalContent('j1', [makePage('p1')]));
+    const catalogBefore = filesystem[`${journalRoot}/page-catalog.json`];
+    // A second file that claims the same page id cannot both be published.
+    filesystem[`${journalRoot}/pages/p1-alias.json`] = 'enc:' + JSON.stringify(makePage('p1'));
+
+    await expect(store.scanJournalPages!('j1')).rejects.toMatchObject({
+      code: 'CATALOG_UNREADABLE',
+      details: [expect.stringMatching(/^record:[0-9a-f]+$/)],
+    });
+    expect(filesystem[`${journalRoot}/page-catalog.json`]).toBe(catalogBefore);
+  });
+
+  it('rejects a secure journal without a usable key before reading any page', async () => {
+    const key = new Uint8Array(32).fill(7);
+    const store = createLocalStore(createMockEncryption());
+    const journal: JournalContent = {
+      ...makeJournalContent('secure-j', [makePage('p1')]),
+      secure: true,
+    };
+    await store.saveJournal(journal, key);
+
+    await expect(store.scanJournalPages!('secure-j', undefined)).rejects.toMatchObject({
+      code: 'JOURNAL_LOCKED',
+    });
+    await expect(store.scanJournalPages!('secure-j', new Uint8Array(32))).rejects.toMatchObject({
+      code: 'JOURNAL_LOCKED',
+    });
+
+    // A usable key scans and stays read-only.
+    const scan = await store.scanJournalPages!('secure-j', key);
+    expect(scan.pageCount).toBe(1);
   });
 });

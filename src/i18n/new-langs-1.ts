@@ -86,6 +86,7 @@ export const ja: Dictionary = {
     takePhoto: '写真を撮る',
     takeEncryptedPhoto: '暗号化写真',
     cameraPermissionDenied: 'カメラの許可が拒否されました',
+    unlockRequired: '保存する前にこのジャーナルをロック解除してください。',
   },
   settings: {
     theme: 'テーマ',
@@ -153,6 +154,18 @@ export const ja: Dictionary = {
     reencryptProgress: '{current}/{total} を処理中...',
     themeOverride: 'テーマ',
     useGlobalTheme: 'グローバルテーマを使用',
+    recoverLocalPages: 'ローカルページを復元',
+    recoverDescription:
+      'この端末に保存されているページファイルをスキャンし、このジャーナルのページ一覧を再構築します。確認するまで何も変更されません。',
+    recoverScanning: 'ローカルページをスキャン中...',
+    recoverFound: '復元可能なページ: {count}',
+    recoverNone: '復元可能なページが見つかりませんでした。何も変更されていません。',
+    recoverConfirm: 'ページ一覧を再構築',
+    recoverRestoring: 'ページ一覧を再構築中...',
+    recoverSuccess: 'ローカルファイルからページ一覧を再構築しました。',
+    recoverIncomplete: '一部のローカルページを安全に読み取れませんでした。何も変更されていません。',
+    recoverLocked: 'ページを復元する前にこのジャーナルのロックを解除してください。',
+    recoverFailed: '復元を完了できませんでした。何も変更されていません。',
   },
   filterBar: {
     searchPlaceholder: '検索...',
@@ -208,6 +221,12 @@ export const ja: Dictionary = {
     exporting: 'エクスポート中...',
     exportComplete: 'エクスポート完了',
     exportError: 'エクスポートに失敗しました',
+    exportErrorData:
+      '一部のジャーナルデータを読み取れませんでした。ファイルは変更・削除されていません。',
+    exportErrorArchive:
+      'バックアップのアーカイブを作成できませんでした。空き容量を確認して再度お試しください。',
+    exportErrorShare:
+      'バックアップは作成されましたが、共有できませんでした。もう一度お試しください。',
     importPassword: 'このバックアップは暗号化されています。パスワードを入力してください：',
     importConflict: '同じ名前のジャーナルが既に存在します',
     importRename: 'ジャーナル名を変更',
@@ -311,6 +330,14 @@ export const ja: Dictionary = {
     retry: '再試行',
     acknowledge: 'OK',
   },
+  recovery: {
+    title: 'データ保護が必要です',
+    message: 'Canto がストレージの整合性の問題を検出しました。何も変更・削除されていません。',
+    deviceKeyDetail: 'この端末は現在、ジャーナルファイルを保護するキーにアクセスできません。',
+    indexDetail: 'ジャーナルのインデックスを安全に読み取れません。',
+    instructions:
+      'アプリをインストールしたままにし、データの消去や再インストールはしないでください。暗号化されたファイルが唯一のコピーです。サポートにこのメッセージを伝えて連絡してください。',
+  },
 };
 
 export const ko: Dictionary = {
@@ -399,6 +426,7 @@ export const ko: Dictionary = {
     takePhoto: '사진 찍기',
     takeEncryptedPhoto: '암호화된 사진',
     cameraPermissionDenied: '카메라 권한이 거부되었습니다',
+    unlockRequired: '저장하기 전에 이 저널을 잠금 해제하세요.',
   },
   settings: {
     theme: '테마',
@@ -466,6 +494,19 @@ export const ko: Dictionary = {
     reencryptProgress: '{current}/{total} 처리 중...',
     themeOverride: '테마',
     useGlobalTheme: '전체 테마 사용',
+    recoverLocalPages: '로컬 페이지 복구',
+    recoverDescription:
+      '이 기기에 저장된 페이지 파일을 검사하여 이 저널의 페이지 목록을 다시 만듭니다. 확인하기 전까지는 아무것도 변경되지 않습니다.',
+    recoverScanning: '로컬 페이지 검사 중...',
+    recoverFound: '복구 가능한 페이지: {count}',
+    recoverNone: '복구할 수 있는 페이지가 없습니다. 아무것도 변경되지 않았습니다.',
+    recoverConfirm: '페이지 목록 다시 만들기',
+    recoverRestoring: '페이지 목록을 다시 만드는 중...',
+    recoverSuccess: '로컬 파일에서 페이지 목록을 다시 만들었습니다.',
+    recoverIncomplete:
+      '일부 로컬 페이지를 안전하게 읽을 수 없습니다. 아무것도 변경되지 않았습니다.',
+    recoverLocked: '페이지를 복구하기 전에 이 저널의 잠금을 해제하세요.',
+    recoverFailed: '복구를 완료할 수 없습니다. 아무것도 변경되지 않았습니다.',
   },
   filterBar: {
     searchPlaceholder: '검색...',
@@ -520,6 +561,10 @@ export const ko: Dictionary = {
     exporting: '내보내는 중...',
     exportComplete: '내보내기 완료',
     exportError: '내보내기 실패',
+    exportErrorData: '일부 저널 데이터를 읽을 수 없습니다. 변경되거나 삭제된 파일이 없습니다.',
+    exportErrorArchive:
+      '백업 아카이브를 만들 수 없습니다. 사용 가능한 저장 공간을 확인하고 다시 시도하세요.',
+    exportErrorShare: '백업이 생성되었지만 공유할 수 없습니다. 다시 시도하세요.',
     importPassword: '이 백업은 암호화되어 있습니다. 비밀번호를 입력해 주세요:',
     importConflict: '같은 이름의 저널이 이미 존재합니다',
     importRename: '저널 이름 변경',
@@ -622,6 +667,14 @@ export const ko: Dictionary = {
     retry: '재시도',
     acknowledge: '확인',
   },
+  recovery: {
+    title: '데이터 보존이 필요합니다',
+    message: 'Canto가 저장소 무결성 문제를 감지했습니다. 변경되거나 삭제된 항목이 없습니다.',
+    deviceKeyDetail: '이 기기는 현재 저널 파일을 보호하는 키에 접근할 수 없습니다.',
+    indexDetail: '저널 인덱스를 안전하게 읽을 수 없습니다.',
+    instructions:
+      '앱을 설치한 상태로 유지하고 데이터를 지우거나 재설치하지 마세요. 암호화된 파일이 유일한 사본입니다. 지원팀에 이 메시지를 알려 연락하세요.',
+  },
 };
 
 export const ar: Dictionary = {
@@ -710,6 +763,7 @@ export const ar: Dictionary = {
     takePhoto: 'التقط صورة',
     takeEncryptedPhoto: 'صورة مشفّرة',
     cameraPermissionDenied: 'تم رفض إذن الكاميرا',
+    unlockRequired: 'افتح قفل هذا اليوميات قبل الحفظ.',
   },
   settings: {
     theme: 'المظهر',
@@ -777,6 +831,18 @@ export const ar: Dictionary = {
     reencryptProgress: 'جارٍ معالجة {current} من {total}...',
     themeOverride: 'المظهر',
     useGlobalTheme: 'استخدام المظهر العام',
+    recoverLocalPages: 'استعادة الصفحات المحلية',
+    recoverDescription:
+      'يفحص ملفات الصفحات المحفوظة على هذا الجهاز ويعيد بناء قائمة صفحات هذه المذكرة. لن يتغير أي شيء حتى تؤكد.',
+    recoverScanning: 'جارٍ فحص الصفحات المحلية...',
+    recoverFound: 'الصفحات القابلة للاستعادة: {count}',
+    recoverNone: 'لم يتم العثور على صفحات قابلة للاستعادة. لم يتم تغيير أي شيء.',
+    recoverConfirm: 'إعادة بناء قائمة الصفحات',
+    recoverRestoring: 'جارٍ إعادة بناء قائمة الصفحات...',
+    recoverSuccess: 'تمت إعادة بناء قائمة الصفحات من الملفات المحلية.',
+    recoverIncomplete: 'تعذر قراءة بعض الصفحات المحلية بأمان. لم يتم تغيير أي شيء.',
+    recoverLocked: 'افتح قفل هذه المذكرة قبل استعادة الصفحات.',
+    recoverFailed: 'تعذر إكمال الاستعادة. لم يتم تغيير أي شيء.',
   },
   filterBar: {
     searchPlaceholder: 'بحث...',
@@ -831,6 +897,9 @@ export const ar: Dictionary = {
     exporting: 'جارٍ التصدير...',
     exportComplete: 'التصدير جاهز',
     exportError: 'فشل التصدير',
+    exportErrorData: 'تعذر قراءة بعض بيانات اليوميات. لم يتم تغيير أي ملف أو حذفه.',
+    exportErrorArchive: 'تعذر إنشاء أرشيف النسخ الاحتياطي. تحقق من المساحة المتاحة وحاول مرة أخرى.',
+    exportErrorShare: 'تم إنشاء النسخ الاحتياطي ولكن تعذرت مشاركته. حاول مرة أخرى.',
     importPassword: 'هذه النسخة الاحتياطية مشفرة. أدخل كلمة المرور:',
     importConflict: 'توجد مذكرة بهذا الاسم بالفعل',
     importRename: 'إعادة تسمية المذكرة',
@@ -932,6 +1001,14 @@ export const ar: Dictionary = {
     retry: 'إعادة المحاولة',
     acknowledge: 'حسناً',
   },
+  recovery: {
+    title: 'يلزم الحفاظ على البيانات',
+    message: 'اكتشف Canto مشكلة في سلامة التخزين. لم يتم تغيير أو حذف أي شيء.',
+    deviceKeyDetail: 'لا يمكن لهذا الجهاز حالياً الوصول إلى المفتاح الذي يحمي ملفات اليوميات.',
+    indexDetail: 'لا يمكن قراءة فهرس اليوميات بأمان.',
+    instructions:
+      'أبقِ التطبيق مثبتاً ولا تمسح بياناته ولا تعيد تثبيته. ملفاتك المشفرة هي النسخة الوحيدة. تواصل مع الدعم واذكر هذه الرسالة.',
+  },
 };
 
 export const hi: Dictionary = {
@@ -1020,6 +1097,7 @@ export const hi: Dictionary = {
     takePhoto: 'फ़ोटो लें',
     takeEncryptedPhoto: 'एन्क्रिप्टेड फ़ोटो',
     cameraPermissionDenied: 'कैमरा अनुमति अस्वीकृत',
+    unlockRequired: 'सहेजने से पहले इस डायरी को अनलॉक करें।',
   },
   settings: {
     theme: 'थीम',
@@ -1087,6 +1165,18 @@ export const hi: Dictionary = {
     reencryptProgress: '{current}/{total} प्रोसेस हो रहा है...',
     themeOverride: 'थीम',
     useGlobalTheme: 'वैश्विक थीम का उपयोग करें',
+    recoverLocalPages: 'स्थानीय पृष्ठ पुनर्प्राप्त करें',
+    recoverDescription:
+      'इस डिवाइस पर सहेजी गई पृष्ठ फ़ाइलों को स्कैन करता है और इस जर्नल की पृष्ठ सूची फिर से बनाता है। आपके पुष्टि करने तक कुछ नहीं बदलेगा।',
+    recoverScanning: 'स्थानीय पृष्ठ स्कैन हो रहे हैं...',
+    recoverFound: 'पुनर्प्राप्त करने योग्य पृष्ठ मिले: {count}',
+    recoverNone: 'कोई पुनर्प्राप्त करने योग्य पृष्ठ नहीं मिला। कुछ नहीं बदला गया।',
+    recoverConfirm: 'पृष्ठ सूची फिर से बनाएँ',
+    recoverRestoring: 'पृष्ठ सूची फिर से बनाई जा रही है...',
+    recoverSuccess: 'स्थानीय फ़ाइलों से पृष्ठ सूची फिर से बनाई गई।',
+    recoverIncomplete: 'कुछ स्थानीय पृष्ठ सुरक्षित रूप से पढ़े नहीं जा सके। कुछ नहीं बदला गया।',
+    recoverLocked: 'पृष्ठ पुनर्प्राप्त करने से पहले इस जर्नल को अनलॉक करें।',
+    recoverFailed: 'पुनर्प्राप्ति पूरी नहीं हो सकी। कुछ नहीं बदला गया।',
   },
   filterBar: {
     searchPlaceholder: 'खोजें...',
@@ -1142,6 +1232,10 @@ export const hi: Dictionary = {
     exporting: 'निर्यात हो रहा है...',
     exportComplete: 'निर्यात तैयार',
     exportError: 'निर्यात विफल',
+    exportErrorData: 'कुछ डायरी डेटा पढ़ा नहीं जा सका। कोई फ़ाइल बदली या हटाई नहीं गई।',
+    exportErrorArchive:
+      'बैकअप संग्रह नहीं बनाया जा सका। उपलब्ध स्थान जांचें और फिर से प्रयास करें।',
+    exportErrorShare: 'बैकअप बन गया था लेकिन साझा नहीं किया जा सका। कृपया फिर से प्रयास करें।',
     importPassword: 'यह बैकअप एन्क्रिप्टेड है। पासवर्ड दर्ज करें:',
     importConflict: 'इस नाम का जर्नल पहले से मौजूद है',
     importRename: 'जर्नल का नाम बदलें',
@@ -1245,6 +1339,15 @@ export const hi: Dictionary = {
     retry: 'पुनः प्रयास',
     acknowledge: 'ठीक है',
   },
+  recovery: {
+    title: 'डेटा संरक्षण आवश्यक है',
+    message: 'Canto ने भंडारण अखंडता समस्या का पता लगाया। कुछ भी बदला या हटाया नहीं गया।',
+    deviceKeyDetail:
+      'यह डिवाइस वर्तमान में उस कुंजी तक नहीं पहुंच सकता जो आपकी डायरी फ़ाइलों की सुरक्षा करती है।',
+    indexDetail: 'डायरी इंडेक्स सुरक्षित रूप से नहीं पढ़ा जा सकता।',
+    instructions:
+      'ऐप इंस्टॉल रखें और उसका डेटा साफ़ न करें या दोबारा इंस्टॉल न करें। आपकी एन्क्रिप्टेड फ़ाइलें ही एकमात्र प्रति हैं। सहायता से संपर्क करें और यह संदेश बताएं।',
+  },
 };
 
 export const tr: Dictionary = {
@@ -1333,6 +1436,7 @@ export const tr: Dictionary = {
     takePhoto: 'Fotoğraf Çek',
     takeEncryptedPhoto: 'Şifreli Fotoğraf',
     cameraPermissionDenied: 'Kamera izni reddedildi',
+    unlockRequired: 'Kaydetmeden önce bu günlüğün kilidini açın.',
   },
   settings: {
     theme: 'Tema',
@@ -1400,6 +1504,18 @@ export const tr: Dictionary = {
     reencryptProgress: '{current}/{total} işleniyor...',
     themeOverride: 'Tema',
     useGlobalTheme: 'Genel temayı kullan',
+    recoverLocalPages: 'Yerel sayfaları kurtar',
+    recoverDescription:
+      'Bu cihazda kayıtlı sayfa dosyalarını tarar ve bu günlüğün sayfa listesini yeniden oluşturur. Onaylayana kadar hiçbir şey değişmez.',
+    recoverScanning: 'Yerel sayfalar taranıyor...',
+    recoverFound: 'Kurtarılabilir sayfa bulundu: {count}',
+    recoverNone: 'Kurtarılabilir sayfa bulunamadı. Hiçbir şey değiştirilmedi.',
+    recoverConfirm: 'Sayfa listesini yeniden oluştur',
+    recoverRestoring: 'Sayfa listesi yeniden oluşturuluyor...',
+    recoverSuccess: 'Sayfa listesi yerel dosyalardan yeniden oluşturuldu.',
+    recoverIncomplete: 'Bazı yerel sayfalar güvenle okunamadı. Hiçbir şey değiştirilmedi.',
+    recoverLocked: 'Sayfaları kurtarmadan önce bu günlüğün kilidini aç.',
+    recoverFailed: 'Kurtarma tamamlanamadı. Hiçbir şey değiştirilmedi.',
   },
   filterBar: {
     searchPlaceholder: 'Ara...',
@@ -1455,6 +1571,10 @@ export const tr: Dictionary = {
     exporting: 'Dışa aktarılıyor...',
     exportComplete: 'Dışa aktarma hazır',
     exportError: 'Dışa aktarma başarısız',
+    exportErrorData: 'Bazı günlük verileri okunamadı. Hiçbir dosya değiştirilmedi veya silinmedi.',
+    exportErrorArchive:
+      'Yedek arşivi oluşturulamadı. Kullanılabilir alanı kontrol edip tekrar deneyin.',
+    exportErrorShare: 'Yedek oluşturuldu ancak paylaşılamadı. Lütfen tekrar deneyin.',
     importPassword: 'Bu yedek şifrelenmiş. Parolayı girin:',
     importConflict: 'Bu isimde bir günlük zaten mevcut',
     importRename: 'Günlüğü yeniden adlandır',
@@ -1557,6 +1677,15 @@ export const tr: Dictionary = {
     retry: 'Tekrar dene',
     acknowledge: 'Tamam',
   },
+  recovery: {
+    title: 'Veri koruması gerekli',
+    message:
+      'Canto bir depolama bütünlüğü sorunu algıladı. Hiçbir şey değiştirilmedi veya silinmedi.',
+    deviceKeyDetail: 'Bu cihaz şu anda günlük dosyalarınızı koruyan anahtara erişemiyor.',
+    indexDetail: 'Günlük dizini güvenle okunamıyor.',
+    instructions:
+      'Uygulamayı kurulu tutun, verilerini temizlemeyin veya yeniden kurmayın. Şifrelenmiş dosyalarınız tek kopyadır. Destek ile iletişime geçip bu mesajı iletin.',
+  },
 };
 
 export const nl: Dictionary = {
@@ -1645,6 +1774,7 @@ export const nl: Dictionary = {
     takePhoto: 'Foto maken',
     takeEncryptedPhoto: 'Versleutelde foto',
     cameraPermissionDenied: 'Cameratoegang geweigerd',
+    unlockRequired: 'Ontgrendel dit dagboek voordat je opslaat.',
   },
   settings: {
     theme: 'Thema',
@@ -1712,6 +1842,19 @@ export const nl: Dictionary = {
     reencryptProgress: '{current} van {total} wordt verwerkt...',
     themeOverride: 'Thema',
     useGlobalTheme: 'Algemeen thema gebruiken',
+    recoverLocalPages: "Lokale pagina's herstellen",
+    recoverDescription:
+      'Scant de paginabestanden die op dit apparaat zijn opgeslagen en bouwt de paginalijst van dit dagboek opnieuw op. Er verandert niets tot je bevestigt.',
+    recoverScanning: "Lokale pagina's worden gescand...",
+    recoverFound: "Herstelbare pagina's gevonden: {count}",
+    recoverNone: "Geen herstelbare pagina's gevonden. Er is niets gewijzigd.",
+    recoverConfirm: 'Paginalijst opnieuw opbouwen',
+    recoverRestoring: 'Paginalijst wordt opnieuw opgebouwd...',
+    recoverSuccess: 'Paginalijst opnieuw opgebouwd uit lokale bestanden.',
+    recoverIncomplete:
+      "Sommige lokale pagina's konden niet veilig worden gelezen. Er is niets gewijzigd.",
+    recoverLocked: "Ontgrendel dit dagboek voordat je pagina's herstelt.",
+    recoverFailed: 'Het herstellen kon niet worden voltooid. Er is niets gewijzigd.',
   },
   filterBar: {
     searchPlaceholder: 'Zoeken...',
@@ -1767,6 +1910,11 @@ export const nl: Dictionary = {
     exporting: 'Exporteren...',
     exportComplete: 'Export gereed',
     exportError: 'Export mislukt',
+    exportErrorData:
+      'Sommige dagboekgegevens konden niet worden gelezen. Er zijn geen bestanden gewijzigd of verwijderd.',
+    exportErrorArchive:
+      'Het back-uparchief kon niet worden gemaakt. Controleer de beschikbare ruimte en probeer het opnieuw.',
+    exportErrorShare: 'De back-up is gemaakt maar kon niet worden gedeeld. Probeer het opnieuw.',
     importPassword: 'Deze back-up is versleuteld. Voer het wachtwoord in:',
     importConflict: 'Er bestaat al een dagboek met deze naam',
     importRename: 'Dagboek hernoemen',
@@ -1869,5 +2017,15 @@ export const nl: Dictionary = {
     failedItems: 'Mislukte items',
     retry: 'Opnieuw proberen',
     acknowledge: 'OK',
+  },
+  recovery: {
+    title: 'Gegevensbehoud vereist',
+    message:
+      'Canto heeft een opslagintegriteitsprobleem gedetecteerd. Er is niets gewijzigd of verwijderd.',
+    deviceKeyDetail:
+      'Dit apparaat heeft momenteel geen toegang tot de sleutel die uw dagboekbestanden beschermt.',
+    indexDetail: 'De dagboekindex kan niet veilig worden gelezen.',
+    instructions:
+      'Houd de app geïnstalleerd en verwijder de gegevens niet of installeer niet opnieuw. Uw versleutelde bestanden zijn de enige kopie. Neem contact op met ondersteuning en vermeld dit bericht.',
   },
 };

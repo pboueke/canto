@@ -84,4 +84,15 @@ describe('usePagination', () => {
     rerender({ data: items });
     expect(result.current.visiblePages).toHaveLength(15);
   });
+
+  it('uses the default page size and ignores loadMore when everything is visible', () => {
+    const items = makeItems(5);
+    const { result } = renderHook(() => usePagination(items));
+
+    expect(result.current.visiblePages).toHaveLength(5);
+    expect(result.current.hasMore).toBe(false);
+
+    act(() => result.current.loadMore());
+    expect(result.current.visiblePages).toHaveLength(5);
+  });
 });

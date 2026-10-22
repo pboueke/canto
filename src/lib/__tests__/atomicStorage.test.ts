@@ -153,7 +153,7 @@ describe('readEncrypted error handling', () => {
     expect(result).toBeNull();
   });
 
-  it('returns null on decryption failure and does not crash', async () => {
+  it('fails closed with a typed error when an existing page cannot be device-decrypted', async () => {
     const mockEnc = createMockEncryption();
     (mockEnc.decrypt as jest.Mock).mockRejectedValueOnce(new Error('Tampered data'));
 
@@ -168,8 +168,12 @@ describe('readEncrypted error handling', () => {
     (mockEnc.decrypt as jest.Mock).mockRejectedValueOnce(new Error('Tampered'));
     const consoleSpy = jest.spyOn(console, 'warn').mockImplementation();
 
-    const result = await store.getPage('j1', 'p1');
-    expect(result).toBeNull();
+    // A page file that exists but cannot be decrypted must be reported as an
+    // integrity condition, never silently treated as absent/deleted.
+    await expect(store.getPage('j1', 'p1')).rejects.toMatchObject({
+      code: 'JOURNAL_UNREADABLE',
+      details: ['p1'],
+    });
     expect(consoleSpy).toHaveBeenCalled();
     consoleSpy.mockRestore();
   });
@@ -260,7 +264,9 @@ describe('reencryptJournal', () => {
     journal.secure = true;
     journal.salt = 'test-salt';
     journal.kdfIterations = 600_000;
-    await store.saveJournal(journal);
+    // Secure journals must be created with a usable derived key: the store
+    // refuses to persist password-layer data as device-only.
+    await store.saveJournal(journal, new Uint8Array(32).fill(0x43));
 
     await store.reencryptJournal(journal, undefined, undefined);
 
@@ -362,7 +368,9 @@ describe('reencryptJournal', () => {
 
     const journal = makeJournalContent('j1', [makePage('p1')]);
     journal.secure = true;
-    await store.saveJournal(journal);
+    // Secure journals must be created with a usable derived key: the store
+    // refuses to persist password-layer data as device-only.
+    await store.saveJournal(journal, new Uint8Array(32).fill(0x44));
 
     // Simulate a password-encrypted attachment:
     // plaintext "imagedata" → password encrypt → "pwd:imagedata" → device encrypt → "dev:pwd:imagedata"

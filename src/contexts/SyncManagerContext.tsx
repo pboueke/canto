@@ -83,15 +83,23 @@ export function SyncManagerProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     let disposed = false;
     void (async () => {
-      const store = await getLocalStore();
-      const nextManager = new SyncManager(store, new GDriveRemoteStore());
-      if (disposed) {
-        nextManager.dispose();
-        await nextManager.disconnect();
-        return;
+      try {
+        const store = await getLocalStore();
+        const nextManager = new SyncManager(store, new GDriveRemoteStore());
+        if (disposed) {
+          nextManager.dispose();
+          await nextManager.disconnect();
+          return;
+        }
+        managerRef.current = nextManager;
+        setManager(nextManager);
+      } catch {
+        // Storage bootstrap can fail closed (for example, when a native
+        // encryption module is unavailable). Avoid an unhandled rejection;
+        // consumers keep manager=null and must report the unavailable state.
+        if (!disposed)
+          console.warn('[Canto] Sync manager unavailable: storage initialization failed');
       }
-      managerRef.current = nextManager;
-      setManager(nextManager);
     })();
     return () => {
       disposed = true;

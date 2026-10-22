@@ -6,6 +6,7 @@ import { createEncryptionService } from '@/lib/encryption';
 import { recoverKeyRotation } from '@/lib/encryption/device';
 import { createLocalStore } from '@/lib/storage';
 import type { LocalStore } from '@/lib/storage';
+import { ensureDeviceKeyBootstrap } from '@/lib/storage/bootstrap';
 import { generateUUID, uint8ToBase64 } from '@/lib/encryption/utils';
 import {
   materializeAttachmentDisplay,
@@ -59,8 +60,12 @@ export async function finalizeCompletedDeviceKeyRotationIfReady(store: LocalStor
 async function ensureInitialized(): Promise<LocalStore> {
   const store = getStore();
   if (!initPromise) {
-    initPromise = store
-      .initialize()
+    initPromise = (async () => {
+      // Runs before recovery/decryption so a missing device key can never
+      // lazily generate a replacement key over an existing populated library.
+      await ensureDeviceKeyBootstrap(store);
+      return store.initialize();
+    })()
       .then(async () => {
         // LocalStore writes this marker in the same durable transaction as
         // all re-encrypted data. Only then is it safe to discard the previous

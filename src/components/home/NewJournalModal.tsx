@@ -231,7 +231,10 @@ export function NewJournalModal({
   }
 
   async function handleCloudImport() {
-    if (!manager || !accessToken) return;
+    if (!manager || !accessToken) {
+      setCloudError(t.sync.syncError);
+      return;
+    }
     setCloudError(null);
     setCloudLoading(true);
     // Let React show feedback before a potentially slow Drive request starts.

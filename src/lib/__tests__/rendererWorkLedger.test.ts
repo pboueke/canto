@@ -156,4 +156,22 @@ describe('RendererWorkLedger', () => {
     });
     expect(ledger.reserve(1)).toBe(true);
   });
+
+  it('discards a persisted snapshot that fails validation', () => {
+    const ledger = new RendererWorkLedger({
+      plaintextLimitBytes: 10,
+      nativeAllocationLimitBytes: 60,
+      storage: {
+        getItem: () =>
+          JSON.stringify({
+            version: 2,
+            plaintextBytes: 0,
+            nativeAllocationBytes: 0,
+            requiresFreshRenderer: false,
+          }),
+        setItem: () => {},
+      },
+    });
+    expect(ledger.reserve(1)).toBe(true);
+  });
 });

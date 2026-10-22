@@ -17,7 +17,7 @@ start:
 	npx expo start
 
 android: patch
-	npx expo run:android
+	JAVA_TOOL_OPTIONS="$${JAVA_TOOL_OPTIONS:+$${JAVA_TOOL_OPTIONS} }--enable-native-access=ALL-UNNAMED" npx expo run:android
 
 ios: patch
 	npx expo run:ios
@@ -26,10 +26,9 @@ web:
 	npx expo start --web
 
 emulator:
-	@avd=$$(emulator -list-avds | head -1); \
-	if [ -z "$$avd" ]; then echo "No AVDs found. Create one in Android Studio Device Manager."; exit 1; fi; \
-	echo "Starting emulator: $$avd"; \
-	emulator -avd "$$avd" &
+	@emulator -list-avds | head -1 | grep -q . || { echo "No AVDs found. Create one in Android Studio Device Manager."; exit 1; }
+	@echo "Starting emulator: `emulator -list-avds | head -1`"
+	@emulator -avd "`emulator -list-avds | head -1`" &
 
 # --- Quality ---
 

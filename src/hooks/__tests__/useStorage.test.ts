@@ -46,6 +46,11 @@ jest.mock('@/lib/attachment-display', () => ({
   materializeAttachmentDisplay: (...args: unknown[]) => mockMaterializeAttachmentDisplay(...args),
 }));
 
+const mockEnsureDeviceKeyBootstrap = jest.fn();
+jest.mock('@/lib/storage/bootstrap', () => ({
+  ensureDeviceKeyBootstrap: (...args: unknown[]) => mockEnsureDeviceKeyBootstrap(...args),
+}));
+
 import {
   useJournals,
   useJournal,
@@ -124,6 +129,44 @@ describe('getLocalStore', () => {
     const store = await getLocalStore();
     expect(mockStore.initialize).toHaveBeenCalled();
     expect(store).toBe(mockStore);
+  });
+});
+
+describe('device-key bootstrap gate wiring', () => {
+  // Fresh module registry per test: the cached initPromise from other tests
+  // must not hide whether the gate ran for this initialization.
+  beforeEach(() => {
+    jest.resetModules();
+    jest.doMock('@/lib/storage', () => ({
+      createLocalStore: jest.fn(() => mockStore),
+    }));
+    jest.doMock('@/lib/encryption', () => ({
+      createEncryptionService: jest.fn(() => mockEncryptionService),
+    }));
+    jest.doMock('@/lib/storage/bootstrap', () => ({
+      ensureDeviceKeyBootstrap: (...args: unknown[]) => mockEnsureDeviceKeyBootstrap(...args),
+    }));
+    mockEnsureDeviceKeyBootstrap.mockReset();
+    mockEnsureDeviceKeyBootstrap.mockResolvedValue(undefined);
+    mockStore.initialize.mockClear();
+  });
+
+  it('runs the device-key bootstrap gate before any initialization', async () => {
+    const { getLocalStore } = require('../useStorage');
+    const store = await getLocalStore();
+    expect(mockEnsureDeviceKeyBootstrap).toHaveBeenCalledTimes(1);
+    expect(mockEnsureDeviceKeyBootstrap).toHaveBeenCalledWith(mockStore);
+    expect(mockStore.initialize).toHaveBeenCalled();
+    expect(store).toBe(mockStore);
+  });
+
+  it('never exposes storage when the bootstrap gate reports DEVICE_KEY_UNAVAILABLE', async () => {
+    mockEnsureDeviceKeyBootstrap.mockRejectedValueOnce(
+      new Error('A device key is missing while encrypted Canto data exists'),
+    );
+    const { getLocalStore } = require('../useStorage');
+    await expect(getLocalStore()).rejects.toThrow('device key is missing');
+    expect(mockStore.initialize).not.toHaveBeenCalled();
   });
 });
 
