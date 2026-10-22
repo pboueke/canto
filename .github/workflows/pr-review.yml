@@ -34,16 +34,12 @@ jobs:
           PR_AUTHOR="${{ github.event.pull_request.user.login }}"
           PR_TITLE="${{ github.event.pull_request.title }}"
 
-          # Generate diff (truncate at ~100KB on a line boundary)
-          git diff "origin/${BASE_REF}...HEAD" > _review_diff_full.patch
-          DIFF_SIZE=$(wc -c < _review_diff_full.patch)
-          if [ "$DIFF_SIZE" -gt 102400 ]; then
-            head -c 102400 _review_diff_full.patch | head -n -1 > _review_diff.patch
-            TRUNCATED_NOTE="**WARNING: The diff was truncated from ${DIFF_SIZE} bytes to ~100KB. Your review is INCOMPLETE — flag this to the PR author.**"
-          else
-            cp _review_diff_full.patch _review_diff.patch
-            TRUNCATED_NOTE=""
-          fi
+          # The full diff is attached to the reviewer as a file, never truncated
+          # into the prompt; the model's context fits large release PRs.
+          git diff "origin/${BASE_REF}...HEAD" > _review_diff.patch
+          DIFF_SIZE=$(wc -c < _review_diff.patch)
+          DIFF_FILES=$(git diff --name-only "origin/${BASE_REF}...HEAD" | wc -l)
+          echo "Review diff: ${DIFF_SIZE} bytes across ${DIFF_FILES} files"
 
           cat > _review_prompt.md <<PROMPT_EOF
           You are a senior code reviewer for canto, a React Native / Expo mobile
@@ -64,13 +60,10 @@ jobs:
           5. Test coverage for new/changed functionality
           6. State management and data flow
 
-          ${TRUNCATED_NOTE}
-
-          Here is the diff:
-
-          \`\`\`diff
-          $(cat _review_diff.patch)
-          \`\`\`
+          The complete diff (${DIFF_SIZE} bytes, ${DIFF_FILES} files) is attached
+          as _review_diff.patch and is also at /workspace/_review_diff.patch.
+          Review every file in it; the repository at the PR head is checked out
+          in /workspace for surrounding context.
 
           Produce your review as Markdown with these sections:
           - **Summary**: 1-3 sentence overview of what the PR does
@@ -92,13 +85,14 @@ jobs:
           import json, os
           cfg = {
             'provider': {'opencode-go': {'options': {'apiKey': os.environ['OPENAI_API_KEY']}}},
-            'model': 'opencode-go/glm-5.3'
+            'model': 'opencode-go/deepseek-v4.1-flash'
           }
           json.dump(cfg, open(os.path.expanduser('~/.config/opencode/opencode.json'), 'w'))
           "
 
-          opencode run 'Review this PR per the attached file' \
-            -f /workspace/_review_prompt.md > /workspace/_review_output.md
+          opencode run 'Review this PR per the attached prompt and full diff' \
+            -f /workspace/_review_prompt.md \
+            -f /workspace/_review_diff.patch > /workspace/_review_output.md
           SCRIPT_EOF
           chmod +x _review.sh
 
