@@ -1,3 +1,5 @@
+import { RotationInterruptedError } from './integrity';
+
 /**
  * Serializes mutating LocalStore calls with device-key rotation. A rotation
  * first waits for writes already in flight, then blocks later writes until its
@@ -23,6 +25,16 @@ export class DeviceKeyWriteBarrier {
    * Reads are never queued behind writes; only device-key rotation is.
    */
   private mutationTail: Promise<void> = Promise.resolve();
+  /**
+   * Set when a device-key rotation passed its commit point but could not
+   * finish. Startup replays that transaction byte for byte, so any later
+   * write would be overwritten; refuse writes until restart instead.
+   */
+  private sealed = false;
+
+  seal(): void {
+    this.sealed = true;
+  }
 
   private isInsideGuardedWrite(): boolean {
     return this.guardedWriteDepth > 0;
@@ -59,6 +71,7 @@ export class DeviceKeyWriteBarrier {
     // synchronous block, so a rotation cannot slip between the lock check and
     // the enqueue of this mutation.
     while (this.rotating) await this.waitForRotation();
+    if (this.sealed) throw new RotationInterruptedError();
     const previous = this.mutationTail;
     let release: (() => void) | undefined;
     const gate = new Promise<void>((resolve) => {
@@ -104,8 +117,10 @@ export class DeviceKeyWriteBarrier {
 }
 
 /** Wrap LocalStore reads and writes so a device-key rotation never races either. */
-export function serializeDeviceKeyWrites<T extends object>(store: T): T {
-  const barrier = new DeviceKeyWriteBarrier();
+export function serializeDeviceKeyWrites<T extends object>(
+  store: T,
+  barrier: DeviceKeyWriteBarrier = new DeviceKeyWriteBarrier(),
+): T {
   const mutable = store as Record<string, unknown>;
   const readerMethods = new Set([
     'listJournals',
@@ -118,9 +133,15 @@ export function serializeDeviceKeyWrites<T extends object>(store: T): T {
     // device-key rotation still waits for it. The confirmed restore is a
     // mutation and intentionally stays on the serialized write path.
     'scanJournalPages',
+    // Key verification, support diagnostics, and draft reads only decrypt.
+    'verifyJournalKey',
+    'collectDiagnostics',
+    'getDraft',
+    'listDrafts',
   ]);
+  const rotationMethods = new Set(['reencryptAll', 'rotateDeviceKey']);
   for (const [name, original] of Object.entries(mutable)) {
-    if (name === 'reencryptAll') continue;
+    if (rotationMethods.has(name)) continue;
     if (typeof original !== 'function') continue;
     const guard = readerMethods.has(name)
       ? barrier.read.bind(barrier)
@@ -128,9 +149,10 @@ export function serializeDeviceKeyWrites<T extends object>(store: T): T {
     mutable[name] = (...args: unknown[]) =>
       guard(() => (original as (...inner: unknown[]) => Promise<unknown>).apply(store, args));
   }
-  const rotate = mutable.reencryptAll;
-  if (typeof rotate === 'function') {
-    mutable.reencryptAll = (...args: unknown[]) =>
+  for (const name of rotationMethods) {
+    const rotate = mutable[name];
+    if (typeof rotate !== 'function') continue;
+    mutable[name] = (...args: unknown[]) =>
       barrier.rotate(() =>
         (rotate as (...inner: unknown[]) => Promise<unknown>).apply(store, args),
       );

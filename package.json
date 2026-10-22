@@ -44,6 +44,7 @@
     "expo-localization": "~55.0.13",
     "expo-location": "~55.1.8",
     "expo-router": "~55.0.11",
+    "expo-screen-capture": "~55.0.18",
     "expo-secure-store": "~55.0.13",
     "expo-sharing": "~55.0.18",
     "expo-splash-screen": "~55.0.17",

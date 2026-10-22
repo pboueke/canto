@@ -1,5 +1,7 @@
 import type { Journal, JournalContent, Page, Attachment } from 'canto-data';
 import type { JournalOverview } from '@/lib/journal-overview';
+import type { JournalKeyVerdict, StorageDiagnostics } from './key-integrity';
+import type { DeviceKeyCustody } from './device-key-rotation';
 
 export interface ReencryptionSkippedAttachment {
   name: string;
@@ -35,6 +37,12 @@ export interface JournalPageScan {
   journalId: string;
   pageCount: number;
   pages: readonly Page[];
+  /**
+   * Pages saved by 0.20.0 or earlier under an auto-locked (zeroed) key. They
+   * are included in pageCount and re-encrypted with the journal key by
+   * restoreJournalCatalog.
+   */
+  legacyPageCount?: number;
 }
 
 /**
@@ -96,8 +104,10 @@ export interface LocalStore {
    * own complete raw-page scan inside the serialized mutation slot and
    * publishes only that fresh, fully validated set, so a save that landed
    * after the preview scan is never hidden and an unreadable record still
-   * fails closed. Catalog-only: raw page records are never touched and no
-   * caller can supply arbitrary catalog rows.
+   * fails closed. No caller can supply arbitrary catalog rows. Raw records are
+   * rewritten only when they were saved under the legacy zero key
+   * (<= 0.20.0), re-encrypted with the verified journal key in the same
+   * transaction as the catalog.
    */
   restoreJournalCatalog?(journalId: string, derivedKey?: Uint8Array): Promise<JournalPageScan>;
 
@@ -242,7 +252,42 @@ export interface LocalStore {
    */
   hasExistingData(): Promise<boolean>;
 
-  /** Re-encrypt all data with a new device key (for device key rotation). */
+  /**
+   * Rotate the device key end to end: preflight, stage, durable key cutover,
+   * commit, verify, then discard the old key. Throws RotationBlockedError when
+   * nothing changed, and RotationInterruptedError (writes sealed until
+   * restart) when the commit point was passed but the rotation must finish on
+   * the next startup. The only device-key rotation entry point for the UI.
+   */
+  rotateDeviceKey?(
+    custody: DeviceKeyCustody,
+    onProgress?: (current: number, total: number) => void,
+  ): Promise<void>;
+
+  /**
+   * Strictly check a derived key against the journal's stored records,
+   * without the device-only fallback that ordinary reads use.
+   */
+  verifyJournalKey?(journalId: string, derivedKey: Uint8Array): Promise<JournalKeyVerdict>;
+
+  /** Counts-only support diagnostics; never content, ids, paths, or keys. */
+  collectDiagnostics?(journalId?: string, derivedKey?: Uint8Array): Promise<StorageDiagnostics>;
+
+  /** Persist an encrypted, app-local unsaved editor draft for one page. */
+  saveDraft?(journalId: string, draft: Page, derivedKey?: Uint8Array): Promise<void>;
+
+  /** Read one draft; null when absent or not readable with this key. */
+  getDraft?(journalId: string, pageId: string, derivedKey?: Uint8Array): Promise<Page | null>;
+
+  /** Page ids that have a stored draft. Keyless; never decrypts. */
+  listDrafts?(journalId: string): Promise<string[]>;
+
+  deleteDraft?(journalId: string, pageId: string): Promise<void>;
+
+  /**
+   * Low-level re-encryption of all data with a new device key. Callers must
+   * use rotateDeviceKey, which owns the durable key cutover around it.
+   */
   reencryptAll(
     oldDeviceEncrypt: (plaintext: string) => Promise<string>,
     oldDeviceDecrypt: (ciphertext: string) => Promise<string>,

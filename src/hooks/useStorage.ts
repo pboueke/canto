@@ -1,12 +1,14 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import type { Journal, JournalContent, Page, Attachment } from 'canto-data';
 import type { JournalOverview } from '@/lib/journal-overview';
+import type { JournalKeyVerdict } from '@/lib/storage/key-integrity';
 import { DEFAULT_JOURNAL_SETTINGS, SCHEMA_VERSION } from 'canto-data';
 import { createEncryptionService } from '@/lib/encryption';
 import { recoverKeyRotation } from '@/lib/encryption/device';
 import { createLocalStore } from '@/lib/storage';
 import type { LocalStore } from '@/lib/storage';
 import { ensureDeviceKeyBootstrap } from '@/lib/storage/bootstrap';
+import { withStartupLock } from '@/lib/storage/tab-coordination';
 import { generateUUID, uint8ToBase64 } from '@/lib/encryption/utils';
 import {
   materializeAttachmentDisplay,
@@ -50,29 +52,35 @@ function getStore(): LocalStore {
 }
 
 /** Resolve an interrupted device-key rotation before later writes can replace its fallback. */
-export async function finalizeCompletedDeviceKeyRotationIfReady(store: LocalStore): Promise<void> {
+export async function finalizeCompletedDeviceKeyRotationIfReady(
+  store: LocalStore,
+  encryption?: { clearSession(): void },
+): Promise<void> {
   const completed =
     !!store.hasCompletedDeviceKeyRotation && (await store.hasCompletedDeviceKeyRotation());
   await recoverKeyRotation(completed);
   if (completed) await store.clearCompletedDeviceKeyRotation?.();
+  // Startup recovery may have read records (and cached the device key) before
+  // a rollback restored the previous key. Re-read the durable current key.
+  encryption?.clearSession();
 }
 
 async function ensureInitialized(): Promise<LocalStore> {
   const store = getStore();
   if (!initPromise) {
-    initPromise = (async () => {
+    // On web, recovery waits for (and never rolls back) a rotation running
+    // in another tab of the same library.
+    initPromise = withStartupLock(async () => {
       // Runs before recovery/decryption so a missing device key can never
       // lazily generate a replacement key over an existing populated library.
       await ensureDeviceKeyBootstrap(store);
-      return store.initialize();
-    })()
-      .then(async () => {
-        // LocalStore writes this marker in the same durable transaction as
-        // all re-encrypted data. Only then is it safe to discard the previous
-        // device key; a crash during either cleanup step is retried on startup.
-        await finalizeCompletedDeviceKeyRotationIfReady(store);
-        return store;
-      })
+      await store.initialize();
+      // LocalStore writes this marker in the same durable transaction as
+      // all re-encrypted data. Only then is it safe to discard the previous
+      // device key; a crash during either cleanup step is retried on startup.
+      await finalizeCompletedDeviceKeyRotationIfReady(store, encryptionInstance ?? undefined);
+    })
+      .then(() => store)
       .catch((err) => {
         initPromise = null;
         throw err;
@@ -138,6 +146,70 @@ export async function tryLoadJournalOverview(
   return loadJournalOverview(id, derivedKey);
 }
 
+/**
+ * Strictly check a derived key before opening a journal. Unlike an overview
+ * read, this never mistakes an integrity problem for a wrong password.
+ */
+export async function verifyJournalKey(
+  journalId: string,
+  derivedKey: Uint8Array,
+): Promise<JournalKeyVerdict> {
+  const store = await ensureInitialized();
+  if (!store.verifyJournalKey) {
+    // Adapters without strict verification keep the overview-based check.
+    return (await store.getJournalOverview?.(journalId, derivedKey)) ? 'valid' : 'invalid';
+  }
+  return store.verifyJournalKey(journalId, derivedKey);
+}
+
+/** Encrypted, app-local unsaved draft for one page (never exported or synced). */
+export async function saveDraft(
+  journalId: string,
+  draft: Page,
+  derivedKey?: Uint8Array | null,
+): Promise<void> {
+  const store = await ensureInitialized();
+  await store.saveDraft?.(journalId, draft, derivedKey ?? undefined);
+}
+
+export async function getDraft(
+  journalId: string,
+  pageId: string,
+  derivedKey?: Uint8Array | null,
+): Promise<Page | null> {
+  const store = await ensureInitialized();
+  return (await store.getDraft?.(journalId, pageId, derivedKey ?? undefined)) ?? null;
+}
+
+export async function deleteDraft(journalId: string, pageId: string): Promise<void> {
+  const store = await ensureInitialized();
+  await store.deleteDraft?.(journalId, pageId);
+}
+
+export async function listDrafts(journalId: string): Promise<string[]> {
+  const store = await ensureInitialized();
+  return (await store.listDrafts?.(journalId)) ?? [];
+}
+
+/** A decrypted value together with the key identity it was read under. */
+interface KeyedValue<T> {
+  value: T | null;
+  key: Uint8Array | null | undefined;
+}
+
+const EMPTY_KEYED = { value: null, key: undefined };
+
+/** Release decrypted state from memory once its key is revoked. */
+function useDropOnKeyLoss<T>(
+  keyIdentity: Uint8Array | null,
+  setLoaded: (update: (current: KeyedValue<T>) => KeyedValue<T>) => void,
+): void {
+  useEffect(() => {
+    if (keyIdentity) return;
+    setLoaded((current) => (current.key ? { value: null, key: null } : current));
+  }, [keyIdentity, setLoaded]);
+}
+
 export function useJournals() {
   const [journals, setJournals] = useState<Journal[]>([]);
   const [loading, setLoading] = useState(true);
@@ -198,7 +270,16 @@ export function useJournal(id: string | undefined, derivedKey?: Uint8Array | nul
 
 /** Read-oriented journal views use the encrypted preview catalog, not every page file. */
 export function useJournalOverview(id: string | undefined, derivedKey?: Uint8Array | null) {
-  const [overview, setOverview] = useState<JournalOverview | null>(null);
+  // Each result is tagged with the key it was read under. When that key is
+  // revoked (auto-lock) the projection stops being exposed immediately.
+  const [loaded, setLoaded] = useState<KeyedValue<JournalOverview>>(EMPTY_KEYED);
+  const keyIdentity = derivedKey ?? null;
+  const overview = loaded.key === keyIdentity ? loaded.value : null;
+  const setOverview = useCallback(
+    (value: JournalOverview | null) => setLoaded({ value, key: keyIdentity }),
+    [keyIdentity],
+  );
+  useDropOnKeyLoss(keyIdentity, setLoaded);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
   const [status, setStatus] = useState<JournalOverviewStatus>('initial');
@@ -246,7 +327,7 @@ export function useJournalOverview(id: string | undefined, derivedKey?: Uint8Arr
         if (requestVersion === requestVersionRef.current) setLoading(false);
       }
     },
-    [id, derivedKey],
+    [id, derivedKey, setOverview],
   );
 
   useEffect(() => {
@@ -270,9 +351,17 @@ export function usePage(
   pageId: string | undefined,
   derivedKey?: Uint8Array | null,
 ) {
-  const [page, setPage] = useState<Page | null>(null);
+  const [loaded, setLoaded] = useState<KeyedValue<Page>>(EMPTY_KEYED);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
+  // A page read under a key that has since been revoked is never exposed.
+  const keyIdentity = derivedKey ?? null;
+  const page = loaded.key === keyIdentity ? loaded.value : null;
+  const setPage = useCallback(
+    (value: Page | null) => setLoaded({ value, key: keyIdentity }),
+    [keyIdentity],
+  );
+  useDropOnKeyLoss(keyIdentity, setLoaded);
 
   const load = useCallback(async () => {
     if (!journalId || !pageId) {
@@ -292,7 +381,7 @@ export function usePage(
     } finally {
       setLoading(false);
     }
-  }, [journalId, pageId, derivedKey]);
+  }, [journalId, pageId, derivedKey, setPage]);
 
   useEffect(() => {
     load();

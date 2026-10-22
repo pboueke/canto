@@ -6,13 +6,14 @@ import { getLocalStore } from '@/hooks/useStorage';
 import { StorageIntegrityError } from '@/lib/storage/integrity';
 import type { JournalPageScan } from '@/lib/storage';
 import type { Dictionary } from '@/i18n/dictionaries';
-import type { JournalContent } from 'canto-data';
 import { webModalContent } from '@/styles/web';
 import { getContrastText } from '@/styles/themes';
+import { PrivacyShield } from '@/components/common/PrivacyShield';
 
 interface RecoverPagesModalProps {
   visible: boolean;
-  journal: Omit<JournalContent, 'pages'>;
+  /** Only the id is needed: recovery also runs when metadata could not be shown. */
+  journal: { id: string };
   derivedKey?: Uint8Array | null;
   onClose: () => void;
   onRecovered: () => void;
@@ -28,6 +29,8 @@ function recoveryMessage(t: Dictionary, error: unknown): string {
   if (error instanceof StorageIntegrityError) {
     if (error.code === 'JOURNAL_LOCKED') return t.journalSettings.recoverLocked;
     if (error.code === 'CATALOG_UNREADABLE') return t.journalSettings.recoverIncomplete;
+    if (error.code === 'LEGACY_ZERO_KEY') return t.journalIntegrity.legacyMessage;
+    if (error.code === 'KEY_UNVERIFIABLE') return t.journalIntegrity.unverifiableMessage;
   }
   return t.journalSettings.recoverFailed;
 }
@@ -168,6 +171,16 @@ export function RecoverPagesModal({
                   ? t.journalSettings.recoverFound.replace('{count}', String(scan.pageCount))
                   : t.journalSettings.recoverNone}
               </Text>
+              {!!scan?.legacyPageCount && (
+                <Text
+                  style={[
+                    styles.message,
+                    { color: theme.colors.textSecondary, fontFamily: theme.fonts.regular },
+                  ]}
+                >
+                  {t.journalSettings.recoverLegacy.replace('{count}', String(scan.legacyPageCount))}
+                </Text>
+              )}
             </>
           )}
 
@@ -233,6 +246,7 @@ export function RecoverPagesModal({
           </View>
         </View>
       </View>
+      <PrivacyShield />
     </Modal>
   );
 }

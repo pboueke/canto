@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useSyncExternalStore } from 'react';
 import {
   ActivityIndicator,
   Dimensions,
@@ -55,6 +55,14 @@ export function ImageCarousel({
   const { onAutoLock } = useJournalKeys();
   const [currentIndex, setCurrentIndex] = useState(0);
   const [viewerVisible, setViewerVisible] = useState(false);
+  const { getOverlayState, subscribePrivacyCover } = useJournalKeys();
+  const overlay = useSyncExternalStore(subscribePrivacyCover, getOverlayState);
+  // The full-screen viewer is a third-party modal no privacy shield can sit
+  // inside: close it whenever content must be hidden (app switcher, resume,
+  // auto-lock) so a decrypted image never shows there.
+  useEffect(() => {
+    if (overlay.covered || overlay.locked) setViewerVisible(false);
+  }, [overlay]);
   const [containerWidth, setContainerWidth] = useState(DEFAULT_WIDTH);
   const { loadedImages, loadingImages, failedImages, enqueue, cancelAll, prioritize, retry } =
     useImageQueue(loadImage);

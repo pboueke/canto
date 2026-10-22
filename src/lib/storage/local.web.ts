@@ -18,16 +18,36 @@ import type {
   JournalSyncSnapshot,
   LocalStore,
 } from './types';
-import { serializeDeviceKeyWrites } from './write-barrier';
+import { DeviceKeyWriteBarrier, serializeDeviceKeyWrites } from './write-barrier';
+import { isSafeRecordId, safeRecordId } from './record-id';
+import { registerOpenTab, withRotationLock } from './tab-coordination.web';
 import { recordStorageIo } from './io-counters';
 import {
   assertUsableDerivedKey,
+  DraftsPendingError,
+  JournalLockedError,
   requireUsableDerivedKey,
   StorageIntegrityError,
   type IndexedRead,
   type IntegrityCode,
   type StorageIntegrityCause,
 } from './integrity';
+import {
+  classifyPasswordLayer,
+  countRecordLayer,
+  decryptLegacyZeroKey,
+  emptyLayerCounts,
+  verifyKeyAgainstRecords,
+  type JournalKeyVerdict,
+  type KeyEvidence,
+  type StorageDiagnostics,
+} from './key-integrity';
+import {
+  createRotationVerifySampler,
+  RotationBlockedError,
+  runDeviceKeyRotation,
+  type DeviceKeyRotationIO,
+} from './device-key-rotation';
 import {
   base64ByteLength,
   decodeChunkFrame,
@@ -46,9 +66,11 @@ const JOURNALS_INDEX_PATH = `${BASE_PATH}/journals.json`;
 const DEVICE_KEY_ROTATION_COMPLETE_PATH = `${BASE_PATH}/.device-key-rotation-complete`;
 const FIRST_INSTALL_MARKER_PATH = `${BASE_PATH}/.first-install`;
 const IMPORTS_PREFIX = `${BASE_PATH}/.imports/`;
+/** Headroom kept free beyond the staged rotation copy. */
+const ROTATION_FREE_SPACE_MARGIN_BYTES = 20 * 1024 * 1024;
 
 function getJournalPath(journalId: string): string {
-  return `${BASE_PATH}/${journalId}`;
+  return `${BASE_PATH}/${safeRecordId(journalId)}`;
 }
 
 function getMetadataPath(journalId: string): string {
@@ -60,11 +82,23 @@ function getPageCatalogPath(journalId: string): string {
 }
 
 function getPagePath(journalId: string, pageId: string): string {
-  return `${getJournalPath(journalId)}/pages/${pageId}.json`;
+  return `${getJournalPath(journalId)}/pages/${safeRecordId(pageId)}.json`;
 }
 
 function getPagesPrefix(journalId: string): string {
   return `${getJournalPath(journalId)}/pages/`;
+}
+
+/**
+ * Encrypted unsaved editor drafts. App-local only: never part of the page
+ * catalog, recovery scans, export, sync, or import verification.
+ */
+function getDraftsPrefix(journalId: string): string {
+  return `${getJournalPath(journalId)}/drafts/`;
+}
+
+function getDraftPath(journalId: string, pageId: string): string {
+  return `${getDraftsPrefix(journalId)}${safeRecordId(pageId)}.json`;
 }
 
 function getAttachmentsPrefix(journalId: string): string {
@@ -444,7 +478,15 @@ async function applyStorageTransaction(transaction: StorageTransaction): Promise
     if (raw == null) throw new Error(`Incomplete storage transaction staging: ${staged}`);
     await idbPut(target, raw);
   }
-  for (const root of transaction.oldRoots ?? []) await idbDeletePrefix(`${root}/`);
+  // Superseded attachment roots are garbage once every target is written;
+  // failing to remove one only leaks space and must not fail the commit.
+  for (const root of transaction.oldRoots ?? []) {
+    try {
+      await idbDeletePrefix(`${root}/`);
+    } catch (error) {
+      console.warn('[Canto] Superseded attachment cleanup deferred:', error);
+    }
+  }
 }
 
 async function recoverTransactions(): Promise<void> {
@@ -600,7 +642,59 @@ function parseJournalImportMarker(value: string, id: string): JournalImportMarke
   return null;
 }
 
+/** Every discovered raw page record, classified by how it could be read. */
+interface PageRecordScan {
+  /** Readable with the supplied key (or device-only data). */
+  pages: Page[];
+  /** Readable only with the legacy zero key. */
+  legacyPages: Page[];
+  /** Opaque ids of the legacy records, for diagnostics. */
+  legacyRecords: string[];
+  /** Opaque ids of records that cannot be trusted at all. */
+  unusable: string[];
+}
+
+function parseValidPage(value: string, recordId: string): Page | undefined {
+  try {
+    return validatePage(safeJsonParse<unknown>(value, `page:${recordId}`));
+  } catch {
+    return undefined;
+  }
+}
+
+/** Publication requires every record; legacy records need explicit recovery first. */
+function assertCompletePageScan(
+  journalId: string,
+  scan: PageRecordScan,
+  errorCode: IntegrityCode,
+): void {
+  if (scan.unusable.length > 0) {
+    throw new StorageIntegrityError(
+      errorCode,
+      `Cannot trust local records: ${scan.unusable.length} page(s) could not be read safely.`,
+      { journalId, details: scan.unusable },
+    );
+  }
+  if (scan.legacyPages.length > 0) {
+    throw new StorageIntegrityError(
+      'LEGACY_ZERO_KEY',
+      `${scan.legacyPages.length} page(s) were saved under an auto-locked key and need recovery.`,
+      { journalId, details: scan.legacyRecords },
+    );
+  }
+}
+
+interface TransactionBuilder {
+  root: string;
+  transaction: StorageTransaction;
+  stage(target: string, ciphertext: string): Promise<void>;
+  commit(): Promise<void>;
+  discard(): Promise<void>;
+}
+
 export function createLocalStore(encryption: EncryptionService): LocalStore {
+  const barrier = new DeviceKeyWriteBarrier();
+  registerOpenTab();
   /**
    * True only when the journal's device-only index entry declares the
    * password layer enabled. Unlike the metadata file — which is password-layer
@@ -749,6 +843,11 @@ export function createLocalStore(encryption: EncryptionService): LocalStore {
       const raw = await idbGet(markerPath);
       const marker = raw ? parseJournalImportMarker(raw, id) : null;
       const journalId = marker?.journalId ?? id;
+      if (!isSafeRecordId(journalId)) {
+        // Never brick startup over a marker that cannot name a journal.
+        console.warn('[Canto] Skipping an import marker with an unusable id');
+        continue;
+      }
       if (!committedIds.has(journalId) && marker) {
         const recovered = await recoveredImportIndexEntry(marker);
         if (recovered) {
@@ -841,22 +940,16 @@ export function createLocalStore(encryption: EncryptionService): LocalStore {
     ]);
   }
 
-  /**
-   * A complete scan of every discovered page file can rebuild a projection.
-   * Any unreadable page blocks publication with a typed, recoverable outcome.
-   */
-  async function readJournalPages(
+  async function scanPageRecords(
     journalId: string,
     derivedKey?: Uint8Array,
     options?: JournalOverviewReadOptions,
-    errorCode: IntegrityCode = 'CATALOG_UNREADABLE',
-  ): Promise<Page[]> {
+  ): Promise<PageRecordScan> {
     if (options?.signal?.aborted) throw new Error('Journal catalog rebuild cancelled');
     const pageKeys = (await idbListKeys(getPagesPrefix(journalId))).filter((key) =>
       key.endsWith('.json'),
     );
-    const pages: Page[] = [];
-    const unusable: string[] = [];
+    const scan: PageRecordScan = { pages: [], legacyPages: [], legacyRecords: [], unusable: [] };
     const seenIds = new Set<string>();
     options?.onRebuildProgress?.({ current: 0, total: pageKeys.length });
     for (const [index, key] of pageKeys.entries()) {
@@ -869,41 +962,186 @@ export function createLocalStore(encryption: EncryptionService): LocalStore {
         .replace(/\.json$/, '');
       const pageRaw = await readEncryptedDetailed(key, encryption, derivedKey);
       if (pageRaw.status === 'value') {
-        let page: Page | undefined;
-        try {
-          // Runtime-validate the decoded record instead of trusting the cast;
-          // a valid JSON body with the wrong shape must fail closed.
-          page = validatePage(safeJsonParse<unknown>(pageRaw.value, `page:${recordId}`));
-        } catch {
-          page = undefined;
+        // Runtime-validate the decoded record instead of trusting the cast;
+        // a valid JSON body with the wrong shape must fail closed.
+        let page = parseValidPage(pageRaw.value, recordId);
+        let legacy = false;
+        if (!page && derivedKey) {
+          // A password layer under the zeroed auto-lock key (<= 0.20.0) is
+          // intact data, not corruption. It is reported separately so only
+          // the explicit recovery flow can re-encrypt it.
+          const legacyValue = await decryptLegacyZeroKey(pageRaw.value);
+          page = legacyValue === null ? undefined : parseValidPage(legacyValue, recordId);
+          legacy = !!page;
         }
         if (!page) {
-          unusable.push(recordId);
+          scan.unusable.push(recordId);
         } else if (page.id !== filenameId) {
           // The record id and its filename-derived catalog key disagree, so the
           // projection would be ambiguous. Fail closed.
-          unusable.push(recordId);
+          scan.unusable.push(recordId);
         } else if (seenIds.has(page.id)) {
           // Two discovered records claim the same id; neither can be published
           // as the single authoritative row.
-          unusable.push(recordId);
+          scan.unusable.push(recordId);
         } else {
           seenIds.add(page.id);
-          pages.push(page);
+          if (legacy) {
+            scan.legacyPages.push(page);
+            scan.legacyRecords.push(recordId);
+          } else {
+            scan.pages.push(page);
+          }
         }
       } else if (pageRaw.status === 'unreadable') {
-        unusable.push(recordId);
+        scan.unusable.push(recordId);
       }
       options?.onRebuildProgress?.({ current: index + 1, total: pageKeys.length });
     }
-    if (unusable.length > 0) {
+    return scan;
+  }
+
+  /**
+   * A complete scan of every discovered page file can rebuild a projection.
+   * Any unreadable page blocks publication with a typed, recoverable outcome;
+   * legacy zero-key pages block it too, as LEGACY_ZERO_KEY, until recovered.
+   */
+  async function readJournalPages(
+    journalId: string,
+    derivedKey: Uint8Array | undefined,
+    options: JournalOverviewReadOptions | undefined,
+    errorCode: IntegrityCode,
+  ): Promise<Page[]> {
+    const scan = await scanPageRecords(journalId, derivedKey, options);
+    assertCompletePageScan(journalId, scan, errorCode);
+    return scan.pages;
+  }
+
+  /**
+   * Metadata whose password layer did not open: a legacy zero-key wrap is
+   * recoverable; anything else means this key cannot read the journal.
+   */
+  async function parseJournalMetadata(
+    id: string,
+    value: string,
+  ): Promise<Omit<JournalContent, 'pages'>> {
+    try {
+      return safeJsonParse<Omit<JournalContent, 'pages'>>(value, `journal:${id} metadata`);
+    } catch {
+      if ((await decryptLegacyZeroKey(value)) !== null) {
+        throw new StorageIntegrityError(
+          'LEGACY_ZERO_KEY',
+          `Journal ${id} metadata was saved under an auto-locked key and needs recovery.`,
+          { journalId: id, details: [opaqueRecordId(getMetadataPath(id))] },
+        );
+      }
       throw new StorageIntegrityError(
-        errorCode,
-        `Cannot trust local records: ${unusable.length} page(s) could not be read safely.`,
-        { journalId, details: unusable },
+        'JOURNAL_UNREADABLE',
+        `Journal ${id} metadata could not be decrypted with this key.`,
+        { journalId: id, cause: 'PASSWORD_DECRYPT_FAILED' },
       );
     }
-    return pages;
+  }
+
+  async function deviceDecryptRecord(path: string): Promise<string | null> {
+    const ciphertext = await idbGet(path);
+    if (ciphertext == null) return null;
+    try {
+      return await encryption.decrypt(ciphertext);
+    } catch {
+      return null;
+    }
+  }
+
+  async function verifyJournalKeyImpl(
+    journalId: string,
+    derivedKey: Uint8Array,
+  ): Promise<JournalKeyVerdict> {
+    const metadataPath = getMetadataPath(journalId);
+    const metadata = await deviceDecryptRecord(metadataPath);
+    if (metadata === null) {
+      throw new StorageIntegrityError(
+        'JOURNAL_UNREADABLE',
+        `Journal ${journalId} metadata could not be read safely.`,
+        {
+          journalId,
+          cause: (await idbHas(metadataPath)) ? 'DEVICE_DECRYPT_FAILED' : 'MISSING_PAGE_FILE',
+        },
+      );
+    }
+    const evidence: KeyEvidence[] = [() => deviceDecryptRecord(getPageCatalogPath(journalId))];
+    for (const key of await idbListKeys(getPagesPrefix(journalId))) {
+      if (key.endsWith('.json')) evidence.push(() => deviceDecryptRecord(key));
+    }
+    return verifyKeyAgainstRecords(metadata, journalId, derivedKey, evidence);
+  }
+
+  /**
+   * Stage replacements for legacy zero-key attachment payloads of recovered
+   * pages. Payloads that already open with the real key are left untouched.
+   */
+  async function stageLegacyAttachmentRewraps(
+    transaction: TransactionBuilder,
+    pages: readonly Page[],
+    derivedKey: Uint8Array,
+  ): Promise<void> {
+    const rewrap = async (path: string) => {
+      const device = await deviceDecryptRecord(path);
+      if (device === null) return;
+      const read = await classifyPasswordLayer(device, derivedKey);
+      if (read.layer !== 'legacy-zero') return;
+      await transaction.stage(
+        path,
+        await encryption.encrypt(await aesGcmEncrypt(read.value!, derivedKey)),
+      );
+    };
+    // Recovered pages passed validatePage, so both attachment arrays exist.
+    for (const page of pages) {
+      for (const attachment of [...page.images, ...page.files]) {
+        if (!attachment.encrypted || !attachment.path) continue;
+        if (attachment.content?.format === 'canto-chunked-v1') {
+          for (let index = 0; index < attachment.content.chunkCount; index++) {
+            await rewrap(getChunkPath(attachment.path, index));
+          }
+        } else {
+          await rewrap(attachment.path);
+        }
+      }
+    }
+  }
+
+  /**
+   * Stage records one at a time, then commit through the same marker protocol
+   * as every other multi-record write.
+   */
+  function beginTransaction(idPrefix: string): TransactionBuilder {
+    const root = transactionRoot(`${idPrefix}-${generateUUID()}`);
+    const transaction: StorageTransaction = { phase: 'prepared', files: [] };
+    return {
+      root,
+      transaction,
+      async stage(target, ciphertext) {
+        transaction.files.push(
+          await stageRawFile(root, transaction.files.length, target, ciphertext),
+        );
+      },
+      async commit() {
+        try {
+          await writeTransactionMarker(root, transaction);
+          transaction.phase = 'committing';
+          await writeTransactionMarker(root, transaction);
+          await applyStorageTransaction(transaction);
+          await idbDeletePrefix(`${root}/`);
+        } catch (error) {
+          if (transaction.phase === 'prepared') await idbDeletePrefix(`${root}/`);
+          throw error;
+        }
+      },
+      // Only ever called before commit(), while the staging copy is invisible.
+      async discard() {
+        await idbDeletePrefix(`${root}/`);
+      },
+    };
   }
 
   async function encryptForStorage(data: string, derivedKey?: Uint8Array): Promise<string> {
@@ -1016,10 +1254,7 @@ export function createLocalStore(encryption: EncryptionService): LocalStore {
         { journalId: id, cause: metadataRead.cause },
       );
     }
-    const metadata = safeJsonParse<Omit<JournalContent, 'pages'>>(
-      metadataRead.value,
-      `journal:${id} metadata`,
-    );
+    const metadata = await parseJournalMetadata(id, metadataRead.value);
     const catalogRead = await readPageCatalogDetailed(id, derivedKey);
     if (catalogRead.state === 'valid') return catalogToOverview(metadata, catalogRead.value);
 
@@ -1038,7 +1273,8 @@ export function createLocalStore(encryption: EncryptionService): LocalStore {
     // Verify the index is readable before deleting anything: an unreadable
     // baseline must block destructive publication, never orphan a directory.
     const index = await readIndex();
-    await idbDeletePrefix(getJournalPath(id));
+    // Trailing slash: never match a sibling journal whose id shares a prefix.
+    await idbDeletePrefix(`${getJournalPath(id)}/`);
     index.journals = index.journals.filter((j) => j.id !== id);
     await commitIndexOnly(index);
   }
@@ -1057,6 +1293,232 @@ export function createLocalStore(encryption: EncryptionService): LocalStore {
 
   async function recordFirstInstallImpl(): Promise<void> {
     await idbPut(FIRST_INSTALL_MARKER_PATH, 'first-install');
+  }
+
+  /** Journal ids that own at least one durable record below the root. */
+  async function storedJournalIds(): Promise<Set<string>> {
+    const ids = new Set<string>();
+    for (const key of await idbListKeys(`${BASE_PATH}/`)) {
+      if (key.startsWith(TRANSACTIONS_PREFIX) || key.startsWith(IMPORTS_PREFIX)) continue;
+      const rest = key.slice(BASE_PATH.length + 1);
+      if (rest.includes('/')) ids.add(rest.split('/')[0]);
+    }
+    return ids;
+  }
+
+  /** Every device-encrypted record below the root, excluding staging and markers. */
+  async function deviceEncryptedKeys(): Promise<string[]> {
+    return (await idbListKeys(`${BASE_PATH}/`)).filter(
+      (key) =>
+        !key.startsWith(TRANSACTIONS_PREFIX) &&
+        !key.startsWith(IMPORTS_PREFIX) &&
+        key !== DEVICE_KEY_ROTATION_COMPLETE_PATH &&
+        key !== FIRST_INSTALL_MARKER_PATH &&
+        !key.endsWith('.size'),
+    );
+  }
+
+  /** Legacy monolithic attachments without a trustworthy, bounded size sidecar. */
+  async function oversizedLegacyAttachments(keys: readonly string[]): Promise<string[]> {
+    const unsafe: string[] = [];
+    for (const key of keys) {
+      if (!key.includes('/attachments/') || key.includes('/chunk-v1-') || isChunkManifest(key)) {
+        continue;
+      }
+      const rawSize = await idbGet(`${key}.size`);
+      const size = rawSize == null ? undefined : Number(rawSize);
+      if (
+        size == null ||
+        !Number.isSafeInteger(size) ||
+        size < 0 ||
+        size > LEGACY_ATTACHMENT_MEMORY_LIMIT_BYTES
+      ) {
+        unsafe.push(key);
+      }
+    }
+    return unsafe;
+  }
+
+  async function stageDeviceKeyRotation(
+    transaction: TransactionBuilder,
+    journals: readonly Journal[],
+    oldDeviceDecrypt: (ciphertext: string) => Promise<string>,
+    newDeviceEncrypt: (plaintext: string) => Promise<string>,
+    onProgress?: (current: number, total: number) => void,
+  ): Promise<void> {
+    const keys = await deviceEncryptedKeys();
+    const unsafeLegacy = await oversizedLegacyAttachments(keys);
+    if (unsafeLegacy.length > 0) {
+      throw new Error(`Cannot safely rotate device key for legacy attachment: ${unsafeLegacy[0]}`);
+    }
+    let processed = 0;
+    for (const journal of journals) {
+      const prefix = `${getJournalPath(journal.id)}/`;
+      for (const key of keys.filter((candidate) => candidate.startsWith(prefix))) {
+        const ciphertext = await idbGet(key);
+        if (ciphertext != null) {
+          await transaction.stage(key, await newDeviceEncrypt(await oldDeviceDecrypt(ciphertext)));
+        }
+      }
+      onProgress?.(++processed, journals.length);
+    }
+    // Never rotate a partial set: a journal whose metadata exists but was not
+    // staged would be left on a key that is about to be deleted.
+    const staged = new Set(transaction.transaction.files.map((file) => file.target));
+    for (const journal of journals) {
+      const metadataPath = getMetadataPath(journal.id);
+      if (!staged.has(metadataPath) && (await idbHas(metadataPath))) {
+        throw new Error('Device-key rotation did not cover every journal record');
+      }
+    }
+    const indexData = await idbGet(JOURNALS_INDEX_PATH);
+    if (indexData != null) {
+      await transaction.stage(
+        JOURNALS_INDEX_PATH,
+        await newDeviceEncrypt(await oldDeviceDecrypt(indexData)),
+      );
+    }
+    // This raw marker is staged with every ciphertext. It becomes visible
+    // only at the same durable commit point, and contains no key material.
+    await transaction.stage(DEVICE_KEY_ROTATION_COMPLETE_PATH, 'complete');
+  }
+
+  /** Free browser storage quota, or null when the browser cannot tell. */
+  async function readAvailableQuota(): Promise<number | null> {
+    try {
+      const estimate = await globalThis.navigator?.storage?.estimate?.();
+      if (!estimate || typeof estimate.quota !== 'number') return null;
+      return Math.max(0, estimate.quota - (estimate.usage ?? 0));
+    } catch {
+      return null;
+    }
+  }
+
+  /** Web storage steps for runDeviceKeyRotation. */
+  function createRotationIO(): DeviceKeyRotationIO {
+    let builder: TransactionBuilder | null = null;
+    let journals: Journal[] = [];
+
+    return {
+      async preflight() {
+        // runDeviceKeyRotation checked that no fallback key is pending, so a
+        // completion marker here is a leftover from a finished rotation and
+        // must not survive into this one.
+        if (await idbHas(DEVICE_KEY_ROTATION_COMPLETE_PATH)) {
+          try {
+            await idbDelete(DEVICE_KEY_ROTATION_COMPLETE_PATH);
+          } catch {
+            throw new RotationBlockedError(
+              'ROTATION_PENDING',
+              'A previous rotation marker could not be cleared; rotation refused.',
+            );
+          }
+        }
+        try {
+          journals = (await readIndex()).journals;
+        } catch {
+          throw new RotationBlockedError(
+            'UNREADABLE_DATA',
+            'The journal index could not be read safely; rotation refused.',
+          );
+        }
+        if ((await idbListKeys(TRANSACTIONS_PREFIX)).length > 0) {
+          throw new RotationBlockedError(
+            'ROTATION_PENDING',
+            'A storage transaction is still pending; rotation refused.',
+          );
+        }
+        if ((await idbListKeys(IMPORTS_PREFIX)).length > 0) {
+          throw new RotationBlockedError(
+            'UNRECOVERED_DATA',
+            'A journal import is still pending; rotation refused.',
+          );
+        }
+        const indexed = new Set(journals.map((journal) => journal.id));
+        if ([...(await storedJournalIds())].some((id) => !indexed.has(id))) {
+          // Unindexed journal data would stay on the retired key forever.
+          throw new RotationBlockedError(
+            'UNRECOVERED_DATA',
+            'Journal data exists outside the index; rotation refused.',
+          );
+        }
+        const keys = await deviceEncryptedKeys();
+        if ((await oversizedLegacyAttachments(keys)).length > 0) {
+          throw new RotationBlockedError(
+            'UNSUPPORTED_DATA',
+            'A legacy attachment is too large to rotate safely.',
+          );
+        }
+        let bytes = 0;
+        for (const key of keys) bytes += (await idbGet(key))?.length ?? 0;
+        const available = await readAvailableQuota();
+        if (available !== null && available < bytes * 1.1 + ROTATION_FREE_SPACE_MARGIN_BYTES) {
+          throw new RotationBlockedError(
+            'INSUFFICIENT_SPACE',
+            'Not enough free storage to rotate the device key safely.',
+          );
+        }
+      },
+
+      async stage(oldDecrypt, newEncrypt, onProgress) {
+        builder = beginTransaction('device');
+        try {
+          await stageDeviceKeyRotation(builder, journals, oldDecrypt, newEncrypt, onProgress);
+        } catch {
+          throw new RotationBlockedError(
+            'UNREADABLE_DATA',
+            'A journal record could not be decrypted with the current device key.',
+          );
+        }
+      },
+
+      async discard() {
+        await builder?.discard();
+      },
+
+      async markCommitting() {
+        const { root, transaction } = builder!;
+        await writeTransactionMarker(root, transaction);
+        // Flip the in-memory phase only after the durable write returned, so a
+        // failed commit write can still discard its uncommitted staging copy.
+        await writeTransactionMarker(root, { ...transaction, phase: 'committing' });
+        transaction.phase = 'committing';
+      },
+
+      async isCommitting() {
+        return (await readTransactionMarker(builder!.root))?.phase === 'committing';
+      },
+
+      async apply() {
+        await applyStorageTransaction(builder!.transaction);
+      },
+
+      async verify(newKey) {
+        const sample = createRotationVerifySampler();
+        for (const { target, staged } of builder!.transaction.files) {
+          const written = await idbGet(target);
+          if (written !== (await idbGet(staged))) {
+            throw new Error('Rotated record does not match its staged copy');
+          }
+          // Prove the new key itself opens the index, metadata, catalogs, and
+          // a sample of pages before the fallback key is discarded. The keys
+          // were just applied, so they are present.
+          if (sample(target)) await aesGcmDecrypt(written!, newKey);
+        }
+      },
+
+      async cleanup() {
+        await idbDeletePrefix(`${builder!.root}/`);
+      },
+
+      async clearCompletionMarker() {
+        await idbDelete(DEVICE_KEY_ROTATION_COMPLETE_PATH);
+      },
+
+      seal() {
+        barrier.seal();
+      },
+    };
   }
 
   const store: LocalStore = {
@@ -1102,10 +1564,7 @@ export function createLocalStore(encryption: EncryptionService): LocalStore {
           { journalId: id, cause: metaRead.cause },
         );
       }
-      const metadata = safeJsonParse<Omit<JournalContent, 'pages'>>(
-        metaRead.value,
-        `journal:${id} metadata`,
-      );
+      const metadata = await parseJournalMetadata(id, metaRead.value);
 
       const pages = await readJournalPages(id, derivedKey, undefined, 'JOURNAL_UNREADABLE');
       return { ...metadata, pages };
@@ -1147,8 +1606,17 @@ export function createLocalStore(encryption: EncryptionService): LocalStore {
       // never silently scanned through the device-only password-layer fallback.
       assertUsableDerivedKey(derivedKey);
       if (await isJournalSecure(journalId)) requireUsableDerivedKey(derivedKey);
-      const pages = await readJournalPages(journalId, derivedKey, options, 'CATALOG_UNREADABLE');
-      return { journalId, pageCount: pages.length, pages };
+      const scan = await scanPageRecords(journalId, derivedKey, options);
+      // Legacy zero-key pages are recoverable and count toward the preview;
+      // anything else unreadable still fails closed.
+      assertCompletePageScan(journalId, { ...scan, legacyPages: [] }, 'CATALOG_UNREADABLE');
+      const pages = [...scan.pages, ...scan.legacyPages];
+      return {
+        journalId,
+        pageCount: pages.length,
+        pages,
+        legacyPageCount: scan.legacyPages.length,
+      };
     },
 
     async restoreJournalCatalog(
@@ -1159,14 +1627,68 @@ export function createLocalStore(encryption: EncryptionService): LocalStore {
       // transaction path as every other projection write. The confirmed write
       // must not trust a preview captured earlier: it re-scans every raw page
       // record here, inside the mutation slot, and publishes only that fresh,
-      // fully validated set. Raw page records are never read or rewritten for
-      // publication; the same key guard as savePage prevents a secure journal's
+      // fully validated set. Raw page records are rewritten only when they
+      // were saved under the legacy zero key, and then only with a verified
+      // key; the same key guard as savePage prevents a secure journal's
       // catalog from being downgraded to device-only data.
       assertUsableDerivedKey(derivedKey);
       if (await isJournalSecure(journalId)) requireUsableDerivedKey(derivedKey);
-      const pages = await readJournalPages(journalId, derivedKey, undefined, 'CATALOG_UNREADABLE');
-      await writePageCatalog(journalId, pages, derivedKey);
-      return { journalId, pageCount: pages.length, pages };
+      const scan = await scanPageRecords(journalId, derivedKey);
+      assertCompletePageScan(journalId, { ...scan, legacyPages: [] }, 'CATALOG_UNREADABLE');
+      const pages = [...scan.pages, ...scan.legacyPages];
+      const metadataPath = getMetadataPath(journalId);
+      const metadataDevice = await deviceDecryptRecord(metadataPath);
+      const legacyMetadata =
+        metadataDevice === null
+          ? null
+          : await classifyPasswordLayer(metadataDevice, derivedKey).then((read) =>
+              read.layer === 'legacy-zero' ? read.value! : null,
+            );
+      const transaction = beginTransaction('recovery');
+      try {
+        if (scan.legacyPages.length > 0 || legacyMetadata !== null) {
+          // Re-encrypting under an unproven key would lock the user out for
+          // good, so the key must open at least one existing record first.
+          const key = requireUsableDerivedKey(derivedKey);
+          const verdict = await verifyJournalKeyImpl(journalId, key);
+          if (verdict === 'unverifiable') {
+            throw new StorageIntegrityError(
+              'KEY_UNVERIFIABLE',
+              'No stored record can confirm this password; recovery refused.',
+              { journalId },
+            );
+          }
+          if (verdict !== 'valid') {
+            throw new JournalLockedError(
+              'The journal key could not be verified; recovery refused.',
+            );
+          }
+          if (legacyMetadata !== null) {
+            await transaction.stage(metadataPath, await encryptForStorage(legacyMetadata, key));
+          }
+          for (const page of scan.legacyPages) {
+            await transaction.stage(
+              getPagePath(journalId, page.id),
+              await encryptForStorage(JSON.stringify(page), key),
+            );
+          }
+          await stageLegacyAttachmentRewraps(transaction, scan.legacyPages, key);
+        }
+        await transaction.stage(
+          getPageCatalogPath(journalId),
+          await encryptForStorage(JSON.stringify(createPageCatalog(journalId, pages)), derivedKey),
+        );
+      } catch (error) {
+        await transaction.discard();
+        throw error;
+      }
+      await transaction.commit();
+      return {
+        journalId,
+        pageCount: pages.length,
+        pages,
+        legacyPageCount: scan.legacyPages.length,
+      };
     },
 
     async saveJournal(journal: JournalContent, derivedKey?: Uint8Array): Promise<void> {
@@ -1342,6 +1864,10 @@ export function createLocalStore(encryption: EncryptionService): LocalStore {
           derivedKey,
         );
       }
+
+      // The page's draft is deliberately kept: sync also deletes pages (for a
+      // deletion made on another device), and that must never destroy unsaved
+      // local typing. The editor discards the draft on a user delete.
 
       // Clean up attachment entries from IDB (non-blocking)
       const attachments = [...(page.images ?? []), ...(page.files ?? [])];
@@ -1640,6 +2166,9 @@ export function createLocalStore(encryption: EncryptionService): LocalStore {
       newKey: Uint8Array | undefined,
       onProgress?: (current: number, total: number) => void,
     ) {
+      if ((await idbListKeys(getDraftsPrefix(journal.id))).length > 0) {
+        throw new DraftsPendingError();
+      }
       const skippedAttachments: { name: string; size?: number }[] = [];
       const skippedPaths = new Set<string>();
       const legacyAttachments = journal.pages
@@ -1936,86 +2465,124 @@ export function createLocalStore(encryption: EncryptionService): LocalStore {
       const journals = indexData
         ? safeJsonParse<JournalIndex>(await oldDeviceDecrypt(indexData), 'journals index').journals
         : [];
-      const root = transactionRoot(`device-${generateUUID()}`);
-      const transaction: StorageTransaction = { phase: 'prepared', files: [] };
+      const transaction = beginTransaction('device');
       try {
-        const keys = (await idbListKeys(`${BASE_PATH}/`)).filter(
-          (key) =>
-            !key.startsWith(TRANSACTIONS_PREFIX) &&
-            !key.startsWith(IMPORTS_PREFIX) &&
-            key !== DEVICE_KEY_ROTATION_COMPLETE_PATH &&
-            key !== FIRST_INSTALL_MARKER_PATH &&
-            !key.endsWith('.size'),
+        await stageDeviceKeyRotation(
+          transaction,
+          journals,
+          oldDeviceDecrypt,
+          newDeviceEncrypt,
+          onProgress,
         );
-        const unsafeLegacy = [] as string[];
-        for (const key of keys) {
-          if (
-            !key.includes('/attachments/') ||
-            key.includes('/chunk-v1-') ||
-            isChunkManifest(key)
-          ) {
-            continue;
-          }
-          const rawSize = await idbGet(`${key}.size`);
-          const size = rawSize == null ? undefined : Number(rawSize);
-          if (
-            size == null ||
-            !Number.isSafeInteger(size) ||
-            size < 0 ||
-            size > LEGACY_ATTACHMENT_MEMORY_LIMIT_BYTES
-          ) {
-            unsafeLegacy.push(key);
-          }
-        }
-        if (unsafeLegacy.length > 0) {
-          throw new Error(
-            `Cannot safely rotate device key for legacy attachment: ${unsafeLegacy[0]}`,
-          );
-        }
-        let staged = 0;
-        let processed = 0;
-        for (const journal of journals) {
-          const prefix = `${getJournalPath(journal.id)}/`;
-          for (const key of keys.filter((candidate) => candidate.startsWith(prefix))) {
-            const ciphertext = await idbGet(key);
-            if (ciphertext != null) {
-              transaction.files.push(
-                await stageRawFile(
-                  root,
-                  staged++,
-                  key,
-                  await newDeviceEncrypt(await oldDeviceDecrypt(ciphertext)),
-                ),
-              );
-            }
-          }
-          onProgress?.(++processed, journals.length);
-        }
-        if (indexData != null) {
-          transaction.files.push(
-            await stageRawFile(
-              root,
-              staged,
-              JOURNALS_INDEX_PATH,
-              await newDeviceEncrypt(await oldDeviceDecrypt(indexData)),
-            ),
-          );
-        }
-        // This raw marker is staged with every ciphertext. It becomes visible
-        // only at the same durable commit point, and contains no key material.
-        transaction.files.push(
-          await stageRawFile(root, staged + 1, DEVICE_KEY_ROTATION_COMPLETE_PATH, 'complete'),
-        );
-        await writeTransactionMarker(root, transaction);
-        transaction.phase = 'committing';
-        await writeTransactionMarker(root, transaction);
-        await applyStorageTransaction(transaction);
-        await idbDeletePrefix(`${root}/`);
       } catch (error) {
-        if (transaction.phase === 'prepared') await idbDeletePrefix(`${root}/`);
+        await transaction.discard();
         throw error;
       }
+      await transaction.commit();
+    },
+
+    async rotateDeviceKey(custody, onProgress): Promise<void> {
+      await withRotationLock(() =>
+        runDeviceKeyRotation(createRotationIO(), custody, encryption, onProgress),
+      );
+    },
+
+    async verifyJournalKey(journalId: string, derivedKey: Uint8Array) {
+      return verifyJournalKeyImpl(journalId, derivedKey);
+    },
+
+    async collectDiagnostics(journalId?: string, derivedKey?: Uint8Array) {
+      const indexRead = await readIndexTyped();
+      const indexed = new Set(
+        indexRead.state === 'valid' ? indexRead.value.journals.map((journal) => journal.id) : [],
+      );
+      const transactionRoots = new Set(
+        (await idbListKeys(TRANSACTIONS_PREFIX)).map(
+          (key) => key.slice(TRANSACTIONS_PREFIX.length).split('/')[0],
+        ),
+      );
+      const journalIds = await storedJournalIds();
+      const diagnostics: StorageDiagnostics = {
+        format: 'canto-diagnostics-v1',
+        platform: 'web',
+        index: indexRead.state,
+        indexedJournals: indexed.size,
+        unindexedJournalDirectories: [...journalIds].filter((id) => !indexed.has(id)).length,
+        pendingTransactions: transactionRoots.size,
+        pendingImports: (await idbListKeys(IMPORTS_PREFIX)).length,
+        rotationCompletionMarker: await idbHas(DEVICE_KEY_ROTATION_COMPLETE_PATH),
+      };
+      if (journalId) {
+        const key = derivedKey && !derivedKey.every((byte) => byte === 0) ? derivedKey : undefined;
+        const metadata = emptyLayerCounts();
+        const catalog = emptyLayerCounts();
+        const pages = emptyLayerCounts();
+        if (await idbHas(getMetadataPath(journalId))) {
+          await countRecordLayer(
+            metadata,
+            await deviceDecryptRecord(getMetadataPath(journalId)),
+            key,
+          );
+        }
+        if (await idbHas(getPageCatalogPath(journalId))) {
+          await countRecordLayer(
+            catalog,
+            await deviceDecryptRecord(getPageCatalogPath(journalId)),
+            key,
+          );
+        }
+        for (const pageKey of await idbListKeys(getPagesPrefix(journalId))) {
+          if (pageKey.endsWith('.json')) {
+            await countRecordLayer(pages, await deviceDecryptRecord(pageKey), key);
+          }
+        }
+        diagnostics.journal = {
+          keySupplied: !!key,
+          metadata,
+          catalog,
+          pages,
+          drafts: (await idbListKeys(getDraftsPrefix(journalId))).length,
+        };
+      }
+      return diagnostics;
+    },
+
+    async saveDraft(journalId: string, draft: Page, derivedKey?: Uint8Array): Promise<void> {
+      assertUsableDerivedKey(derivedKey);
+      if (await isJournalSecure(journalId)) requireUsableDerivedKey(derivedKey);
+      // A draft never creates journal records: orphan records would trip the
+      // fail-closed missing-index guard.
+      if (!(await idbHas(getMetadataPath(journalId)))) {
+        throw new Error(`Journal not found: ${journalId}`);
+      }
+      await commitStagedWrites('draft', [
+        {
+          target: getDraftPath(journalId, draft.id),
+          ciphertext: await encryptForStorage(JSON.stringify(draft), derivedKey),
+        },
+      ]);
+    },
+
+    async getDraft(journalId: string, pageId: string, derivedKey?: Uint8Array) {
+      const path = getDraftPath(journalId, pageId);
+      const raw = await readEncryptedDetailed(path, encryption, derivedKey);
+      if (raw.status !== 'value') return null;
+      // A draft is a convenience copy. One that does not open with this key
+      // is kept but never shown.
+      const draft = parseValidPage(raw.value, opaqueRecordId(path));
+      return draft && draft.id === pageId ? draft : null;
+    },
+
+    async listDrafts(journalId: string): Promise<string[]> {
+      const prefix = getDraftsPrefix(journalId);
+      return (await idbListKeys(prefix))
+        .filter((key) => key.endsWith('.json'))
+        .map((key) => key.slice(prefix.length).replace(/\.json$/, ''));
+    },
+
+    async deleteDraft(journalId: string, pageId: string): Promise<void> {
+      await idbDelete(getDraftPath(journalId, pageId));
     },
   };
-  return serializeDeviceKeyWrites(store);
+  return serializeDeviceKeyWrites(store, barrier);
 }

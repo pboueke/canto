@@ -18,7 +18,11 @@
     },
     "android": {
       "package": "com.boueke.canto",
-      "versionCode": 30,
+      "versionCode": 32,
+      "blockedPermissions": [
+        "android.permission.READ_MEDIA_IMAGES",
+        "android.permission.DETECT_SCREEN_CAPTURE"
+      ],
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
         "foregroundImage": "./assets/android-icon-foreground.png",

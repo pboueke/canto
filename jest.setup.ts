@@ -74,6 +74,25 @@ jest.mock('expo-secure-store', () => ({
 };
 
 // ---------------------------------------------------------------------------
+// Web Locks: Node ships a process-wide navigator.locks, so a lock held by one
+// test file (an open-tab registration never releases) would leak into later
+// files in the same worker. Tests that need locks install their own fake.
+// ---------------------------------------------------------------------------
+if (typeof globalThis.navigator !== 'undefined') {
+  Object.defineProperty(globalThis.navigator, 'locks', { configurable: true, value: undefined });
+}
+
+// ---------------------------------------------------------------------------
+// Mock: expo-screen-capture (native module; FLAG_SECURE / iOS app switcher)
+// ---------------------------------------------------------------------------
+jest.mock('expo-screen-capture', () => ({
+  preventScreenCaptureAsync: jest.fn(async () => {}),
+  allowScreenCaptureAsync: jest.fn(async () => {}),
+  enableAppSwitcherProtectionAsync: jest.fn(async () => {}),
+  disableAppSwitcherProtectionAsync: jest.fn(async () => {}),
+}));
+
+// ---------------------------------------------------------------------------
 // Mock: expo-crypto (AES-GCM via @noble/ciphers for Jest/Node)
 // ---------------------------------------------------------------------------
 jest.mock('expo-crypto', () => {

@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Alert } from 'react-native';
+import { Alert, AppState } from 'react-native';
 import { act, fireEvent, render, waitFor } from '@testing-library/react-native';
 import type { Page } from 'canto-data';
 import { JournalKeyProvider, useJournalKeys } from '@/contexts/JournalKeyContext';
@@ -22,6 +22,15 @@ const p1: Page = {
 
 const mockSave = jest.fn();
 const mockDeletePage = jest.fn();
+const mockSaveDraft = jest.fn(async () => {});
+const mockGetDraft = jest.fn(async (): Promise<Page | null> => null);
+const mockDeleteDraft = jest.fn(async () => {});
+const mockGetAttachment = jest.fn();
+const mockCanGenerateThumbnail = jest.fn(() => false);
+const mockGetAutoLockTimeout = jest.fn(async () => 0);
+let mockPage: Page = p1;
+let mockPageError: Error | null = null;
+const mockNavigationListeners: Record<string, (event: unknown) => void> = {};
 
 jest.mock('@expo/vector-icons', () => ({ Feather: () => null }));
 jest.mock('@/hooks/useTheme', () => {
@@ -55,15 +64,23 @@ jest.mock('@/hooks/useI18n', () => ({
 jest.mock('@/contexts/FontPrefsContext', () => ({
   useFontPrefs: () => ({ fontFamily: 'System', fontSize: 16 }),
 }));
-jest.mock('@/hooks/useSafeBack', () => ({ useSafeBack: () => jest.fn() }));
+const mockSafeBack = jest.fn();
+const mockNavDispatch = jest.fn();
+jest.mock('@/hooks/useSafeBack', () => ({ useSafeBack: () => mockSafeBack }));
 jest.mock('@react-navigation/native', () => ({
-  useNavigation: () => ({ addListener: jest.fn(() => jest.fn()), dispatch: jest.fn() }),
+  useNavigation: () => ({
+    addListener: jest.fn((name: string, listener: (event: unknown) => void) => {
+      mockNavigationListeners[name] = listener;
+      return jest.fn();
+    }),
+    dispatch: mockNavDispatch,
+  }),
 }));
 jest.mock('expo-router', () => ({
   useLocalSearchParams: () => ({ id: 'p1', journalId: 'j1', edit: 'true' }),
 }));
 jest.mock('@/components/home/SecuritySettingsModal', () => ({
-  getAutoLockTimeout: async () => 0,
+  getAutoLockTimeout: () => mockGetAutoLockTimeout(),
   AUTO_LOCK_OPTIONS: [],
 }));
 jest.mock('@/lib/attachment-display', () => ({
@@ -71,18 +88,27 @@ jest.mock('@/lib/attachment-display', () => ({
   purgeEncryptedAttachmentDisplayCache: jest.fn(),
 }));
 jest.mock('@/hooks/useStorage', () => ({
-  usePage: () => ({ page: p1, loading: false }),
+  usePage: () => ({
+    page: mockPageError ? null : mockPage,
+    loading: false,
+    error: mockPageError,
+  }),
+  saveDraft: (...args: unknown[]) => (mockSaveDraft as (...a: unknown[]) => unknown)(...args),
+  getDraft: (...args: unknown[]) => (mockGetDraft as (...a: unknown[]) => unknown)(...args),
+  deleteDraft: (...args: unknown[]) => (mockDeleteDraft as (...a: unknown[]) => unknown)(...args),
   useSavePage: () => ({ save: mockSave }),
   useDeletePage: () => ({ deletePage: mockDeletePage }),
   useJournalTags: () => ({ tags: [] }),
   useAttachment: () => ({
     saveAttachmentStream: jest.fn(),
-    getAttachment: jest.fn(),
+    getAttachment: mockGetAttachment,
     materializeImage: jest.fn(),
   }),
 }));
 jest.mock('@/lib/thumbnail', () => ({ generateThumbnail: jest.fn(async () => 'thumb') }));
-jest.mock('@/lib/pagePreview', () => ({ canGenerateThumbnailFromAttachment: () => false }));
+jest.mock('@/lib/pagePreview', () => ({
+  canGenerateThumbnailFromAttachment: () => mockCanGenerateThumbnail(),
+}));
 jest.mock('@/lib/downloadAttachment', () => ({ downloadAttachment: jest.fn() }));
 jest.mock('@/lib/image-ingestion', () => ({ persistPickedImage: jest.fn() }));
 jest.mock('expo-image-picker', () => ({}));
@@ -182,6 +208,11 @@ describe('page editor auto-lock write safety', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     capturedApi = undefined;
+    mockPage = p1;
+    mockGetDraft.mockResolvedValue(null);
+    mockCanGenerateThumbnail.mockReturnValue(false);
+    mockGetAutoLockTimeout.mockResolvedValue(0);
+    for (const name of Object.keys(mockNavigationListeners)) delete mockNavigationListeners[name];
     alertSpy = jest.spyOn(Alert, 'alert').mockImplementation(() => {});
   });
 
@@ -189,49 +220,71 @@ describe('page editor auto-lock write safety', () => {
     alertSpy.mockRestore();
   });
 
-  it('a mounted editor cannot save after its lease is revoked, and keeps the draft', async () => {
-    const { getByTestId, getByText } = await renderEditor();
-
-    // Establish an edit while the lease is still valid.
+  it('hides every decrypted field once the journal is locked', async () => {
+    const { getByTestId, queryByTestId, queryByText } = await renderEditor();
     fireEvent.press(getByTestId('page-content-edit'));
-    expect(getByText('edited text')).toBeTruthy();
+    expect(queryByText('edited text')).toBeTruthy();
 
-    // Revoke the lease exactly like an auto-lock does.
     act(() => {
       capturedApi!.clearKey('j1');
     });
 
-    fireEvent.press(getByTestId('fab-check'));
-
-    await waitFor(() => expect(alertSpy).toHaveBeenCalledWith(t.page.unlockRequired));
+    expect(getByTestId('journal-locked')).toBeTruthy();
+    expect(queryByTestId('page-content-text')).toBeNull();
+    expect(queryByText('edited text')).toBeNull();
+    expect(queryByText('Page p1 content')).toBeNull();
     expect(mockSave).not.toHaveBeenCalled();
-    // The draft is retained, never silently discarded.
-    expect(getByText('edited text')).toBeTruthy();
   });
 
-  it('a revoked lease blocks a pending delete without mutating storage', async () => {
+  it('a revoked lease blocks a delete confirmed after the lock', async () => {
     const { getByTestId } = await renderEditor();
 
-    act(() => {
-      capturedApi!.clearKey('j1');
-    });
-
     fireEvent.press(getByTestId('fab-trash-2'));
-    await waitFor(() => expect(alertSpy).toHaveBeenCalled());
-
     const confirmCall = alertSpy.mock.calls.find((call) => call[0] === t.page.deleteConfirm);
-    expect(confirmCall).toBeDefined();
     const destructive = (confirmCall![2] as { style?: string; onPress?: () => void }[]).find(
       (button) => button.style === 'destructive',
     );
-    expect(destructive).toBeDefined();
 
+    act(() => {
+      capturedApi!.clearKey('j1');
+    });
     await act(async () => {
       await destructive!.onPress?.();
     });
 
     expect(mockDeletePage).not.toHaveBeenCalled();
     expect(alertSpy).toHaveBeenCalledWith(t.page.unlockRequired);
+  });
+
+  it('re-checks the live lease after awaited thumbnail work', async () => {
+    mockPage = {
+      ...p1,
+      images: [
+        { id: 'i1', path: '/img', name: 'a.jpg', type: 'image', encrypted: false, deleted: false },
+      ],
+    };
+    mockCanGenerateThumbnail.mockReturnValue(true);
+    let releaseAttachment!: (value: string | null) => void;
+    mockGetAttachment.mockReturnValue(
+      new Promise((resolve) => {
+        releaseAttachment = resolve;
+      }),
+    );
+    const { getByTestId } = await renderEditor();
+
+    fireEvent.press(getByTestId('page-content-edit'));
+    fireEvent.press(getByTestId('fab-check'));
+    await waitFor(() => expect(mockGetAttachment).toHaveBeenCalled());
+
+    act(() => {
+      capturedApi!.clearKey('j1');
+    });
+    await act(async () => {
+      releaseAttachment(null);
+    });
+
+    await waitFor(() => expect(alertSpy).toHaveBeenCalledWith(t.page.unlockRequired));
+    expect(mockSave).not.toHaveBeenCalled();
   });
 
   it('a save that races a revoked key fails closed and surfaces the localized lock message', async () => {
@@ -250,7 +303,7 @@ describe('page editor auto-lock write safety', () => {
     expect(getByText('edited text')).toBeTruthy();
   });
 
-  it('saves normally while the lease is valid', async () => {
+  it('saves normally while the lease is valid and drops the stored draft', async () => {
     mockSave.mockResolvedValueOnce(undefined);
     const { getByTestId } = await renderEditor();
 
@@ -262,5 +315,421 @@ describe('page editor auto-lock write safety', () => {
       expect.objectContaining({ id: 'p1', text: 'edited text' }),
     );
     expect(alertSpy).not.toHaveBeenCalledWith(t.page.unlockRequired);
+    await waitFor(() => expect(mockDeleteDraft).toHaveBeenCalledWith('j1', 'p1'));
+  });
+});
+
+describe('page editor encrypted drafts', () => {
+  let alertSpy: jest.SpyInstance;
+  let appStateHandlers: ((state: string) => void)[];
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockPage = p1;
+    mockGetDraft.mockResolvedValue(null);
+    mockGetAutoLockTimeout.mockResolvedValue(0);
+    for (const name of Object.keys(mockNavigationListeners)) delete mockNavigationListeners[name];
+    alertSpy = jest.spyOn(Alert, 'alert').mockImplementation(() => {});
+    appStateHandlers = [];
+    jest.spyOn(AppState, 'addEventListener').mockImplementation(((
+      _event: string,
+      handler: (state: string) => void,
+    ) => {
+      appStateHandlers.push(handler);
+      return { remove: jest.fn() };
+    }) as never);
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
+    jest.useRealTimers();
+  });
+
+  async function emitAppState(state: string) {
+    await act(async () => {
+      for (const handler of appStateHandlers) await handler(state);
+    });
+  }
+
+  it('stores the unsaved draft, encrypted with a private copy of the live key', async () => {
+    const seen: Uint8Array[] = [];
+    mockSaveDraft.mockImplementation((async (...args: unknown[]) => {
+      seen.push(new Uint8Array(args[2] as Uint8Array));
+    }) as never);
+    const { getByTestId } = await renderEditor();
+    fireEvent.press(getByTestId('page-content-edit'));
+
+    await emitAppState('background');
+
+    expect(mockSaveDraft).toHaveBeenCalledWith(
+      'j1',
+      expect.objectContaining({ id: 'p1', text: 'edited text' }),
+      expect.any(Uint8Array),
+    );
+    // The key was usable when written, and is a copy: the live key is intact
+    // while the copy is wiped once the write settles.
+    expect(seen[0].some((byte) => byte !== 0)).toBe(true);
+    const passed = (mockSaveDraft.mock.calls[0] as unknown[])[2] as Uint8Array;
+    expect(passed).not.toBe(capturedApi!.getKey('j1'));
+    expect(passed.every((byte) => byte === 0)).toBe(true);
+    expect(capturedApi!.getKey('j1')!.some((byte) => byte !== 0)).toBe(true);
+  });
+
+  it('does not store anything when nothing was edited', async () => {
+    await renderEditor();
+    await emitAppState('background');
+    expect(mockSaveDraft).not.toHaveBeenCalled();
+  });
+
+  it('flushes the draft before an auto-lock zeroes the key, then hides it', async () => {
+    mockGetAutoLockTimeout.mockResolvedValue(1);
+    const { getByTestId, queryByText } = await renderEditor();
+    fireEvent.press(getByTestId('page-content-edit'));
+
+    await emitAppState('background');
+    mockSaveDraft.mockClear();
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    await emitAppState('active');
+
+    await waitFor(() => expect(getByTestId('journal-locked')).toBeTruthy());
+    expect(mockSaveDraft).toHaveBeenCalledTimes(1);
+    const key = (mockSaveDraft.mock.calls[0] as unknown[])[2] as Uint8Array;
+    // The key was usable when the draft was written, and zeroed afterwards.
+    expect(key.every((byte) => byte === 0)).toBe(true);
+    expect(queryByText('edited text')).toBeNull();
+  });
+
+  // Reviewer finding 2: the lock screen can be dismissed while drafts are
+  // still flushing. Content must already be hidden, guards bypassed, and a
+  // stale discard prompt must not delete the draft the lock is storing.
+  it('hides content as soon as an auto-lock starts, before keys are zeroed', async () => {
+    mockGetAutoLockTimeout.mockResolvedValue(1);
+    let finishFlush!: () => void;
+    mockSaveDraft.mockImplementation(
+      () =>
+        new Promise<void>((resolve) => {
+          finishFlush = resolve;
+        }),
+    );
+    const { getByTestId, queryByText } = await renderEditor();
+    fireEvent.press(getByTestId('page-content-edit'));
+
+    // A discard prompt was already open when the lock fired.
+    const pending = { preventDefault: jest.fn(), data: { action: { type: 'GO_BACK' } } };
+    mockNavigationListeners.beforeRemove(pending);
+    const prompt = alertSpy.mock.calls.find((call) => call[0] === t.page.discardChanges);
+    const staleDiscard = (prompt![2] as { style?: string; onPress?: () => void }[]).find(
+      (button) => button.style === 'destructive',
+    );
+
+    await emitAppState('background');
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    await act(async () => {
+      void appStateHandlers.forEach((handler) => handler('active'));
+      await Promise.resolve();
+    });
+    await waitFor(() => expect(getByTestId('journal-locked')).toBeTruthy());
+    // Keys are still live while the draft flush is pending.
+    expect(capturedApi!.getKey('j1')).not.toBeNull();
+    expect(queryByText('edited text')).toBeNull();
+
+    // Dismissing the lock screen now passes straight through the guard.
+    const dismiss = { preventDefault: jest.fn(), data: { action: {} } };
+    mockNavigationListeners.beforeRemove(dismiss);
+    expect(dismiss.preventDefault).not.toHaveBeenCalled();
+
+    act(() => staleDiscard!.onPress?.());
+    expect(mockDeleteDraft).not.toHaveBeenCalled();
+
+    await act(async () => {
+      finishFlush();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    await waitFor(() => expect(capturedApi!.getKey('j1')).toBeNull());
+    expect(mockDeleteDraft).not.toHaveBeenCalled();
+  });
+
+  it('never traps a locked editor behind the discard prompt', async () => {
+    const { getByTestId } = await renderEditor();
+    fireEvent.press(getByTestId('page-content-edit'));
+
+    const dirtyEvent = { preventDefault: jest.fn(), data: { action: {} } };
+    mockNavigationListeners.beforeRemove(dirtyEvent);
+    expect(dirtyEvent.preventDefault).toHaveBeenCalled();
+
+    act(() => {
+      capturedApi!.clearKey('j1');
+    });
+    const lockedEvent = { preventDefault: jest.fn(), data: { action: {} } };
+    mockNavigationListeners.beforeRemove(lockedEvent);
+    expect(lockedEvent.preventDefault).not.toHaveBeenCalled();
+  });
+
+  it('discarding changes from the prompt also deletes the stored draft', async () => {
+    const { getByTestId } = await renderEditor();
+    fireEvent.press(getByTestId('page-content-edit'));
+    const event = { preventDefault: jest.fn(), data: { action: {} } };
+    mockNavigationListeners.beforeRemove(event);
+    const prompt = alertSpy.mock.calls.find((call) => call[0] === t.page.discardChanges);
+    const discard = (prompt![2] as { style?: string; onPress?: () => void }[]).find(
+      (button) => button.style === 'destructive',
+    );
+    act(() => discard!.onPress?.());
+    await waitFor(() => expect(mockDeleteDraft).toHaveBeenCalledWith('j1', 'p1'));
+  });
+
+  it('restores a stored draft after unlock, and can discard it', async () => {
+    mockGetDraft.mockResolvedValue({ ...p1, text: 'restored words' });
+    const { getByTestId, getByText, queryByTestId } = await renderEditor();
+
+    await waitFor(() => expect(getByText('restored words')).toBeTruthy());
+    expect(getByTestId('draft-restored')).toBeTruthy();
+    expect(mockGetDraft).toHaveBeenCalledWith('j1', 'p1', expect.any(Uint8Array));
+
+    fireEvent.press(getByText(t.privacy.discardDraft));
+    // Discarding asks first.
+    const prompt = alertSpy.mock.calls.find((call) => call[0] === t.privacy.discardDraft);
+    expect(mockDeleteDraft).not.toHaveBeenCalled();
+    const discard = (prompt![2] as { style?: string; onPress?: () => void }[]).find(
+      (button) => button.style === 'destructive',
+    );
+    act(() => discard!.onPress?.());
+    await waitFor(() => expect(getByText('Page p1 content')).toBeTruthy());
+    expect(queryByTestId('draft-restored')).toBeNull();
+    expect(mockDeleteDraft).toHaveBeenCalledWith('j1', 'p1');
+  });
+
+  it('deleting the page from a restored draft also discards the draft, without a prompt', async () => {
+    mockGetDraft.mockResolvedValue({ ...p1, text: 'restored words' });
+    const { getByTestId, findByText } = await renderEditor();
+    await findByText('restored words');
+
+    fireEvent.press(getByTestId('fab-trash-2'));
+    const confirm = alertSpy.mock.calls.find((call) => call[0] === t.page.deleteConfirm);
+    const destructive = (confirm![2] as { style?: string; onPress?: () => Promise<void> }[]).find(
+      (button) => button.style === 'destructive',
+    );
+    await act(async () => {
+      await destructive!.onPress?.();
+    });
+
+    expect(mockDeletePage).toHaveBeenCalledWith('p1');
+    expect(mockDeleteDraft).toHaveBeenCalledWith('j1', 'p1');
+    // Leaving the deleted page never asks to discard changes.
+    const leave = { preventDefault: jest.fn(), data: { action: {} } };
+    mockNavigationListeners.beforeRemove(leave);
+    expect(leave.preventDefault).not.toHaveBeenCalled();
+    expect(alertSpy.mock.calls.some((call) => call[0] === t.page.discardChanges)).toBe(false);
+    // Nothing stores the draft again on the way out.
+    mockSaveDraft.mockClear();
+    await emitAppState('background');
+    expect(mockSaveDraft).not.toHaveBeenCalled();
+  });
+
+  it('leaves a deleted page only after its draft is gone, so the journal list never shows it', async () => {
+    mockGetDraft.mockResolvedValue({ ...p1, text: 'restored words' });
+    let finishDraftDelete!: () => void;
+    mockDeleteDraft.mockImplementationOnce(
+      () => new Promise<void>((resolve) => (finishDraftDelete = resolve)),
+    );
+    mockSafeBack.mockClear();
+    const { getByTestId, findByText } = await renderEditor();
+    await findByText('restored words');
+
+    fireEvent.press(getByTestId('fab-trash-2'));
+    const confirm = alertSpy.mock.calls.find((call) => call[0] === t.page.deleteConfirm);
+    const destructive = (confirm![2] as { style?: string; onPress?: () => Promise<void> }[]).find(
+      (button) => button.style === 'destructive',
+    );
+    let deleting!: Promise<void> | undefined;
+    act(() => {
+      deleting = destructive!.onPress?.();
+    });
+    await waitFor(() => expect(mockDeleteDraft).toHaveBeenCalledWith('j1', 'p1'));
+    expect(mockSafeBack).not.toHaveBeenCalled();
+
+    await act(async () => {
+      finishDraftDelete();
+      await deleting;
+    });
+    expect(mockSafeBack).toHaveBeenCalledTimes(1);
+  });
+
+  it('discarding changes on Back waits for the draft delete before leaving', async () => {
+    mockGetDraft.mockResolvedValue({ ...p1, text: 'restored words' });
+    let finishDraftDelete!: () => void;
+    mockDeleteDraft.mockImplementationOnce(
+      () => new Promise<void>((resolve) => (finishDraftDelete = resolve)),
+    );
+    mockNavDispatch.mockClear();
+    const { findByText } = await renderEditor();
+    await findByText('restored words');
+
+    const leave = { preventDefault: jest.fn(), data: { action: { type: 'GO_BACK' } } };
+    mockNavigationListeners.beforeRemove(leave);
+    expect(leave.preventDefault).toHaveBeenCalled();
+    const prompt = alertSpy.mock.calls.find((call) => call[0] === t.page.discardChanges);
+    const discard = (prompt![2] as { style?: string; onPress?: () => void }[]).find(
+      (button) => button.style === 'destructive',
+    );
+    act(() => discard!.onPress?.());
+    expect(mockDeleteDraft).toHaveBeenCalledWith('j1', 'p1');
+    expect(mockNavDispatch).not.toHaveBeenCalled();
+
+    await act(async () => {
+      finishDraftDelete();
+    });
+    expect(mockNavDispatch).toHaveBeenCalledWith({ type: 'GO_BACK' });
+  });
+
+  it('keeps the draft and the guard when deleting the page fails', async () => {
+    mockGetDraft.mockResolvedValue({ ...p1, text: 'restored words' });
+    mockDeletePage.mockRejectedValueOnce(new Error('disk full'));
+    const { getByTestId, findByText } = await renderEditor();
+    await findByText('restored words');
+    fireEvent.press(getByTestId('fab-trash-2'));
+    const confirm = alertSpy.mock.calls.find((call) => call[0] === t.page.deleteConfirm);
+    const destructive = (confirm![2] as { style?: string; onPress?: () => Promise<void> }[]).find(
+      (button) => button.style === 'destructive',
+    );
+    await act(async () => {
+      await destructive!.onPress?.();
+    });
+    expect(alertSpy).toHaveBeenCalledWith('Error', 'disk full');
+    expect(mockDeleteDraft).not.toHaveBeenCalled();
+    const leave = { preventDefault: jest.fn(), data: { action: {} } };
+    mockNavigationListeners.beforeRemove(leave);
+    expect(leave.preventDefault).toHaveBeenCalled();
+  });
+
+  // Data-loss review: a draft older than the saved page (sync, remote
+  // delete, failed cleanup) must not silently replace it, nor vanish.
+  function conflictPrompt() {
+    const prompt = alertSpy.mock.calls.find((call) => call[0] === t.privacy.draftConflictTitle);
+    return prompt![2] as { text: string; onPress?: () => void }[];
+  }
+
+  it('asks before restoring a draft older than the saved page, and can use it', async () => {
+    mockGetDraft.mockResolvedValue({ ...p1, text: 'older words', modified: p1.modified - 1 });
+    const { findByText, getByTestId, queryByText } = await renderEditor();
+    await waitFor(() => expect(conflictPrompt()).toBeDefined());
+    expect(queryByText('older words')).toBeNull();
+
+    act(() => conflictPrompt().find((button) => button.text === t.privacy.useDraft)!.onPress!());
+    expect(await findByText('older words')).toBeTruthy();
+    expect(getByTestId('draft-restored')).toBeTruthy();
+    expect(mockDeleteDraft).not.toHaveBeenCalled();
+  });
+
+  it('keeps the saved page and discards the older draft when the user chooses so', async () => {
+    mockGetDraft.mockResolvedValue({ ...p1, text: 'older words', modified: p1.modified - 1 });
+    const { getByText, queryByText } = await renderEditor();
+    await waitFor(() => expect(conflictPrompt()).toBeDefined());
+
+    act(() => conflictPrompt().find((button) => button.text === t.privacy.keepSaved)!.onPress!());
+    await waitFor(() => expect(mockDeleteDraft).toHaveBeenCalledWith('j1', 'p1'));
+    expect(getByText('Page p1 content')).toBeTruthy();
+    expect(queryByText('older words')).toBeNull();
+  });
+
+  it('does not store a discarded draft again from a flush that fires right after', async () => {
+    mockGetDraft.mockResolvedValue({ ...p1, text: 'restored words' });
+    const { getByText, findByText } = await renderEditor();
+    await findByText('restored words');
+    fireEvent.press(getByText(t.privacy.discardDraft));
+    const prompt = alertSpy.mock.calls.find((call) => call[0] === t.privacy.discardDraft);
+    const discard = (prompt![2] as { style?: string; onPress?: () => void }[]).find(
+      (button) => button.style === 'destructive',
+    );
+    mockSaveDraft.mockClear();
+    // The background flush fires in the same tick as the discard.
+    await act(async () => {
+      discard!.onPress?.();
+      await Promise.all(appStateHandlers.map((handler) => handler('background')));
+    });
+    expect(mockSaveDraft).not.toHaveBeenCalled();
+    expect(mockDeleteDraft).toHaveBeenCalledWith('j1', 'p1');
+  });
+
+  it('stores the draft after a short idle period while typing', async () => {
+    const { getByTestId } = await renderEditor();
+    jest.useFakeTimers();
+    fireEvent.press(getByTestId('page-content-edit'));
+    await act(async () => {
+      jest.advanceTimersByTime(3_000);
+    });
+    expect(mockSaveDraft).toHaveBeenCalledWith(
+      'j1',
+      expect.objectContaining({ text: 'edited text' }),
+      expect.any(Uint8Array),
+    );
+  });
+
+  it('keeps working when the draft cannot be stored or read', async () => {
+    mockSaveDraft.mockRejectedValueOnce(new JournalLockedError());
+    mockGetDraft.mockRejectedValueOnce(new Error('unreadable'));
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => {});
+    const { getByTestId, getByText } = await renderEditor();
+    fireEvent.press(getByTestId('page-content-edit'));
+    await emitAppState('background');
+    expect(warn).toHaveBeenCalled();
+    expect(getByText('edited text')).toBeTruthy();
+  });
+});
+
+describe('page editor without a key in memory', () => {
+  // Regression (web reload): a reloaded editor has no key and its page does
+  // not open. It must say the journal is locked rather than render blank.
+  it('shows the locked placeholder instead of a blank screen', () => {
+    mockPageError = new Error('password layer did not open');
+    const { getByTestId, queryByTestId } = render(
+      <JournalKeyProvider>
+        <PageScreen />
+      </JournalKeyProvider>,
+    );
+    expect(getByTestId('journal-locked')).toBeTruthy();
+    expect(queryByTestId('page-content-text')).toBeNull();
+    mockPageError = null;
+  });
+});
+
+describe('page editor on web', () => {
+  const originalOS = require('react-native').Platform.OS;
+  const setOS = (os: string) =>
+    Object.defineProperty(require('react-native').Platform, 'OS', {
+      configurable: true,
+      get: () => os,
+    });
+
+  afterEach(() => setOS(originalOS));
+
+  // Cross-platform review: a reload cannot finish an encrypted write, so the
+  // browser warns before leaving while edits are unsaved.
+  it('warns before unload only while there are unsaved edits', async () => {
+    setOS('web');
+    const target = globalThis as unknown as Record<string, unknown>;
+    const add = jest.fn();
+    const remove = jest.fn();
+    target.addEventListener = add;
+    target.removeEventListener = remove;
+    const { getByTestId, unmount } = await renderEditor();
+    const registered = () =>
+      (add.mock.calls as unknown[][]).filter((call) => call[0] === 'beforeunload');
+    expect(registered()).toHaveLength(0);
+
+    fireEvent.press(getByTestId('page-content-edit'));
+    await waitFor(() => expect(registered()).toHaveLength(1));
+    const listener = registered()[0][1] as (event: Event) => void;
+    const event = { preventDefault: jest.fn(), returnValue: undefined } as unknown as Event;
+    mockSaveDraft.mockClear();
+    listener(event);
+    expect((event as unknown as { preventDefault: jest.Mock }).preventDefault).toHaveBeenCalled();
+    expect((event as unknown as { returnValue: unknown }).returnValue).toBe('');
+    await waitFor(() => expect(mockSaveDraft).toHaveBeenCalled());
+
+    unmount();
+    expect((remove.mock.calls as unknown[][]).some((call) => call[1] === listener)).toBe(true);
+    delete target.addEventListener;
+    delete target.removeEventListener;
   });
 });

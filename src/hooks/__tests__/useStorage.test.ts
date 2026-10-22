@@ -70,6 +70,11 @@ import {
   tryLoadJournalOverview,
   finalizeCompletedDeviceKeyRotationIfReady,
   invalidateJournalOverview,
+  verifyJournalKey,
+  saveDraft,
+  getDraft,
+  deleteDraft,
+  listDrafts,
 } from '../useStorage';
 
 beforeEach(() => {
@@ -188,9 +193,12 @@ describe('finalizeCompletedDeviceKeyRotationIfReady', () => {
       clearCompletedDeviceKeyRotation: jest.fn().mockResolvedValue(undefined),
     } as unknown as LocalStore;
 
-    await finalizeCompletedDeviceKeyRotationIfReady(store);
+    const encryption = { clearSession: jest.fn() };
+    await finalizeCompletedDeviceKeyRotationIfReady(store, encryption);
 
     expect(store.clearCompletedDeviceKeyRotation).toHaveBeenCalledTimes(1);
+    // A rollback or finalization changes the durable key; drop any cached one.
+    expect(encryption.clearSession).toHaveBeenCalledTimes(1);
   });
 });
 
@@ -1330,5 +1338,107 @@ describe('ensureInitialized error recovery', () => {
     // After failure, initPromise is reset — next call should succeed
     const store = await getLS();
     expect(store.initialize).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('strict key verification and drafts', () => {
+  const store = mockStore as unknown as Record<string, jest.Mock | undefined>;
+  const key = new Uint8Array(32).fill(2);
+  const draftPage = { id: 'p1', text: 'draft' } as Page;
+
+  afterEach(() => {
+    delete store.verifyJournalKey;
+    delete store.saveDraft;
+    delete store.getDraft;
+    delete store.deleteDraft;
+    delete store.listDrafts;
+  });
+
+  it('delegates to strict verification when the store supports it', async () => {
+    store.verifyJournalKey = jest.fn().mockResolvedValue('invalid');
+    expect(await verifyJournalKey('j1', key)).toBe('invalid');
+    expect(store.verifyJournalKey).toHaveBeenCalledWith('j1', key);
+  });
+
+  it('falls back to an overview read for adapters without verification', async () => {
+    mockStore.getJournalOverview.mockResolvedValueOnce({ metadata: {} });
+    expect(await verifyJournalKey('j1', key)).toBe('valid');
+    mockStore.getJournalOverview.mockResolvedValueOnce(null);
+    expect(await verifyJournalKey('j1', key)).toBe('invalid');
+  });
+
+  it('routes drafts through the store, tolerating adapters without them', async () => {
+    expect(await getDraft('j1', 'p1', key)).toBeNull();
+    expect(await listDrafts('j1')).toEqual([]);
+    await saveDraft('j1', draftPage, key);
+    await deleteDraft('j1', 'p1');
+
+    store.saveDraft = jest.fn().mockResolvedValue(undefined);
+    store.getDraft = jest.fn().mockResolvedValue(draftPage);
+    store.deleteDraft = jest.fn().mockResolvedValue(undefined);
+    store.listDrafts = jest.fn().mockResolvedValue(['p1']);
+    await saveDraft('j1', draftPage, null);
+    expect(store.saveDraft).toHaveBeenCalledWith('j1', draftPage, undefined);
+    expect(await getDraft('j1', 'p1', key)).toBe(draftPage);
+    expect(store.getDraft).toHaveBeenCalledWith('j1', 'p1', key);
+    await deleteDraft('j1', 'p1');
+    expect(store.deleteDraft).toHaveBeenCalledWith('j1', 'p1');
+    expect(await listDrafts('j1')).toEqual(['p1']);
+  });
+});
+
+describe('decrypted state is dropped when the key is revoked', () => {
+  it('usePage clears the page when its key disappears', async () => {
+    const key = new Uint8Array(32).fill(5);
+    mockStore.getPage.mockResolvedValue({ id: 'p1', text: 'secret' });
+    const { result, rerender } = renderHook(
+      ({ derivedKey }: { derivedKey: Uint8Array | null }) => usePage('j1', 'p1', derivedKey),
+      { initialProps: { derivedKey: key as Uint8Array | null } },
+    );
+    await waitFor(() => expect(result.current.page?.text).toBe('secret'));
+
+    mockStore.getPage.mockRejectedValue(new Error('locked'));
+    rerender({ derivedKey: null });
+    expect(result.current.page).toBeNull();
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    expect(result.current.page).toBeNull();
+  });
+
+  it('useJournalOverview clears the projection when its key disappears', async () => {
+    const key = new Uint8Array(32).fill(6);
+    mockStore.getJournalOverview.mockResolvedValue({ metadata: { id: 'j1' }, pages: [] });
+    const { result, rerender } = renderHook(
+      ({ derivedKey }: { derivedKey: Uint8Array | null }) => useJournalOverview('j1', derivedKey),
+      { initialProps: { derivedKey: key as Uint8Array | null } },
+    );
+    await waitFor(() => expect(result.current.overview).not.toBeNull());
+
+    mockStore.getJournalOverview.mockRejectedValue(new Error('locked'));
+    rerender({ derivedKey: null });
+    expect(result.current.overview).toBeNull();
+    await waitFor(() => expect(result.current.loading).toBe(false));
+  });
+
+  it('tolerates a key that disappears before anything was loaded', async () => {
+    const key = new Uint8Array(32).fill(7);
+    let release!: () => void;
+    mockStore.getPage.mockReturnValue(new Promise((resolve) => (release = () => resolve(null))));
+    mockStore.getJournalOverview.mockReturnValue(
+      new Promise((resolve) => setTimeout(() => resolve(null), 0)),
+    );
+    const page = renderHook(
+      ({ derivedKey }: { derivedKey: Uint8Array | null }) => usePage('j1', 'p1', derivedKey),
+      { initialProps: { derivedKey: key as Uint8Array | null } },
+    );
+    const overview = renderHook(
+      ({ derivedKey }: { derivedKey: Uint8Array | null }) => useJournalOverview('j1', derivedKey),
+      { initialProps: { derivedKey: key as Uint8Array | null } },
+    );
+    page.rerender({ derivedKey: null });
+    overview.rerender({ derivedKey: null });
+    expect(page.result.current.page).toBeNull();
+    expect(overview.result.current.overview).toBeNull();
+    await act(async () => release());
+    await waitFor(() => expect(overview.result.current.loading).toBe(false));
   });
 });

@@ -39,6 +39,7 @@ import { DataIntegrityWarningModal } from '@/components/common/DataIntegrityWarn
 import { retryWithBackoff } from '@/lib/sync/retry';
 import { formatSyncWarning } from '@/lib/sync/warnings';
 import { describeError } from '@/lib/utils/error';
+import { PrivacyShield } from '@/components/common/PrivacyShield';
 
 type CloudImportPhase = 'idle' | 'preparing' | 'downloading';
 
@@ -1152,6 +1153,7 @@ export function NewJournalModal({
             </Pressable>
           </View>
         </View>
+        <PrivacyShield />
       </Modal>
 
       {/* Import password prompt */}
@@ -1270,6 +1272,7 @@ export function NewJournalModal({
             </View>
           </View>
         </View>
+        <PrivacyShield />
       </Modal>
 
       {/* Import rename prompt */}
@@ -1372,6 +1375,7 @@ export function NewJournalModal({
             </View>
           </View>
         </View>
+        <PrivacyShield />
       </Modal>
 
       <ThemePickerModal
@@ -1485,6 +1489,7 @@ export function NewJournalModal({
             </Pressable>
           </View>
         </View>
+        <PrivacyShield />
       </Modal>
 
       {/* Data integrity warning */}
@@ -1551,6 +1556,7 @@ export function NewJournalModal({
               ]
         }
       />
+      <PrivacyShield />
     </Modal>
   );
 }
