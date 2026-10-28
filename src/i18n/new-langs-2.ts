@@ -167,6 +167,10 @@ export const pl: Dictionary = {
       'Niektórych lokalnych stron nie udało się bezpiecznie odczytać. Nic nie zostało zmienione.',
     recoverLocked: 'Odblokuj ten dziennik przed odzyskaniem stron.',
     recoverFailed: 'Nie udało się zakończyć odzyskiwania. Nic nie zostało zmienione.',
+    recoverLegacy:
+      '{count} z nich zapisano podczas blokowania dziennika i zostaną ponownie zaszyfrowane Twoim hasłem.',
+    draftsPending:
+      'Ten dziennik ma niezapisane szkice. Otwórz każdy z nich i zapisz go lub odrzuć przed zmianą hasła.',
   },
   filterBar: {
     searchPlaceholder: 'Szukaj...',
@@ -212,6 +216,24 @@ export const pl: Dictionary = {
     rotating: 'Rotacja klucza urządzenia...',
     rotateSuccess: 'Klucz urządzenia został pomyślnie zmieniony',
     doNotClose: 'Nie zamykaj aplikacji',
+    blockScreenshots: 'Blokuj zrzuty ekranu',
+    blockScreenshotsHint:
+      'Ukrywa Canto na ekranie ostatnich aplikacji i blokuje zrzuty oraz nagrywanie ekranu.',
+    rotateBlockedUnrecovered:
+      'Część danych dziennika trzeba najpierw odzyskać, dlatego klucz urządzenia nie został zmieniony. Nic nie zostało zmienione.',
+    rotateBlockedUnreadable:
+      'Nie udało się odczytać części danych dziennika, dlatego klucz urządzenia nie został zmieniony. Nic nie zostało zmienione.',
+    rotateBlockedSpace:
+      'Za mało wolnego miejsca, aby bezpiecznie zmienić klucz urządzenia. Nic nie zostało zmienione.',
+    rotateBlockedPending:
+      'Poprzednia zmiana klucza wciąż się kończy. Uruchom ponownie Canto i spróbuj jeszcze raz.',
+    rotateBlockedUnsupported:
+      'Starszy załącznik jest zbyt duży, aby bezpiecznie zmienić jego klucz. Nic nie zostało zmienione.',
+    rotateBlockedOtherTabs:
+      'Canto jest otwarte w innej karcie przeglądarki. Zamknij pozostałe karty i spróbuj ponownie. Nic nie zostało zmienione.',
+    rotateInterrupted:
+      'Zmiana klucza została przerwana. Twoje dane są bezpieczne. Uruchom ponownie Canto, aby ją dokończyć.',
+    rotateFailed: 'Zmiana klucza nie powiodła się. Nic nie zostało zmienione.',
   },
   backup: {
     export: 'Eksportuj',
@@ -340,6 +362,35 @@ export const pl: Dictionary = {
     indexDetail: 'Indeks dzienników nie może być bezpiecznie odczytany.',
     instructions:
       'Pozostaw aplikację zainstalowaną, nie czyść jej danych ani nie instaluj ponownie. Zaszyfrowane pliki są jedyną kopią. Skontaktuj się z pomocą techniczną, podając ten komunikat.',
+  },
+  privacy: {
+    locked: 'Dziennik zablokowany',
+    lockedHint: 'Odblokuj ten dziennik na ekranie głównym, aby kontynuować.',
+    draftRestored: 'Przywrócono niezapisane zmiany',
+    discardDraft: 'Odrzuć szkic',
+    unsavedDraft: 'Niezapisany szkic',
+    draftConflictTitle: 'Ta strona zmieniła się od czasu Twojego szkicu',
+    draftConflictMessage:
+      'Zapisana strona została zaktualizowana po zachowaniu niezapisanego szkicu. Kontynuować ze szkicem czy zachować zapisaną wersję i odrzucić szkic?',
+    useDraft: 'Użyj mojego szkicu',
+    keepSaved: 'Zachowaj zapisaną wersję',
+  },
+  journalIntegrity: {
+    title: 'Ten dziennik wymaga uwagi',
+    legacyMessage:
+      'Niektóre strony zostały zapisane przez starszą wersję Canto podczas blokowania dziennika. Są nienaruszone i można je odzyskać za pomocą Twojego hasła.',
+    unreadableMessage:
+      'Nie udało się bezpiecznie odczytać części danych tego dziennika. Nic nie zostało usunięte.',
+    interruptedMessage:
+      'Zmiana klucza urządzenia została przerwana. Twoje dane są bezpieczne. Uruchom ponownie Canto, aby ją dokończyć.',
+    recover: 'Odzyskaj strony',
+    copyDiagnostics: 'Kopiuj diagnostykę',
+    diagnosticsCopied: 'Skopiowano diagnostykę. Zawiera tylko liczby, nigdy to, co napisano.',
+    diagnosticsCopyManually:
+      'Nie udało się skopiować automatycznie. Zaznacz poniższy tekst i skopiuj go.',
+    back: 'Wróć do dzienników',
+    unverifiableMessage:
+      'Canto nie może potwierdzić tego hasła na podstawie zapisanych danych dziennika, więc nic nie zostało ponownie zaszyfrowane. Skopiuj diagnostykę i skontaktuj się z pomocą techniczną.',
   },
 };
 
@@ -509,6 +560,10 @@ export const sv: Dictionary = {
     recoverIncomplete: 'Vissa lokala sidor kunde inte läsas säkert. Inget ändrades.',
     recoverLocked: 'Lås upp den här dagboken innan du återställer sidor.',
     recoverFailed: 'Återställningen kunde inte slutföras. Inget ändrades.',
+    recoverLegacy:
+      '{count} av dem sparades medan dagboken låstes och krypteras om med ditt lösenord.',
+    draftsPending:
+      'Den här dagboken har osparade utkast. Öppna vart och ett och spara eller släng det innan du byter lösenord.',
   },
   filterBar: {
     searchPlaceholder: 'Sök...',
@@ -554,6 +609,24 @@ export const sv: Dictionary = {
     rotating: 'Roterar enhetsnyckel...',
     rotateSuccess: 'Enhetsnyckeln har roterats',
     doNotClose: 'Stäng inte appen',
+    blockScreenshots: 'Blockera skärmbilder',
+    blockScreenshotsHint:
+      'Döljer Canto på skärmen med senaste appar och blockerar skärmbilder och skärminspelning.',
+    rotateBlockedUnrecovered:
+      'En del dagboksdata måste återställas först, så enhetsnyckeln byttes inte. Inget har ändrats.',
+    rotateBlockedUnreadable:
+      'En del dagboksdata kunde inte läsas, så enhetsnyckeln byttes inte. Inget har ändrats.',
+    rotateBlockedSpace:
+      'Det finns inte tillräckligt med ledigt lagringsutrymme för att byta enhetsnyckeln säkert. Inget har ändrats.',
+    rotateBlockedPending:
+      'Ett tidigare nyckelbyte håller fortfarande på att slutföras. Starta om Canto och försök igen.',
+    rotateBlockedUnsupported:
+      'En äldre bilaga är för stor för att byta nyckel på säkert. Inget har ändrats.',
+    rotateBlockedOtherTabs:
+      'Canto är öppet i en annan webbläsarflik. Stäng de andra flikarna och försök igen. Inget har ändrats.',
+    rotateInterrupted:
+      'Nyckelbytet avbröts. Dina data är säkra. Starta om Canto för att slutföra det.',
+    rotateFailed: 'Nyckelbytet misslyckades. Inget har ändrats.',
   },
   backup: {
     export: 'Exportera',
@@ -680,6 +753,36 @@ export const sv: Dictionary = {
     indexDetail: 'Journalindexet kan inte läsas på ett säkert sätt.',
     instructions:
       'Behåll appen installerad och rensa inte dess data eller installera om den. Dina krypterade filer är den enda kopian. Kontakta supporten och nämn detta meddelande.',
+  },
+  privacy: {
+    locked: 'Dagboken är låst',
+    lockedHint: 'Lås upp den här dagboken från startskärmen för att fortsätta.',
+    draftRestored: 'Osparade ändringar återställda',
+    discardDraft: 'Släng utkast',
+    unsavedDraft: 'Osparat utkast',
+    draftConflictTitle: 'Den här sidan har ändrats sedan ditt utkast',
+    draftConflictMessage:
+      'Den sparade sidan uppdaterades efter att ditt osparade utkast lagrades. Fortsätta med utkastet, eller behålla den sparade versionen och slänga utkastet?',
+    useDraft: 'Använd mitt utkast',
+    keepSaved: 'Behåll sparad version',
+  },
+  journalIntegrity: {
+    title: 'Den här dagboken behöver åtgärdas',
+    legacyMessage:
+      'Vissa sidor sparades av en äldre version av Canto medan dagboken låstes. De är intakta och kan återställas med ditt lösenord.',
+    unreadableMessage:
+      'En del data i den här dagboken kunde inte läsas säkert. Inget har raderats.',
+    interruptedMessage:
+      'Ett byte av enhetsnyckeln avbröts. Dina data är säkra. Starta om Canto för att slutföra det.',
+    recover: 'Återställ sidor',
+    copyDiagnostics: 'Kopiera diagnostik',
+    diagnosticsCopied:
+      'Diagnostiken kopierades. Den innehåller bara antal, aldrig det du har skrivit.',
+    diagnosticsCopyManually:
+      'Det gick inte att kopiera automatiskt. Markera texten nedan och kopiera den.',
+    back: 'Tillbaka till dagböckerna',
+    unverifiableMessage:
+      'Canto kan inte bekräfta lösenordet mot dagbokens sparade data, så inget krypterades om. Kopiera diagnostiken och kontakta supporten.',
   },
 };
 
@@ -850,6 +953,10 @@ export const vi: Dictionary = {
     recoverIncomplete: 'Một số trang cục bộ không thể đọc an toàn. Không có gì bị thay đổi.',
     recoverLocked: 'Mở khóa nhật ký này trước khi khôi phục trang.',
     recoverFailed: 'Không thể hoàn tất khôi phục. Không có gì bị thay đổi.',
+    recoverLegacy:
+      '{count} trang trong số đó được lưu khi nhật ký đang khóa và sẽ được mã hóa lại bằng mật khẩu của bạn.',
+    draftsPending:
+      'Nhật ký này có bản nháp chưa lưu. Hãy mở từng bản và lưu hoặc bỏ trước khi đổi mật khẩu.',
   },
   filterBar: {
     searchPlaceholder: 'Tìm kiếm...',
@@ -895,6 +1002,24 @@ export const vi: Dictionary = {
     rotating: 'Đang xoay khóa thiết bị...',
     rotateSuccess: 'Đã xoay khóa thiết bị thành công',
     doNotClose: 'Không đóng ứng dụng',
+    blockScreenshots: 'Chặn ảnh chụp màn hình',
+    blockScreenshotsHint:
+      'Ẩn Canto trên màn hình ứng dụng gần đây và chặn chụp ảnh cũng như quay màn hình.',
+    rotateBlockedUnrecovered:
+      'Một số dữ liệu nhật ký cần được khôi phục trước, nên khóa thiết bị chưa được xoay vòng. Không có gì bị thay đổi.',
+    rotateBlockedUnreadable:
+      'Không thể đọc một số dữ liệu nhật ký, nên khóa thiết bị chưa được xoay vòng. Không có gì bị thay đổi.',
+    rotateBlockedSpace:
+      'Không đủ dung lượng trống để xoay vòng khóa thiết bị một cách an toàn. Không có gì bị thay đổi.',
+    rotateBlockedPending:
+      'Lần xoay vòng khóa trước vẫn đang hoàn tất. Hãy khởi động lại Canto rồi thử lại.',
+    rotateBlockedUnsupported:
+      'Một tệp đính kèm cũ quá lớn để xoay vòng an toàn. Không có gì bị thay đổi.',
+    rotateBlockedOtherTabs:
+      'Canto đang mở ở một thẻ trình duyệt khác. Hãy đóng các thẻ khác rồi thử lại. Không có gì bị thay đổi.',
+    rotateInterrupted:
+      'Quá trình xoay vòng khóa đã bị gián đoạn. Dữ liệu của bạn vẫn an toàn. Hãy khởi động lại Canto để hoàn tất.',
+    rotateFailed: 'Xoay vòng khóa thất bại. Không có gì bị thay đổi.',
   },
   backup: {
     export: 'Xuất',
@@ -1017,6 +1142,34 @@ export const vi: Dictionary = {
     indexDetail: 'Không thể đọc chỉ mục nhật ký một cách an toàn.',
     instructions:
       'Giữ ứng dụng đã cài đặt, không xóa dữ liệu hoặc cài lại. Các tệp mã hóa của bạn là bản sao duy nhất. Liên hệ bộ phận hỗ trợ và đề cập thông báo này.',
+  },
+  privacy: {
+    locked: 'Nhật ký đã khóa',
+    lockedHint: 'Hãy mở khóa nhật ký này từ màn hình chính để tiếp tục.',
+    draftRestored: 'Đã khôi phục các thay đổi chưa lưu',
+    discardDraft: 'Bỏ bản nháp',
+    unsavedDraft: 'Bản nháp chưa lưu',
+    draftConflictTitle: 'Trang này đã thay đổi sau bản nháp của bạn',
+    draftConflictMessage:
+      'Trang đã lưu được cập nhật sau khi bản nháp chưa lưu của bạn được lưu trữ. Tiếp tục với bản nháp, hay giữ phiên bản đã lưu và bỏ bản nháp?',
+    useDraft: 'Dùng bản nháp của tôi',
+    keepSaved: 'Giữ phiên bản đã lưu',
+  },
+  journalIntegrity: {
+    title: 'Nhật ký này cần được xử lý',
+    legacyMessage:
+      'Một số trang đã được phiên bản Canto cũ lưu khi nhật ký đang khóa. Chúng vẫn nguyên vẹn và có thể khôi phục bằng mật khẩu của bạn.',
+    unreadableMessage: 'Không thể đọc an toàn một số dữ liệu của nhật ký này. Không có gì bị xóa.',
+    interruptedMessage:
+      'Quá trình xoay vòng khóa thiết bị đã bị gián đoạn. Dữ liệu của bạn vẫn an toàn. Hãy khởi động lại Canto để hoàn tất.',
+    recover: 'Khôi phục trang',
+    copyDiagnostics: 'Sao chép chẩn đoán',
+    diagnosticsCopied:
+      'Đã sao chép chẩn đoán. Chỉ gồm các con số, không bao giờ có nội dung bạn viết.',
+    diagnosticsCopyManually: 'Không thể tự động sao chép. Hãy chọn đoạn văn bên dưới và sao chép.',
+    back: 'Quay lại danh sách nhật ký',
+    unverifiableMessage:
+      'Canto không thể xác nhận mật khẩu này với dữ liệu đã lưu của nhật ký, nên không có gì được mã hóa lại. Hãy sao chép chẩn đoán và liên hệ hỗ trợ.',
   },
 };
 
@@ -1185,6 +1338,10 @@ export const th: Dictionary = {
     recoverIncomplete: 'ไม่สามารถอ่านหน้าในเครื่องบางส่วนได้อย่างปลอดภัย ไม่มีการเปลี่ยนแปลงใด ๆ',
     recoverLocked: 'ปลดล็อกสมุดบันทึกนี้ก่อนกู้คืนหน้า',
     recoverFailed: 'ไม่สามารถกู้คืนให้เสร็จสมบูรณ์ได้ ไม่มีการเปลี่ยนแปลงใด ๆ',
+    recoverLegacy:
+      'มี {count} หน้าในนั้นที่บันทึกไว้ขณะสมุดบันทึกกำลังล็อก และจะถูกเข้ารหัสใหม่ด้วยรหัสผ่านของคุณ',
+    draftsPending:
+      'สมุดบันทึกนี้มีฉบับร่างที่ยังไม่ได้บันทึก โปรดเปิดแต่ละฉบับแล้วบันทึกหรือทิ้งก่อนเปลี่ยนรหัสผ่าน',
   },
   filterBar: {
     searchPlaceholder: 'ค้นหา...',
@@ -1229,6 +1386,23 @@ export const th: Dictionary = {
     rotating: 'กำลังหมุนเวียนคีย์อุปกรณ์...',
     rotateSuccess: 'หมุนเวียนคีย์อุปกรณ์สำเร็จ',
     doNotClose: 'อย่าปิดแอป',
+    blockScreenshots: 'บล็อกภาพหน้าจอ',
+    blockScreenshotsHint: 'ซ่อน Canto ในหน้าจอแอปล่าสุด และบล็อกการจับภาพและบันทึกหน้าจอ',
+    rotateBlockedUnrecovered:
+      'ต้องกู้คืนข้อมูลบันทึกบางส่วนก่อน จึงไม่ได้เปลี่ยนคีย์อุปกรณ์ ไม่มีการเปลี่ยนแปลงใดๆ',
+    rotateBlockedUnreadable:
+      'อ่านข้อมูลบันทึกบางส่วนไม่ได้ จึงไม่ได้เปลี่ยนคีย์อุปกรณ์ ไม่มีการเปลี่ยนแปลงใดๆ',
+    rotateBlockedSpace:
+      'พื้นที่จัดเก็บว่างไม่พอสำหรับเปลี่ยนคีย์อุปกรณ์อย่างปลอดภัย ไม่มีการเปลี่ยนแปลงใดๆ',
+    rotateBlockedPending:
+      'การเปลี่ยนคีย์ครั้งก่อนยังดำเนินการไม่เสร็จ โปรดรีสตาร์ท Canto แล้วลองอีกครั้ง',
+    rotateBlockedUnsupported:
+      'ไฟล์แนบรุ่นเก่ามีขนาดใหญ่เกินกว่าจะเปลี่ยนคีย์ได้อย่างปลอดภัย ไม่มีการเปลี่ยนแปลงใดๆ',
+    rotateBlockedOtherTabs:
+      'Canto เปิดอยู่ในแท็บเบราว์เซอร์อื่น โปรดปิดแท็บอื่นแล้วลองอีกครั้ง ไม่มีการเปลี่ยนแปลงใดๆ',
+    rotateInterrupted:
+      'การเปลี่ยนคีย์ถูกขัดจังหวะ ข้อมูลของคุณปลอดภัย โปรดรีสตาร์ท Canto เพื่อดำเนินการให้เสร็จ',
+    rotateFailed: 'เปลี่ยนคีย์ไม่สำเร็จ ไม่มีการเปลี่ยนแปลงใดๆ',
   },
   backup: {
     export: 'ส่งออก',
@@ -1350,6 +1524,33 @@ export const th: Dictionary = {
     indexDetail: 'ไม่สามารถอ่านดัชนีสมุดบันทึกได้อย่างปลอดภัย',
     instructions:
       'ติดตั้งแอปไว้ตามเดิม อย่าล้างข้อมูลหรือติดตั้งใหม่ ไฟล์ที่เข้ารหัสของคุณเป็นสำเนาเดียว ติดต่อฝ่ายสนับสนุนและแจ้งข้อความนี้',
+  },
+  privacy: {
+    locked: 'สมุดบันทึกถูกล็อก',
+    lockedHint: 'ปลดล็อกสมุดบันทึกนี้จากหน้าจอหลักเพื่อดำเนินการต่อ',
+    draftRestored: 'กู้คืนการเปลี่ยนแปลงที่ยังไม่ได้บันทึกแล้ว',
+    discardDraft: 'ทิ้งฉบับร่าง',
+    unsavedDraft: 'ฉบับร่างที่ยังไม่ได้บันทึก',
+    draftConflictTitle: 'หน้านี้เปลี่ยนไปหลังจากฉบับร่างของคุณ',
+    draftConflictMessage:
+      'หน้าที่บันทึกไว้ได้รับการอัปเดตหลังจากจัดเก็บฉบับร่างที่ยังไม่ได้บันทึกของคุณ จะใช้ฉบับร่างต่อ หรือเก็บฉบับที่บันทึกไว้และทิ้งฉบับร่าง?',
+    useDraft: 'ใช้ฉบับร่างของฉัน',
+    keepSaved: 'เก็บฉบับที่บันทึกไว้',
+  },
+  journalIntegrity: {
+    title: 'สมุดบันทึกนี้ต้องได้รับการดูแล',
+    legacyMessage:
+      'บางหน้าถูกบันทึกโดย Canto รุ่นเก่าขณะสมุดบันทึกกำลังล็อก หน้าเหล่านั้นยังสมบูรณ์และกู้คืนได้ด้วยรหัสผ่านของคุณ',
+    unreadableMessage: 'อ่านข้อมูลบางส่วนของสมุดบันทึกนี้อย่างปลอดภัยไม่ได้ ไม่มีสิ่งใดถูกลบ',
+    interruptedMessage:
+      'การเปลี่ยนคีย์อุปกรณ์ถูกขัดจังหวะ ข้อมูลของคุณปลอดภัย โปรดรีสตาร์ท Canto เพื่อดำเนินการให้เสร็จ',
+    recover: 'กู้คืนหน้า',
+    copyDiagnostics: 'คัดลอกข้อมูลวินิจฉัย',
+    diagnosticsCopied: 'คัดลอกข้อมูลวินิจฉัยแล้ว มีเพียงจำนวนนับ ไม่มีสิ่งที่คุณเขียนเลย',
+    diagnosticsCopyManually: 'คัดลอกอัตโนมัติไม่ได้ โปรดเลือกข้อความด้านล่างแล้วคัดลอก',
+    back: 'กลับไปที่สมุดบันทึก',
+    unverifiableMessage:
+      'Canto ยืนยันรหัสผ่านนี้กับข้อมูลที่จัดเก็บของสมุดบันทึกไม่ได้ จึงไม่มีการเข้ารหัสใหม่ใดๆ โปรดคัดลอกข้อมูลวินิจฉัยแล้วติดต่อฝ่ายสนับสนุน',
   },
 };
 
@@ -1521,6 +1722,10 @@ export const id: Dictionary = {
       'Beberapa halaman lokal tidak dapat dibaca dengan aman. Tidak ada yang diubah.',
     recoverLocked: 'Buka kunci jurnal ini sebelum memulihkan halaman.',
     recoverFailed: 'Pemulihan tidak dapat diselesaikan. Tidak ada yang diubah.',
+    recoverLegacy:
+      '{count} di antaranya disimpan saat jurnal sedang dikunci dan akan dienkripsi ulang dengan kata sandi Anda.',
+    draftsPending:
+      'Jurnal ini memiliki draf yang belum disimpan. Buka masing-masing lalu simpan atau buang sebelum mengubah kata sandi.',
   },
   filterBar: {
     searchPlaceholder: 'Cari...',
@@ -1565,6 +1770,24 @@ export const id: Dictionary = {
     rotating: 'Merotasi kunci perangkat...',
     rotateSuccess: 'Kunci perangkat berhasil dirotasi',
     doNotClose: 'Jangan tutup aplikasi',
+    blockScreenshots: 'Blokir tangkapan layar',
+    blockScreenshotsHint:
+      'Menyembunyikan Canto di layar aplikasi terbaru serta memblokir tangkapan dan rekaman layar.',
+    rotateBlockedUnrecovered:
+      'Beberapa data jurnal perlu dipulihkan terlebih dahulu, jadi kunci perangkat tidak dirotasi. Tidak ada yang diubah.',
+    rotateBlockedUnreadable:
+      'Beberapa data jurnal tidak dapat dibaca, jadi kunci perangkat tidak dirotasi. Tidak ada yang diubah.',
+    rotateBlockedSpace:
+      'Ruang penyimpanan kosong tidak cukup untuk merotasi kunci perangkat dengan aman. Tidak ada yang diubah.',
+    rotateBlockedPending:
+      'Rotasi kunci sebelumnya masih diselesaikan. Mulai ulang Canto, lalu coba lagi.',
+    rotateBlockedUnsupported:
+      'Lampiran lama terlalu besar untuk dirotasi dengan aman. Tidak ada yang diubah.',
+    rotateBlockedOtherTabs:
+      'Canto terbuka di tab browser lain. Tutup tab lainnya, lalu coba lagi. Tidak ada yang diubah.',
+    rotateInterrupted:
+      'Rotasi kunci terputus. Data Anda aman. Mulai ulang Canto untuk menyelesaikannya.',
+    rotateFailed: 'Rotasi kunci gagal. Tidak ada yang diubah.',
   },
   backup: {
     export: 'Ekspor',
@@ -1690,6 +1913,34 @@ export const id: Dictionary = {
     indexDetail: 'Indeks jurnal tidak dapat dibaca dengan aman.',
     instructions:
       'Biarkan aplikasi tetap terpasang, jangan hapus datanya atau instal ulang. File terenkripsi Anda adalah satu-satunya salinan. Hubungi dukungan dan sebutkan pesan ini.',
+  },
+  privacy: {
+    locked: 'Jurnal terkunci',
+    lockedHint: 'Buka kunci jurnal ini dari layar beranda untuk melanjutkan.',
+    draftRestored: 'Perubahan yang belum disimpan dipulihkan',
+    discardDraft: 'Buang draf',
+    unsavedDraft: 'Draf belum disimpan',
+    draftConflictTitle: 'Halaman ini berubah sejak draf Anda',
+    draftConflictMessage:
+      'Halaman yang tersimpan diperbarui setelah draf Anda yang belum disimpan disimpan. Lanjutkan dengan draf Anda, atau pertahankan versi tersimpan dan buang draf?',
+    useDraft: 'Gunakan draf saya',
+    keepSaved: 'Pertahankan versi tersimpan',
+  },
+  journalIntegrity: {
+    title: 'Jurnal ini perlu ditangani',
+    legacyMessage:
+      'Beberapa halaman disimpan oleh versi Canto yang lebih lama saat jurnal sedang dikunci. Halaman tersebut masih utuh dan dapat dipulihkan dengan kata sandi Anda.',
+    unreadableMessage:
+      'Beberapa data jurnal ini tidak dapat dibaca dengan aman. Tidak ada yang dihapus.',
+    interruptedMessage:
+      'Rotasi kunci perangkat terputus. Data Anda aman. Mulai ulang Canto untuk menyelesaikannya.',
+    recover: 'Pulihkan halaman',
+    copyDiagnostics: 'Salin diagnostik',
+    diagnosticsCopied: 'Diagnostik disalin. Isinya hanya jumlah, tidak pernah tulisan Anda.',
+    diagnosticsCopyManually: 'Tidak dapat menyalin otomatis. Pilih teks di bawah lalu salin.',
+    back: 'Kembali ke jurnal',
+    unverifiableMessage:
+      'Canto tidak dapat mengonfirmasi kata sandi ini dengan data jurnal yang tersimpan, jadi tidak ada yang dienkripsi ulang. Salin diagnostik dan hubungi dukungan.',
   },
 };
 
@@ -1859,6 +2110,10 @@ export const uk: Dictionary = {
     recoverIncomplete: 'Деякі локальні сторінки не вдалося безпечно прочитати. Нічого не змінено.',
     recoverLocked: 'Розблокуйте цей щоденник, перш ніж відновлювати сторінки.',
     recoverFailed: 'Не вдалося завершити відновлення. Нічого не змінено.',
+    recoverLegacy:
+      '{count} з них було збережено під час блокування щоденника, і їх буде повторно зашифровано вашим паролем.',
+    draftsPending:
+      'У цьому щоденнику є незбережені чернетки. Відкрийте кожну та збережіть або видаліть її, перш ніж змінювати пароль.',
   },
   filterBar: {
     searchPlaceholder: 'Пошук...',
@@ -1904,6 +2159,24 @@ export const uk: Dictionary = {
     rotating: 'Ротація ключа пристрою...',
     rotateSuccess: 'Ключ пристрою успішно ротовано',
     doNotClose: 'Не закривайте застосунок',
+    blockScreenshots: 'Заборонити знімки екрана',
+    blockScreenshotsHint:
+      'Приховує Canto на екрані нещодавніх застосунків і забороняє знімки та запис екрана.',
+    rotateBlockedUnrecovered:
+      'Спочатку потрібно відновити частину даних щоденника, тому ключ пристрою не було змінено. Нічого не змінено.',
+    rotateBlockedUnreadable:
+      'Частину даних щоденника не вдалося прочитати, тому ключ пристрою не було змінено. Нічого не змінено.',
+    rotateBlockedSpace:
+      'Недостатньо вільного місця, щоб безпечно змінити ключ пристрою. Нічого не змінено.',
+    rotateBlockedPending:
+      'Попередня зміна ключа ще не завершена. Перезапустіть Canto і спробуйте знову.',
+    rotateBlockedUnsupported:
+      'Старе вкладення завелике для безпечної зміни ключа. Нічого не змінено.',
+    rotateBlockedOtherTabs:
+      'Canto відкрито в іншій вкладці браузера. Закрийте інші вкладки й спробуйте знову. Нічого не змінено.',
+    rotateInterrupted:
+      'Зміну ключа перервано. Ваші дані в безпеці. Перезапустіть Canto, щоб її завершити.',
+    rotateFailed: 'Не вдалося змінити ключ. Нічого не змінено.',
   },
   backup: {
     export: 'Експорт',
@@ -2031,5 +2304,34 @@ export const uk: Dictionary = {
     indexDetail: 'Індекс журналів не можна безпечно прочитати.',
     instructions:
       'Залиште застосунок встановленим, не очищайте його дані та не перевстановлюйте. Зашифровані файли — єдина копія. Зверніться до підтримки, зазначивши це повідомлення.',
+  },
+  privacy: {
+    locked: 'Щоденник заблоковано',
+    lockedHint: 'Розблокуйте цей щоденник на головному екрані, щоб продовжити.',
+    draftRestored: 'Незбережені зміни відновлено',
+    discardDraft: 'Видалити чернетку',
+    unsavedDraft: 'Незбережена чернетка',
+    draftConflictTitle: 'Ця сторінка змінилася після вашої чернетки',
+    draftConflictMessage:
+      'Збережену сторінку було оновлено після збереження вашої незбереженої чернетки. Продовжити з чернеткою чи залишити збережену версію та видалити чернетку?',
+    useDraft: 'Використати мою чернетку',
+    keepSaved: 'Залишити збережену версію',
+  },
+  journalIntegrity: {
+    title: 'Цей щоденник потребує уваги',
+    legacyMessage:
+      'Деякі сторінки було збережено старішою версією Canto під час блокування щоденника. Вони цілі, і їх можна відновити за допомогою вашого пароля.',
+    unreadableMessage:
+      'Частину даних цього щоденника не вдалося безпечно прочитати. Нічого не видалено.',
+    interruptedMessage:
+      'Зміну ключа пристрою перервано. Ваші дані в безпеці. Перезапустіть Canto, щоб її завершити.',
+    recover: 'Відновити сторінки',
+    copyDiagnostics: 'Копіювати діагностику',
+    diagnosticsCopied: 'Діагностику скопійовано. Вона містить лише кількості, ніколи ваші записи.',
+    diagnosticsCopyManually:
+      'Не вдалося скопіювати автоматично. Виділіть текст нижче й скопіюйте його.',
+    back: 'Назад до щоденників',
+    unverifiableMessage:
+      'Canto не може підтвердити цей пароль за збереженими даними щоденника, тому нічого не було повторно зашифровано. Скопіюйте діагностику та зверніться до підтримки.',
   },
 };

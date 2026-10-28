@@ -8,6 +8,7 @@ import { exportJournal, isExportError, type ExportProgress } from '@/lib/backup'
 import { StorageIntegrityError } from '@/lib/storage/integrity';
 import type { JournalContent } from 'canto-data';
 import { webModalContent } from '@/styles/web';
+import { PrivacyShield } from '@/components/common/PrivacyShield';
 
 function ProgressBar({ current, total }: { current: number; total: number }) {
   const { theme } = useTheme();
@@ -241,6 +242,7 @@ export function ExportJournalModal({
           </Pressable>
         </View>
       </View>
+      <PrivacyShield />
     </Modal>
   );
 }

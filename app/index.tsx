@@ -14,7 +14,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '@/hooks/useTheme';
 import { useI18n } from '@/hooks/useI18n';
-import { useJournals, useCreateJournal, tryLoadJournalOverview } from '@/hooks/useStorage';
+import { useJournals, useCreateJournal, verifyJournalKey } from '@/hooks/useStorage';
 import { useJournalKeys } from '@/contexts/JournalKeyContext';
 import { Logo } from '@/components/common/Logo';
 import { InfoBox } from '@/components/home/InfoBox';
@@ -25,6 +25,7 @@ import { JournalAccessModal } from '@/components/home/JournalAccessModal';
 import { AccountButton } from '@/components/home/AccountButton';
 import { authenticateBiometric } from '@/lib/biometric';
 import { StorageIntegrityError } from '@/lib/storage/integrity';
+import { DiagnosticsCopyButton } from '@/components/common/DiagnosticsCopyButton';
 import { ONBOARDING_KEY, isOnboardingDone, markOnboardingDone } from './onboarding';
 import type { Journal } from 'canto-data';
 
@@ -41,7 +42,7 @@ export default function HomeScreen() {
       ? error.code
       : null;
   const { create } = useCreateJournal();
-  const { deriveAndCache, getKey, clearKey, clearAll } = useJournalKeys();
+  const { deriveAndCache, getKey, clearKey, clearAll, markReadOnly } = useJournalKeys();
   const [onboardingChecked, setOnboardingChecked] = useState(false);
 
   // Check onboarding status on mount
@@ -155,6 +156,7 @@ export default function HomeScreen() {
   async function handleUnlock(password: string) {
     if (!accessJournal?.salt) return;
     const journalId = accessJournal.id;
+    let verdict: Awaited<ReturnType<typeof verifyJournalKey>>;
     try {
       const key = await deriveAndCache(
         journalId,
@@ -162,21 +164,37 @@ export default function HomeScreen() {
         accessJournal.salt,
         accessJournal.kdfIterations,
       );
-      // PBKDF2 always succeeds, so verify the derived key by decrypting the
-      // metadata and page catalog. Do not open every page solely to unlock.
-      const result = await tryLoadJournalOverview(journalId, key);
-      if (!result) {
-        clearKey(journalId);
-        setAccessError(t.home.wrongPassword);
+      // PBKDF2 always succeeds, so check the derived key strictly against the
+      // stored records. Only a key that opens none of them is a wrong
+      // password; every other failure is an integrity state the journal
+      // screen shows with its recovery options.
+      verdict = await verifyJournalKey(journalId, key);
+    } catch (error) {
+      // A key that could not be verified is never kept: the journal screen
+      // reports the integrity state without it, and nothing can be written.
+      clearKey(journalId);
+      if (error instanceof StorageIntegrityError) {
+        setAccessJournal(null);
+        setAccessError(null);
+        router.push(`/journal/${journalId}`);
         return;
       }
-      setAccessJournal(null);
-      setAccessError(null);
-      router.push(`/journal/${journalId}`);
-    } catch {
-      clearKey(accessJournal.id);
-      setAccessError(t.home.wrongPassword);
+      setAccessError(t.journalIntegrity.unreadableMessage);
+      throw error;
     }
+    if (verdict === 'invalid') {
+      clearKey(journalId);
+      setAccessError(t.home.wrongPassword);
+      // Rejecting keeps the unlock rate limiter counting this attempt.
+      throw new Error('Wrong password');
+    }
+    // 'unverifiable' (only legacy zero-key records exist) still opens, read
+    // only: the journal screen shows its integrity state, recovery refuses to
+    // re-encrypt, and no save can write under a possibly mistyped key.
+    if (verdict === 'unverifiable') markReadOnly(journalId);
+    setAccessJournal(null);
+    setAccessError(null);
+    router.push(`/journal/${journalId}`);
   }
 
   // Don't render until onboarding check completes (avoids flash before redirect)
@@ -267,6 +285,7 @@ export default function HomeScreen() {
                 {t.dataIntegrity.retry}
               </Text>
             </Pressable>
+            <DiagnosticsCopyButton code={recoveryCode} />
           </View>
         </ScrollView>
       ) : journals.length === 0 ? (

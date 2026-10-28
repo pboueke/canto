@@ -18,6 +18,7 @@ import { DEFAULT_KDF_ITERATIONS } from '@/lib/encryption/password';
 import type { ReencryptionResult } from '@/lib/storage/types';
 import { getContrastText } from '@/styles/themes';
 import { webModalContent } from '@/styles/web';
+import { PrivacyShield } from '@/components/common/PrivacyShield';
 
 function formatBytes(bytes: number, locale: string): string {
   if (bytes < 1024 * 1024) {
@@ -382,6 +383,7 @@ export function ChangePasswordModal({
           )}
         </View>
       </View>
+      <PrivacyShield />
     </Modal>
   );
 }

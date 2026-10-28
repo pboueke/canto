@@ -1,4 +1,10 @@
 agents:
+  # Default agent: OpenCode on the OpenCode Go provider with GLM-5.3.
+  # Needs OPENCODE_API_KEY exported on the host (forwarded below).
+  - name: opencode
+    adapter: opencode
+    command: opencode --model opencode-go/glm-5.3
+
   - name: claude
     adapter: claude
     command: claude
@@ -30,3 +36,8 @@ volumes:
   cache: true                     # Cache agent memory, config, session across runs
   # extra:                        # Custom volume mounts (host:container[:mode])
   #   - ~/docs:/reference:ro
+
+# Environment variables forwarded into agent containers
+environment:
+  passthrough:
+    - OPENCODE_API_KEY

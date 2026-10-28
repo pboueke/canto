@@ -2,6 +2,7 @@ import { Modal, Platform, Pressable, StyleSheet, Text, View } from 'react-native
 import { Feather } from '@expo/vector-icons';
 import { useTheme } from '@/hooks/useTheme';
 import { useI18n } from '@/hooks/useI18n';
+import { PrivacyShield } from '@/components/common/PrivacyShield';
 
 interface ExportMenuProps {
   visible: boolean;
@@ -41,6 +42,7 @@ export function ExportMenu({ visible, onClose, onExport }: ExportMenuProps) {
           </Pressable>
         </View>
       </Pressable>
+      <PrivacyShield />
     </Modal>
   );
 }

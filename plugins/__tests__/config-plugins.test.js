@@ -10,6 +10,20 @@ const {
   EXPO_RECORD_CONVERTER_KEEP_RULE,
 } = require('../withAndroidReleaseOptimization');
 const { registerCantoArchivePackage, syncCantoArchiveSources } = require('../withCantoArchive');
+const { applyRecentsPrivacy } = require('../withAndroidRecentsPrivacy');
+
+const MAIN_ACTIVITY_FIXTURE = `package com.boueke.canto
+import expo.modules.splashscreen.SplashScreenManager
+
+import android.os.Build
+import android.os.Bundle
+
+class MainActivity : ReactActivity() {
+  override fun onCreate(savedInstanceState: Bundle?) {
+    SplashScreenManager.registerOnActivity(this)
+    super.onCreate(null)
+  }
+}`;
 
 const BUILD_GRADLE_FIXTURE = `android {
     signingConfigs {
@@ -259,5 +273,96 @@ describe('Android config plugin transformations', () => {
         .readFileSync(path.join(packageDirectory, 'MainApplication.kt'), 'utf8')
         .match(/CantoArchivePackage/g),
     ).toHaveLength(1);
+  });
+});
+
+describe('Android recents privacy plugin', () => {
+  it('is registered exactly once in Expo config', () => {
+    const config = require('../../app.config');
+    expect(
+      config.plugins.filter((plugin) => plugin === './plugins/withAndroidRecentsPrivacy'),
+    ).toHaveLength(1);
+  });
+
+  it('blocks the media permission Canto never uses', () => {
+    const config = require('../../app.config');
+    expect(config.android.blockedPermissions).toContain('android.permission.READ_MEDIA_IMAGES');
+  });
+
+  it('keeps DETECT_SCREEN_CAPTURE, which expo-screen-capture needs at startup', () => {
+    // On API 34+ the module registers a screen-capture callback when it is
+    // created; without this install-time permission Android throws and the
+    // app aborts on launch (0.21.0 internal build, versionCode 31).
+    const config = require('../../app.config');
+    expect(config.android.blockedPermissions ?? []).not.toContain(
+      'android.permission.DETECT_SCREEN_CAPTURE',
+    );
+  });
+
+  it('withholds the recents thumbnail on API 33+ after onCreate, idempotently', () => {
+    const once = applyRecentsPrivacy(MAIN_ACTIVITY_FIXTURE);
+    expect(applyRecentsPrivacy(once)).toBe(once);
+    expect(once).toContain(`super.onCreate(null)
+    // @generated begin canto-recents-privacy
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+      setRecentsScreenshotEnabled(false)
+    }`);
+    expect(once.match(/setRecentsScreenshotEnabled/g)).toHaveLength(1);
+  });
+
+  it('adds the Build import when the template lacks it', () => {
+    const withoutImport = MAIN_ACTIVITY_FIXTURE.replace('import android.os.Build\n', '');
+    const patched = applyRecentsPrivacy(withoutImport);
+    const header = patched.split('class MainActivity')[0];
+    expect(header).toContain('import android.os.Build\n');
+    expect(header).toContain('import android.view.WindowManager\n');
+    expect(patched.startsWith('package com.boueke.canto\n')).toBe(true);
+  });
+
+  it('fails loudly instead of guessing when the template changes', () => {
+    expect(() => applyRecentsPrivacy('class MainActivity {}')).toThrow(
+      'expected one MainActivity super.onCreate(null) call, found 0',
+    );
+    const duplicated = `${applyRecentsPrivacy(MAIN_ACTIVITY_FIXTURE)}\n// @generated begin canto-recents-privacy`;
+    expect(() => applyRecentsPrivacy(duplicated)).toThrow('found 2');
+    expect(() => applyRecentsPrivacy('class MainActivity {\n  super.onCreate(null)\n}')).toThrow(
+      'MainActivity has no package line',
+    );
+  });
+
+  // Cross-platform review: on Android 12 and below the in-app cover renders
+  // too late for the recents snapshot, so FLAG_SECURE is held while paused.
+  it('holds FLAG_SECURE while paused below API 33 without undoing the screenshot setting', () => {
+    const patched = applyRecentsPrivacy(MAIN_ACTIVITY_FIXTURE);
+    expect(patched).toContain(`class MainActivity : ReactActivity() {
+  // @generated begin canto-legacy-recents-guard`);
+    expect(patched).toContain('Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU');
+    // Only a flag this guard added is cleared on resume.
+    expect(patched).toContain(
+      '(window.attributes.flags and WindowManager.LayoutParams.FLAG_SECURE) == 0',
+    );
+    expect(patched).toContain(`if (cantoRecentsSecureAdded) {
+      window.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)`);
+    expect(patched.match(/override fun onPause/g)).toHaveLength(1);
+    expect(applyRecentsPrivacy(patched)).toBe(patched);
+  });
+
+  it('refuses to guess when MainActivity already handles pause or resume', () => {
+    const custom = MAIN_ACTIVITY_FIXTURE.replace(
+      '  override fun onCreate',
+      '  override fun onResume() { super.onResume() }\n  override fun onCreate',
+    );
+    expect(() => applyRecentsPrivacy(custom)).toThrow('already overrides onPause/onResume');
+    const duplicated = `${applyRecentsPrivacy(MAIN_ACTIVITY_FIXTURE)}\n// @generated begin canto-legacy-recents-guard`;
+    expect(() => applyRecentsPrivacy(duplicated)).toThrow(
+      'expected at most one legacy block, found 2',
+    );
+    const noClass = MAIN_ACTIVITY_FIXTURE.replace(
+      'class MainActivity : ReactActivity() {',
+      'class Other {',
+    );
+    expect(() => applyRecentsPrivacy(noClass)).toThrow(
+      'expected one MainActivity class declaration',
+    );
   });
 });

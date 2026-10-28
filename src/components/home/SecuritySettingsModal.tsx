@@ -1,17 +1,25 @@
 import { useState, useEffect } from 'react';
-import { Alert, Modal, Pressable, StyleSheet, Text, View, ActivityIndicator } from 'react-native';
+import {
+  Modal,
+  Platform,
+  Pressable,
+  StyleSheet,
+  Switch,
+  Text,
+  View,
+  ActivityIndicator,
+} from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTheme } from '@/hooks/useTheme';
 import { useI18n } from '@/hooks/useI18n';
-import { getLocalStore, getEncryptionService } from '@/hooks/useStorage';
-import {
-  prepareKeyRotation,
-  beginKeyRotation,
-  commitKeyRotation,
-  abortKeyRotation,
-} from '@/lib/encryption/device';
-import { aesGcmEncrypt, aesGcmDecrypt } from '@/lib/encryption/utils';
+import { getLocalStore } from '@/hooks/useStorage';
+import * as deviceKeyCustody from '@/lib/encryption/device';
+import { RotationBlockedError } from '@/lib/storage/device-key-rotation';
+import { RotationInterruptedError } from '@/lib/storage/integrity';
+import { getBlockScreenshots, setBlockScreenshots } from '@/lib/privacy';
+import { confirmDestructive, notify } from '@/lib/dialogs';
+import type { Dictionary } from '@/i18n/dictionaries';
 import { webModalContent } from '@/styles/web';
 
 const AUTO_LOCK_KEY = 'canto_auto_lock_timeout';
@@ -32,6 +40,32 @@ export async function getAutoLockTimeout(): Promise<number> {
   return isNaN(val) ? DEFAULT_AUTO_LOCK : val;
 }
 
+/**
+ * Localized outcome of a failed rotation. Never forwards raw error text, which
+ * could carry paths. Blocked rotations changed nothing; an interrupted one
+ * keeps both keys and finishes on restart.
+ */
+export function rotationErrorMessage(t: Dictionary, error: unknown): string {
+  if (error instanceof RotationInterruptedError) return t.security.rotateInterrupted;
+  if (error instanceof RotationBlockedError) {
+    switch (error.reason) {
+      case 'UNRECOVERED_DATA':
+        return t.security.rotateBlockedUnrecovered;
+      case 'UNREADABLE_DATA':
+        return t.security.rotateBlockedUnreadable;
+      case 'INSUFFICIENT_SPACE':
+        return t.security.rotateBlockedSpace;
+      case 'ROTATION_PENDING':
+        return t.security.rotateBlockedPending;
+      case 'UNSUPPORTED_DATA':
+        return t.security.rotateBlockedUnsupported;
+      case 'OTHER_TABS_OPEN':
+        return t.security.rotateBlockedOtherTabs;
+    }
+  }
+  return t.security.rotateFailed;
+}
+
 interface SecuritySettingsModalProps {
   visible: boolean;
   onClose: () => void;
@@ -41,11 +75,13 @@ export function SecuritySettingsModal({ visible, onClose }: SecuritySettingsModa
   const { theme } = useTheme();
   const { t } = useI18n();
   const [autoLock, setAutoLock] = useState(DEFAULT_AUTO_LOCK);
+  const [blockScreenshots, setBlockScreenshotsState] = useState(false);
   const [rotating, setRotating] = useState(false);
 
   useEffect(() => {
     if (visible) {
       getAutoLockTimeout().then(setAutoLock);
+      getBlockScreenshots().then(setBlockScreenshotsState);
     }
   }, [visible]);
 
@@ -54,65 +90,33 @@ export function SecuritySettingsModal({ visible, onClose }: SecuritySettingsModa
     await AsyncStorage.setItem(AUTO_LOCK_KEY, String(value));
   }
 
+  async function handleBlockScreenshotsChange(value: boolean) {
+    setBlockScreenshotsState(value);
+    await setBlockScreenshots(value);
+  }
+
   async function handleRotateKey() {
-    Alert.alert(t.security.rotateDeviceKey, t.security.rotateWarning, [
-      { text: t.common.cancel, style: 'cancel' },
-      {
-        text: t.security.rotateConfirm,
-        style: 'destructive',
-        onPress: async () => {
-          setRotating(true);
-          try {
-            const store = await getLocalStore();
-            const encryption = getEncryptionService();
-
-            // Generate the new key WITHOUT persisting — only persist after
-            // re-encryption succeeds to avoid data loss on partial failure.
-            const { oldKey: secureStoreKey, newKey } = await prepareKeyRotation();
-
-            // Try the singleton's cached key first (for journal data that
-            // was never re-encrypted), fall back to the SecureStore key
-            // (for the index or any file that WAS re-encrypted previously).
-            const oldDecrypt = async (ciphertext: string) => {
-              try {
-                return await encryption.decrypt(ciphertext);
-              } catch {
-                return await aesGcmDecrypt(ciphertext, secureStoreKey);
-              }
-            };
-
-            const oldEncrypt = (plaintext: string) => aesGcmEncrypt(plaintext, newKey);
-            const newEncrypt = (plaintext: string) => aesGcmEncrypt(plaintext, newKey);
-
-            // Persist a protected fallback before LocalStore can publish the
-            // new ciphertext generation. A restart can decrypt either side
-            // until the storage commit marker is replayed.
-            await beginKeyRotation(secureStoreKey, newKey);
-            await store.reencryptAll(oldDecrypt, oldEncrypt, newEncrypt);
-            await commitKeyRotation(newKey);
-            // A crash before this cleanup is harmless: startup finalization is
-            // idempotent and will consume the durable completion proof.
-            await store.clearCompletedDeviceKeyRotation?.();
-            // Clear the singleton's cached device key so it picks up the new one
-            encryption.clearSession();
-            Alert.alert(t.security.rotateSuccess);
-          } catch (err) {
-            // A failed pre-commit rewrite must restore the old current key.
-            // Retaining the new key here would make a retry overwrite the only
-            // fallback that can decrypt the untouched legacy ciphertext.
-            try {
-              const store = await getLocalStore();
-              if (!(await store.hasCompletedDeviceKeyRotation?.())) await abortKeyRotation();
-            } catch (recoveryError) {
-              console.warn('[Canto] Failed to restore previous device key:', recoveryError);
-            }
-            Alert.alert('Error', err instanceof Error ? err.message : String(err));
-          } finally {
-            setRotating(false);
-          }
-        },
+    confirmDestructive(
+      t.security.rotateDeviceKey,
+      t.security.rotateWarning,
+      { confirm: t.security.rotateConfirm, cancel: t.common.cancel },
+      async () => {
+        setRotating(true);
+        try {
+          const store = await getLocalStore();
+          if (!store.rotateDeviceKey) throw new Error('Device-key rotation is unavailable');
+          // The store owns the whole cutover: it keeps the previous key until
+          // the re-encrypted data is applied and verified, and swaps the
+          // cached key before any queued write can run.
+          await store.rotateDeviceKey(deviceKeyCustody);
+          notify(t.security.rotateSuccess);
+        } catch (err) {
+          notify(t.security.rotateDeviceKey, rotationErrorMessage(t, err));
+        } finally {
+          setRotating(false);
+        }
       },
-    ]);
+    );
   }
 
   return (
@@ -189,6 +193,36 @@ export function SecuritySettingsModal({ visible, onClose }: SecuritySettingsModa
                   );
                 })}
               </View>
+
+              {/* Block screenshots */}
+              {Platform.OS !== 'web' && (
+                <>
+                  <View style={styles.switchRow}>
+                    <Text
+                      style={[
+                        styles.switchLabel,
+                        { color: theme.colors.text, fontFamily: theme.fonts.regular },
+                      ]}
+                    >
+                      {t.security.blockScreenshots}
+                    </Text>
+                    <Switch
+                      value={blockScreenshots}
+                      onValueChange={handleBlockScreenshotsChange}
+                      trackColor={{ true: theme.colors.primary }}
+                      accessibilityLabel={t.security.blockScreenshots}
+                    />
+                  </View>
+                  <Text
+                    style={[
+                      styles.rotateExplain,
+                      { color: theme.colors.textSecondary, fontFamily: theme.fonts.regular },
+                    ]}
+                  >
+                    {t.security.blockScreenshotsHint}
+                  </Text>
+                </>
+              )}
 
               {/* Rotate device key */}
               <Text
@@ -278,6 +312,17 @@ const styles = StyleSheet.create({
   },
   pillText: {
     fontSize: 12,
+  },
+  switchRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 4,
+    marginLeft: 4,
+  },
+  switchLabel: {
+    fontSize: 14,
+    flex: 1,
   },
   rotateExplain: {
     fontSize: 13,

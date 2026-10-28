@@ -1,6 +1,10 @@
 import React from 'react';
 import { renderHook, act } from '@testing-library/react-native';
-import { JournalKeyProvider, useJournalKeys } from '@/contexts/JournalKeyContext';
+import {
+  BEFORE_LOCK_TIMEOUT_MS,
+  JournalKeyProvider,
+  useJournalKeys,
+} from '@/contexts/JournalKeyContext';
 import { deriveKey, DEFAULT_KDF_ITERATIONS } from '@/lib/encryption/password';
 
 const mockPurgeAttachmentDisplayCache = jest.fn();
@@ -212,6 +216,15 @@ describe('JournalKeyContext — default context (no provider)', () => {
     result.current.clearKey('x');
     result.current.clearAll();
     result.current.touchActivity();
+    result.current.onBeforeLock(async () => {})();
+    result.current.onJournalLocked('x', () => {})();
+    result.current.markReadOnly('x');
+    result.current.dismissLockScreen();
+    expect(result.current.getOverlayState()).toEqual({ covered: false, locked: false });
+    const lease = result.current.createLease('x');
+    expect(result.current.isLeaseValid(lease)).toBe(false);
+    result.current.subscribePrivacyCover(() => {})();
+    expect(result.current.isPrivacyCovered()).toBe(false);
     expect(() => result.current.onAutoLock(() => {})()).not.toThrow();
   });
 });
@@ -561,5 +574,221 @@ describe('JournalKeyContext — revocable key leases', () => {
     // zero-key defense as a second layer).
     expect(result.current.isLeaseValid(lease)).toBe(false);
     expect(key.every((b) => b === 0)).toBe(true);
+  });
+});
+
+describe('JournalKeyContext read-only keys', () => {
+  it('keeps a read-only key readable but never writable, until the key changes', async () => {
+    const { result } = renderHook(() => useJournalKeys(), { wrapper });
+    const key = new Uint8Array(32).fill(5);
+    act(() => {
+      result.current.setKey('ro', key);
+    });
+    const lease = result.current.createLease('ro');
+    expect(result.current.isLeaseValid(lease)).toBe(true);
+
+    act(() => result.current.markReadOnly('ro'));
+    expect(result.current.getKey('ro')).toBe(key);
+    expect(result.current.isLeaseValid(result.current.createLease('ro'))).toBe(false);
+
+    // A verified unlock replaces the key and ends the read-only grant.
+    act(() => {
+      result.current.setKey('ro', new Uint8Array(32).fill(6));
+    });
+    expect(result.current.isLeaseValid(result.current.createLease('ro'))).toBe(true);
+  });
+});
+
+describe('JournalKeyContext privacy cover and pre-lock flush', () => {
+  beforeEach(() => {
+    jest.useFakeTimers();
+    mockGetAutoLockTimeout.mockReset();
+  });
+
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
+  async function flush() {
+    for (let i = 0; i < 6; i++) await Promise.resolve();
+  }
+
+  it('covers content while backgrounded and uncovers on a resume that does not lock', async () => {
+    mockGetAutoLockTimeout.mockResolvedValue(0);
+    const { result } = renderHook(() => useJournalKeys(), { wrapper });
+    const listener = jest.fn();
+    const unsubscribe = result.current.subscribePrivacyCover(listener);
+    expect(result.current.isPrivacyCovered()).toBe(false);
+
+    await act(async () => {
+      appStateHandler!('inactive');
+      appStateHandler!('background');
+    });
+    expect(result.current.isPrivacyCovered()).toBe(true);
+    expect(listener).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      appStateHandler!('active');
+      await flush();
+    });
+    expect(result.current.isPrivacyCovered()).toBe(false);
+    expect(listener).toHaveBeenCalledTimes(2);
+    unsubscribe();
+  });
+
+  it('raises the lock flag before draft flushes and keeps it until dismissed', async () => {
+    mockGetAutoLockTimeout.mockResolvedValue(1);
+    const { result } = renderHook(() => useJournalKeys(), { wrapper });
+    act(() => {
+      result.current.setKey('j-lock-flag', new Uint8Array(32).fill(3));
+    });
+    let lockedDuringFlush: boolean | undefined;
+    result.current.onBeforeLock(async () => {
+      lockedDuringFlush = result.current.getOverlayState().locked;
+    });
+    const listener = jest.fn();
+    result.current.subscribePrivacyCover(listener);
+    await act(async () => {
+      appStateHandler!('background');
+    });
+    jest.advanceTimersByTime(5);
+    await act(async () => {
+      await appStateHandler!('active');
+      await flush();
+    });
+    expect(lockedDuringFlush).toBe(true);
+    const state = result.current.getOverlayState();
+    expect(state).toEqual({ covered: false, locked: true });
+    // Stable identity while nothing changes (useSyncExternalStore snapshot).
+    expect(result.current.getOverlayState()).toBe(state);
+    act(() => result.current.dismissLockScreen());
+    expect(result.current.getOverlayState()).toEqual({ covered: false, locked: false });
+    act(() => result.current.dismissLockScreen());
+    expect(listener).toHaveBeenCalled();
+  });
+
+  it('ignores AppState values other than active, inactive, and background', async () => {
+    const { result } = renderHook(() => useJournalKeys(), { wrapper });
+    await act(async () => {
+      appStateHandler!('background');
+      appStateHandler!('unknown');
+    });
+    expect(result.current.isPrivacyCovered()).toBe(true);
+  });
+
+  // Reviewer finding 8: a resume that finishes after the app went to the
+  // background again must not lift the cover.
+  it('keeps the cover up when a newer background overlaps a pending resume', async () => {
+    let releaseTimeout!: (value: number) => void;
+    mockGetAutoLockTimeout.mockReturnValue(
+      new Promise<number>((resolve) => {
+        releaseTimeout = resolve;
+      }),
+    );
+    const { result } = renderHook(() => useJournalKeys(), { wrapper });
+    await act(async () => {
+      appStateHandler!('background');
+    });
+    let resume!: Promise<void>;
+    await act(async () => {
+      resume = Promise.resolve(appStateHandler!('active'));
+    });
+    await act(async () => {
+      appStateHandler!('background');
+    });
+    await act(async () => {
+      releaseTimeout(0);
+      await resume;
+      await flush();
+    });
+    expect(result.current.isPrivacyCovered()).toBe(true);
+  });
+
+  it('uncovers on an active event with no recorded background', async () => {
+    const { result } = renderHook(() => useJournalKeys(), { wrapper });
+    await act(async () => {
+      appStateHandler!('active');
+    });
+    expect(result.current.isPrivacyCovered()).toBe(false);
+  });
+
+  it('keeps content covered until a due lock has flushed drafts and zeroed keys', async () => {
+    mockGetAutoLockTimeout.mockResolvedValue(5);
+    const { result } = renderHook(() => useJournalKeys(), { wrapper });
+    const key = new Uint8Array(32).fill(0x11);
+    const order: string[] = [];
+    act(() => {
+      result.current.setKey('j-cover', key);
+    });
+    result.current.onAutoLock(() => order.push(`lock-screen:${key[0]}`));
+    let release!: () => void;
+    result.current.onBeforeLock(
+      () =>
+        new Promise<void>((resolve) => {
+          order.push(`flush:${key[0]}`);
+          release = resolve;
+        }),
+    );
+
+    await act(async () => {
+      appStateHandler!('background');
+    });
+    jest.advanceTimersByTime(10);
+    await act(async () => {
+      void appStateHandler!('active');
+      await flush();
+    });
+    // The flush still holds a usable key, and the cover is still up.
+    expect(order).toEqual(['lock-screen:17', 'flush:17']);
+    expect(result.current.isPrivacyCovered()).toBe(true);
+    expect(result.current.getKey('j-cover')).toBe(key);
+
+    await act(async () => {
+      release();
+      await flush();
+    });
+    expect(result.current.getKey('j-cover')).toBeNull();
+    expect(key.every((byte) => byte === 0)).toBe(true);
+    expect(result.current.isPrivacyCovered()).toBe(false);
+  });
+
+  it('never lets a stuck draft flush postpone the lock past its bound', async () => {
+    const { result } = renderHook(() => useJournalKeys(), { wrapper });
+    const key = new Uint8Array(32).fill(0x22);
+    act(() => {
+      result.current.setKey('j-stuck', key);
+    });
+    const unsubscribe = result.current.onBeforeLock(() => new Promise<void>(() => {}));
+    mockGetAutoLockTimeout.mockResolvedValue(1);
+
+    await act(async () => {
+      appStateHandler!('background');
+    });
+    jest.advanceTimersByTime(5);
+    await act(async () => {
+      void appStateHandler!('active');
+      await flush();
+    });
+    expect(result.current.getKey('j-stuck')).toBe(key);
+
+    await act(async () => {
+      jest.advanceTimersByTime(BEFORE_LOCK_TIMEOUT_MS);
+      await flush();
+    });
+    expect(result.current.getKey('j-stuck')).toBeNull();
+    unsubscribe();
+  });
+
+  it('uncovers even when reading the timeout fails', async () => {
+    mockGetAutoLockTimeout.mockRejectedValue(new Error('storage down'));
+    const { result } = renderHook(() => useJournalKeys(), { wrapper });
+    await act(async () => {
+      appStateHandler!('background');
+    });
+    await act(async () => {
+      await Promise.resolve(appStateHandler!('active')).catch(() => undefined);
+      await flush();
+    });
+    expect(result.current.isPrivacyCovered()).toBe(false);
   });
 });

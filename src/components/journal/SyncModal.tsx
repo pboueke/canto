@@ -10,6 +10,7 @@ import type { JournalContent, JournalSettings } from 'canto-data';
 import { webModalContent } from '@/styles/web';
 import { formatSyncWarning } from '@/lib/sync/warnings';
 import type { SyncRunOutcome } from '@/lib/sync';
+import { PrivacyShield } from '@/components/common/PrivacyShield';
 
 interface SyncModalProps {
   visible: boolean;
@@ -365,6 +366,7 @@ export function SyncModal({
           </Pressable>
         </View>
       </View>
+      <PrivacyShield />
     </Modal>
   );
 }

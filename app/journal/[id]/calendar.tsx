@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   FlatList,
@@ -19,6 +19,7 @@ import { useCalendarScroll } from '@/contexts/CalendarScrollContext';
 import { CalendarHeader } from '@/components/journal/CalendarHeader';
 import { AnniversaryRow } from '@/components/journal/AnniversaryRow';
 import { MonthPreview } from '@/components/journal/MonthPreview';
+import { LockedPlaceholder } from '@/components/common/LockedPlaceholder';
 import { type ThemeName, themes } from '@/styles/themes';
 import { useFontPrefs } from '@/contexts/FontPrefsContext';
 import { applyFontPrefs } from '@/lib/font';
@@ -29,13 +30,19 @@ export default function JournalCalendarScreen() {
   const { theme: globalTheme, setThemeName } = useTheme();
   const { t } = useI18n();
   const { fontFamily, fontSize } = useFontPrefs();
-  const { getKey } = useJournalKeys();
+  const { getKey, onJournalLocked } = useJournalKeys();
   const insets = useSafeAreaInsets();
   const { getScrollAnchor, setScrollAnchor } = useCalendarScroll();
 
   const derivedKey = id ? getKey(id) : null;
   const { overview, loading } = useJournalOverview(id, derivedKey);
   const journal = overview?.metadata ?? null;
+  const [revoked, setRevoked] = useState(false);
+
+  useEffect(() => {
+    if (!id) return;
+    return onJournalLocked(id, () => setRevoked(true));
+  }, [id, onJournalLocked]);
 
   const overrideName = journal?.settings.themeOverride as ThemeName | undefined;
   const overrideRawTheme = overrideName && overrideName in themes ? themes[overrideName] : null;
@@ -84,10 +91,10 @@ export default function JournalCalendarScreen() {
   }, [loading, journal, id, getScrollAnchor, months]);
 
   useEffect(() => {
-    if (!loading && !journal) {
+    if (!loading && !journal && !revoked) {
       router.replace('/');
     }
-  }, [loading, journal]);
+  }, [loading, journal, revoked]);
 
   const onViewableItemsChanged = useRef(({ viewableItems }: { viewableItems: ViewToken[] }) => {
     const journalId = journalIdRef.current;
@@ -127,6 +134,14 @@ export default function JournalCalendarScreen() {
     () => ({ theme, setThemeName, isDark }),
     [theme, setThemeName, isDark],
   );
+
+  if (revoked) {
+    return (
+      <ThemeContext.Provider value={themeContextValue}>
+        <LockedPlaceholder />
+      </ThemeContext.Provider>
+    );
+  }
 
   if (loading && !journal) {
     return (

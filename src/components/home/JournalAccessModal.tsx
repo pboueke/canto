@@ -12,6 +12,7 @@ import { useTheme } from '@/hooks/useTheme';
 import { useI18n } from '@/hooks/useI18n';
 import { createUnlockRateLimiter } from '@/lib/encryption/ratelimit';
 import { webModalContent } from '@/styles/web';
+import { PrivacyShield } from '@/components/common/PrivacyShield';
 
 interface JournalAccessModalProps {
   visible: boolean;
@@ -176,6 +177,7 @@ export function JournalAccessModal({
           )}
         </View>
       </View>
+      <PrivacyShield />
     </Modal>
   );
 }

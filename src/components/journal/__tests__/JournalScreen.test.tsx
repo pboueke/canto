@@ -9,6 +9,13 @@ const mockCreatePage = jest.fn(async () => 'p-new');
 // Mirrors the write-capability seam: false while the journal holds a valid key
 // lease, true after an auto-lock revokes it (set per-test).
 let mockKeyLeaseLocked = false;
+let mockOverviewError: Error | null = null;
+let mockOverviewPresent = true;
+let mockDraftIds: string[] = [];
+let mockDerivedKey: Uint8Array | undefined;
+const mockLockListeners: (() => void)[] = [];
+const mockRouterPush = jest.fn();
+const mockRouterReplace = jest.fn();
 const mockUseJournal = jest.fn((..._args: unknown[]) => ({
   journal: mockJournal,
   loading: false,
@@ -28,7 +35,10 @@ jest.mock('expo-router', () => {
   return {
     useLocalSearchParams: () => ({ id: 'j1' }),
     useRouter: () => ({ push: jest.fn() }),
-    router: { replace: jest.fn(), push: jest.fn() },
+    router: {
+      replace: (...args: unknown[]) => mockRouterReplace(...args),
+      push: (...args: unknown[]) => mockRouterPush(...args),
+    },
     useFocusEffect: (effect: () => void | (() => void)) => React.useEffect(effect, [effect]),
   };
 });
@@ -62,6 +72,7 @@ jest.mock('@/hooks/useI18n', () => ({
   useI18n: () => ({
     t: {
       journal: { anniversary: '', filter: '', noPages: '' },
+      privacy: { unsavedDraft: 'Unsaved draft' },
       page: { unlockRequired: 'Unlock this journal before saving.' },
       a11y: { pageEntry: 'Page entry' },
     },
@@ -73,11 +84,13 @@ jest.mock('@/hooks/useStorage', () => ({
   useJournalOverview: () => {
     const { pages, ...metadata } = mockJournal;
     return {
-      overview: { metadata, pages, tags: [], latestModified: 1 },
+      overview: mockOverviewPresent ? { metadata, pages, tags: [], latestModified: 1 } : null,
       loading: false,
+      error: mockOverviewError,
       refresh: mockRefresh,
     };
   },
+  listDrafts: async () => mockDraftIds,
   useCreatePage: () => ({ create: mockCreatePage }),
   useAttachment: () => ({ getAttachment: mockGetAttachment }),
 }));
@@ -87,7 +100,14 @@ jest.mock('@/hooks/useKeyLease', () => ({
 }));
 
 jest.mock('@/contexts/JournalKeyContext', () => ({
-  useJournalKeys: () => ({ getKey: () => undefined, deriveAndCache: jest.fn() }),
+  useJournalKeys: () => ({
+    getKey: () => mockDerivedKey,
+    deriveAndCache: jest.fn(),
+    onJournalLocked: (_id: string, listener: () => void) => {
+      mockLockListeners.push(listener);
+      return () => undefined;
+    },
+  }),
 }));
 
 jest.mock('@/hooks/useFilter', () => ({
@@ -142,6 +162,19 @@ jest.mock('@/components/journal/JournalHeader', () => {
   };
 });
 jest.mock('@/components/journal/FilterBar', () => ({ FilterBar: () => null }));
+jest.mock('@/components/common/LockedPlaceholder', () => {
+  const React = require('react');
+  const { Text } = require('react-native');
+  return { LockedPlaceholder: () => React.createElement(Text, { testID: 'journal-locked' }) };
+});
+jest.mock('@/components/journal/JournalIntegrityPanel', () => {
+  const React = require('react');
+  const { Text } = require('react-native');
+  return {
+    JournalIntegrityPanel: ({ code }: { code: string }) =>
+      React.createElement(Text, { testID: 'journal-integrity' }, code),
+  };
+});
 jest.mock('@/components/journal/JournalSettings', () => ({ JournalSettings: () => null }));
 jest.mock('@/components/journal/ExportJournalModal', () => ({ ExportJournalModal: () => null }));
 jest.mock('@/components/journal/SyncModal', () => {
@@ -208,6 +241,7 @@ const mockJournal = {
 
 import JournalScreen from '../../../../app/journal/[id]/index';
 import { Alert } from 'react-native';
+import { StorageIntegrityError } from '@/lib/storage/integrity';
 
 describe('JournalScreen open scheduling', () => {
   beforeEach(() => {
@@ -219,6 +253,13 @@ describe('JournalScreen open scheduling', () => {
     mockUseJournal.mockClear();
     mockCreatePage.mockClear();
     mockKeyLeaseLocked = false;
+    mockOverviewError = null;
+    mockOverviewPresent = true;
+    mockDraftIds = [];
+    mockDerivedKey = undefined;
+    mockLockListeners.length = 0;
+    mockRouterPush.mockClear();
+    mockRouterReplace.mockClear();
     jest.spyOn(InteractionManager, 'runAfterInteractions').mockImplementation((task) => {
       if (typeof task === 'function') {
         task();
@@ -314,5 +355,63 @@ describe('JournalScreen open scheduling', () => {
     expect(mockCreatePage).not.toHaveBeenCalled();
     expect(alertSpy).toHaveBeenCalledWith('Unlock this journal before saving.');
     alertSpy.mockRestore();
+  });
+
+  it('replaces every page with the locked placeholder once the journal locks', () => {
+    const { getByTestId, queryByTestId, rerender } = render(<JournalScreen />);
+    expect(queryByTestId('journal-locked')).toBeNull();
+    mockKeyLeaseLocked = true;
+    act(() => {
+      for (const listener of mockLockListeners) listener();
+    });
+    rerender(<JournalScreen />);
+    expect(getByTestId('journal-locked')).toBeTruthy();
+    expect(queryByTestId('new-page')).toBeNull();
+  });
+
+  it('shows the integrity panel instead of bouncing home for a verified-but-unreadable journal', () => {
+    mockDerivedKey = new Uint8Array(32).fill(1);
+    mockOverviewPresent = false;
+    mockOverviewError = new StorageIntegrityError('LEGACY_ZERO_KEY', 'legacy');
+    const { getByTestId } = render(<JournalScreen />);
+    expect(getByTestId('journal-integrity').props.children).toBe('LEGACY_ZERO_KEY');
+    expect(mockRouterReplace).not.toHaveBeenCalled();
+  });
+
+  it('still leaves a journal that genuinely no longer exists', () => {
+    mockOverviewPresent = false;
+    render(<JournalScreen />);
+    expect(mockRouterReplace).toHaveBeenCalledWith('/');
+  });
+
+  it('lists pages with an unsaved draft and opens them for editing', async () => {
+    mockDraftIds = ['p1', 'orphan'];
+    const { findByTestId, queryByTestId } = render(<JournalScreen />);
+    const row = await findByTestId('draft-row-p1');
+    expect(queryByTestId('draft-row-orphan')).toBeNull();
+    fireEvent.press(row);
+    expect(mockRouterPush).toHaveBeenCalledWith('/page/p1?journalId=j1&edit=true');
+  });
+
+  // Regression (web reload): with no key in memory, a password layer that
+  // does not open means the journal is locked, not damaged.
+  it('sends a keyless password-protected journal home to unlock instead of the integrity panel', () => {
+    mockOverviewPresent = false;
+    mockOverviewError = new StorageIntegrityError('JOURNAL_UNREADABLE', 'locked', {
+      cause: 'PASSWORD_DECRYPT_FAILED',
+    });
+    const { queryByTestId } = render(<JournalScreen />);
+    expect(queryByTestId('journal-integrity')).toBeNull();
+    expect(mockRouterReplace).toHaveBeenCalledWith('/');
+  });
+
+  it('still shows real damage without a key', () => {
+    mockOverviewPresent = false;
+    mockOverviewError = new StorageIntegrityError('JOURNAL_UNREADABLE', 'damaged', {
+      cause: 'DEVICE_DECRYPT_FAILED',
+    });
+    const { getByTestId } = render(<JournalScreen />);
+    expect(getByTestId('journal-integrity')).toBeTruthy();
+    expect(mockRouterReplace).not.toHaveBeenCalled();
   });
 });

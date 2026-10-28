@@ -15,6 +15,13 @@ import { getAutoLockTimeout } from '@/components/home/SecuritySettingsModal';
  * material, so an already-mounted editor can never keep writing with a
  * revoked (zeroed) key after an auto-lock.
  */
+export interface OverlayState {
+  covered: boolean;
+  locked: boolean;
+}
+
+const NO_OVERLAY: OverlayState = { covered: false, locked: false };
+
 export interface KeyLease {
   journalId: string;
   epoch: number;
@@ -34,10 +41,32 @@ interface JournalKeyContextValue {
   touchActivity(): void;
   /** Subscribe to auto-lock events. Returns unsubscribe function. */
   onAutoLock(callback: () => void): () => void;
+  /**
+   * Run async work (an encrypted draft flush) after the lock screen is shown
+   * but before key material is zeroed. Bounded by BEFORE_LOCK_TIMEOUT_MS.
+   */
+  onBeforeLock(handler: () => Promise<void>): () => void;
+  /** True while journal content must stay covered (background, or resume pending a lock decision). */
+  isPrivacyCovered(): boolean;
+  /**
+   * Overlay state shared by every privacy shield: `covered` while content
+   * must be hidden, `locked` from an auto-lock until the lock screen is
+   * dismissed. The object identity changes only when a field changes.
+   */
+  getOverlayState(): OverlayState;
+  /** Subscribe to overlay changes (covered or locked). */
+  subscribePrivacyCover(listener: () => void): () => void;
+  /** Close the lock screen; the caller navigates back to the journal list. */
+  dismissLockScreen(): void;
   /** Capture the current key epoch for a mounted editor. */
   createLease(journalId: string): KeyLease;
-  /** True only while that journal's key epoch is unchanged. */
+  /** True only while that journal's key epoch is unchanged and writable. */
   isLeaseValid(lease: KeyLease): boolean;
+  /**
+   * Keep this journal's key for reading only: no record could confirm the
+   * password, so nothing may be written under it. Cleared with the key.
+   */
+  markReadOnly(journalId: string): void;
   /** Notify mounted screens when this journal's key is revoked/locked. */
   onJournalLocked(journalId: string, callback: () => void): () => void;
 }
@@ -50,21 +79,39 @@ const JournalKeyContext = createContext<JournalKeyContextValue>({
   clearAll: () => {},
   touchActivity: () => {},
   onAutoLock: () => () => {},
+  onBeforeLock: () => () => {},
+  isPrivacyCovered: () => false,
+  getOverlayState: () => NO_OVERLAY,
+  subscribePrivacyCover: () => () => {},
+  dismissLockScreen: () => {},
   createLease: () => ({ journalId: '', epoch: 0 }),
   isLeaseValid: () => false,
+  markReadOnly: () => {},
   onJournalLocked: () => () => {},
 });
+
+/** Upper bound on pre-lock draft flushes; the lock always completes. */
+export const BEFORE_LOCK_TIMEOUT_MS = 3_000;
 
 export function JournalKeyProvider({ children }: { children: ReactNode }) {
   const keysRef = useRef(new Map<string, Uint8Array>());
   const lastActivityRef = useRef(Date.now());
   const backgroundedAtRef = useRef<number | null>(null);
-  const clearAllRef = useRef<() => void>(() => {});
+  // Bumped on every background transition: only the resume that started last
+  // may lift the cover, so an overlapping background is never uncovered.
+  const coverGenerationRef = useRef(0);
+  const clearAllRef = useRef<() => Promise<void>>(async () => {});
   const autoLockListenersRef = useRef(new Set<() => void>());
+  const beforeLockHandlersRef = useRef(new Set<() => Promise<void>>());
+  const overlayRef = useRef<OverlayState>(NO_OVERLAY);
+  const privacyListenersRef = useRef(new Set<() => void>());
   const journalLockListenersRef = useRef(new Map<string, Set<() => void>>());
   const epochsRef = useRef(new Map<string, number>());
+  const readOnlyRef = useRef(new Set<string>());
 
   const bumpEpoch = useCallback((journalId: string): number => {
+    // Any key change (new password, lock) ends a read-only grant.
+    readOnlyRef.current.delete(journalId);
     const next = (epochsRef.current.get(journalId) ?? 0) + 1;
     epochsRef.current.set(journalId, next);
     return next;
@@ -132,7 +179,12 @@ export function JournalKeyProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const isLeaseValid = useCallback((lease: KeyLease): boolean => {
+    if (readOnlyRef.current.has(lease.journalId)) return false;
     return epochsRef.current.get(lease.journalId) === lease.epoch;
+  }, []);
+
+  const markReadOnly = useCallback((journalId: string) => {
+    readOnlyRef.current.add(journalId);
   }, []);
 
   const onJournalLocked = useCallback((journalId: string, callback: () => void) => {
@@ -156,12 +208,60 @@ export function JournalKeyProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
-  const triggerAutoLock = useCallback(() => {
+  const onBeforeLock = useCallback((handler: () => Promise<void>) => {
+    beforeLockHandlersRef.current.add(handler);
+    return () => {
+      beforeLockHandlersRef.current.delete(handler);
+    };
+  }, []);
+
+  const updateOverlay = useCallback((patch: Partial<OverlayState>) => {
+    const next = { ...overlayRef.current, ...patch };
+    if (next.covered === overlayRef.current.covered && next.locked === overlayRef.current.locked) {
+      return;
+    }
+    overlayRef.current = next;
+    for (const listener of privacyListenersRef.current) listener();
+  }, []);
+
+  const setPrivacyCovered = useCallback(
+    (covered: boolean) => updateOverlay({ covered }),
+    [updateOverlay],
+  );
+
+  const isPrivacyCovered = useCallback(() => overlayRef.current.covered, []);
+  const getOverlayState = useCallback(() => overlayRef.current, []);
+  const dismissLockScreen = useCallback(() => updateOverlay({ locked: false }), [updateOverlay]);
+
+  const subscribePrivacyCover = useCallback((listener: () => void) => {
+    privacyListenersRef.current.add(listener);
+    return () => {
+      privacyListenersRef.current.delete(listener);
+    };
+  }, []);
+
+  const triggerAutoLock = useCallback(async () => {
+    // The opaque lock screen goes up first, synchronously, so no content is
+    // visible while drafts flush.
+    updateOverlay({ locked: true });
     for (const listener of autoLockListenersRef.current) {
       listener();
     }
+    // Editors persist their unsaved draft, encrypted, while the key is still
+    // valid. A slow or failing flush never delays the lock past the bound.
+    const handlers = [...beforeLockHandlersRef.current];
+    if (handlers.length > 0) {
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      await Promise.race([
+        Promise.allSettled(handlers.map((handler) => handler())),
+        new Promise<void>((resolve) => {
+          timer = setTimeout(resolve, BEFORE_LOCK_TIMEOUT_MS);
+        }),
+      ]);
+      clearTimeout(timer);
+    }
     clearAll();
-  }, [clearAll]);
+  }, [clearAll, updateOverlay]);
 
   // Keep clearAllRef in sync so effects use the latest triggerAutoLock without re-registering
   clearAllRef.current = triggerAutoLock;
@@ -170,22 +270,37 @@ export function JournalKeyProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const subscription = AppState.addEventListener('change', async (state) => {
       if (state === 'background' || state === 'inactive') {
+        // Cover journal content before the OS can snapshot the app switcher.
+        coverGenerationRef.current++;
+        setPrivacyCovered(true);
         // A background transition can happen before the configured auto-lock
         // threshold. Remove password-encrypted display originals immediately
         // while retaining only the bounded unencrypted LRU cache.
         purgeEncryptedAttachmentDisplayCache();
-        backgroundedAtRef.current = Date.now();
-      } else if (state === 'active' && backgroundedAtRef.current !== null) {
-        const elapsed = Date.now() - backgroundedAtRef.current;
-        backgroundedAtRef.current = null;
-        const timeout = await getAutoLockTimeout();
-        if (timeout > 0 && elapsed >= timeout && keysRef.current.size > 0) {
-          clearAllRef.current();
+        // iOS reports inactive before background; keep the earliest moment.
+        backgroundedAtRef.current ??= Date.now();
+      } else if (state === 'active') {
+        const generation = coverGenerationRef.current;
+        if (backgroundedAtRef.current !== null) {
+          const elapsed = Date.now() - backgroundedAtRef.current;
+          backgroundedAtRef.current = null;
+          // Content stays covered until this decision is made, so a lock that
+          // is due never reveals the page first.
+          try {
+            const timeout = await getAutoLockTimeout();
+            if (timeout > 0 && elapsed >= timeout && keysRef.current.size > 0) {
+              await clearAllRef.current();
+            }
+          } finally {
+            if (generation === coverGenerationRef.current) setPrivacyCovered(false);
+          }
+        } else {
+          setPrivacyCovered(false);
         }
       }
     });
     return () => subscription.remove();
-  }, []);
+  }, [setPrivacyCovered]);
 
   // Auto-lock: periodic inactivity check while foregrounded
   useEffect(() => {
@@ -193,7 +308,7 @@ export function JournalKeyProvider({ children }: { children: ReactNode }) {
       if (keysRef.current.size === 0) return;
       const timeout = await getAutoLockTimeout();
       if (timeout > 0 && Date.now() - lastActivityRef.current >= timeout) {
-        clearAllRef.current();
+        void clearAllRef.current();
       }
     }, 30_000);
     return () => clearInterval(interval);
@@ -209,8 +324,14 @@ export function JournalKeyProvider({ children }: { children: ReactNode }) {
         clearAll,
         touchActivity,
         onAutoLock,
+        onBeforeLock,
+        isPrivacyCovered,
+        getOverlayState,
+        subscribePrivacyCover,
+        dismissLockScreen,
         createLease,
         isLeaseValid,
+        markReadOnly,
         onJournalLocked,
       }}
     >
